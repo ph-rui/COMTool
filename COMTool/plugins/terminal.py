@@ -4,10 +4,11 @@
     @update 2022-03-15 create
 '''
 from ast import arg
-from PyQt5.QtCore import QObject, Qt, QRect
+from PyQt5.QtCore import QObject, Qt, QRect, pyqtSignal
 from PyQt5.QtWidgets import (QApplication, QWidget,QPushButton,QMessageBox,QDesktopWidget,QMainWindow,
                              QVBoxLayout,QHBoxLayout,QGridLayout,QTextEdit,QLabel,QRadioButton,QCheckBox,
-                             QLineEdit,QGroupBox,QSplitter,QFileDialog, QScrollArea, QScrollBar)
+                             QLineEdit,QGroupBox,QSplitter,QFileDialog, QScrollArea, QScrollBar,
+                             QProgressBar)
 from PyQt5.QtGui import (QColor, QPixmap, QFontMetrics, QFont, QBrush, QPen, QPainter,
                         QKeyEvent, QWheelEvent)
 
@@ -17,13 +18,22 @@ try:
     from i18n import _
     import utils, parameters
     from conn.base import ConnectionStatus
+    from ..zmodem.detector import ZmodemDetector
+    from ..zmodem.io import ZmodemIO
+    from ..zmodem.session import ZmodemSession
 except ImportError:
     from COMTool.plugins.base import Plugin_Base
     from COMTool import utils, parameters
     from COMTool.i18n import _
     from COMTool.Combobox import ComboBox
     from COMTool.conn.base import  ConnectionStatus
+    from COMTool.zmodem.detector import ZmodemDetector
+    from COMTool.zmodem.io import ZmodemIO
+    from COMTool.zmodem.session import ZmodemSession
 
+import os
+import shutil
+import tempfile
 import pyte
 from wcwidth import wcswidth
 import threading
@@ -112,6 +122,7 @@ class Terminal_Frontend(QWidget):
         self._columns, self._rows = self._pixel2pos(self.width(), self.height())
         self.cursor_x = 0
         self.cursor_y = 0
+        self.transferActive = False
         self._selection = None
         # cache
         self.pens = {}
@@ -380,12 +391,20 @@ class Terminal_Frontend(QWidget):
             return True
         return super().event(e)
 
+    def setTransferActive(self, active: bool):
+        self.transferActive = active
+
     def inputMethodEvent(self, e):
+        if self.transferActive:
+            return
         text = e.commitString()
         if text:
             self.send(text.encode("utf-8"))
 
     def keyPressEvent(self, event):
+        if self.transferActive:
+            event.accept()
+            return
         text = str(event.text())
         key = event.key()
         modifiers = event.modifiers()
@@ -677,10 +696,28 @@ class Plugin(Plugin_Base):
     active  = False          # using this plugin
     autoHideSettings = True  # hide connection/settings panel, show it on hover
 
+    zmodemSendRequestSignal = pyqtSignal()
+    zmodemBusySignal = pyqtSignal(str)
+    zmodemActiveSignal = pyqtSignal(bool)
+    zmodemProgressSignal = pyqtSignal(str, int, object)
+    zmodemFileStartSignal = pyqtSignal(str, object)
+    zmodemCompleteSignal = pyqtSignal(object, object)
+    zmodemErrorSignal = pyqtSignal(str)
+    zmodemCancelledSignal = pyqtSignal()
+
     def __init__(self):
         super().__init__()
         if not self.id:
             raise ValueError(f"var id of Plugin {self} should be set")
+        self._zmodem_lock = threading.RLock()
+        self._zmodem_session = None
+        self._zmodem_detector = ZmodemDetector()
+        self._zmodem_pending = None
+        self._zmodem_pending_buffer = b""
+        self._zmodem_temp_dir = None
+        self.zmodemLabel = None
+        self.zmodemBar = None
+        self.zmodemCancel = None
 
     def onInit(self, config):
         '''
@@ -691,6 +728,7 @@ class Plugin(Plugin_Base):
         self.config = config
         default = {
             "version": 1,
+            "zmodem_last_dir": "",
         }
         for k in default:
             if not k in self.config:
@@ -700,7 +738,7 @@ class Plugin(Plugin_Base):
         pass
 
     def onDel(self):
-        pass
+        self._zmodem_abort_from_ui()
 
     def onWidgetMain(self, parent):
         self.widget = Scroll_Terminal(self.send, self.resizeConnOutput, self.isConnected)
@@ -710,10 +748,286 @@ class Plugin(Plugin_Base):
         if self.isConnected:
             self.ctrlConn("resize", (w, h))
 
-    def onReceived(self, data : bytes):
+    def _feed_terminal(self, data: bytes):
         self.widget.onReceived(data)
         for plugin in self.connChilds:
             plugin.onReceived(data)
+
+    def onReceived(self, data : bytes):
+        with self._zmodem_lock:
+            session = self._zmodem_session
+            pending = self._zmodem_pending
+        if session is not None and session.active:
+            session.io.feed(data)
+            return
+        if session is not None:
+            with self._zmodem_lock:
+                if self._zmodem_session is session:
+                    self._zmodem_session = None
+        if pending is not None:
+            # While the file picker is open the remote only repeats ZRINIT.
+            # The first header is enough to start the sender.
+            return
+
+        result = self._zmodem_detector.feed(data)
+        if result.terminal_data:
+            self._feed_terminal(result.terminal_data)
+        if result.detection is not None:
+            self._handle_zmodem_detection(result.detection)
+
+    def _handle_zmodem_detection(self, detection):
+        if detection.direction == "receive":
+            self._zmodem_start_receive(detection)
+        else:
+            self._zmodem_start_pending_send(detection)
+
+    def _zmodem_callbacks(self):
+        return {
+            "on_progress": lambda name, sent, total: self.zmodemProgressSignal.emit(
+                name, sent, total
+            ),
+            "on_complete": lambda files, trailing: self.zmodemCompleteSignal.emit(
+                files, trailing
+            ),
+            "on_error": lambda error: self.zmodemErrorSignal.emit(str(error)),
+            "on_cancelled": lambda: self.zmodemCancelledSignal.emit(),
+        }
+
+    def _zmodem_start_receive(self, detection):
+        temp_dir = tempfile.mkdtemp(prefix="comtool-zmodem-")
+        io = ZmodemIO(lambda data: self.send(data))
+        callbacks = self._zmodem_callbacks()
+        session = ZmodemSession(
+            "receive",
+            io,
+            output_dir=temp_dir,
+            on_file_start=lambda meta, path: self.zmodemFileStartSignal.emit(
+                meta.name, meta.size
+            ),
+            on_progress=callbacks["on_progress"],
+            on_complete=callbacks["on_complete"],
+            on_error=callbacks["on_error"],
+            on_cancelled=callbacks["on_cancelled"],
+        )
+        with self._zmodem_lock:
+            self._zmodem_session = session
+            self._zmodem_temp_dir = temp_dir
+            self._zmodem_detector.reset()
+        self.zmodemActiveSignal.emit(True)
+        self.zmodemBusySignal.emit(_("Receiving..."))
+        session.start()
+        if detection.remainder:
+            io.feed(detection.remainder)
+
+    def _zmodem_start_pending_send(self, detection):
+        with self._zmodem_lock:
+            self._zmodem_pending = detection.header
+            self._zmodem_pending_buffer = detection.remainder
+            self._zmodem_detector.reset()
+        self.zmodemActiveSignal.emit(True)
+        self.zmodemBusySignal.emit(_("Select files to send..."))
+        self.zmodemSendRequestSignal.emit()
+
+    def _zmodem_choose_send_files(self):
+        with self._zmodem_lock:
+            header = self._zmodem_pending
+            buffered = self._zmodem_pending_buffer
+        if header is None:
+            return
+
+        start_dir = self.config.get("zmodem_last_dir", "")
+        files, _selected = QFileDialog.getOpenFileNames(
+            self.widget, _("Select files to send"), start_dir
+        )
+        if not files:
+            self._zmodem_clear_pending(cancel_remote=True)
+            return
+
+        self.config["zmodem_last_dir"] = os.path.dirname(files[0])
+        io = ZmodemIO(lambda data: self.send(data))
+        callbacks = self._zmodem_callbacks()
+        session = ZmodemSession(
+            "send",
+            io,
+            files=files,
+            initial_zrinit=header,
+            on_file_start=lambda name, size: self.zmodemFileStartSignal.emit(
+                name, size
+            ),
+            on_progress=callbacks["on_progress"],
+            on_complete=callbacks["on_complete"],
+            on_error=callbacks["on_error"],
+            on_cancelled=callbacks["on_cancelled"],
+        )
+        with self._zmodem_lock:
+            self._zmodem_pending = None
+            self._zmodem_pending_buffer = b""
+            self._zmodem_session = session
+        self._zmodem_set_busy(_("Sending..."))
+        session.start()
+        if buffered:
+            io.feed(buffered)
+
+    def _zmodem_clear_pending(self, cancel_remote: bool):
+        with self._zmodem_lock:
+            self._zmodem_pending = None
+            self._zmodem_pending_buffer = b""
+        if cancel_remote:
+            self.send(b"\x18" * 8 + b"\x08" * 8)
+        self._zmodem_restore_terminal()
+        status_bar = getattr(self, "statusBar", None)
+        if status_bar is not None:
+            status_bar.setMsg("info", _("File transfer cancelled"))
+
+    def _zmodem_cancel(self):
+        with self._zmodem_lock:
+            session = self._zmodem_session
+            pending = self._zmodem_pending
+        if session is not None and session.active:
+            session.cancel()
+            if self.zmodemLabel is not None:
+                self.zmodemLabel.setText(_("Cancelling..."))
+            if self.zmodemCancel is not None:
+                self.zmodemCancel.setEnabled(False)
+            return
+        if pending is not None:
+            self._zmodem_clear_pending(cancel_remote=True)
+
+    def _zmodem_abort_from_ui(self):
+        with self._zmodem_lock:
+            session = self._zmodem_session
+            pending = self._zmodem_pending
+            temp_dir = self._zmodem_temp_dir
+            self._zmodem_session = None
+            self._zmodem_pending = None
+            self._zmodem_pending_buffer = b""
+            self._zmodem_temp_dir = None
+        if session is not None:
+            session.cancel()
+        if pending is not None:
+            self.send(b"\x18" * 8 + b"\x08" * 8)
+        self._zmodem_cleanup_temp(temp_dir)
+        self._zmodem_restore_terminal()
+
+    def _zmodem_set_transfer_active(self, active: bool):
+        widget = getattr(self, "widget", None)
+        if widget is not None:
+            widget.terminal.setTransferActive(active)
+
+    def _zmodem_set_controls_visible(self, visible: bool):
+        for widget in (self.zmodemLabel, self.zmodemBar, self.zmodemCancel):
+            if widget is not None:
+                widget.setVisible(visible)
+
+    def _zmodem_set_busy(self, text: str):
+        if self.zmodemLabel is None:
+            return
+        self.zmodemLabel.setText(text)
+        self.zmodemBar.setRange(0, 0)
+        self.zmodemCancel.setEnabled(True)
+        self._zmodem_set_controls_visible(True)
+
+    def _zmodem_restore_terminal(self):
+        self._zmodem_set_transfer_active(False)
+        self._zmodem_set_controls_visible(False)
+
+    def _zmodem_cleanup_temp(self, temp_dir):
+        if temp_dir:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        with self._zmodem_lock:
+            if self._zmodem_temp_dir == temp_dir:
+                self._zmodem_temp_dir = None
+
+    def _zmodem_on_file_start(self, name: str, size):
+        if self.zmodemLabel is None:
+            return
+        self.zmodemLabel.setText(name)
+        if size:
+            self.zmodemBar.setRange(0, int(size))
+            self.zmodemBar.setValue(0)
+        else:
+            self.zmodemBar.setRange(0, 0)
+        self._zmodem_set_controls_visible(True)
+
+    def _zmodem_on_progress(self, name: str, sent: int, total):
+        if self.zmodemLabel is None:
+            return
+        self.zmodemLabel.setText(name)
+        if total:
+            self.zmodemBar.setRange(0, int(total))
+            self.zmodemBar.setValue(min(int(sent), int(total)))
+        else:
+            self.zmodemBar.setRange(0, 0)
+
+    def _zmodem_on_complete(self, files, trailing: bytes):
+        with self._zmodem_lock:
+            self._zmodem_session = None
+            temp_dir = self._zmodem_temp_dir
+            self._zmodem_temp_dir = None
+        self._zmodem_restore_terminal()
+        if trailing:
+            self._feed_terminal(trailing)
+
+        if files is None:
+            status_bar = getattr(self, "statusBar", None)
+            if status_bar is not None:
+                status_bar.setMsg("info", _("Files sent"))
+            self._zmodem_cleanup_temp(temp_dir)
+            return
+
+        saved = 0
+        for received in files:
+            start_dir = self.config.get("zmodem_last_dir", "")
+            initial = os.path.join(start_dir, received.name) if start_dir else received.name
+            path, _selected = QFileDialog.getSaveFileName(
+                self.widget, _("Save received file"), initial
+            )
+            if path:
+                try:
+                    shutil.move(received.path, path)
+                    saved += 1
+                    self.config["zmodem_last_dir"] = os.path.dirname(path)
+                except Exception as error:
+                    if self.hintSignal is not None:
+                        self.hintSignal.emit(
+                            "error", _("Error"), "%s\n%s" % (path, str(error))
+                        )
+            else:
+                try:
+                    os.remove(received.path)
+                except OSError:
+                    pass
+
+        self._zmodem_cleanup_temp(temp_dir)
+        status_bar = getattr(self, "statusBar", None)
+        if status_bar is not None:
+            status_bar.setMsg(
+                "info", _("Received {} file(s)").format(saved)
+            )
+
+    def _zmodem_on_error(self, message: str):
+        with self._zmodem_lock:
+            self._zmodem_session = None
+            temp_dir = self._zmodem_temp_dir
+            self._zmodem_temp_dir = None
+        self._zmodem_cleanup_temp(temp_dir)
+        self._zmodem_restore_terminal()
+        status_bar = getattr(self, "statusBar", None)
+        if status_bar is not None:
+            status_bar.setMsg("error", message)
+        if self.hintSignal is not None:
+            self.hintSignal.emit("error", _("ZMODEM error"), message)
+
+    def _zmodem_on_cancelled(self):
+        with self._zmodem_lock:
+            self._zmodem_session = None
+            temp_dir = self._zmodem_temp_dir
+            self._zmodem_temp_dir = None
+        self._zmodem_cleanup_temp(temp_dir)
+        self._zmodem_restore_terminal()
+        status_bar = getattr(self, "statusBar", None)
+        if status_bar is not None:
+            status_bar.setMsg("info", _("File transfer cancelled"))
 
     def onKeyPressEvent(self, event):
         pass
@@ -726,12 +1040,34 @@ class Plugin(Plugin_Base):
             UI init done, you can update your widget here
             this method runs in UI thread, do not block too long
         '''
-        pass
+        self.zmodemLabel = QLabel("")
+        self.zmodemBar = QProgressBar()
+        self.zmodemBar.setFixedWidth(150)
+        self.zmodemBar.setTextVisible(False)
+        self.zmodemBar.setRange(0, 0)
+        self.zmodemCancel = QPushButton(_("Cancel"))
+        self.zmodemCancel.setFixedWidth(90)
+        layout = self.statusBar.layout()
+        layout.addWidget(self.zmodemLabel)
+        layout.addWidget(self.zmodemBar)
+        layout.addWidget(self.zmodemCancel)
+        self._zmodem_set_controls_visible(False)
+        self.zmodemCancel.clicked.connect(self._zmodem_cancel)
+        self.zmodemSendRequestSignal.connect(self._zmodem_choose_send_files)
+        self.zmodemBusySignal.connect(self._zmodem_set_busy)
+        self.zmodemActiveSignal.connect(self._zmodem_set_transfer_active)
+        self.zmodemProgressSignal.connect(self._zmodem_on_progress)
+        self.zmodemFileStartSignal.connect(self._zmodem_on_file_start)
+        self.zmodemCompleteSignal.connect(self._zmodem_on_complete)
+        self.zmodemErrorSignal.connect(self._zmodem_on_error)
+        self.zmodemCancelledSignal.connect(self._zmodem_on_cancelled)
 
     def onConnChanged(self, status:ConnectionStatus, msg:str):
         '''
             call in UI thread, be carefully!!
         '''
+        if status != ConnectionStatus.CONNECTED:
+            self._zmodem_abort_from_ui()
         super().onConnChanged(status, msg)
         if status == ConnectionStatus.CONNECTED:
             # set pty size when first connect
