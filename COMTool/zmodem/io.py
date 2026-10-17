@@ -64,6 +64,38 @@ class ZmodemIO:
             del self._buffer[:size]
             return data
 
+    def read_some(self, size: int, timeout: float = None) -> bytes:
+        """Return between 1 and *size* bytes as soon as any are available."""
+        if size <= 0:
+            return b""
+        if timeout is None:
+            deadline = None
+        else:
+            deadline = time.monotonic() + timeout
+
+        with self._condition:
+            while not self._buffer:
+                if self._cancelled:
+                    raise ZmodemAbort("ZMODEM transfer cancelled")
+                if deadline is None:
+                    self._condition.wait()
+                    continue
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise ZmodemTimeout("timed out waiting for ZMODEM data")
+                self._condition.wait(remaining)
+
+            count = min(size, len(self._buffer))
+            data = bytes(self._buffer[:count])
+            del self._buffer[:count]
+            return data
+
+    def drain(self) -> bytes:
+        with self._condition:
+            data = bytes(self._buffer)
+            self._buffer.clear()
+            return data
+
     def write(self, data: bytes) -> None:
         if not data:
             return

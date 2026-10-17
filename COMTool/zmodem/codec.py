@@ -213,7 +213,8 @@ def _parse_hex_header(data: bytes, offset: int) -> HeaderParseResult:
     if data[index] == 0x0D:
         if index + 1 >= len(data):
             return HeaderParseResult(HEADER_PARSE_NEED_MORE)
-        if data[index + 1] != 0x0A:
+        # lrzsz sends CR, 0x8a instead of CR, LF.
+        if data[index + 1] not in (0x0A, 0x8A):
             return HeaderParseResult(HEADER_PARSE_INVALID)
         index += 2
     elif data[index] == 0x0A:
@@ -314,7 +315,8 @@ def encode_hex_header(frame_type: int, data: bytes = b"\0\0\0\0") -> bytes:
         raise ValueError("header data must be 4 bytes")
     body = bytes([frame_type]) + data
     crc_bytes = pack_crc16(crc16(body))
-    digits = (body + crc_bytes).hex().upper().encode("ascii")
+    # lrzsz's hex decoder only accepts lower-case digits.
+    digits = (body + crc_bytes).hex().encode("ascii")
     return _HEX_PREFIX + digits + b"\r\n\x11"
 
 
@@ -400,6 +402,18 @@ def parse_subpacket(data: bytes, crc_len: int = 16) -> Optional[Tuple[Subpacket,
 
     consumed = delimiter + 2 + encoded_crc_len
     return Subpacket(frame_end, payload, crc_len, consumed), consumed
+
+
+def pack_offset(offset: int) -> bytes:
+    if not 0 <= offset <= 0xFFFFFFFF:
+        raise ValueError("offset out of range")
+    return offset.to_bytes(4, "little")
+
+
+def unpack_offset(data: bytes) -> int:
+    if len(data) != 4:
+        raise ValueError("offset must be 4 bytes")
+    return int.from_bytes(data, "little")
 
 
 def strip_ignored_bytes(data: bytes) -> bytes:
