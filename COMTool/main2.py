@@ -48,7 +48,7 @@ from PyQt5.QtWidgets import (QApplication, QWidget,QPushButton,QMessageBox,QDesk
                              QVBoxLayout,QHBoxLayout,QGridLayout,QTextEdit,QLabel,QRadioButton,QCheckBox,
                              QLineEdit,QGroupBox,QSplitter,QFileDialog, QScrollArea, QTabWidget, QMenu, QSplashScreen,
                              QAbstractSpinBox)
-from PyQt5.QtGui import QIcon,QFont,QTextCursor,QPixmap,QColor, QCloseEvent, QCursor
+from PyQt5.QtGui import QIcon,QFont,QTextCursor,QPixmap,QColor, QCloseEvent, QCursor, QPainter, QPen
 import qtawesome as qta # https://github.com/spyder-ide/qtawesome
 import threading
 import time
@@ -72,6 +72,61 @@ class SettingsHoverStrip(QWidget):
     def enterEvent(self, event):
         self.hovered.emit()
         super().enterEvent(event)
+
+
+class SettingsHandle(QWidget):
+    """Small chevron button shown next to the auto-hiding settings panel."""
+    clicked = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._expanded = False
+        self.setFixedSize(10, 48)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setAttribute(Qt.WA_Hover, True)
+
+    def setExpanded(self, expanded):
+        if self._expanded != expanded:
+            self._expanded = expanded
+            self.update()
+
+    def enterEvent(self, event):
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self.update()
+        super().leaveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.LeftButton and self.rect().contains(event.pos()):
+            self.clicked.emit()
+        super().mouseReleaseEvent(event)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        color = QColor("#2196f3")
+        if self.underMouse():
+            color = color.lighter(115)
+        painter.setBrush(color)
+        painter.setPen(Qt.NoPen)
+        painter.drawRoundedRect(self.rect().adjusted(0, 0, -1, -1), 4, 4)
+        pen = QPen(QColor("white"))
+        pen.setWidth(2)
+        pen.setCapStyle(Qt.RoundCap)
+        pen.setJoinStyle(Qt.RoundJoin)
+        painter.setPen(pen)
+        cx = self.width() // 2
+        cy = self.height() // 2
+        if self._expanded:
+            # Point left: click to collapse.
+            painter.drawLine(cx + 2, cy - 6, cx - 2, cy)
+            painter.drawLine(cx - 2, cy, cx + 2, cy + 6)
+        else:
+            # Point right: click to expand.
+            painter.drawLine(cx - 2, cy - 6, cx + 2, cy)
+            painter.drawLine(cx + 2, cy, cx - 2, cy + 6)
 
 
 class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
@@ -112,6 +167,7 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         self.helpWindow = None
         # hover-to-show settings panel (currently used by the terminal plugin)
         self.settingsHoverStrip = None
+        self.settingsHandle = None
         self._settings_hover_seen = False
         self._settings_hover_timer = QTimer(self)
         self._settings_hover_timer.setInterval(250)
@@ -391,12 +447,16 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         self.tabWidget.setCornerWidget(tabConerWidgetRight, Qt.TopRightCorner)
         self.contentLayout = QVBoxLayout()
         self.contentWidget.setLayout(self.contentLayout)
-        self.contentLayout.setContentsMargins(10, 0, 10, 10)
+        self.contentLayout.setContentsMargins(16, 0, 10, 10)
         self.contentLayout.addWidget(self.tabWidget)
         # thin hover area for auto showing the settings panel
         self.settingsHoverStrip = SettingsHoverStrip(self.tabWidget)
         self.settingsHoverStrip.hovered.connect(self.onSettingsHoverStripEntered)
         self.settingsHoverStrip.hide()
+        # visible chevron button in the left margin, click to show/hide the panel
+        self.settingsHandle = SettingsHandle(self.contentWidget)
+        self.settingsHandle.clicked.connect(self.onSettingsHandleClicked)
+        self.settingsHandle.hide()
 
         if sys.platform == 'darwin':
             self.macOsAddDockMenu()
@@ -499,6 +559,18 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
             height = 0
         self.settingsHoverStrip.setGeometry(rect.x(), y, 6, height)
         self.settingsHoverStrip.raise_()
+        if self.settingsHandle is not None:
+            # Put the handle in the empty margin left of the tab content, so it
+            # never covers terminal text or the connection panel. Keep it at
+            # least EventFilter.Margins + 1 px from the window edge so the
+            # frameless-window resize border does not swallow its clicks.
+            tab_geo = self.tabWidget.geometry()
+            handle_w = self.settingsHandle.width()
+            handle_h = self.settingsHandle.height()
+            handle_x = max(6, tab_geo.x() - handle_w)
+            handle_y = tab_geo.y() + y + max(0, (height - handle_h) // 2)
+            self.settingsHandle.setGeometry(handle_x, handle_y, handle_w, handle_h)
+            self.settingsHandle.raise_()
 
     def updateSettingsAutoHide(self, item):
         enabled = bool(item and getattr(item.plugin, "autoHideSettings", False))
@@ -506,9 +578,12 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         self._settings_hover_timer.stop()
         if self.settingsHoverStrip is None:
             return
+        if self.settingsHandle is not None:
+            self.settingsHandle.setVisible(enabled)
         if not enabled:
             self.settingsHoverStrip.hide()
             return
+        self.settingsHandle.setExpanded(item.settingWidget.isVisible())
         self.positionSettingsHoverStrip()
         if item.settingWidget.isVisible():
             self.settingsHoverStrip.hide()
@@ -522,6 +597,15 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         if not item or not getattr(item.plugin, "autoHideSettings", False):
             return
         if not item.settingWidget.isVisible():
+            self.showSettings()
+
+    def onSettingsHandleClicked(self):
+        item = self.getCurrentItem()
+        if not item or not getattr(item.plugin, "autoHideSettings", False):
+            return
+        if item.settingWidget.isVisible():
+            self.hideSettings()
+        else:
             self.showSettings()
 
     def _checkSettingsAutoHide(self):
@@ -742,6 +826,10 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         self.updateSettingsButton()
         if getattr(item.plugin, "autoHideSettings", False) and self.settingsHoverStrip is not None:
             self.settingsHoverStrip.hide()
+            if self.settingsHandle is not None:
+                self.settingsHandle.show()
+                self.settingsHandle.setExpanded(True)
+                self.settingsHandle.raise_()
             self._settings_hover_seen = False
             self._settings_hover_timer.start()
 
@@ -758,6 +846,10 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
             self.positionSettingsHoverStrip()
             self.settingsHoverStrip.show()
             self.settingsHoverStrip.raise_()
+            if self.settingsHandle is not None:
+                self.settingsHandle.show()
+                self.settingsHandle.setExpanded(False)
+                self.settingsHandle.raise_()
 
     def toggleFunctional(self):
         widget = self.getCurrentItem().functionalWidget
