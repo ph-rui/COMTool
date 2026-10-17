@@ -15,7 +15,17 @@
 - [x] 7. 新增 `NOTICE`，README 增加 fork 说明、运行与打包命令。
 - [x] 8. 新增 `.github/workflows/test.yml`，跑纯逻辑单测。
 - [x] 9. 本地验证：`pytest`、`py_compile`、无头 Qt 冒烟测试（可用时）。
-- [ ] 10. 提交并推送到 `origin/feature/live-port-refresh`。
+- [x] 10. 提交并推送到 `origin/feature/live-port-refresh`。
+
+## 验证结果
+
+- `python3 -m pytest tests -q`（无 PyQt5 的系统 Python）：`21 passed, 1 skipped`，GUI 用例按预期跳过。
+- `venv/bin/python -m pytest tests -q`（PyQt5 5.15.11 + pyserial 3.5）：`26 passed`。
+- `py_compile`：`Combobox.py`、`conn_serial.py`、`port_utils.py`、`autoUpdate.py` 全部通过。
+- 无头 Qt 冒烟：弹窗打开期间插入 `COM5`，列表在 500ms 定时器触发后从 1 项变为 2 项；拔出后显示禁用的“未检测到串口”占位项；关闭弹窗后定时器停止。
+- `QT_QPA_PLATFORM=offscreen python COMTool/Main.py`：主窗口启动，无异常堆栈。
+- GitHub Actions `unit tests`：通过（run 见分支提交 `b471c42`）。
+- 真机串口的 Windows/Linux/macOS 手工矩阵尚未执行，需要在有 CH340/CP210x/FTDI 的环境补测。
 
 ## 验证命令
 
