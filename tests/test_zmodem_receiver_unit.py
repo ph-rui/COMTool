@@ -1,6 +1,7 @@
 import threading
 
 from COMTool.zmodem.codec import (  # noqa: F401
+    FRAME_ZCAN,
     FRAME_ZDATA,
     FRAME_ZEOF,
     FRAME_ZFILE,
@@ -16,7 +17,7 @@ from COMTool.zmodem.codec import (  # noqa: F401
     pack_offset,
     unpack_offset,
 )
-from COMTool.zmodem.io import ZmodemIO
+from COMTool.zmodem.io import ZmodemAbort, ZmodemIO
 from COMTool.zmodem.reader import ZmodemReader
 from COMTool.zmodem.receiver import ZmodemReceiver
 
@@ -102,3 +103,44 @@ def test_receiver_retries_after_bad_subpacket_crc(tmp_path):
     assert len(received) == 1
     with open(received[0].path, "rb") as handle:
         assert handle.read() == b"hello"
+
+
+def test_receiver_aborts_and_cleans_up_after_zcan(tmp_path):
+    link = Duplex()
+    peer = ZmodemReader(link.peer_io, read_timeout=1)
+    errors = []
+
+    def run_receiver():
+        try:
+            receiver = ZmodemReceiver(
+                link.receiver_io,
+                str(tmp_path),
+                header_timeout=1,
+                data_timeout=1,
+            )
+            receiver.run()
+        except Exception as error:  # noqa: BLE001 - test reports the error
+            errors.append(error)
+
+    thread = threading.Thread(target=run_receiver, daemon=True)
+    thread.start()
+
+    assert peer.read_header().frame_type == FRAME_ZRINIT
+    link.peer_io.write(
+        encode_binary_header(FRAME_ZFILE, b"\0\0\0\0", crc_len=32)
+    )
+    link.peer_io.write(
+        encode_subpacket(
+            b"cancel.bin\x005 0 644 0 0 0",
+            SUBPACKET_ZCRCW,
+            crc_len=32,
+        )
+    )
+    assert peer.read_header().frame_type == FRAME_ZRPOS
+    link.peer_io.write(encode_hex_header(FRAME_ZCAN))
+
+    thread.join(3)
+    assert not thread.is_alive()
+    assert len(errors) == 1
+    assert isinstance(errors[0], ZmodemAbort)
+    assert list(tmp_path.iterdir()) == []

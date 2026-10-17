@@ -95,7 +95,10 @@ class ZmodemReceiver:
                 self._send_zack(1)
                 continue
             if header.frame_type == FRAME_ZFILE:
-                self._receive_file(header)
+                if self._receive_file(header) == "finish":
+                    self._send_header(FRAME_ZFIN)
+                    self._read_oo()
+                    return self.files
                 continue
             if header.frame_type == FRAME_ZFIN:
                 self._send_header(FRAME_ZFIN)
@@ -137,6 +140,7 @@ class ZmodemReceiver:
 
         offset = 0
         retries = 0
+        finish_after_file = False
         self._send_zrpos(0)
         try:
             while True:
@@ -184,9 +188,15 @@ class ZmodemReceiver:
                     break
 
                 if next_header.frame_type == FRAME_ZFIN:
+                    finish_after_file = True
                     break
                 if next_header.frame_type == FRAME_ZSKIP:
-                    break
+                    handle.close()
+                    try:
+                        os.remove(path)
+                    except OSError:
+                        pass
+                    return "skip"
                 if next_header.frame_type in (FRAME_ZABORT, FRAME_ZCAN):
                     raise ZmodemAbort("sender aborted the transfer")
                 if next_header.frame_type == FRAME_ZNAK:
@@ -211,7 +221,10 @@ class ZmodemReceiver:
         )
         if self.on_file_complete is not None:
             self.on_file_complete(meta, path)
+        if finish_after_file:
+            return "finish"
         self._send_zrinit()
+        return "ok"
 
     def _receive_data_frames(
         self, handle, crc_len: int, offset: int, meta: FileMeta
