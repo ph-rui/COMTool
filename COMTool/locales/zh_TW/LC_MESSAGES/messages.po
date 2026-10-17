@@ -949,6 +949,36 @@ msgstr "終端"
 msgid "my plugin2"
 msgstr ""
 
+msgid "Receiving..."
+msgstr "正在接收..."
+
+msgid "Select files to send..."
+msgstr "請選擇要傳送的檔案..."
+
+msgid "Sending..."
+msgstr "正在傳送..."
+
+msgid "Cancelling..."
+msgstr "正在取消..."
+
+msgid "Select files to send"
+msgstr "選擇要傳送的檔案"
+
+msgid "Save received file"
+msgstr "儲存接收的檔案"
+
+msgid "Files sent"
+msgstr "檔案已傳送"
+
+msgid "File transfer cancelled"
+msgstr "檔案傳輸已取消"
+
+msgid "Received {} file(s)"
+msgstr "已接收 {} 個檔案"
+
+msgid "ZMODEM error"
+msgstr "ZMODEM 錯誤"
+
 #~ msgid "Send"
 #~ msgstr "發送"
 
