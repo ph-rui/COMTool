@@ -144,6 +144,8 @@ class PluginItem:
         widget.setStretchFactor(1, 2)
         widget.setStretchFactor(2, 1)
         self.functionalWidget.hide()
+        if getattr(self.plugin, "autoHideSettings", False):
+            self.settingWidget.hide()
         # UI init done
         self.plugin.onUiInitDone()
         return wrapper
