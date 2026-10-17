@@ -26,6 +26,7 @@
 - `QT_QPA_PLATFORM=offscreen python COMTool/Main.py`：主窗口启动，无异常堆栈。
 - GitHub Actions `unit tests`：通过（run 见分支提交 `b471c42`）。
 - 真机串口的 Windows/Linux/macOS 手工矩阵尚未执行，需要在有 CH340/CP210x/FTDI 的环境补测。
+- 为 Windows 真机准备了交互式脚本 `tools/hotplug_smoke_test.py`：自动打开串口下拉框，提示插入/拔出设备，并检查列表是否在弹窗展开时刷新。
 
 ## 验证命令
 
