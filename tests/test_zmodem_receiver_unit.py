@@ -1,6 +1,7 @@
 import threading
 
 from COMTool.zmodem.codec import (  # noqa: F401
+    FRAME_ZACK,
     FRAME_ZCAN,
     FRAME_ZDATA,
     FRAME_ZEOF,
@@ -8,6 +9,7 @@ from COMTool.zmodem.codec import (  # noqa: F401
     FRAME_ZFIN,
     FRAME_ZRINIT,
     FRAME_ZRPOS,
+    SUBPACKET_ZCRCQ,
     SUBPACKET_ZCRCW,
     SUBPACKET_ZCRCE,
     SUBPACKET_ZCRCG,
@@ -103,6 +105,72 @@ def test_receiver_retries_after_bad_subpacket_crc(tmp_path):
     assert len(received) == 1
     with open(received[0].path, "rb") as handle:
         assert handle.read() == b"hello"
+
+
+def test_receiver_continues_after_zcrcg_and_zcrcq(tmp_path):
+    link = Duplex()
+    peer = ZmodemReader(link.peer_io, read_timeout=1)
+    results = []
+    errors = []
+
+    def run_receiver():
+        try:
+            receiver = ZmodemReceiver(
+                link.receiver_io,
+                str(tmp_path),
+                header_timeout=1,
+                data_timeout=1,
+            )
+            results.append(receiver.run())
+        except Exception as error:  # noqa: BLE001 - test reports the error
+            errors.append(error)
+
+    thread = threading.Thread(target=run_receiver, daemon=True)
+    thread.start()
+
+    assert peer.read_header().frame_type == FRAME_ZRINIT
+    link.peer_io.write(
+        encode_binary_header(FRAME_ZFILE, b"\0\0\0\0", crc_len=32)
+    )
+    link.peer_io.write(
+        encode_subpacket(
+            b"stream.bin\x0010 0 644 0 0 0",
+            SUBPACKET_ZCRCW,
+            crc_len=32,
+        )
+    )
+    response = peer.read_header()
+    assert response.frame_type == FRAME_ZRPOS
+    assert unpack_offset(response.data) == 0
+
+    link.peer_io.write(
+        encode_binary_header(FRAME_ZDATA, pack_offset(0), crc_len=32)
+    )
+    link.peer_io.write(encode_subpacket(b"AAAA", SUBPACKET_ZCRCG, crc_len=32))
+    link.peer_io.write(encode_subpacket(b"BBBB", SUBPACKET_ZCRCQ, crc_len=32))
+    response = peer.read_header()
+    assert response.frame_type == FRAME_ZACK
+    assert unpack_offset(response.data) == 8
+    link.peer_io.write(encode_subpacket(b"CCCC", SUBPACKET_ZCRCG, crc_len=32))
+    link.peer_io.write(encode_subpacket(b"DDDD", SUBPACKET_ZCRCE, crc_len=32))
+    link.peer_io.write(encode_hex_header(FRAME_ZEOF, pack_offset(16)))
+
+    response = peer.read_header()
+    assert response.frame_type == FRAME_ZRINIT
+
+    link.peer_io.write(encode_hex_header(FRAME_ZFIN))
+    response = peer.read_header()
+    assert response.frame_type == FRAME_ZFIN
+    link.peer_io.write(b"OO")
+
+    thread.join(3)
+    assert not thread.is_alive()
+    assert errors == []
+    assert len(results) == 1
+    received = results[0]
+    assert len(received) == 1
+    with open(received[0].path, "rb") as handle:
+        assert handle.read() == b"AAAABBBBCCCCDDDD"
 
 
 def test_receiver_aborts_and_cleans_up_after_zcan(tmp_path):
