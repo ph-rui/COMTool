@@ -998,3 +998,7 @@ msgstr "我的插件2"
 #~ msgid "Sendding File"
 #~ msgstr "发送文件中"
 
+#: conn/conn_serial.py:0
+msgid "No serial port found"
+msgstr "未检测到串口"
+

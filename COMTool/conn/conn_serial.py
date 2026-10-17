@@ -5,7 +5,7 @@ if __name__ == "__main__":
     sys.path.insert(0, path)
     sys.path.insert(0, os.path.join(path, ".."))
 
-from PyQt5.QtCore import pyqtSignal,Qt, QRect, QMargins, QObject, pyqtSlot
+from PyQt5.QtCore import pyqtSignal,Qt, QRect, QMargins, QObject, pyqtSlot, QTimer
 from PyQt5.QtWidgets import (QWidget,QPushButton,QMessageBox,QDesktopWidget,QMainWindow,
                              QVBoxLayout,QHBoxLayout,QGridLayout,QTextEdit,QLabel,QRadioButton,QCheckBox,
                              QLineEdit,QGroupBox,QSplitter,QFileDialog, QScrollArea)
@@ -27,10 +27,27 @@ try:
     from base import COMM, ConnectionStatus
 except Exception:
     from .base import COMM, ConnectionStatus
+try:
+    from port_utils import (
+        choose_index,
+        collect_ports,
+        display_text,
+        format_port_details,
+        port_keys,
+    )
+except ImportError:
+    from .port_utils import (
+        choose_index,
+        collect_ports,
+        display_text,
+        format_port_details,
+        port_keys,
+    )
 import serial, threading, time
 import serial.tools.list_ports
 
 
+PORT_REFRESH_INTERVAL_MS = 500
 
 
 class Serial(COMM):
@@ -76,15 +93,22 @@ class Serial(COMM):
         self.isOpened = False
         self.busy = False
         self.status = ConnectionStatus.CLOSED
-        self.isDetectSerialPort = False
         self.widget = None
         self.baudrateCustomStr = _("Custom, input baudrate")
+        # Port enumeration state. Each Serial instance (tab) owns its own copy.
+        self._port_scan_in_flight = False
+        self._last_port_keys = None
+        self._popup_visible = False
+        self._initial_scan_done = False
+        self._applying_ports = False
+        self._port_refresh_timer = None
 
     def disconnect(self):
         if self.isConnected():
             self.openCloseSerial()
 
     def onDel(self):
+        self._stopPortRefresh()
         if self.isConnected():
             self.openCloseSerial()
 
@@ -105,7 +129,7 @@ class Serial(COMM):
     def onUiInitDone(self):
         for key in self.config:
             self.setSerialConfig(key, self.widgetConfMap[key], self.config[key])
-        self.detectSerialPort()
+        self.requestPortScan()
 
     def onWidget(self):
         self.widget = QWidget()
@@ -117,6 +141,9 @@ class Serial(COMM):
         serailStopbitsLabel = QLabel(_("Stopbits"))
         serialFlowControlLabel = QLabel(_("Flow control"))
         self.serialPortCombobox = ComboBox()
+        self._port_refresh_timer = QTimer(self.widget)
+        self._port_refresh_timer.setInterval(PORT_REFRESH_INTERVAL_MS)
+        self._port_refresh_timer.timeout.connect(self.requestPortScan)
         self.serailBaudrateCombobox = ComboBox()
         for baud in parameters.defaultBaudrates:
             self.serailBaudrateCombobox.addItem(str(baud))
@@ -180,8 +207,10 @@ class Serial(COMM):
         return self.widget
 
     def initEvet(self):
-        self.serialPortCombobox.clicked.connect(self.detectSerialPort)
-        self.showSerialComboboxSignal.connect(self.showCombobox)
+        self.serialPortCombobox.clicked.connect(self.requestPortScan)
+        self.serialPortCombobox.popupShown.connect(self._onPopupShown)
+        self.serialPortCombobox.popupHidden.connect(self._onPopupHidden)
+        self.showSerialComboboxSignal.connect(self._onPortsScanned)
         self.serialPortCombobox.currentIndexChanged.connect(lambda: self.onSerialConfigChanged("port", self.serialPortCombobox, str))
         self.serailBaudrateCombobox.currentIndexChanged.connect(lambda: self.onSerialConfigChanged("baudrate", self.serailBaudrateCombobox, int, caller="index change"))
         self.serailBaudrateCombobox.editTextChanged.connect(lambda: self.onSerialConfigChanged("baudrate", self.serailBaudrateCombobox, int, caller="text change"))
@@ -196,9 +225,10 @@ class Serial(COMM):
 
     def onSerialConfigChanged(self, conf_type, obj, value_type, caller=""):
         if conf_type == "port":
-            obj.setToolTip(obj.currentText())
-            newPort = obj.currentText().split(" ")[0]
-            if newPort and not self.isDetectSerialPort and (newPort != self.config["port"] or  not self.com.port):
+            details = obj.itemData(obj.currentIndex(), Qt.ToolTipRole)
+            obj.setToolTip(details or obj.currentText())
+            newPort = obj.currentData(Qt.UserRole) or ""
+            if newPort and not self._applying_ports and (newPort != self.config["port"] or  not self.com.port):
                 self.config["port"] = newPort
                 print("-- set to new port:", self.config["port"])
                 try:
@@ -247,13 +277,11 @@ class Serial(COMM):
                 values.append(obj.itemText(i))
             return values
         if conf_type == "port":
-            values = getCommboboxItems(obj)
-            idx = 0
-            try:
-                idx = values.index(str(value))
-            except Exception:
-                # print(f"-- set {obj} index {idx} error, value {value}, items {values}")
-                pass
+            idx = -1
+            for i in range(obj.count()):
+                if obj.itemData(i, Qt.UserRole) == str(value):
+                    idx = i
+                    break
             obj.setCurrentIndex(idx)
         elif conf_type in ["baudrate", "bytesize", "parity", "stopbits"]:
             values = getCommboboxItems(obj)
@@ -340,52 +368,95 @@ class Serial(COMM):
                 self.showSwitchSignal.emit(self.status)
         self.busy = False
 
-    def detectSerialPort(self):
-        if not self.isDetectSerialPort:
-            self.isDetectSerialPort = True
-            t = threading.Thread(target=self.detectSerialPortProcess)
-            t.setDaemon(True)
-            t.start()
+    def requestPortScan(self):
+        """Start one background scan, coalescing concurrent requests."""
+        if self._port_scan_in_flight or self.widget is None:
+            return
+        self._port_scan_in_flight = True
+        t = threading.Thread(target=self._scanPortsProcess)
+        t.setDaemon(True)
+        t.start()
 
-    def detectSerialPortProcess(self):
-        items = []
-        while 1:
-            portList = self.findSerialPort()
-            if len(portList)>0:
-                for p in portList:
-                    showStr = "{} {} - {}".format(p.device, p.name, p.description)
-                    if p.manufacturer:
-                        showStr += ' - {}'.format(p.manufacturer)
-                    if p.pid:
-                        showStr += ' - pid(0x{:04X})'.format(p.pid)
-                    if p.vid:
-                        showStr += ' - vid(0x{:04X})'.format(p.vid)
-                    if p.serial_number:
-                        showStr += ' - v{}'.format(p.serial_number)
-                    if p.device.startswith("/dev/cu.Bluetooth-Incoming-Port"):
-                        continue
-                    items.append(showStr)
-                break
-            time.sleep(0.5)
-        self.showSerialComboboxSignal.emit(items)
+    def _scanPortsProcess(self):
+        try:
+            ports = collect_ports()
+        except Exception as e:
+            print("-- scan serial ports failed:", e)
+            ports = []
+        # Always emit so the UI thread clears the in-flight flag.
+        self.showSerialComboboxSignal.emit(ports)
 
-    # @pyqtSlot(list)
-    def showCombobox(self, items):
-        set = -1
-        self.serialPortCombobox.clear()
-        for item in items:
-            self.serialPortCombobox.addItem(item)
-            if self.config["port"]:
-                index = self.serialPortCombobox.findText(self.config["port"], Qt.MatchContains)
-                if index>=0:
-                    set = index
-        self.serialPortCombobox.showPopup()
-        self.isDetectSerialPort = False
-        if set <= 0:
-            # set to first port in list
-            self.onSerialConfigChanged("port", self.serialPortCombobox, str)
-        else:
-            self.serialPortCombobox.setCurrentIndex(set)
+    def _onPortsScanned(self, ports):
+        self._port_scan_in_flight = False
+        keys = port_keys(ports)
+        if self._last_port_keys == keys:
+            return
+        self._applyPorts(ports)
+        self._last_port_keys = keys
+
+    def _applyPorts(self, ports):
+        combo = self.serialPortCombobox
+        was_popup_visible = self._popup_visible
+        preferred = combo.currentData(Qt.UserRole) or self.config.get("port")
+        startup_select_first = (
+            not self._initial_scan_done
+            and bool(ports)
+            and choose_index(ports, preferred) < 0
+        )
+        selected = -1
+        self._applying_ports = True
+        combo.blockSignals(True)
+        try:
+            combo.clear()
+            if not ports:
+                combo.addItem(_("No serial port found"))
+                item = combo.model().item(combo.count() - 1)
+                if item is not None:
+                    item.setEnabled(False)
+                combo.setCurrentIndex(-1)
+                combo.setToolTip("")
+            else:
+                for port in ports:
+                    combo.addItem(display_text(port))
+                    index = combo.count() - 1
+                    combo.setItemData(index, port.device, Qt.UserRole)
+                    combo.setItemData(index, format_port_details(port), Qt.ToolTipRole)
+                selected = choose_index(ports, preferred)
+                if selected < 0 and startup_select_first:
+                    selected = 0
+                combo.setCurrentIndex(selected)
+                if selected >= 0:
+                    combo.setToolTip(display_text(ports[selected]))
+                else:
+                    combo.setToolTip("")
+        finally:
+            combo.blockSignals(False)
+            self._applying_ports = False
+        self._initial_scan_done = True
+        if selected >= 0:
+            # Keep Serial.com in sync with the selected item. Signals were
+            # blocked during the rebuild, so do it explicitly.
+            self.onSerialConfigChanged("port", combo, str)
+        if was_popup_visible:
+            combo.updatePopupWidth()
+            if not combo.view().isVisible():
+                # Some platforms close the popup when its model is cleared.
+                combo.showItems()
+
+    def _onPopupShown(self):
+        self._popup_visible = True
+        if not self._applying_ports:
+            self.requestPortScan()
+        if self._port_refresh_timer is not None:
+            self._port_refresh_timer.start()
+
+    def _onPopupHidden(self):
+        self._stopPortRefresh()
+
+    def _stopPortRefresh(self):
+        self._popup_visible = False
+        if self._port_refresh_timer is not None:
+            self._port_refresh_timer.stop()
 
     # @pyqtSlot(ConnectionStatus)
     def showSwitch(self, status):
