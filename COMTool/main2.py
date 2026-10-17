@@ -77,6 +77,7 @@ class SettingsHoverStrip(QWidget):
 class SettingsHandle(QWidget):
     """Small chevron button shown next to the auto-hiding settings panel."""
     clicked = pyqtSignal()
+    hovered = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -92,6 +93,7 @@ class SettingsHandle(QWidget):
 
     def enterEvent(self, event):
         self.update()
+        self.hovered.emit()
         super().enterEvent(event)
 
     def leaveEvent(self, event):
@@ -169,6 +171,7 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         self.settingsHoverStrip = None
         self.settingsHandle = None
         self._settings_hover_seen = False
+        self._settings_shown_at = 0.0
         self._settings_hover_timer = QTimer(self)
         self._settings_hover_timer.setInterval(250)
         self._settings_hover_timer.timeout.connect(self._checkSettingsAutoHide)
@@ -456,6 +459,7 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         # visible chevron button in the left margin, click to show/hide the panel
         self.settingsHandle = SettingsHandle(self.contentWidget)
         self.settingsHandle.clicked.connect(self.onSettingsHandleClicked)
+        self.settingsHandle.hovered.connect(self.onSettingsHandleHovered)
         self.settingsHandle.hide()
 
         if sys.platform == 'darwin':
@@ -598,15 +602,31 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
             return
         if not item.settingWidget.isVisible():
             self.showSettings()
+            # The pointer is already at the edge, so auto-hide may run as soon
+            # as the pointer leaves instead of waiting for a panel visit.
+            self._settings_hover_seen = True
+
+    def onSettingsHandleHovered(self):
+        item = self.getCurrentItem()
+        if not item or not getattr(item.plugin, "autoHideSettings", False):
+            return
+        if not item.settingWidget.isVisible():
+            self.showSettings()
+        self._settings_hover_seen = True
 
     def onSettingsHandleClicked(self):
         item = self.getCurrentItem()
         if not item or not getattr(item.plugin, "autoHideSettings", False):
             return
         if item.settingWidget.isVisible():
+            # Ignore the click that immediately follows hover-open, otherwise
+            # a normal click on the collapsed handle would open and close it.
+            if time.monotonic() - self._settings_shown_at < 0.35:
+                return
             self.hideSettings()
         else:
             self.showSettings()
+            self._settings_hover_seen = True
 
     def _checkSettingsAutoHide(self):
         item = self.getCurrentItem()
@@ -619,6 +639,9 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         panel = item.settingWidget
         cursor_pos = panel.mapFromGlobal(QCursor.pos())
         inside = panel.rect().contains(cursor_pos)
+        if self.settingsHandle is not None and self.settingsHandle.isVisible():
+            handle_pos = self.settingsHandle.mapFromGlobal(QCursor.pos())
+            inside = inside or self.settingsHandle.rect().contains(handle_pos)
         if inside:
             self._settings_hover_seen = True
         if not self._settings_hover_seen:
@@ -825,6 +848,7 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         item.settingWidget.show()
         self.updateSettingsButton()
         if getattr(item.plugin, "autoHideSettings", False) and self.settingsHoverStrip is not None:
+            self._settings_shown_at = time.monotonic()
             self.settingsHoverStrip.hide()
             if self.settingsHandle is not None:
                 self.settingsHandle.show()
