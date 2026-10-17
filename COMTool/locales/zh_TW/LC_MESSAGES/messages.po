@@ -1043,3 +1043,7 @@ msgstr ""
 #~ msgid "Sendding File"
 #~ msgstr "發送文件中"
 
+#: conn/conn_serial.py:0
+msgid "No serial port found"
+msgstr "未偵測到串列埠"
+

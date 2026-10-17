@@ -8,14 +8,12 @@ import platform
 log = parameters.log
 
 class AutoUpdate:
-    updateUrl = "https://github.com/Neutree/COMTool/releases"
-    releaseApiUrl = "https://api.github.com/repos/Neutree/COMTool/releases"
-    releaseApiUrl2 = "https://neucrack.com/comtool_update"
+    # This fork has its own release channel. Do not point users at upstream
+    # releases, otherwise an update would replace the custom port handling.
+    updateUrl = "https://github.com/ph-rui/COMTool/releases"
+    releaseApiUrl = "https://api.github.com/repos/ph-rui/COMTool/releases"
     def detectNewVersion(self):
-        need, v = self.checkUpdate_neucrack() # github api may change, but this will not
-        if not v:
-            log.i("get version info from neucrack fail, now get from github")
-            need , v = self.checkUpdate_github()
+        need, v = self.checkUpdate_github()
         return need, v
     
     def checkUpdate_github(self):
@@ -38,28 +36,6 @@ class AutoUpdate:
                 releasesInfo.append([ver, ver.major * 100 + ver.minor * 10 + ver.dev])
             releasesInfo = sorted(releasesInfo, key=lambda x:x[1], reverse=True)
             latest = releasesInfo[0][0]
-            if self.needUpdate(latest):
-                return True, latest
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            return False, None
-        log.i("Already latest version!")
-        return False, latest
-
-    def checkUpdate_neucrack(self):
-        import requests, json
-        latest = version.Version()
-        try:
-            headers = {
-                "User-Agent": f"comtool_v{version.major}.{version.minor}.{version.dev}-{platform.platform()}"
-            }
-            page = requests.post(self.releaseApiUrl2, headers=headers)
-            if page.status_code != 200:
-                log.i("request {} fail, check update fail!".format(self.releaseApiUrl))
-                return False, None
-            release = json.loads(page.content)
-            latest.load_dict(release)
             if self.needUpdate(latest):
                 return True, latest
         except Exception as e:

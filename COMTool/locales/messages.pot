@@ -943,3 +943,7 @@ msgstr ""
 msgid "my plugin2"
 msgstr ""
 
+#: conn/conn_serial.py:0
+msgid "No serial port found"
+msgstr ""
+

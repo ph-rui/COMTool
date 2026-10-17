@@ -4,10 +4,12 @@ from PyQt5.QtCore import pyqtSignal
 
 class ComboBox(QComboBox):
     clicked = pyqtSignal()
-    # popupAboutToBeShown = pyqtSignal()
+    popupShown = pyqtSignal()
+    popupHidden = pyqtSignal()
 
     def __init__(self):
         QComboBox.__init__(self)
+        self._popup_visible = False
         listView = QListView()
         listView.executeDelayedItemsLayout()
         self.setView(listView)
@@ -21,20 +23,27 @@ class ComboBox(QComboBox):
         pass
 
     def _showPopup(self):
-        max_w = 0
-        for i in range(self.count()):
-            w = self.view().sizeHintForColumn(i)
-            if w > max_w:
-                max_w = w
+        self.updatePopupWidth()
+        super(ComboBox, self).showPopup()
+        if not self._popup_visible:
+            self._popup_visible = True
+            self.popupShown.emit()
 
+    def updatePopupWidth(self):
+        self.view().executeDelayedItemsLayout()
+        max_w = self.view().sizeHintForColumn(0)
         screen_width = QApplication.desktop().availableGeometry().width()
         self.view().setMinimumWidth(min(max_w + 50, screen_width))
-        super(ComboBox, self).showPopup()
-    
+
+    def hidePopup(self):
+        was_visible = self._popup_visible
+        super(ComboBox, self).hidePopup()
+        if was_visible:
+            self._popup_visible = False
+            self.popupHidden.emit()
+
     def showItems(self):
         self._showPopup()
 
     def mousePressEvent(self, QMouseEvent):
         self.clicked.emit()
-
-
