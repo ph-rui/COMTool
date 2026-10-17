@@ -1,0 +1,30 @@
+COMTool
+=======
+
+This repository is a fork of COMTool:
+
+  https://github.com/Neutree/COMTool
+  Copyright (C) 2016-2022 Neucrack and contributors
+  Licensed under the GNU Lesser General Public License v3.0 (see LICENSE)
+
+Fork maintained at:
+
+  https://github.com/ph-rui/COMTool
+
+Modifications in this fork:
+
+  - Live refresh of the serial port list while the port dropdown is open
+    (500 ms polling on a background thread, coalesced to one scan at a time).
+  - Fixed the no-port busy loop in Serial.detectSerialPortProcess and the
+    stale "detecting" state that made later clicks unresponsive.
+  - Port items store the real device path in Qt.UserRole instead of parsing
+    the display text; added natural COM ordering, macOS /dev/cu.*
+    deduplication, and richer per-port tooltips.
+  - Auto-update points at this fork instead of upstream releases, so a
+    custom build is not replaced by an upstream binary.
+  - Added unit tests, design documentation, and a CI workflow for the
+    port-list helpers.
+
+This fork remains under LGPL-3.0. The complete corresponding source is
+available in this repository. See the design document at
+docs/superpowers/specs/2026-10-17-comtool-live-port-refresh-design.md.

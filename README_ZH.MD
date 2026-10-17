@@ -3,6 +3,17 @@ COMTool
 
 [English](./README.MD) | 中文
 
+> **Fork 说明：** 本仓库是 [Neutree/COMTool](https://github.com/Neutree/COMTool) 的 fork，继续使用上游 LGPL-3.0 协议。主要改动是串口下拉框展开期间的实时刷新、修复无串口时的死循环，以及端口显示优化。详见 [NOTICE](./NOTICE) 和[设计文档](docs/superpowers/specs/2026-10-17-comtool-live-port-refresh-design.md)。
+>
+> 源码运行：
+>
+> ```bash
+> python3 -m pip install -r requirements.txt
+> python3 COMTool/Main.py
+> ```
+>
+> 打包使用 `python3 pack.py`（PyInstaller），产物生成在仓库根目录。
+
  ![GitHub](https://img.shields.io/github/license/neutree/comtool) [![PyPI](https://img.shields.io/pypi/v/comtool.svg)](https://pypi.python.org/pypi/comtool/) ![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/neutree/comtool/pack.yml?branch=master) ![GitHub repo size](https://img.shields.io/github/repo-size/neutree/comtool) ![GitHub Repo stars](https://img.shields.io/github/stars/neutree/comtool?style=social)
 
  [![GitHub all releases](https://img.shields.io/github/downloads/neutree/comtool/total?label=release%20downloads)](https://github.com/Neutree/COMTool/releases) [![PyPI - Downloads](https://img.shields.io/pypi/dm/comtool?label=pypi%20downloads)](https://pypi.org/project/COMTool/) [![SourceForge](https://img.shields.io/sourceforge/dt/comtool?label=sourceforge%20downloads)](https://sourceforge.net/projects/comtool)

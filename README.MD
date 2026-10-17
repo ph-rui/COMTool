@@ -3,6 +3,17 @@ COMTool
 
 English | [中文](./README_ZH.MD)
 
+> **Fork note:** this repository is a fork of [Neutree/COMTool](https://github.com/Neutree/COMTool), keeping the upstream LGPL-3.0 license. It adds live serial-port refresh while the port dropdown is open, fixes the no-port busy loop, and improves port display. See [NOTICE](./NOTICE) and the [design spec](docs/superpowers/specs/2026-10-17-comtool-live-port-refresh-design.md).
+>
+> Run from source:
+>
+> ```bash
+> python3 -m pip install -r requirements.txt
+> python3 COMTool/Main.py
+> ```
+>
+> Package with `python3 pack.py` (PyInstaller); the archive is written to the repository root.
+
  ![GitHub](https://img.shields.io/github/license/neutree/comtool) [![PyPI](https://img.shields.io/pypi/v/comtool.svg)](https://pypi.python.org/pypi/comtool/) ![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/neutree/comtool/pack.yml?branch=master) ![GitHub repo size](https://img.shields.io/github/repo-size/neutree/comtool) ![GitHub Repo stars](https://img.shields.io/github/stars/neutree/comtool?style=social)
 
  [![GitHub all releases](https://img.shields.io/github/downloads/neutree/comtool/total?label=release%20downloads)](https://github.com/Neutree/COMTool/releases) [![PyPI - Downloads](https://img.shields.io/pypi/dm/comtool?label=pypi%20downloads)](https://pypi.org/project/COMTool/) [![SourceForge](https://img.shields.io/sourceforge/dt/comtool?label=sourceforge%20downloads)](https://sourceforge.net/projects/comtool)
