@@ -25,6 +25,10 @@
 - 无头 Qt 冒烟：弹窗打开期间插入 `COM5`，列表在 500ms 定时器触发后从 1 项变为 2 项；拔出后显示禁用的“未检测到串口”占位项；关闭弹窗后定时器停止。
 - `QT_QPA_PLATFORM=offscreen python COMTool/Main.py`：主窗口启动，无异常堆栈。
 - GitHub Actions `unit tests`：通过（run 见分支提交 `b471c42`）。
+- Windows 10 Pro 1909（`172.16.66.163`），Python 3.10.11，PyQt5 5.15.11，pyserial 3.5：`python -m pytest tests -q` → `26 passed`。
+- Windows 真实端口枚举：`COM97`/`COM98`/`COM99`/`COM100`（CH344，`1A86:55D5`），`collect_ports()` 与 `display_text()` 输出正确。
+- Windows GUI 弹窗刷新测试（真实 `Serial` 控件和 500ms 定时器，注入端口列表变化以模拟拔插）：`PASS`；拔除 0.33s、插入 0.54s、空列表占位 0.55s、重新插入 0.44s；弹窗保持展开，选中项保持。
+- 由于无法远程物理拔插 CH344，上述 GUI 测试用注入端口列表模拟真实拔插；物理拔插仍需现场验证，或直接运行 `tools/hotplug_smoke_test.py`。
 - 真机串口的 Windows/Linux/macOS 手工矩阵尚未执行，需要在有 CH340/CP210x/FTDI 的环境补测。
 - 为 Windows 真机准备了交互式脚本 `tools/hotplug_smoke_test.py`：自动打开串口下拉框，提示插入/拔出设备，并检查列表是否在弹窗展开时刷新。
 
