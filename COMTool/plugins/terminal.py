@@ -675,6 +675,7 @@ class Plugin(Plugin_Base):
 
     enabled = False          # user enabled this plugin
     active  = False          # using this plugin
+    autoHideSettings = True  # hide connection/settings panel, show it on hover
 
     def __init__(self):
         super().__init__()

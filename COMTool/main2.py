@@ -43,11 +43,12 @@ except ImportError:
     from COMTool.pluginItems import PluginItem
     from .widgets import TitleBar, CustomTitleBarWindowMixin, EventFilter, ButtonCombbox, HelpWidget
 
-from PyQt5.QtCore import pyqtSignal, Qt, QRect, QMargins, QCoreApplication
+from PyQt5.QtCore import pyqtSignal, Qt, QRect, QMargins, QCoreApplication, QTimer
 from PyQt5.QtWidgets import (QApplication, QWidget,QPushButton,QMessageBox,QDesktopWidget,QMainWindow,
                              QVBoxLayout,QHBoxLayout,QGridLayout,QTextEdit,QLabel,QRadioButton,QCheckBox,
-                             QLineEdit,QGroupBox,QSplitter,QFileDialog, QScrollArea, QTabWidget, QMenu, QSplashScreen)
-from PyQt5.QtGui import QIcon,QFont,QTextCursor,QPixmap,QColor, QCloseEvent
+                             QLineEdit,QGroupBox,QSplitter,QFileDialog, QScrollArea, QTabWidget, QMenu, QSplashScreen,
+                             QAbstractSpinBox)
+from PyQt5.QtGui import QIcon,QFont,QTextCursor,QPixmap,QColor, QCloseEvent, QCursor
 import qtawesome as qta # https://github.com/spyder-ide/qtawesome
 import threading
 import time
@@ -57,6 +58,21 @@ if sys.platform == "win32":
     import ctypes
 
 g_all_windows = []
+
+
+class SettingsHoverStrip(QWidget):
+    """Thin invisible hover area at the left edge of the tab content."""
+    hovered = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedWidth(6)
+        self.setCursor(Qt.PointingHandCursor)
+
+    def enterEvent(self, event):
+        self.hovered.emit()
+        super().enterEvent(event)
+
 
 class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
     hintSignal = pyqtSignal(str, str, str) # type(error, warning, info), title, msg
@@ -85,6 +101,8 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         self.loadPluginItems()
         log.i("load plugin items complete")
         self.initEvent()
+        self.updateSettingsButton()
+        self.updateSettingsAutoHide(self.getCurrentItem())
 
     def initVar(self):
         self.loadPluginStr = _("Load plugin from file")
@@ -92,6 +110,12 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         self.items = []
         self.pluginClasses = []
         self.helpWindow = None
+        # hover-to-show settings panel (currently used by the terminal plugin)
+        self.settingsHoverStrip = None
+        self._settings_hover_seen = False
+        self._settings_hover_timer = QTimer(self)
+        self._settings_hover_timer.setInterval(250)
+        self._settings_hover_timer.timeout.connect(self._checkSettingsAutoHide)
 
 
     def loadPluginsInfoList(self):
@@ -369,6 +393,10 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         self.contentWidget.setLayout(self.contentLayout)
         self.contentLayout.setContentsMargins(10, 0, 10, 10)
         self.contentLayout.addWidget(self.tabWidget)
+        # thin hover area for auto showing the settings panel
+        self.settingsHoverStrip = SettingsHoverStrip(self.tabWidget)
+        self.settingsHoverStrip.hovered.connect(self.onSettingsHoverStripEntered)
+        self.settingsHoverStrip.hide()
 
         if sys.platform == 'darwin':
             self.macOsAddDockMenu()
@@ -389,6 +417,10 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
                                 self.add_new_window)
         self.dockMenu.setAsDockMenu()
         self.app.setAttribute(Qt.AA_DontShowIconsInMenus, True)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.positionSettingsHoverStrip()
 
     def initEvent(self):
         # menu
@@ -452,6 +484,74 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         if item:
             self.config["currItem"] = item.name
             item.plugin.onActive()
+        self.updateSettingsButton()
+        self.updateSettingsAutoHide(item)
+
+    def positionSettingsHoverStrip(self):
+        if self.settingsHoverStrip is None:
+            return
+        rect = self.tabWidget.contentsRect()
+        tabBar = self.tabWidget.tabBar()
+        top = tabBar.height() if tabBar is not None and tabBar.isVisible() else 0
+        y = rect.y() + top
+        height = rect.height() - top
+        if height < 0:
+            height = 0
+        self.settingsHoverStrip.setGeometry(rect.x(), y, 6, height)
+        self.settingsHoverStrip.raise_()
+
+    def updateSettingsAutoHide(self, item):
+        enabled = bool(item and getattr(item.plugin, "autoHideSettings", False))
+        self._settings_hover_seen = False
+        self._settings_hover_timer.stop()
+        if self.settingsHoverStrip is None:
+            return
+        if not enabled:
+            self.settingsHoverStrip.hide()
+            return
+        self.positionSettingsHoverStrip()
+        if item.settingWidget.isVisible():
+            self.settingsHoverStrip.hide()
+            self._settings_hover_timer.start()
+        else:
+            self.settingsHoverStrip.show()
+            self.settingsHoverStrip.raise_()
+
+    def onSettingsHoverStripEntered(self):
+        item = self.getCurrentItem()
+        if not item or not getattr(item.plugin, "autoHideSettings", False):
+            return
+        if not item.settingWidget.isVisible():
+            self.showSettings()
+
+    def _checkSettingsAutoHide(self):
+        item = self.getCurrentItem()
+        if (not item
+                or not getattr(item.plugin, "autoHideSettings", False)
+                or not item.settingWidget.isVisible()):
+            self._settings_hover_timer.stop()
+            self._settings_hover_seen = False
+            return
+        panel = item.settingWidget
+        cursor_pos = panel.mapFromGlobal(QCursor.pos())
+        inside = panel.rect().contains(cursor_pos)
+        if inside:
+            self._settings_hover_seen = True
+        if not self._settings_hover_seen:
+            # Wait until the user actually visits the panel, so a panel opened
+            # with the toolbar button is not closed immediately.
+            return
+        if QApplication.activePopupWidget() is not None:
+            return
+        if inside:
+            return
+        focus_widget = QApplication.focusWidget()
+        if (focus_widget is not None
+                and panel.isAncestorOf(focus_widget)
+                and isinstance(focus_widget, (QLineEdit, QAbstractSpinBox, QTextEdit))):
+            # Do not hide while the user is editing a value.
+            return
+        self.hideSettings()
 
     def closeTab(self, idx):
         # only one, ignore
@@ -627,17 +727,37 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         else:
             self.showSettings()
 
+    def updateSettingsButton(self):
+        item = self.getCurrentItem()
+        visible = bool(item and item.settingWidget and item.settingWidget.isVisible())
+        style = (parameters.strStyleShowHideButtonLeft if visible
+                 else parameters.strStyleShowHideButtonRight)
+        self.settingsButton.setStyleSheet(style.replace("$DataPath", self.DataPath))
+
     def showSettings(self):
-        widget = self.getCurrentItem().settingWidget
-        widget.show()
-        self.settingsButton.setStyleSheet(
-            parameters.strStyleShowHideButtonLeft.replace("$DataPath",self.DataPath))
+        item = self.getCurrentItem()
+        if not item:
+            return
+        item.settingWidget.show()
+        self.updateSettingsButton()
+        if getattr(item.plugin, "autoHideSettings", False) and self.settingsHoverStrip is not None:
+            self.settingsHoverStrip.hide()
+            self._settings_hover_seen = False
+            self._settings_hover_timer.start()
 
     def hideSettings(self):
-        widget = self.getCurrentItem().settingWidget
-        widget.hide()
-        self.settingsButton.setStyleSheet(
-            parameters.strStyleShowHideButtonRight.replace("$DataPath", self.DataPath))
+        item = self.getCurrentItem()
+        if not item:
+            return
+        item.settingWidget.hide()
+        self.updateSettingsButton()
+        self._settings_hover_timer.stop()
+        self._settings_hover_seen = False
+        if (getattr(item.plugin, "autoHideSettings", False)
+                and self.settingsHoverStrip is not None):
+            self.positionSettingsHoverStrip()
+            self.settingsHoverStrip.show()
+            self.settingsHoverStrip.raise_()
 
     def toggleFunctional(self):
         widget = self.getCurrentItem().functionalWidget
