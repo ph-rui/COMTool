@@ -162,6 +162,13 @@ class ZmodemReceiver:
                     frame_finished = self._receive_data_frames(
                         handle, header.crc_len, offset, meta
                     )
+                    if frame_finished is None:
+                        retries += 1
+                        if retries > self.max_retries:
+                            raise ZmodemAbort(
+                                "too many data checksum failures"
+                            )
+                        continue
                     offset = frame_finished
                     retries = 0
                     continue
@@ -208,14 +215,14 @@ class ZmodemReceiver:
 
     def _receive_data_frames(
         self, handle, crc_len: int, offset: int, meta: FileMeta
-    ) -> int:
+    ):
         while True:
             try:
                 subpacket = self.reader.read_subpacket(crc_len)
             except ValueError:
                 self.reader.clear_buffer()
                 self._send_zrpos(offset)
-                raise
+                return None
 
             handle.write(subpacket.payload)
             offset += len(subpacket.payload)

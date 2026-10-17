@@ -110,10 +110,9 @@ class ZmodemSender:
             ).encode("ascii")
         )
 
-        self._send_binary_header(FRAME_ZFILE, b"\0\0\0\0", crc_len)
-        self._send_subpacket(metadata, SUBPACKET_ZCRCW, crc_len)
+        self._send_zfile(metadata, crc_len)
 
-        offset = self._wait_for_zrpos()
+        offset = self._wait_for_zrpos(metadata, crc_len)
         if offset is None:
             return
         if offset < 0 or offset > stat.st_size:
@@ -150,9 +149,23 @@ class ZmodemSender:
         if self.on_file_complete is not None:
             self.on_file_complete(name)
 
-    def _wait_for_zrpos(self) -> Optional[int]:
+    def _send_zfile(self, metadata: bytes, crc_len: int) -> None:
+        self._send_binary_header(FRAME_ZFILE, b"\0\0\0\0", crc_len)
+        self._send_subpacket(metadata, SUBPACKET_ZCRCW, crc_len)
+
+    def _wait_for_zrpos(
+        self, metadata: bytes, crc_len: int
+    ) -> Optional[int]:
+        retries = 0
         while True:
-            header = self.reader.read_header()
+            try:
+                header = self.reader.read_header()
+            except ZmodemTimeout:
+                retries += 1
+                if retries > self.max_retries:
+                    raise
+                self._send_zfile(metadata, crc_len)
+                continue
             if header.frame_type == FRAME_ZRPOS:
                 return unpack_offset(header.data)
             if header.frame_type == FRAME_ZSKIP:
@@ -160,10 +173,12 @@ class ZmodemSender:
             if header.frame_type in (FRAME_ZABORT, FRAME_ZCAN):
                 raise ZmodemAbort("receiver aborted the transfer")
             if header.frame_type == FRAME_ZNAK:
-                # The receiver did not like the file header; resend nothing
-                # here and let the caller's retry logic handle it.
+                retries += 1
+                if retries > self.max_retries:
+                    raise ZmodemAbort("receiver rejected the file header")
+                self._send_zfile(metadata, crc_len)
                 continue
-            # Ignore ZRINIT/ZACK etc. while waiting for ZRPOS.
+            # Ignore repeated ZRINIT/ZACK etc. while waiting for ZRPOS.
 
     def _send_data(self, path: str, offset: int, crc_len: int) -> None:
         with open(path, "rb") as handle:
@@ -201,7 +216,7 @@ class ZmodemSender:
             if header.frame_type in (FRAME_ZABORT, FRAME_ZCAN):
                 raise ZmodemAbort("receiver aborted the transfer")
             if header.frame_type == FRAME_ZNAK:
-                return size
+                return 0
 
     def _finish(self) -> None:
         self._send_header(FRAME_ZFIN)

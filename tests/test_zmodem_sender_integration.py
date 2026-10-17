@@ -73,6 +73,38 @@ def test_send_one_megabyte_to_lrz(peer, tmp_path):
     assert _sha256(str(output / "large.bin")) == _sha256(str(source))
 
 
+def test_send_empty_file_to_lrz(peer, tmp_path):
+    source = tmp_path / "empty.bin"
+    source.write_bytes(b"")
+    output = tmp_path / "output"
+    output.mkdir()
+
+    peer.start_receiver(cwd=str(output))
+    sender = ZmodemSender(peer.io, [str(source)])
+    sender.run()
+
+    assert peer.wait(timeout=20) == 0
+    received = output / "empty.bin"
+    assert received.exists()
+    assert received.stat().st_size == 0
+
+
+def test_send_unicode_filename_to_lrz(peer, tmp_path):
+    source = tmp_path / "中文文件.bin"
+    source.write_bytes(os.urandom(16 * 1024))
+    output = tmp_path / "output"
+    output.mkdir()
+
+    peer.start_receiver(cwd=str(output))
+    sender = ZmodemSender(peer.io, [str(source)])
+    sender.run()
+
+    assert peer.wait(timeout=20) == 0
+    received = output / source.name
+    assert received.exists()
+    assert _sha256(str(received)) == _sha256(str(source))
+
+
 def test_send_after_delayed_start(peer, tmp_path):
     source = tmp_path / "delayed.bin"
     source.write_bytes(os.urandom(32 * 1024))

@@ -35,7 +35,7 @@ class LrzszPeer:
     def available(self) -> bool:
         return self.send_tool is not None and self.receive_tool is not None
 
-    def _start(self, command, cwd):
+    def _start(self, command, cwd, io_factory=None):
         self.process = subprocess.Popen(
             command,
             stdin=subprocess.PIPE,
@@ -44,22 +44,40 @@ class LrzszPeer:
             cwd=cwd,
             bufsize=0,
         )
-        self.io = ZmodemIO(self._write)
+        self.io = (
+            io_factory(self._write)
+            if io_factory is not None
+            else ZmodemIO(self._write)
+        )
 
         self._stdout_thread = threading.Thread(target=self._read_stdout, daemon=True)
         self._stdout_thread.start()
         self._stderr_thread = threading.Thread(target=self._read_stderr, daemon=True)
         self._stderr_thread.start()
 
-    def start_sender(self, files: List[str], cwd: Optional[str] = None):
+    def start_sender(
+        self,
+        files: List[str],
+        cwd: Optional[str] = None,
+        io_factory=None,
+        extra_args: Optional[List[str]] = None,
+    ):
         assert self.send_tool is not None
-        command = [self.send_tool, "-b", "-q"] + list(files)
-        self._start(command, cwd)
+        command = (
+            [self.send_tool, "-b", "-q"]
+            + list(extra_args or [])
+            + list(files)
+        )
+        self._start(command, cwd, io_factory=io_factory)
 
-    def start_receiver(self, cwd: Optional[str] = None):
+    def start_receiver(
+        self, cwd: Optional[str] = None, io_factory=None, extra_args=None
+    ):
         assert self.receive_tool is not None
-        command = [self.receive_tool, "-y", "-b", "-q"]
-        self._start(command, cwd)
+        command = (
+            [self.receive_tool, "-y", "-b", "-q"] + list(extra_args or [])
+        )
+        self._start(command, cwd, io_factory=io_factory)
 
     def _write(self, data: bytes):
         assert self.process is not None and self.process.stdin is not None
