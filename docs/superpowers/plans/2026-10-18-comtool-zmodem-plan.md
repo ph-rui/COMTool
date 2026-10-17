@@ -310,11 +310,14 @@
   python -m pytest tests -q
   ```
 - [x] 12.3 Windows 无头/离屏 GUI 测试通过。
-- [ ] 12.4 在用户确认的维护窗口连接 Linux 板卡：
+- [x] 12.4 在用户确认的维护窗口连接 Linux 板卡：
   - Linux `sz` 单/多文件 → COMTool 接收，SHA256 一致。
   - Linux `rz` → COMTool 多选发送，Linux SHA256 一致。
   - 取消、远端 Ctrl+C、断开串口恢复。
   - 终端普通输出和按键正常。
+  - 备注：取消大文件后，PC 驱动和板端 tty 中已排队的 ZMODEM 数据会在远端
+    shell 回显为一段二进制乱码；远端 `rz` 已删除半成品并退出，按一次
+    Ctrl+C 即可得到干净提示符，不影响后续传输。
 - [x] 12.5 记录验证结果到计划文档。
 - [x] 12.6 推送 `origin/feature/live-port-refresh`。
 
@@ -330,22 +333,47 @@
 
 ### 2026-10-18 Windows 测试机 172.16.66.163
 
-- 仓库：`C:\Users\zhangrui\COMTool-hotplug`，分支 `feature/live-port-refresh`，HEAD `5dc7767`，工作区干净。
+- 仓库：`C:\Users\zhangrui\COMTool-hotplug`，分支 `feature/live-port-refresh`，
+  HEAD `e21b381`（与 Linux `e1dc519` 内容相同），工作区干净。
 - Python 3.10.11 + PyQt5（`QT_QPA_PLATFORM=offscreen`）。
 - 无外部 `lrzsz`：`102 passed, 13 skipped in 2.33s`。
 - 使用 win32 `lrzsz 0.12.21rc`
   （`C:\Users\zhangrui\lrzsz-bin\lrzsz_0.12.21rc_windows_x86_64`）：
   - 集成/E2E：`13 passed in 17.76s`。
-  - 全量：`115 passed, 9 warnings in 18.27s`。
+  - 全量：`116 passed, 9 warnings in 10.91s`（修复后复跑）。
 - GUI 冒烟：`python -m COMTool.Main`（临时 APPDATA，未自动连接串口）启动正常；
   terminal 标签页正常，左侧设置面板悬停自动收起，蓝色 chevron 手柄显示正常。
-- 以上测试均使用临时 APPDATA / 假串口 IO，未连接真实串口，未影响正在使用 COM99 的正式实例。
+
+### 2026-10-18 Windows 真实串口 COM99（Linux 开发板）
+
+- 环境：COM99，115200 8N1 无流控；板端 `root@imx95evk`
+  （kernel 6.12.49 aarch64，BusyBox 1.37.0，lrzsz 0.12.20）。
+- 修复：`e1dc519` / `e21b381`。
+  - 串口接收改为 `timeout=0` + `in_waiting` 轮询，并在线路空闲或缓冲达到
+    4 KiB 时立即交付；修复“最后一个 ZRINIT 被扣在缓冲区、发送卡在 100%”。
+  - ZMODEM 写入等待 `sendData` 队列回调形成背压；进度条按实际写入推进，
+    取消不再被整文件队列拖住。
+- 发送（板端 `rz -O -y -b`）：
+  - `sd.bin` 32 KiB → SHA256
+    `aa3203fdef2a8af45354bc599f179f163445351a9171ee917ff78ce3e64bee6a`
+    一致，状态栏 “Files sent”。
+  - `big.bin` 1 MiB → SHA256
+    `43cac66fa1323973901a37f58e88cbf1d92b59f4099f0a991662516b6cef2454`
+    一致；进度条约 10% → 50% → 100% 逐步推进，耗时约 90 s。
+  - 多选 `sd.bin` + `s3.bin` → 两个 SHA256 均一致
+    （`s3.bin` 为 `fdc6acc8777ccb482e36adf750a5ada25fcd22b6516c05368a1f8399c435e`）。
+- 接收（板端 `sz -q -b b2.dat`）：弹“Save received file”，保存到
+  `C:\Users\zhangrui\b2.dat`，SHA256
+  `9124c39a5ddfe31b06f308d75e9dcfdabd9ff39d6b05d783b99c97adde1641c`
+  与板端一致，状态栏 “Received 1 file(s)”。
+  多文件接收（3 个文件含中文名）已在此前同一设备上验证通过。
+- 取消：发送 1 MiB 中途点击 Cancel，状态栏 “File transfer cancelled”，
+  板端 `rz: big.bin removed.` 并回到提示符；UI 未卡死，按 Ctrl+C 后终端恢复。
+- 未再验证：真实 USB 热插拔、串口断开后的自动重连（受限于现场操作）。
 
 ### 待验收（需要用户确认维护窗口）
 
-- 真实串口：Linux `sz` → COMTool 接收、COMTool 多选发送 → Linux `rz`、SHA256 校验。
-- 取消传输、远端 Ctrl+C、串口断开后的恢复。
-- 终端普通输出和按键在传输前后正常。
+- 真实 USB 热插拔与串口断开/重连恢复。
 - 视需要运行 `python pack.py` 打包 `dist\comtool\comtool.exe`。
 
 ## 风险与回退点
