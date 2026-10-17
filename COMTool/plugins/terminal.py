@@ -781,6 +781,34 @@ class Plugin(Plugin_Base):
         else:
             self._zmodem_start_pending_send(detection)
 
+    def _zmodem_write(self, data: bytes):
+        """Write ZMODEM bytes and wait until the serial layer took them.
+
+        The normal plugin ``send`` is asynchronous (it queues to the serial
+        writer thread).  ZMODEM needs backpressure: without it the whole file
+        is queued at once, progress jumps to 100%, and a cancelled transfer
+        cannot stop in time.  The queue callback fires after the connection
+        actually wrote the bytes.
+        """
+        done = threading.Event()
+        result = []
+
+        def callback(ok, msg, length, path):
+            result.append((ok, msg))
+            done.set()
+
+        try:
+            self.send(data, callback=callback)
+        except TypeError:
+            # Test doubles / custom send implementations with one argument.
+            self.send(data)
+            callback(True, "", len(data), "")
+        if not done.wait(15.0):
+            raise OSError(_("Serial write timed out"))
+        ok, msg = result[0]
+        if not ok:
+            raise OSError(msg or _("Serial write failed"))
+
     def _zmodem_callbacks(self):
         return {
             "on_progress": lambda name, sent, total: self.zmodemProgressSignal.emit(
@@ -795,7 +823,7 @@ class Plugin(Plugin_Base):
 
     def _zmodem_start_receive(self, detection):
         temp_dir = tempfile.mkdtemp(prefix="comtool-zmodem-")
-        io = ZmodemIO(lambda data: self.send(data))
+        io = ZmodemIO(self._zmodem_write)
         callbacks = self._zmodem_callbacks()
         session = ZmodemSession(
             "receive",
@@ -844,7 +872,7 @@ class Plugin(Plugin_Base):
             return
 
         self.config["zmodem_last_dir"] = os.path.dirname(files[0])
-        io = ZmodemIO(lambda data: self.send(data))
+        io = ZmodemIO(self._zmodem_write)
         callbacks = self._zmodem_callbacks()
         session = ZmodemSession(
             "send",

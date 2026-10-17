@@ -69,11 +69,17 @@ class ZmodemSession:
             if self._cancelled:
                 return
             self._cancelled = True
-        try:
-            self.io.write(b"\x18" * 8 + b"\x08" * 8)
-        except Exception:
-            pass
-        self.io.cancel()
+
+        def _abort():
+            try:
+                self.io.write(b"\x18" * 8 + b"\x08" * 8)
+            except Exception:
+                pass
+            finally:
+                self.io.cancel()
+
+        # Do not block the UI thread while the writer waits for serial I/O.
+        threading.Thread(target=_abort, daemon=True).start()
 
     def _run(self):
         try:
@@ -101,6 +107,7 @@ class ZmodemSession:
                     on_file_complete=self.on_file_complete,
                     header_timeout=self.header_timeout,
                     data_timeout=self.data_timeout,
+                    chunk_size=1024,
                 )
                 self.trailing = sender.run()
                 if self.on_complete is not None:

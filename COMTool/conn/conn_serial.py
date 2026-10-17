@@ -491,7 +491,11 @@ class Serial(COMM):
 
     def receiveDataProcess(self):
         waitingReconnect = False
-        self.com.timeout = 0.001
+        # Non-blocking reads: some USB-serial drivers ignore the read timeout
+        # and block until the requested byte count arrives.  Polling avoids
+        # that and lets us flush the coalescing buffer when the line goes idle
+        # (a ZMODEM ack header is often the last thing the peer sends).
+        self.com.timeout = 0
         buffer = b''
         t = 0
         while self.status != ConnectionStatus.CLOSED:
@@ -510,20 +514,23 @@ class Serial(COMM):
                 time.sleep(0.01)
                 continue
             try:
-                length = max(1, self.com.in_waiting)
-                data = self.com.read(length)
-                if data:
-                    t = time.time()
-                    if length == 1 and not buffer: # just start receive
+                length = self.com.in_waiting
+                if length:
+                    data = self.com.read(length)
+                    if data:
+                        t = time.time()
                         buffer += data
-                        continue
-                    buffer += data
-                if buffer and (time.time() - t > self.oneByteTime * 2): # no new data in next frame
+                if buffer and (
+                    len(buffer) >= 4096
+                    or (time.time() - t > self.oneByteTime * 2)
+                ): # no new data in next frame
                     try:
                         self.onReceived(buffer)
                     except Exception as e:
                         print("-- error in onReceived callback:", e)
                     buffer = b''
+                if not length:
+                    time.sleep(0.001)
             except Exception as e:
                 if (self.status != ConnectionStatus.CLOSED):
                     # close as fast as we can to release port
