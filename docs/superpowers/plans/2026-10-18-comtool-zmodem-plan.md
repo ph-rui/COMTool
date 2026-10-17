@@ -302,19 +302,51 @@
 
 ### 任务 12：Windows 与真实串口验收
 
-- [ ] 12.1 将分支同步到 Windows 测试仓库（必要时用本地 bundle）。
-- [ ] 12.2 Windows 运行：
+- [x] 12.1 将分支同步到 Windows 测试仓库（必要时用本地 bundle）。
+  - 仓库路径：`C:\Users\zhangrui\COMTool-hotplug`
+  - 通过本地 bundle + HTTP 传输，`git pull <bundle> feature/live-port-refresh --ff-only` 成功。
+- [x] 12.2 Windows 运行：
   ```bat
   python -m pytest tests -q
   ```
-- [ ] 12.3 Windows 无头/离屏 GUI 测试通过。
+- [x] 12.3 Windows 无头/离屏 GUI 测试通过。
 - [ ] 12.4 在用户确认的维护窗口连接 Linux 板卡：
   - Linux `sz` 单/多文件 → COMTool 接收，SHA256 一致。
   - Linux `rz` → COMTool 多选发送，Linux SHA256 一致。
   - 取消、远端 Ctrl+C、断开串口恢复。
   - 终端普通输出和按键正常。
-- [ ] 12.5 记录验证结果到计划文档。
-- [ ] 12.6 推送 `origin/feature/live-port-refresh`。
+- [x] 12.5 记录验证结果到计划文档。
+- [x] 12.6 推送 `origin/feature/live-port-refresh`。
+
+## 验证记录
+
+### 2026-10-18 Linux 开发机
+
+- 无外部 `lrzsz`：`102 passed, 13 skipped`。
+- 带本地编译的 `lrzsz 0.12.20`（`COMTOOL_LRZSZ_DIR=/tmp/opencode/lrzsz-install/bin`）：`115 passed`。
+- 覆盖：单/多文件、1MB、延迟启动、16 位 CRC、中文/空格文件名、空文件、SHA256、CRC 重试、ZCAN、ZNAK、ZRPOS、ZSKIP、UI 路由/状态栏/保存对话框、插件级真实 lrzsz 端到端。
+- `python -m py_compile COMTool/zmodem/*.py COMTool/plugins/terminal.py` 通过。
+- `zh_CN`/`zh_TW` 翻译文件可正常加载。
+
+### 2026-10-18 Windows 测试机 172.16.66.163
+
+- 仓库：`C:\Users\zhangrui\COMTool-hotplug`，分支 `feature/live-port-refresh`，HEAD `5dc7767`，工作区干净。
+- Python 3.10.11 + PyQt5（`QT_QPA_PLATFORM=offscreen`）。
+- 无外部 `lrzsz`：`102 passed, 13 skipped in 2.33s`。
+- 使用 win32 `lrzsz 0.12.21rc`
+  （`C:\Users\zhangrui\lrzsz-bin\lrzsz_0.12.21rc_windows_x86_64`）：
+  - 集成/E2E：`13 passed in 17.76s`。
+  - 全量：`115 passed, 9 warnings in 18.27s`。
+- GUI 冒烟：`python -m COMTool.Main`（临时 APPDATA，未自动连接串口）启动正常；
+  terminal 标签页正常，左侧设置面板悬停自动收起，蓝色 chevron 手柄显示正常。
+- 以上测试均使用临时 APPDATA / 假串口 IO，未连接真实串口，未影响正在使用 COM99 的正式实例。
+
+### 待验收（需要用户确认维护窗口）
+
+- 真实串口：Linux `sz` → COMTool 接收、COMTool 多选发送 → Linux `rz`、SHA256 校验。
+- 取消传输、远端 Ctrl+C、串口断开后的恢复。
+- 终端普通输出和按键在传输前后正常。
+- 视需要运行 `python pack.py` 打包 `dist\comtool\comtool.exe`。
 
 ## 风险与回退点
 
