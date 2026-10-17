@@ -75,10 +75,30 @@ A cross platform serial debug tools written by python
     - [x] customize shortcut key
     - [x] escape character support, like `\r \n \t \x` etc.
   - [x] terminal plugin, basic terminal interaction
+    - [x] pure-Python ZMODEM file receive/send, compatible with Linux `rz`/`sz`
+    - [x] automatic ZMODEM detection in both directions, including multi-file transfers
+    - [x] save-as prompt for every received file, with progress and cancel support
   - [x] graph plugin
     - [x] support dynamicly add graph widgets, add graph widgets you need
     - [x] display line chart in realtime, support customize protocol header(support escape characters)
     - [x] customable button to send data, support shortcut key
+
+## ZMODEM file transfer
+
+The terminal plugin contains a pure-Python ZMODEM implementation. It does not
+bundle or require an external `rz`/`sz` binary at runtime.
+
+* **Receive files from a Linux device**: in the terminal run `sz file1 file2`.
+  COMTool detects the ZMODEM request automatically, receives all files into a
+  private temporary directory, and then asks where to save each file.
+* **Send files to a Linux device**: run `rz -y` on the Linux device. COMTool
+  detects the ZRINIT request, opens a multi-file picker, and sends the selected
+  files over the same serial connection.
+* Transfers show progress in the status bar and can be cancelled. Terminal
+  keyboard input is locked while a transfer is active and restored afterwards.
+
+Linux `rz`/`sz` are only needed on the remote side. For local integration tests,
+install `lrzsz` and point `COMTOOL_LRZSZ_DIR` at its `bin` directory.
 
 ## Installation
 

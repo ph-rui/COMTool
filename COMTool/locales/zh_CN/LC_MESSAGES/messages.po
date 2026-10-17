@@ -950,6 +950,36 @@ msgstr "终端"
 msgid "my plugin2"
 msgstr "我的插件2"
 
+msgid "Receiving..."
+msgstr "正在接收..."
+
+msgid "Select files to send..."
+msgstr "请选择要发送的文件..."
+
+msgid "Sending..."
+msgstr "正在发送..."
+
+msgid "Cancelling..."
+msgstr "正在取消..."
+
+msgid "Select files to send"
+msgstr "选择要发送的文件"
+
+msgid "Save received file"
+msgstr "保存接收的文件"
+
+msgid "Files sent"
+msgstr "文件已发送"
+
+msgid "File transfer cancelled"
+msgstr "文件传输已取消"
+
+msgid "Received {} file(s)"
+msgstr "已接收 {} 个文件"
+
+msgid "ZMODEM error"
+msgstr "ZMODEM 错误"
+
 #~ msgid "Donate"
 #~ msgstr "捐献"
 

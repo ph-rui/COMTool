@@ -943,6 +943,36 @@ msgstr ""
 msgid "my plugin2"
 msgstr ""
 
+msgid "Receiving..."
+msgstr ""
+
+msgid "Select files to send..."
+msgstr ""
+
+msgid "Sending..."
+msgstr ""
+
+msgid "Cancelling..."
+msgstr ""
+
+msgid "Select files to send"
+msgstr ""
+
+msgid "Save received file"
+msgstr ""
+
+msgid "Files sent"
+msgstr ""
+
+msgid "File transfer cancelled"
+msgstr ""
+
+msgid "Received {} file(s)"
+msgstr ""
+
+msgid "ZMODEM error"
+msgstr ""
+
 #: conn/conn_serial.py:0
 msgid "No serial port found"
 msgstr ""
