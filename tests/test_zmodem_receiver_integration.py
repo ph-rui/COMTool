@@ -76,6 +76,23 @@ def test_receive_one_megabyte_from_lsz(peer, tmp_path):
     assert peer.wait(timeout=20) == 0
 
 
+def test_receive_with_16_bit_crc(peer, tmp_path):
+    source = tmp_path / "crc16.bin"
+    source.write_bytes(os.urandom(48 * 1024))
+    output = tmp_path / "output"
+    output.mkdir()
+
+    peer.start_sender(
+        [str(source)], cwd=str(tmp_path), extra_args=["-o"]
+    )
+    receiver = ZmodemReceiver(peer.io, str(output))
+    files = receiver.run()
+
+    assert len(files) == 1
+    assert _sha256(files[0].path) == _sha256(str(source))
+    assert peer.wait(timeout=20) == 0
+
+
 def test_receive_after_delayed_start(peer, tmp_path):
     source = tmp_path / "delayed.bin"
     source.write_bytes(os.urandom(32 * 1024))
