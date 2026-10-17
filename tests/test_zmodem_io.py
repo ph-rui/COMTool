@@ -42,6 +42,20 @@ def test_cancel_wakes_reader():
     assert isinstance(caught[0], ZmodemAbort)
 
 
+def test_read_some_returns_available_bytes():
+    io = ZmodemIO(lambda data: None)
+    io.feed(b"abcdef")
+    assert io.read_some(4, timeout=1) == b"abcd"
+    assert io.read_some(4, timeout=1) == b"ef"
+
+
+def test_drain_returns_buffered_bytes():
+    io = ZmodemIO(lambda data: None)
+    io.feed(b"trailing")
+    assert io.drain() == b"trailing"
+    assert io.drain() == b""
+
+
 def test_write_callback_receives_data():
     written = []
     io = ZmodemIO(written.append)

@@ -42,7 +42,7 @@ def test_encode_hex_header_exact_bytes():
 
 def test_encode_hex_header_zrinit():
     assert encode_hex_header(FRAME_ZRINIT, b"\0\0\0\x27") == (
-        b"**\x18B01000000" + b"27FED4\r\n\x11"
+        b"**\x18B01000000" + b"27fed4\r\n\x11"
     )
 
 
@@ -54,6 +54,15 @@ def test_parse_hex_header_with_leading_garbage():
     assert header.data == b"\0\0\0\0"
     assert header.crc_len == 16
     assert consumed == len(raw)
+
+
+def test_parse_lrzsz_hex_header_ending():
+    raw = encode_hex_header(FRAME_ZFIN, b"\0\0\0\0").replace(
+        b"\r\n\x11", b"\r\x8a"
+    )
+    result = parse_header_at(raw)
+    assert result.status == HEADER_PARSE_OK
+    assert result.header.frame_type == FRAME_ZFIN
 
 
 def test_parse_header_at_need_more_and_invalid():
