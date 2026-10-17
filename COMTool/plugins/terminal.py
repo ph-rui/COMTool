@@ -40,6 +40,21 @@ import threading
 import time
 import pyperclip
 
+
+def _format_size(size) -> str:
+    try:
+        size = int(size)
+    except (TypeError, ValueError):
+        return "0 B"
+    if size < 1024:
+        return "%d B" % size
+    if size < 1024 * 1024:
+        return "%.1f KB" % (size / 1024.0)
+    if size < 1024 * 1024 * 1024:
+        return "%.1f MB" % (size / 1024.0 / 1024.0)
+    return "%.1f GB" % (size / 1024.0 / 1024.0 / 1024.0)
+
+
 class Terminal_Backend:
     def __init__(self) -> None:
         self.screen = pyte.HistoryScreen(60, 20, history=9999, ratio = 0.05)
@@ -715,6 +730,15 @@ class Plugin(Plugin_Base):
         self._zmodem_pending = None
         self._zmodem_pending_buffer = b""
         self._zmodem_temp_dir = None
+        self._zmodem_mode = None
+        self._zmodem_send_count = 0
+        self._zmodem_send_total = 0
+        self._zmodem_send_index = 0
+        self._zmodem_send_done = 0
+        self._zmodem_send_current = 0
+        self._zmodem_recv_count = 0
+        self._zmodem_recv_bytes = 0
+        self._zmodem_recv_current = 0
         self.zmodemLabel = None
         self.zmodemBar = None
         self.zmodemCancel = None
@@ -822,6 +846,8 @@ class Plugin(Plugin_Base):
         }
 
     def _zmodem_start_receive(self, detection):
+        self._zmodem_reset_progress()
+        self._zmodem_mode = "receive"
         temp_dir = tempfile.mkdtemp(prefix="comtool-zmodem-")
         io = ZmodemIO(self._zmodem_write)
         callbacks = self._zmodem_callbacks()
@@ -848,6 +874,7 @@ class Plugin(Plugin_Base):
             io.feed(detection.remainder)
 
     def _zmodem_start_pending_send(self, detection):
+        self._zmodem_reset_progress()
         with self._zmodem_lock:
             self._zmodem_pending = detection.header
             self._zmodem_pending_buffer = detection.remainder
@@ -872,6 +899,14 @@ class Plugin(Plugin_Base):
             return
 
         self.config["zmodem_last_dir"] = os.path.dirname(files[0])
+        self._zmodem_reset_progress()
+        self._zmodem_mode = "send"
+        self._zmodem_send_count = len(files)
+        for path in files:
+            try:
+                self._zmodem_send_total += os.path.getsize(path)
+            except OSError:
+                pass
         io = ZmodemIO(self._zmodem_write)
         callbacks = self._zmodem_callbacks()
         session = ZmodemSession(
@@ -947,6 +982,17 @@ class Plugin(Plugin_Base):
             if widget is not None:
                 widget.setVisible(visible)
 
+    def _zmodem_reset_progress(self):
+        self._zmodem_mode = None
+        self._zmodem_send_count = 0
+        self._zmodem_send_total = 0
+        self._zmodem_send_index = 0
+        self._zmodem_send_done = 0
+        self._zmodem_send_current = 0
+        self._zmodem_recv_count = 0
+        self._zmodem_recv_bytes = 0
+        self._zmodem_recv_current = 0
+
     def _zmodem_set_busy(self, text: str):
         if self.zmodemLabel is None:
             return
@@ -958,6 +1004,7 @@ class Plugin(Plugin_Base):
     def _zmodem_restore_terminal(self):
         self._zmodem_set_transfer_active(False)
         self._zmodem_set_controls_visible(False)
+        self._zmodem_reset_progress()
 
     def _zmodem_cleanup_temp(self, temp_dir):
         if temp_dir:
@@ -969,23 +1016,94 @@ class Plugin(Plugin_Base):
     def _zmodem_on_file_start(self, name: str, size):
         if self.zmodemLabel is None:
             return
-        self.zmodemLabel.setText(name)
-        if size:
-            self.zmodemBar.setRange(0, int(size))
-            self.zmodemBar.setValue(0)
+        if self._zmodem_mode == "send":
+            if self._zmodem_send_index > 0:
+                self._zmodem_send_done += self._zmodem_send_current
+            self._zmodem_send_index += 1
+            self._zmodem_send_current = int(size or 0)
+            total = self._zmodem_send_total
+            self.zmodemLabel.setText(
+                "%s  [%d/%d]  %d%%  %s/%s"
+                % (
+                    name,
+                    self._zmodem_send_index,
+                    max(self._zmodem_send_count, self._zmodem_send_index),
+                    int(self._zmodem_send_done * 100 / total) if total else 0,
+                    _format_size(self._zmodem_send_done),
+                    _format_size(total),
+                )
+            )
+            if total > 0:
+                self.zmodemBar.setRange(0, total)
+                self.zmodemBar.setValue(self._zmodem_send_done)
+            else:
+                self.zmodemBar.setRange(0, 0)
+        elif self._zmodem_mode == "receive":
+            if self._zmodem_recv_count > 0:
+                self._zmodem_recv_bytes += self._zmodem_recv_current
+            self._zmodem_recv_current = int(size or 0)
+            self._zmodem_recv_count += 1
+            self.zmodemLabel.setText(
+                "%s  [%d]  %s"
+                % (
+                    name,
+                    self._zmodem_recv_count,
+                    _format_size(self._zmodem_recv_bytes),
+                )
+            )
+            if size:
+                self.zmodemBar.setRange(0, int(size))
+                self.zmodemBar.setValue(0)
+            else:
+                self.zmodemBar.setRange(0, 0)
         else:
-            self.zmodemBar.setRange(0, 0)
+            self.zmodemLabel.setText(name)
+            if size:
+                self.zmodemBar.setRange(0, int(size))
+                self.zmodemBar.setValue(0)
+            else:
+                self.zmodemBar.setRange(0, 0)
         self._zmodem_set_controls_visible(True)
 
     def _zmodem_on_progress(self, name: str, sent: int, total):
         if self.zmodemLabel is None:
             return
-        self.zmodemLabel.setText(name)
-        if total:
+        if self._zmodem_mode == "send" and self._zmodem_send_total > 0:
+            overall = min(
+                self._zmodem_send_done + int(sent), self._zmodem_send_total
+            )
+            self.zmodemBar.setRange(0, self._zmodem_send_total)
+            self.zmodemBar.setValue(overall)
+            self.zmodemLabel.setText(
+                "%s  [%d/%d]  %d%%  %s/%s"
+                % (
+                    name,
+                    max(1, self._zmodem_send_index),
+                    max(self._zmodem_send_count, self._zmodem_send_index, 1),
+                    int(overall * 100 / self._zmodem_send_total),
+                    _format_size(overall),
+                    _format_size(self._zmodem_send_total),
+                )
+            )
+        elif self._zmodem_mode == "receive" and total:
             self.zmodemBar.setRange(0, int(total))
             self.zmodemBar.setValue(min(int(sent), int(total)))
+            self.zmodemLabel.setText(
+                "%s  [%d]  %d%%  %s"
+                % (
+                    name,
+                    max(1, self._zmodem_recv_count),
+                    int(int(sent) * 100 / int(total)),
+                    _format_size(self._zmodem_recv_bytes + int(sent)),
+                )
+            )
         else:
-            self.zmodemBar.setRange(0, 0)
+            self.zmodemLabel.setText(name)
+            if total:
+                self.zmodemBar.setRange(0, int(total))
+                self.zmodemBar.setValue(min(int(sent), int(total)))
+            else:
+                self.zmodemBar.setRange(0, 0)
 
     def _zmodem_on_complete(self, files, trailing: bytes):
         with self._zmodem_lock:
@@ -1071,7 +1189,8 @@ class Plugin(Plugin_Base):
         self.zmodemLabel = QLabel("")
         self.zmodemBar = QProgressBar()
         self.zmodemBar.setFixedWidth(150)
-        self.zmodemBar.setTextVisible(False)
+        self.zmodemBar.setTextVisible(True)
+        self.zmodemBar.setFormat("%p%")
         self.zmodemBar.setRange(0, 0)
         self.zmodemCancel = QPushButton(_("Cancel"))
         self.zmodemCancel.setFixedWidth(90)

@@ -67,6 +67,53 @@ def test_progress_updates_bar_and_label(plugin):
     assert plugin.zmodemBar.value() == 512
 
 
+def test_send_overall_progress_across_files(plugin):
+    plugin._zmodem_mode = "send"
+    plugin._zmodem_send_count = 2
+    plugin._zmodem_send_total = 3000
+
+    plugin._zmodem_on_file_start("a.bin", 1000)
+    plugin._zmodem_on_progress("a.bin", 500, 1000)
+
+    assert plugin.zmodemBar.maximum() == 3000
+    assert plugin.zmodemBar.value() == 500
+    assert "a.bin" in plugin.zmodemLabel.text()
+    assert "1/2" in plugin.zmodemLabel.text()
+    assert "16%" in plugin.zmodemLabel.text()
+
+    plugin._zmodem_on_file_start("b.bin", 2000)
+    assert plugin.zmodemBar.value() == 1000
+
+    plugin._zmodem_on_progress("b.bin", 1000, 2000)
+    assert plugin.zmodemBar.value() == 2000
+    assert "b.bin" in plugin.zmodemLabel.text()
+    assert "2/2" in plugin.zmodemLabel.text()
+    assert "66%" in plugin.zmodemLabel.text()
+
+
+def test_receive_progress_shows_file_count_and_bytes(plugin):
+    plugin._zmodem_mode = "receive"
+
+    plugin._zmodem_on_file_start("a.bin", 1000)
+    plugin._zmodem_on_progress("a.bin", 500, 1000)
+
+    assert plugin.zmodemBar.maximum() == 1000
+    assert plugin.zmodemBar.value() == 500
+    assert "[1]" in plugin.zmodemLabel.text()
+    assert "500 B" in plugin.zmodemLabel.text()
+    assert "50%" in plugin.zmodemLabel.text()
+
+    plugin._zmodem_on_file_start("b.bin", 2000)
+    assert plugin.zmodemBar.maximum() == 2000
+    assert plugin.zmodemBar.value() == 0
+    assert "[2]" in plugin.zmodemLabel.text()
+    assert "1000 B" in plugin.zmodemLabel.text()
+
+    plugin._zmodem_on_progress("b.bin", 1000, 2000)
+    assert plugin.zmodemBar.value() == 1000
+    assert "2.0 KB" in plugin.zmodemLabel.text()
+
+
 def test_complete_moves_received_file(plugin, tmp_path, monkeypatch):
     temp_dir = tmp_path / "temp"
     temp_dir.mkdir()
