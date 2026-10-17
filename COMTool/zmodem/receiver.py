@@ -242,9 +242,9 @@ class ZmodemReceiver:
             if self.on_progress is not None:
                 self.on_progress(meta.name, offset, meta.size)
 
-            if subpacket.ack_expected and not subpacket.frame_end:
+            if subpacket.ack_expected and not subpacket.frame_end_frame:
                 self._send_zack(offset)
-            if subpacket.frame_end:
+            if subpacket.frame_end_frame:
                 if subpacket.frame_end == SUBPACKET_ZCRCW:
                     self._send_zack(offset)
                 return offset
