@@ -33,6 +33,7 @@ try:
     from plugins import builtinPlugins
     from pluginItems import PluginItem
     from widgets import TitleBar, CustomTitleBarWindowMixin, EventFilter, ButtonCombbox, HelpWidget
+    from settings_behavior import should_auto_hide_settings
 except ImportError:
     from COMTool import helpAbout,autoUpdate, utils_ui
     from COMTool.Combobox import ComboBox
@@ -42,6 +43,7 @@ except ImportError:
     from COMTool.plugins import builtinPlugins
     from COMTool.pluginItems import PluginItem
     from .widgets import TitleBar, CustomTitleBarWindowMixin, EventFilter, ButtonCombbox, HelpWidget
+    from COMTool.settings_behavior import should_auto_hide_settings
 
 from PyQt5.QtCore import pyqtSignal, Qt, QRect, QMargins, QCoreApplication, QTimer
 from PyQt5.QtWidgets import (QApplication, QWidget,QPushButton,QMessageBox,QDesktopWidget,QMainWindow,
@@ -172,6 +174,7 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         self.settingsHandle = None
         self._settings_hover_seen = False
         self._settings_shown_at = 0.0
+        self._last_cursor_x = QCursor.pos().x()
         self._settings_hover_timer = QTimer(self)
         self._settings_hover_timer.setInterval(250)
         self._settings_hover_timer.timeout.connect(self._checkSettingsAutoHide)
@@ -276,6 +279,7 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
                         self.config, pluginConfig,
                         self.hintSignal, self.reloadWindowSignal,
                         self.onConnChnaged)
+        item.titleChanged = self.onItemTitleChanged
         self.tabAddItem(item)
         self.items.append(item)
         if setCurrent:
@@ -292,17 +296,38 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         return item
 
     def tabAddItem(self, item):
-        self.tabWidget.addTab(item.widget, item.name)
-        self.tabWidget.setTabToolTip(self.tabWidget.count() - 1, item.name + _(", Double click to detach as a window"))
+        title = item.getDisplayName()
+        self.tabWidget.addTab(item.widget, title)
+        self.tabWidget.setTabToolTip(
+            self.tabWidget.count() - 1,
+            title + _(", Double click to detach as a window"),
+        )
+
+    def onItemTitleChanged(self, item):
+        title = item.getDisplayName()
+        for i in range(self.tabWidget.count()):
+            if self.tabWidget.widget(i) == item.widget:
+                self.tabWidget.setTabText(i, title)
+                self.tabWidget.setTabToolTip(
+                    i, title + _(", Double click to detach as a window")
+                )
+                break
+        if item.widget.isWindow():
+            item.widget.setWindowTitle(title)
 
     def onConnChnaged(self, plugin, status:ConnectionStatus, msg):
         for item in self.items:
             if item.plugin == plugin:
+                title = item.getDisplayName()
                 for i in range(self.tabWidget.count()):
                     if self.tabWidget.widget(i) == item.widget:
                         self.setTabIcon(status, i)
+                        self.tabWidget.setTabText(i, title)
+                        self.tabWidget.setTabToolTip(
+                            i, title + _(", Double click to detach as a window")
+                        )
                         break
-                item.widget.setWindowTitle(item.name + " - {}".format(_("Connected" if status == ConnectionStatus.CONNECTED else _("Connection lose") if status == ConnectionStatus.LOSE else _("Disconnected"))))
+                item.widget.setWindowTitle(title + " - {}".format(_("Connected" if status == ConnectionStatus.CONNECTED else _("Connection lose") if status == ConnectionStatus.LOSE else _("Disconnected"))))
 
     def setTabIcon(self, status:ConnectionStatus, i:int):
         if status == ConnectionStatus.CONNECTED:
@@ -592,6 +617,7 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         self.positionSettingsHoverStrip()
         if item.settingWidget.isVisible():
             self.settingsHoverStrip.hide()
+            self._last_cursor_x = QCursor.pos().x()
             self._settings_hover_timer.start()
         else:
             self.settingsHoverStrip.show()
@@ -638,28 +664,30 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
             self._settings_hover_seen = False
             return
         panel = item.settingWidget
-        cursor_pos = panel.mapFromGlobal(QCursor.pos())
+        cursor = QCursor.pos()
+        cursor_pos = panel.mapFromGlobal(cursor)
         inside = panel.rect().contains(cursor_pos)
         if self.settingsHandle is not None and self.settingsHandle.isVisible():
-            handle_pos = self.settingsHandle.mapFromGlobal(QCursor.pos())
+            handle_pos = self.settingsHandle.mapFromGlobal(cursor)
             inside = inside or self.settingsHandle.rect().contains(handle_pos)
+        # Directional auto-hide: moving left (or staying put) keeps the
+        # panel open; only a rightward move after leaving it collapses.
+        dx = cursor.x() - self._last_cursor_x
+        self._last_cursor_x = cursor.x()
         if inside:
             self._settings_hover_seen = True
-        if not self._settings_hover_seen:
-            # Wait until the user actually visits the panel, so a panel opened
-            # with the toolbar button is not closed immediately.
-            return
-        if QApplication.activePopupWidget() is not None:
-            return
-        if inside:
             return
         focus_widget = QApplication.focusWidget()
-        if (focus_widget is not None
-                and panel.isAncestorOf(focus_widget)
-                and isinstance(focus_widget, (QLineEdit, QAbstractSpinBox, QTextEdit))):
-            # Do not hide while the user is editing a value.
-            return
-        self.hideSettings()
+        editing = (focus_widget is not None
+                   and panel.isAncestorOf(focus_widget)
+                   and isinstance(focus_widget, (QLineEdit, QAbstractSpinBox, QTextEdit)))
+        if should_auto_hide_settings(
+                inside=False,
+                hover_seen=self._settings_hover_seen,
+                dx=dx,
+                popup_active=QApplication.activePopupWidget() is not None,
+                editing=editing):
+            self.hideSettings()
 
     def closeTab(self, idx):
         # only one, ignore
@@ -684,7 +712,7 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         parent = item.widget.parent()
         item.widget.setWindowFlag(Qt.Window) # this method is not stable in QT, do not use it
         # item.widget.setParent(None)
-        item.widget.setWindowTitle(item.name)
+        item.widget.setWindowTitle(item.getDisplayName())
         item.widget.closeEvent = lambda event: self.onPluginWindowClose(item, parent)
         item.widget.show()
 
@@ -693,7 +721,11 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
 
     def recoverTab(self, item, parent):
         def add(i):
-            self.tabWidget.insertTab(i, item.widget, item.name)
+            title = item.getDisplayName()
+            self.tabWidget.insertTab(i, item.widget, title)
+            self.tabWidget.setTabToolTip(
+                i, title + _(", Double click to detach as a window")
+            )
             self.tabWidget.setCurrentIndex(i)
             item.widget.setWindowFlag(Qt.Window, False)
             # item.widget.setParent(parent)
@@ -855,6 +887,7 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
                 self.settingsHandle.show()
                 self.settingsHandle.setExpanded(True)
                 self.settingsHandle.raise_()
+            self._last_cursor_x = QCursor.pos().x()
             self._settings_hover_seen = False
             self._settings_hover_timer.start()
 

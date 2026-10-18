@@ -34,6 +34,7 @@ class PluginItem:
         self.reloadWindowSignal = reloadWindowSignal
         self.hintSignal = hintSignal
         self.name = name
+        self.titleChanged = None
         self.connClasses = connClasses
         self.connsConfigs = connsConfigs
         self.currConnWidget = None
@@ -209,14 +210,39 @@ class PluginItem:
             self.currConnWidget.setParent(None)
             self.conns[self.currConnIdx].onReceived = lambda x:None
             self.conns[self.currConnIdx].onConnectionStatus.disconnect(self.onConnStatus)
+            try:
+                self.conns[self.currConnIdx].displayNameChanged.disconnect(
+                    self._onDisplayNameChanged
+                )
+            except (TypeError, RuntimeError):
+                pass
         self.currConnWidget = self.connWidgets[idx]
         self.connsParent.layout().addWidget(self.currConnWidget)
         self.conns[idx].onReceived = self.onReceived
         self.plugin.isConnected = self.conns[idx].isConnected
         self.plugin.getConnStatus = self.conns[idx].getConnStatus
         self.conns[idx].onConnectionStatus.connect(self.onConnStatus)
+        self.conns[idx].displayNameChanged.connect(self._onDisplayNameChanged)
         self.connsConfigs["currConn"] = self.conns[idx].id
         self.currConnIdx = idx
+        self._notifyTitleChanged()
+
+    def _onDisplayNameChanged(self):
+        self._notifyTitleChanged()
+
+    def _notifyTitleChanged(self):
+        if self.titleChanged is not None:
+            self.titleChanged(self)
+
+    def getDisplayName(self):
+        if self.isAddConn and getattr(self.plugin, "displayNameFromConnection", False):
+            try:
+                name = self.conns[self.currConnIdx].getDisplayName()
+            except Exception:
+                name = ""
+            if name:
+                return name
+        return self.name
 
 
     def uiLoadConfigs(self):
@@ -244,6 +270,7 @@ class PluginItem:
 
     def onConnStatus(self, status:ConnectionStatus, msg):
         self.plugin.onConnChanged(status, msg)
+        self._notifyTitleChanged()
         if self.sendProcess is None:
             self.sendProcess = threading.Thread(target=self.sendDataProcess)
             self.sendProcess.setDaemon(True)

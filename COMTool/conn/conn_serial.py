@@ -103,6 +103,9 @@ class Serial(COMM):
         self._applying_ports = False
         self._port_refresh_timer = None
 
+    def getDisplayName(self):
+        return str(self.config.get("port") or "")
+
     def disconnect(self):
         if self.isConnected():
             self.openCloseSerial()
@@ -241,6 +244,7 @@ class Serial(COMM):
             if newPort and not self._applying_ports and (newPort != self.config["port"] or  not self.com.port):
                 self.config["port"] = newPort
                 print("-- set to new port:", self.config["port"])
+                self.displayNameChanged.emit()
                 try:
                     self.com.port = self.config["port"]
                 except Exception as e:

@@ -710,7 +710,8 @@ class Plugin(Plugin_Base):
 
     enabled = False          # user enabled this plugin
     active  = False          # using this plugin
-    autoHideSettings = True  # hide connection/settings panel, show it on hover
+    autoHideSettings = True  # hover left edge to open; rightward move closes
+    displayNameFromConnection = True  # tab title shows COM99 / /dev/ttyUSB0
 
     zmodemSendRequestSignal = pyqtSignal()
     zmodemBusySignal = pyqtSignal(str)
