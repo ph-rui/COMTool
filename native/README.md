@@ -77,7 +77,7 @@ event-loop turn.
 | System | Result |
 | --- | --- |
 | Linux, Qt 5.15.2, Xvfb | 0.12–0.21 s |
-| Windows 10 Pro 1909 VM over RDP, Qt 5.15.2 | 0.60–0.67 s |
+| Windows 10 Pro 1909 VM over RDP, Qt 5.15.2 | 0.60–0.68 s |
 
 The Windows VM spends ~0.34 s in Qt's first font-database initialisation and
 ~0.20 s showing the first text window; a bare Qt window containing only one
