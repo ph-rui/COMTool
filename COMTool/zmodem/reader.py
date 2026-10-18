@@ -11,7 +11,7 @@ from .codec import (
     parse_header_at,
     parse_subpacket,
 )
-from .io import ZmodemIO
+from .io import ZmodemAbort, ZmodemIO
 
 
 class ZmodemReader:
@@ -28,15 +28,30 @@ class ZmodemReader:
             raise EOFError("ZMODEM stream closed")
         self.buffer.extend(data)
 
+    def _check_cancel(self) -> None:
+        # ZMODEM cancellation is eight consecutive CAN bytes.  Inside a
+        # subpacket a literal 0x18 is always ZDLE-escaped, so a run this long
+        # can only be an explicit abort.  Detect it instead of ignoring it as
+        # noise: otherwise the sender keeps retransmitting into a receiver
+        # that already exited and deleted its partial file.
+        if b"\x18" * 8 in self.buffer:
+            raise ZmodemAbort("peer cancelled the transfer")
+
     def read_header(self, timeout: Optional[float] = None) -> ZHeader:
         while True:
             if not self.buffer:
                 self._read_more(timeout)
                 continue
 
+            self._check_cancel()
+
             star = self.buffer.find(b"*")
             if star < 0:
+                # Keep a short tail so a cancellation sequence split across
+                # two reads is still recognised on the next iteration.
+                tail = bytes(self.buffer[-7:])
                 self.buffer.clear()
+                self.buffer.extend(tail)
                 self._read_more(timeout)
                 continue
             if star > 0:
@@ -60,6 +75,7 @@ class ZmodemReader:
             if not self.buffer:
                 self._read_more()
                 continue
+            self._check_cancel()
             parsed = parse_subpacket(bytes(self.buffer), crc_len=crc_len)
             if parsed is not None:
                 subpacket, consumed = parsed
