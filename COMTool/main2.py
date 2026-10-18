@@ -421,6 +421,7 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         log.i("icon path: " + iconPath)
         self.titleBar = TitleBar(self, icon=iconPath, title=title, brothers=[], widgets=[[self.skinButton, self.languageCombobox, self.aboutButton], []])
         CustomTitleBarWindowMixin.__init__(self, titleBar=self.titleBar, init = True)
+        self.setWindowTitle(title)
 
         # root layout
         self.frameWidget = QWidget()
