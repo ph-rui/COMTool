@@ -845,18 +845,6 @@ class Plugin(Plugin_Base):
             "on_cancelled": lambda: self.zmodemCancelledSignal.emit(),
         }
 
-    def _zmodem_flow_control(self, enabled: bool):
-        """Toggle software flow control for the duration of a transfer.
-
-        lrzsz's receiver enables IXOFF and emits XOFF when its tty input
-        queue fills.  Without host-side XON/XOFF the UART overruns, windows
-        are retransmitted and ``rz`` can abort and delete its partial file.
-        """
-        try:
-            self.ctrlConn("zmodem_flow", enabled)
-        except Exception:
-            pass
-
     def _zmodem_start_receive(self, detection):
         self._zmodem_reset_progress()
         self._zmodem_mode = "receive"
@@ -881,7 +869,6 @@ class Plugin(Plugin_Base):
             self._zmodem_detector.reset()
         self.zmodemActiveSignal.emit(True)
         self.zmodemBusySignal.emit(_("Receiving..."))
-        self._zmodem_flow_control(True)
         session.start()
         if detection.remainder:
             io.feed(detection.remainder)
@@ -940,7 +927,6 @@ class Plugin(Plugin_Base):
             self._zmodem_pending_buffer = b""
             self._zmodem_session = session
         self._zmodem_set_busy(_("Sending..."))
-        self._zmodem_flow_control(True)
         session.start()
         if buffered:
             io.feed(buffered)
@@ -954,7 +940,6 @@ class Plugin(Plugin_Base):
             # remote sees the abort instead of another kilobyte of data.
             self.ctrlConn("purge", None)
             self.send(b"\x18" * 8 + b"\x08" * 8)
-        self._zmodem_flow_control(False)
         self._zmodem_restore_terminal()
         status_bar = getattr(self, "statusBar", None)
         if status_bar is not None:
@@ -991,7 +976,6 @@ class Plugin(Plugin_Base):
             session.cancel()
         if pending is not None:
             self.send(b"\x18" * 8 + b"\x08" * 8)
-        self._zmodem_flow_control(False)
         self._zmodem_cleanup_temp(temp_dir)
         self._zmodem_restore_terminal()
 
@@ -1136,7 +1120,6 @@ class Plugin(Plugin_Base):
             self._zmodem_session = None
             temp_dir = self._zmodem_temp_dir
             self._zmodem_temp_dir = None
-        self._zmodem_flow_control(False)
         self._zmodem_restore_terminal()
         if trailing:
             # Never hand a multi-megabyte binary tail to the terminal
@@ -1185,7 +1168,6 @@ class Plugin(Plugin_Base):
             self._zmodem_session = None
             temp_dir = self._zmodem_temp_dir
             self._zmodem_temp_dir = None
-        self._zmodem_flow_control(False)
         self._zmodem_cleanup_temp(temp_dir)
         self._zmodem_restore_terminal()
         self.ctrlConn("purge", None)
@@ -1200,7 +1182,6 @@ class Plugin(Plugin_Base):
             self._zmodem_session = None
             temp_dir = self._zmodem_temp_dir
             self._zmodem_temp_dir = None
-        self._zmodem_flow_control(False)
         self._zmodem_cleanup_temp(temp_dir)
         self._zmodem_restore_terminal()
         status_bar = getattr(self, "statusBar", None)
