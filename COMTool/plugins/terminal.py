@@ -936,6 +936,9 @@ class Plugin(Plugin_Base):
             self._zmodem_pending = None
             self._zmodem_pending_buffer = b""
         if cancel_remote:
+            # Drop queued payload before writing the CAN sequence so the
+            # remote sees the abort instead of another kilobyte of data.
+            self.ctrlConn("purge", None)
             self.send(b"\x18" * 8 + b"\x08" * 8)
         self._zmodem_restore_terminal()
         status_bar = getattr(self, "statusBar", None)
@@ -947,6 +950,9 @@ class Plugin(Plugin_Base):
             session = self._zmodem_session
             pending = self._zmodem_pending
         if session is not None and session.active:
+            # Discard queued data first; the ZCAN written below then goes out
+            # immediately instead of sitting behind a kilobyte of payload.
+            self.ctrlConn("purge", None)
             session.cancel()
             if self.zmodemLabel is not None:
                 self.zmodemLabel.setText(_("Cancelling..."))
@@ -965,6 +971,7 @@ class Plugin(Plugin_Base):
             self._zmodem_pending = None
             self._zmodem_pending_buffer = b""
             self._zmodem_temp_dir = None
+        self.ctrlConn("purge", None)
         if session is not None:
             session.cancel()
         if pending is not None:
@@ -1115,7 +1122,9 @@ class Plugin(Plugin_Base):
             self._zmodem_temp_dir = None
         self._zmodem_restore_terminal()
         if trailing:
-            self._feed_terminal(trailing)
+            # Never hand a multi-megabyte binary tail to the terminal
+            # renderer: it can block the UI for minutes.
+            self._feed_terminal(trailing[-4096:])
 
         if files is None:
             status_bar = getattr(self, "statusBar", None)
@@ -1161,6 +1170,7 @@ class Plugin(Plugin_Base):
             self._zmodem_temp_dir = None
         self._zmodem_cleanup_temp(temp_dir)
         self._zmodem_restore_terminal()
+        self.ctrlConn("purge", None)
         status_bar = getattr(self, "statusBar", None)
         if status_bar is not None:
             status_bar.setMsg("error", message)

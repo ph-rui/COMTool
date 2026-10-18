@@ -94,7 +94,11 @@ class ZmodemSession:
                     data_timeout=self.data_timeout,
                 )
                 self.received_files = receiver.run()
-                self.trailing = receiver.reader.drain()
+                # Bytes that arrive after ZFIN are usually the remote shell
+                # prompt, but a noisy/failed link can leave megabytes of
+                # garbage behind.  Feeding that to the terminal renderer
+                # freezes the UI, so only surface a bounded tail.
+                self.trailing = receiver.reader.drain()[-4096:]
                 if self.on_complete is not None:
                     self.on_complete(self.received_files, self.trailing)
             else:
@@ -109,7 +113,7 @@ class ZmodemSession:
                     data_timeout=self.data_timeout,
                     chunk_size=1024,
                 )
-                self.trailing = sender.run()
+                self.trailing = sender.run()[-4096:]
                 if self.on_complete is not None:
                     self.on_complete(None, self.trailing)
         except ZmodemAbort:

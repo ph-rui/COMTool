@@ -5,6 +5,7 @@ from typing import Callable, List, Optional, Sequence
 
 from .codec import (
     FRAME_ZABORT,
+    FRAME_ZACK,
     FRAME_ZCAN,
     FRAME_ZDATA,
     FRAME_ZEOF,
@@ -43,6 +44,8 @@ class ZmodemSender:
         data_timeout: float = 30.0,
         chunk_size: int = 8192,
         max_retries: int = 5,
+        window_size: int = 4096,
+        ack_timeout: float = 10.0,
     ):
         self.io = io
         self.files = list(files)
@@ -54,6 +57,13 @@ class ZmodemSender:
         self.data_timeout = data_timeout
         self.chunk_size = max(1, chunk_size)
         self.max_retries = max_retries
+        # Stop-and-wait exactly every window_size bytes with a ZCRCW frame.
+        # This keeps the receiver's input queue from overflowing on plain
+        # 115200 links and lets us notice ZRPOS/ZNAK before the whole file is
+        # on the wire, which is what prevents 4 MiB transfers from restarting
+        # from zero after a single lost byte.
+        self.window_size = max(self.chunk_size, window_size)
+        self.ack_timeout = ack_timeout
         self.reader = ZmodemReader(io, read_timeout=header_timeout)
         self.trailing = b""
 
@@ -122,9 +132,34 @@ class ZmodemSender:
             self.on_file_start(name, stat.st_size)
 
         retries = 0
+        last_offset = offset
         while True:
+            # _send_data returns a byte offset when the receiver asked us to
+            # reposition (ZRPOS/ZNAK/ACK timeout); None means all bytes plus
+            # the final ZCRCE subpacket are on the wire.
+            resume = self._send_data(path, offset, crc_len)
+            if resume is not None and 0 <= resume < stat.st_size:
+                if resume > last_offset:
+                    # Moving forward means the previous retransmit was
+                    # accepted; stale ZRPOS frames must not exhaust the
+                    # retry budget for the rest of the file.
+                    retries = 0
+                    last_offset = resume
+                else:
+                    retries += 1
+                    if retries > self.max_retries:
+                        raise ZmodemAbort(
+                            "too many receiver retransmit requests"
+                        )
+                offset = resume
+                # Drop duplicate/stale ZRPOS frames from the failed window
+                # before retransmitting; otherwise the sender keeps chasing
+                # a position the receiver already moved past.
+                self.reader.clear_buffer()
+                self.io.drain()
+                continue
+
             try:
-                self._send_data(path, offset, crc_len)
                 result = self._wait_after_eof(stat.st_size)
             except ZmodemTimeout:
                 retries += 1
@@ -180,28 +215,75 @@ class ZmodemSender:
                 continue
             # Ignore repeated ZRINIT/ZACK etc. while waiting for ZRPOS.
 
-    def _send_data(self, path: str, offset: int, crc_len: int) -> None:
+    def _report_progress(self, path: str, sent: int, size: int) -> None:
+        if self.on_progress is not None:
+            self.on_progress(os.path.basename(path), sent, size)
+
+    def _wait_for_ack(self, sent: int) -> Optional[int]:
+        """Wait until the receiver acknowledges the current window.
+
+        ``None`` means the peer accepted the window; an int is the offset we
+        should resume from.  Timeouts and ZNAK resume at *sent*: if the peer
+        already has those bytes it accepts our next window, and if it is
+        behind it replies with ZRPOS (or an attention sequence) so the next
+        ACK wait corrects the position.
+        """
+        while True:
+            try:
+                header = self.reader.read_header(timeout=self.ack_timeout)
+            except ZmodemTimeout:
+                return sent
+            # lrzsz acknowledges ZCRCW with ZACK|0x80.
+            frame_type = header.frame_type & 0x7F
+            if frame_type == FRAME_ZACK:
+                acked = unpack_offset(header.data)
+                if acked < sent:
+                    return acked
+                return None
+            if frame_type == FRAME_ZRPOS:
+                return unpack_offset(header.data)
+            if frame_type == FRAME_ZNAK:
+                return sent
+            if frame_type in (FRAME_ZABORT, FRAME_ZCAN):
+                raise ZmodemAbort("receiver aborted the transfer")
+            # Ignore stray headers (e.g. ZRINIT) and keep waiting.
+
+    def _send_data(self, path: str, offset: int, crc_len: int) -> Optional[int]:
+        size = os.path.getsize(path)
         with open(path, "rb") as handle:
             handle.seek(offset)
-            self._send_binary_header(FRAME_ZDATA, pack_offset(offset), crc_len)
             sent = offset
-            chunk = handle.read(self.chunk_size)
-            if not chunk:
+            if size == 0:
+                self._send_binary_header(FRAME_ZDATA, pack_offset(0), crc_len)
                 self._send_subpacket(b"", SUBPACKET_ZCRCE, crc_len)
-                return
-            while True:
-                next_chunk = handle.read(self.chunk_size)
-                if not next_chunk:
-                    self._send_subpacket(chunk, SUBPACKET_ZCRCE, crc_len)
+                return None
+            while sent < size:
+                # Each window starts with a fresh ZDATA header and ends with
+                # ZCRCW.  lrzsz returns to header-search mode after ZCRCW, so
+                # if a block was corrupted the next header (or the ZRPOS it
+                # sends on the CRC error) puts both sides back in sync without
+                # restarting the whole file.
+                self._send_binary_header(FRAME_ZDATA, pack_offset(sent), crc_len)
+                window_end = min(sent + self.window_size, size)
+                while sent < window_end:
+                    remaining = window_end - sent
+                    chunk = handle.read(min(self.chunk_size, remaining))
+                    if not chunk:
+                        break
                     sent += len(chunk)
-                    if self.on_progress is not None:
-                        self.on_progress(os.path.basename(path), sent, os.path.getsize(path))
-                    return
-                self._send_subpacket(chunk, SUBPACKET_ZCRCG, crc_len)
-                sent += len(chunk)
-                if self.on_progress is not None:
-                    self.on_progress(os.path.basename(path), sent, os.path.getsize(path))
-                chunk = next_chunk
+                    if sent >= size:
+                        self._send_subpacket(chunk, SUBPACKET_ZCRCE, crc_len)
+                        self._report_progress(path, sent, size)
+                        return None
+                    if sent >= window_end:
+                        self._send_subpacket(chunk, SUBPACKET_ZCRCW, crc_len)
+                    else:
+                        self._send_subpacket(chunk, SUBPACKET_ZCRCG, crc_len)
+                    self._report_progress(path, sent, size)
+                resume = self._wait_for_ack(sent)
+                if resume is not None:
+                    return resume
+            return None
 
     def _wait_after_eof(self, size: int):
         self._send_header(FRAME_ZEOF, pack_offset(size))
