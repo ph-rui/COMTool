@@ -11,6 +11,11 @@
 #include <QTextStream>
 #include <QTimer>
 
+#ifdef Q_OS_WIN
+#include <cstdio>
+#include <windows.h>
+#endif
+
 namespace {
 
 // Qt's own catalogs translate most standard dialog labels, but the
@@ -92,6 +97,15 @@ int main(int argc, char *argv[])
         QStringLiteral("Print the time from process start to the first event-loop turn and exit."));
     parser.addOption(benchmarkOption);
     parser.process(app);
+
+#ifdef Q_OS_WIN
+    // A GUI-subsystem executable has no console of its own.  In benchmark
+    // mode, attach to the launching console so the result remains visible.
+    if (parser.isSet(benchmarkOption) && AttachConsole(ATTACH_PARENT_PROCESS)) {
+        std::freopen("CONOUT$", "w", stdout);
+        std::freopen("CONOUT$", "w", stderr);
+    }
+#endif
 
     MainWindow window;
     const qint64 windowConstructedMs = startup.elapsed();
