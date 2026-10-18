@@ -114,6 +114,13 @@ def test_receive_progress_shows_file_count_and_bytes(plugin):
     assert "2.0 KB" in plugin.zmodemLabel.text()
 
 
+def test_busy_updates_status_message(plugin, app):
+    plugin._zmodem_set_busy("Sending...")
+    app.processEvents()
+
+    assert "Sending..." in plugin.statusBar.msg.text()
+
+
 def test_complete_moves_received_file(plugin, tmp_path, monkeypatch):
     temp_dir = tmp_path / "temp"
     temp_dir.mkdir()

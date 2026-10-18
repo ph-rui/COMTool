@@ -1000,6 +1000,9 @@ class Plugin(Plugin_Base):
         self.zmodemBar.setRange(0, 0)
         self.zmodemCancel.setEnabled(True)
         self._zmodem_set_controls_visible(True)
+        status_bar = getattr(self, "statusBar", None)
+        if status_bar is not None:
+            status_bar.setMsg("info", text)
 
     def _zmodem_restore_terminal(self):
         self._zmodem_set_transfer_active(False)
