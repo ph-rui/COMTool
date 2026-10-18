@@ -126,6 +126,17 @@ class Serial(COMM):
         '''
         return self.config
 
+    def ctrl(self, k, v):
+        if k == "purge":
+            # Drop bytes that are still queued in the driver after a failed or
+            # cancelled transfer.  Without this a 115200 port keeps sending
+            # (and the remote shell keeps echoing) for a long time.
+            try:
+                if self.com.is_open:
+                    self.com.reset_output_buffer()
+            except Exception:
+                pass
+
     def onUiInitDone(self):
         for key in self.config:
             self.setSerialConfig(key, self.widgetConfMap[key], self.config[key])

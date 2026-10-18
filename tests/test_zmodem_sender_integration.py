@@ -3,6 +3,7 @@ import os
 
 import pytest
 
+from COMTool.zmodem.io import ZmodemIO
 from COMTool.zmodem.sender import ZmodemSender
 from tests.zmodem_peer import LrzszPeer
 
@@ -101,6 +102,41 @@ def test_send_unicode_filename_to_lrz(peer, tmp_path):
 
     assert peer.wait(timeout=20) == 0
     received = output / source.name
+    assert received.exists()
+    assert _sha256(str(received)) == _sha256(str(source))
+
+
+class LossyIO(ZmodemIO):
+    """Drop one slice of the outgoing stream to emulate a serial glitch."""
+
+    def __init__(self, write_callback, drop_at=11000, drop_len=64):
+        super().__init__(write_callback)
+        self.drop_at = drop_at
+        self.drop_len = drop_len
+        self.written = 0
+        self.dropped = False
+
+    def write(self, data):
+        if not self.dropped and self.written + len(data) > self.drop_at:
+            cut = self.drop_at - self.written
+            data = data[:cut] + data[cut + self.drop_len :]
+            self.dropped = True
+        self.written += len(data)
+        super().write(data)
+
+
+def test_send_recovers_from_lost_bytes(peer, tmp_path):
+    source = tmp_path / "lossy.bin"
+    source.write_bytes(os.urandom(128 * 1024))
+    output = tmp_path / "output"
+    output.mkdir()
+
+    peer.start_receiver(cwd=str(output), io_factory=lambda cb: LossyIO(cb))
+    sender = ZmodemSender(peer.io, [str(source)], chunk_size=1024)
+    sender.run()
+
+    assert peer.wait(timeout=60) == 0
+    received = output / "lossy.bin"
     assert received.exists()
     assert _sha256(str(received)) == _sha256(str(source))
 

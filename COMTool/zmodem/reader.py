@@ -20,22 +20,24 @@ class ZmodemReader:
         self.read_timeout = read_timeout
         self.buffer = bytearray()
 
-    def _read_more(self) -> None:
-        data = self.io.read_some(8192, timeout=self.read_timeout)
+    def _read_more(self, timeout: Optional[float] = None) -> None:
+        if timeout is None:
+            timeout = self.read_timeout
+        data = self.io.read_some(8192, timeout=timeout)
         if not data:
             raise EOFError("ZMODEM stream closed")
         self.buffer.extend(data)
 
-    def read_header(self) -> ZHeader:
+    def read_header(self, timeout: Optional[float] = None) -> ZHeader:
         while True:
             if not self.buffer:
-                self._read_more()
+                self._read_more(timeout)
                 continue
 
             star = self.buffer.find(b"*")
             if star < 0:
                 self.buffer.clear()
-                self._read_more()
+                self._read_more(timeout)
                 continue
             if star > 0:
                 del self.buffer[:star]
@@ -45,7 +47,7 @@ class ZmodemReader:
                 del self.buffer[: result.consumed]
                 return result.header
             if result.status == HEADER_PARSE_NEED_MORE:
-                self._read_more()
+                self._read_more(timeout)
                 continue
             if result.status == HEADER_PARSE_INVALID:
                 del self.buffer[:1]

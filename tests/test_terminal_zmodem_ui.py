@@ -184,6 +184,34 @@ def test_cancel_pending_send_sends_can(plugin, monkeypatch):
     assert plugin.zmodemLabel.isHidden()
 
 
+def test_complete_truncates_huge_trailing(plugin):
+    fed = []
+    plugin._feed_terminal = fed.append
+
+    plugin._zmodem_on_complete(None, b"x" * 100000)
+
+    assert len(fed[0]) == 4096
+
+
+def test_error_purges_queued_serial_output(plugin):
+    calls = []
+    plugin.ctrlConn = lambda key, value: calls.append((key, value))
+
+    plugin._zmodem_on_error("boom")
+
+    assert ("purge", None) in calls
+
+
+def test_cancel_pending_send_purges_before_can(plugin):
+    calls = []
+    plugin.ctrlConn = lambda key, value: calls.append((key, value))
+    plugin._zmodem_pending = object()
+
+    plugin._zmodem_clear_pending(cancel_remote=True)
+
+    assert calls and calls[0] == ("purge", None)
+
+
 def test_error_restores_terminal_and_reports(plugin):
     plugin.widget.terminal.setTransferActive(True)
     plugin._zmodem_set_busy("Receiving...")
