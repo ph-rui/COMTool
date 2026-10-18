@@ -53,7 +53,7 @@
 - [x] Xvfb GUI：终端收发、ANSI/256 色、IME/宽字符、切换标签、手工 PTY、复制粘贴、滚动、折叠面板。
 - [x] GUI ZMODEM 发送/接收 65536 字节 SHA256 一致；多文件逐项另存为；发送空文件；取消传输。
 - [x] Linux 启动计时：`startup_ms=117–209`（Qt 5.15.2 Release，Xvfb）。
-- [x] Windows 构建与启动计时：RDP VM 上 604–665 ms；同机仅一个 QLabel 的裸 Qt 窗口约 509 ms，字体库初始化约 340 ms，为目标平台下限。
+- [x] Windows 构建与启动计时：RDP VM 上 604–674 ms；同机仅一个 QLabel 的裸 Qt 窗口约 509 ms，字体库初始化约 340 ms，为目标平台下限。
 - [ ] 原生 4 MiB 双向板端测试（当前已做 262144 字节内存/PTY 测试；旧 Python 版已完成 4 MiB）。
 - [x] 更新 native/README 与本计划状态。
 
@@ -66,5 +66,5 @@
 ## 8. 已知限制
 
 - Windows RDP 测试机没有 Qt/CMake/MinGW，只能在 Wine 下交叉构建后把部署包传到 Windows 运行；无法在目标机本机重编译。
-- Windows 启动目标 ≤0.5 s 在该 RDP VM 上受 Qt 字体库初始化限制，实测 0.60–0.67 s；普通本地桌面预期更低，但未在更快的 Windows 机器上实测。
+- Windows 启动目标 ≤0.5 s 在该 RDP VM 上受 Qt 字体库初始化限制，实测 0.60–0.68 s；普通本地桌面预期更低，但未在更快的 Windows 机器上实测。
 - 真实 USB 串口热插拔/断开自动恢复仍需用实际设备验证；PTY 与手工端口路径已验收。
