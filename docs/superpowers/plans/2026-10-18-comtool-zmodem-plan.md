@@ -371,6 +371,24 @@
   板端 `rz: big.bin removed.` 并回到提示符；UI 未卡死，按 Ctrl+C 后终端恢复。
 - 未再验证：真实 USB 热插拔、串口断开后的自动重连（受限于现场操作）。
 
+### 2026-10-18 多文件进度显示（Linux + Windows + COM99）
+
+- 发送状态栏显示 `文件名 [当前/总数] 百分比 已发送/总字节`，进度条按所有选中
+  文件的总字节推进；接收显示 `文件名 [序号] 百分比 已收累计字节`，进度条按
+  当前文件推进（ZMODEM 接收在下一个文件头到达前无法预知后续总量）。
+- Windows 测试：进度提交 `118 passed in 10.14s`；补充状态栏消息后
+  `119 passed`。
+- COM99 真实发送 `a_small.bin`（32 KiB，先发）+ `z_big.bin`（1 MiB）：
+  - 进入第二个文件时显示 `z_big.bin [2/2] 3% 35.0 KB/1.0 MB`，
+    随后观察到 35% / 61% / 84%，约 90 s 完成。
+  - 板端 SHA256 均一致：`aa3203fd...`、`43cac66f...`。
+- COM99 真实接收 `sz -q -b a_small.bin z_big.bin`：
+  - 第二个文件显示 `z_big.bin [2] 47% 521.0 KB`（累计字节包含文件 1），
+    约 90 s 完成，状态栏 “Received 2 file(s)”。
+  - Windows `certutil -hashfile` SHA256 与板端一致。
+- 传输开始时状态栏消息切换为 “Sending...”/“Receiving...”，不再残留上一次的
+  “Files sent”/“Received N file(s)”。
+
 ### 待验收（需要用户确认维护窗口）
 
 - 真实 USB 热插拔与串口断开/重连恢复。
