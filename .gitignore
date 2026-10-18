@@ -6,7 +6,6 @@ __pycache__
 bin
 dist
 build
-build-native
 *.egg-info
 *.pyc
 
