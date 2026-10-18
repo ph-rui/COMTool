@@ -531,6 +531,7 @@ class Terminal_Frontend(QWidget):
         return content
 
     def mousePressEvent(self, e):
+        self.setFocus()
         self.mouseButton = e.button()
         x = e.x(); y = e.y()
         col, row, scroll = self._pos_pix2colrow(x, y)
@@ -759,7 +760,10 @@ class Plugin(Plugin_Base):
                 self.config[k] = default[k]
 
     def onActive(self):
-        pass
+        try:
+            self.widget.terminal.setFocus()
+        except Exception:
+            pass
 
     def onDel(self):
         self._zmodem_abort_from_ui()
