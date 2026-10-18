@@ -389,6 +389,51 @@
 - 传输开始时状态栏消息切换为 “Sending...”/“Receiving...”，不再残留上一次的
   “Files sent”/“Received N file(s)”。
 
+### 2026-10-18 4 MiB 双向验收与 1 KiB 窗口
+
+- 4 MiB 测试文件 `big4.bin`，SHA256
+  `bb7ace96abaa3246d67d25782e97c249ddbe7f5b347aee9b8f8053dbde6a6c46`。
+- 发送（板端 `rz -O -y -b`，COM99，115200 8N1，流控 None）：
+  - 应用 2 KiB 窗口：哈希一致、`Transfer complete`，但 1829 次重传、
+    8.26 MB 线序（1.97x），约 12 分钟；即使全程不 SSH 仍出现。
+  - 独立直写发送器（同一 ZMODEM 引擎、直接 `ser.write`）2 KiB 窗口：
+    932 次重传、6.36 MB 线序（1.52x），约 10 分钟；哈希一致。
+  - 独立直写 1 KiB 窗口：`tx=4,389,221`（1.046x），1 次重传，约 7 分钟；
+    哈希一致。
+  - 应用 1 KiB 窗口（Linux `a8a2b63` / Windows `e1bf222`）：零重传、
+    线序开销约 4%、约 6.5 分钟，哈希一致；传输期间 `oe` 计数未增长。
+- 接收（板端 `sz` 到应用）：保存为 `big4_back.bin`，4,194,304 字节，
+  SHA256 同为 `bb7ace96...`，`sz.err` 为 `Transfer complete`，0 次重传，
+  全程未 SSH，约 6 分钟。
+- 多文件（新代码）：`a_small.bin` 32 KiB + `z_big.bin` 1 MiB，状态栏显示
+  跨文件总进度 `z_big.bin [2/2] 6% 73.0 KB/1.0 MB`；两文件 SHA256
+  `aa3203fd...`、`43cac66f...` 与 Windows 源完全一致；`rz` 0 次重传。
+- 根因分析：
+  - 板端 tty 输入队列为 4 KiB。接收端 ACK 一个窗口时可能尚未完全排空
+    队列，发送端紧接着写入下一窗口；2 KiB 窗口加头部后，两个窗口可在
+    队列中重叠并超过高水位线，导致丢字节（`oe` 增长）。丢失后
+    `zgethdr` 读到子包尾部的 `ZDLE+ZCRCW` 会返回 ERROR（`rz` 打印
+    `Got ERROR`），触发重传；CRC 最终纠正，所以数据无损。
+  - 在 PTY 上用相同的“队列写线程 + 合并读”路径跑 4 MiB，direct/queue
+    都是 1.04x、0 重传；人为丢 64 字节也只产生 2 次重传。说明应用协议
+    与发送队列本身没有问题，真实串口的持续丢字节来自板端 4 KiB tty
+    队列溢出。
+  - 1 KiB 窗口留出 4 倍余量，发送端等待 ACK 的节奏下队列不再重叠；
+    代价是 ACK 次数翻倍，但重传消除后总时长反而从约 12 分钟降到约
+    6.5 分钟。
+  - 不启用 XON/XOFF：CH344 在暂停/恢复主机输出时会丢字节；保留用户
+    手动流控设置，默认 None。
+- 测试环境恢复记录（仅测试板，不影响产品）：
+  - 板端重启后 `/tmp` 为 tmpfs，`/tmp/zstress` 需要重建。
+  - 板端 sshd 未随启动运行；`sshd.socket` 会占用 22 端口导致 banner
+    超时，恢复方式：`systemctl stop sshd.socket`、`mkdir -p /run/sshd`、
+    `/usr/sbin/sshd`。
+  - Windows `portproxy` 由 `iphlpsvc` 承载，异常时
+    `Restart-Service iphlpsvc -Force` 恢复监听。
+  - 大文件传输期间避免 SSH 登录板端：登录会在控制台打印 audit 消息并
+    造成 CPU 尖峰，增加丢字节/重传；干净 4 MiB 验收全程未 SSH。
+- 回归测试：Linux 全量 `128 passed`（含新增的 1 KiB 窗口默认值断言）。
+
 ### 待验收（需要用户确认维护窗口）
 
 - 真实 USB 热插拔与串口断开/重连恢复。
