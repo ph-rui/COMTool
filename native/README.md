@@ -66,8 +66,10 @@ ctest --test-dir build-native --output-on-failure
 `zmodem_tests` covers codec/detector/filename handling, empty and binary
 transfers, multi-file metadata, and 256 KiB in-memory transfers.  On POSIX,
 `zmodem_peer` is a small CLI endpoint for interoperability tests against
-`lrzsz` over a PTY pair.  GUI acceptance used `lrz`/`lsz` over `socat` PTYs;
-the Python suite remains at `128 passed`.
+`lrzsz` over a PTY pair.  GUI acceptance used `lrz`/`lsz` over `socat` PTYs
+and a real i.MX95 EVK console (`console.sh` -> `ttyLP0`, 115200 8N1):
+a 4 MiB file was sent and received with matching SHA256.  The Python suite
+remains at `128 passed`.
 
 ## Measured startup
 
