@@ -54,7 +54,8 @@
 - [x] GUI ZMODEM 发送/接收 65536 字节 SHA256 一致；多文件逐项另存为；发送空文件；取消传输。
 - [x] Linux 启动计时：`startup_ms=117–209`（Qt 5.15.2 Release，Xvfb）。
 - [x] Windows 构建与启动计时：RDP VM 上 604–674 ms；同机仅一个 QLabel 的裸 Qt 窗口约 509 ms，字体库初始化约 340 ms，为目标平台下限。
-- [ ] 原生 4 MiB 双向板端测试（当前已做 262144 字节内存/PTY 测试；旧 Python 版已完成 4 MiB）。
+- [x] 原生 4 MiB GUI 双向 PTY 测试（与 lrzsz）：4194304 字节，收/发 SHA256 `3e7a90c4d60cf213aafa59e00a5fd59399d92a7c7230a5b469addc82b1125194` 一致；接收逐个另存为、发送进度/完成状态正常。
+- [ ] 原生 4 MiB 双向实板测试（GUI/PTY 已完成，仍需真实串口设备复测）。
 - [x] 更新 native/README 与本计划状态。
 
 ## 7. 仓库
