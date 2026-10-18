@@ -65,6 +65,30 @@ def test_scan_populates_and_selects_first(app, monkeypatch):
         serial_conn.onDel()
 
 
+def test_display_name_tracks_selected_port(app, monkeypatch):
+    serial_conn = make_serial(
+        app,
+        monkeypatch,
+        [
+            PortInfo(device="COM2", description="USB Serial"),
+            PortInfo(device="COM10", description="USB Serial"),
+        ],
+    )
+    try:
+        assert serial_conn.getDisplayName() == "COM2"
+
+        changes = []
+        serial_conn.displayNameChanged.connect(
+            lambda: changes.append(serial_conn.getDisplayName())
+        )
+        serial_conn.serialPortCombobox.setCurrentIndex(1)
+
+        assert serial_conn.getDisplayName() == "COM10"
+        assert changes == ["COM10"]
+    finally:
+        serial_conn.onDel()
+
+
 def test_refresh_preserves_selected_device(app, monkeypatch):
     serial_conn = make_serial(
         app,

@@ -24,6 +24,7 @@ class COMM(QObject):
     '''
     onReceived     = lambda self, data:None   # data: bytes
     onConnectionStatus = pyqtSignal(ConnectionStatus, str)    # connected, msg
+    displayNameChanged = pyqtSignal()                         # active port/endpoint changed
     hintSignal = pyqtSignal(str, str, str)                    # hintSignal.emit(type(error, warning, info), title, msg)
     configGlobal = {}
     id = ""
@@ -70,6 +71,10 @@ class COMM(QObject):
             this method runs in UI thread, do not block too long
         '''
         return {}
+
+    def getDisplayName(self):
+        '''Short name used for the tab title, e.g. COM99 or /dev/ttyUSB0.'''
+        return ""
 
     def ctrl(self, k, v):
         pass
