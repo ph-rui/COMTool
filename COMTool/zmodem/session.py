@@ -112,6 +112,7 @@ class ZmodemSession:
                     header_timeout=self.header_timeout,
                     data_timeout=self.data_timeout,
                     chunk_size=1024,
+                    window_size=1024,
                 )
                 self.trailing = sender.run()[-4096:]
                 if self.on_complete is not None:

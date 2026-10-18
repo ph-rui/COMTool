@@ -42,9 +42,9 @@ class ZmodemSender:
         on_file_complete: Optional[Callable[[str], None]] = None,
         header_timeout: float = 30.0,
         data_timeout: float = 30.0,
-        chunk_size: int = 8192,
+        chunk_size: int = 1024,
         max_retries: int = 5,
-        window_size: int = 2048,
+        window_size: int = 1024,
         ack_timeout: float = 10.0,
     ):
         self.io = io
@@ -58,11 +58,15 @@ class ZmodemSender:
         self.chunk_size = max(1, chunk_size)
         self.max_retries = max_retries
         # Stop-and-wait every window_size bytes with a ZCRCW frame.  The
-        # receiver's tty input queue is 4 KiB, so a 4 KiB payload plus
-        # headers overruns it on a real UART (lrzsz then sends XOFF, but
-        # several USB-serial drivers drop bytes while resuming).  2 KiB
-        # stays below the queue's high-water mark while still letting us
-        # notice ZRPOS/ZNAK before the whole file is on the wire.
+        # receiver's tty input queue is 4 KiB.  A 2 KiB window technically
+        # fits, but lrzsz can ACK a window before its tty has fully drained,
+        # so the next header and payload land while a little of the previous
+        # one is still queued.  With real USB-serial adapters and a busy
+        # board that occasionally loses bytes at the UART, two overlapping
+        # 2 KiB windows push the queue over the high-water mark and trigger
+        # a retransmission storm (measured: 1.52x wire bytes on a 4 MiB
+        # transfer).  1 KiB windows leave 4x headroom: the same 4 MiB
+        # transfer measured 1.046x wire bytes with one retry.
         self.window_size = max(self.chunk_size, window_size)
         self.ack_timeout = ack_timeout
         self.reader = ZmodemReader(io, read_timeout=header_timeout)

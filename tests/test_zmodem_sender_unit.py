@@ -198,3 +198,11 @@ def test_sender_missing_file_fails_without_hanging(tmp_path):
     thread.join(3)
     assert len(errors) == 1
     assert isinstance(errors[0], FileNotFoundError)
+
+
+def test_sender_defaults_to_one_kib_windows():
+    """1 KiB windows leave headroom in the receiver's 4 KiB tty queue."""
+    link = Duplex()
+    sender = ZmodemSender(link.sender_io, [])
+    assert sender.chunk_size == 1024
+    assert sender.window_size == 1024
