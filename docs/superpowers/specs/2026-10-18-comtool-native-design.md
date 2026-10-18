@@ -246,7 +246,8 @@ worker 内维护 `ZmodemDetector`：
 
 - 浅色默认；深色切换立即生效，保存配置。
 - 终端 ANSI 调色板按主题调整，默认前景/背景跟随主题。
-- v1 使用内置轻量中英文字符串表，跟随 `QLocale::system().language()`；不依赖 `.qm` 文件。后续可迁移 Qt Linguist。
+- 主题只使用 `QPalette`，不使用全局 QSS，避免 Windows 启动时样式表解析开销；标准标签关闭按钮由轻量 `QProxyStyle` 用当前文字色绘制，保证深色主题下可见。
+- 自有界面文本使用内置轻量中英文字符串表，跟随 `QLocale::system().language()`；标准对话框加载 Qt `qt_zh_CN.qm`，并补齐 `QPlatformTheme` 的 Cancel/OK 等按钮翻译。
 - 动态状态文本允许英文文件名/路径原样显示。
 
 ## 8. 配置
