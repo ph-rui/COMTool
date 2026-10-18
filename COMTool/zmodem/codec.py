@@ -109,10 +109,18 @@ class Subpacket:
         return self.frame_end in SUBPACKET_ACK_ENDS
 
 
-def _escape_byte(value: int, escape_ctrl: bool, previous: int) -> bool:
+def _escape_byte(
+    value: int, escape_ctrl: bool, escape_8bit: bool, previous: int
+) -> bool:
+    # ZDLE, DLE, XON/XOFF and their parity-masked variants are the only
+    # bytes the protocol requires escaping.  lrzsz only escapes other
+    # control characters when the receiver asks for it (ZRINIT ESCCTL)
+    # and only escapes the 8th bit for 7-bit links (ZRINIT ESC8).
     if value in (ZDLE, XON, XOFF, XON_HIGH, XOFF_HIGH, 0x10, 0x90):
         return True
     if escape_ctrl and (value & 0x7F) < 0x20:
+        return True
+    if escape_8bit and value & 0x80:
         return True
     # Telenet command escape: CR after '@' must be escaped.
     if value in (0x0D, 0x8D) and (previous & 0x7F) == 0x40:
@@ -120,12 +128,19 @@ def _escape_byte(value: int, escape_ctrl: bool, previous: int) -> bool:
     return False
 
 
-def zdle_encode(data: bytes, escape_ctrl: bool = True) -> bytes:
-    """ZDLE-encode *data* for transmission."""
+def zdle_encode(
+    data: bytes, escape_ctrl: bool = False, escape_8bit: bool = False
+) -> bytes:
+    """ZDLE-encode *data* for transmission.
+
+    Defaults match lrzsz on an 8-bit clean line: only bytes that the
+    protocol itself interprets are escaped, which keeps ZMODEM overhead
+    around 2% instead of ~25% for random binary data.
+    """
     out = bytearray()
     previous = 0
     for value in data:
-        if _escape_byte(value, escape_ctrl, previous):
+        if _escape_byte(value, escape_ctrl, escape_8bit, previous):
             out.append(ZDLE)
             out.append(value ^ 0x40)
         else:
