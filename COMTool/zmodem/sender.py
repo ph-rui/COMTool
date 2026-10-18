@@ -44,7 +44,7 @@ class ZmodemSender:
         data_timeout: float = 30.0,
         chunk_size: int = 8192,
         max_retries: int = 5,
-        window_size: int = 4096,
+        window_size: int = 2048,
         ack_timeout: float = 10.0,
     ):
         self.io = io
@@ -57,11 +57,12 @@ class ZmodemSender:
         self.data_timeout = data_timeout
         self.chunk_size = max(1, chunk_size)
         self.max_retries = max_retries
-        # Stop-and-wait exactly every window_size bytes with a ZCRCW frame.
-        # This keeps the receiver's input queue from overflowing on plain
-        # 115200 links and lets us notice ZRPOS/ZNAK before the whole file is
-        # on the wire, which is what prevents 4 MiB transfers from restarting
-        # from zero after a single lost byte.
+        # Stop-and-wait every window_size bytes with a ZCRCW frame.  The
+        # receiver's tty input queue is 4 KiB, so a 4 KiB payload plus
+        # headers overruns it on a real UART (lrzsz then sends XOFF, but
+        # several USB-serial drivers drop bytes while resuming).  2 KiB
+        # stays below the queue's high-water mark while still letting us
+        # notice ZRPOS/ZNAK before the whole file is on the wire.
         self.window_size = max(self.chunk_size, window_size)
         self.ack_timeout = ack_timeout
         self.reader = ZmodemReader(io, read_timeout=header_timeout)

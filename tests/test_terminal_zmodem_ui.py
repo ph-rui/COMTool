@@ -234,52 +234,6 @@ def test_disconnect_aborts_pending_transfer(plugin):
     assert not plugin.widget.terminal.transferActive
 
 
-def test_flow_control_helper_calls_connection(plugin):
-    calls = []
-    plugin.ctrlConn = lambda key, value: calls.append((key, value))
-
-    plugin._zmodem_flow_control(True)
-    plugin._zmodem_flow_control(False)
-
-    assert calls == [("zmodem_flow", True), ("zmodem_flow", False)]
-
-
-def test_error_disables_zmodem_flow_control(plugin):
-    calls = []
-    plugin.ctrlConn = lambda key, value: calls.append((key, value))
-
-    plugin._zmodem_on_error("boom")
-
-    assert ("zmodem_flow", False) in calls
-
-
-def test_complete_disables_zmodem_flow_control(plugin):
-    calls = []
-    plugin.ctrlConn = lambda key, value: calls.append((key, value))
-
-    plugin._zmodem_on_complete(None, b"")
-
-    assert ("zmodem_flow", False) in calls
-
-
-def test_cancel_disables_zmodem_flow_control(plugin):
-    calls = []
-    plugin.ctrlConn = lambda key, value: calls.append((key, value))
-
-    plugin._zmodem_on_cancelled()
-
-    assert ("zmodem_flow", False) in calls
-
-
-def test_disconnect_disables_zmodem_flow_control(plugin):
-    calls = []
-    plugin.ctrlConn = lambda key, value: calls.append((key, value))
-
-    plugin.onConnChanged(ConnectionStatus.CLOSED, "closed")
-
-    assert ("zmodem_flow", False) in calls
-
-
 class StubSession:
     def __init__(self, *args, **kwargs):
         self.active = True
@@ -291,41 +245,3 @@ class StubSession:
     def cancel(self):
         pass
 
-
-def test_receive_start_enables_zmodem_flow_control(plugin, monkeypatch, tmp_path):
-    import COMTool.plugins.terminal as terminal_module
-    from types import SimpleNamespace
-
-    monkeypatch.setattr(
-        terminal_module.tempfile, "mkdtemp", lambda prefix="": str(tmp_path)
-    )
-    monkeypatch.setattr(terminal_module, "ZmodemSession", StubSession)
-    calls = []
-    plugin.ctrlConn = lambda key, value: calls.append((key, value))
-
-    plugin._zmodem_start_receive(SimpleNamespace(remainder=b""))
-
-    assert ("zmodem_flow", True) in calls
-    plugin._zmodem_session = None
-
-
-def test_send_start_enables_zmodem_flow_control(plugin, monkeypatch, tmp_path):
-    import COMTool.plugins.terminal as terminal_module
-
-    source = tmp_path / "flow.bin"
-    source.write_bytes(b"payload")
-    monkeypatch.setattr(terminal_module, "ZmodemSession", StubSession)
-    monkeypatch.setattr(
-        QFileDialog,
-        "getOpenFileNames",
-        lambda *args, **kwargs: ([str(source)], ""),
-    )
-    calls = []
-    plugin.ctrlConn = lambda key, value: calls.append((key, value))
-    plugin._zmodem_pending = object()
-    plugin._zmodem_pending_buffer = b""
-
-    plugin._zmodem_choose_send_files()
-
-    assert ("zmodem_flow", True) in calls
-    plugin._zmodem_session = None

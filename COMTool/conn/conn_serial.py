@@ -136,33 +136,6 @@ class Serial(COMM):
                     self.com.reset_output_buffer()
             except Exception:
                 pass
-        elif k == "zmodem_flow":
-            # lrzsz enables IXOFF on the receiving tty and emits XOFF when its
-            # 4 KiB input queue is nearly full.  If the host ignores XOFF the
-            # UART overruns, every corrupted window is retransmitted, and rz
-            # eventually gives up and deletes the partial file.  Enable
-            # software flow control for the duration of the transfer, then
-            # restore whatever the user selected.
-            try:
-                if v:
-                    if not self.com.is_open:
-                        return
-                    if getattr(self, "_zmodem_saved_xonxoff", None) is None:
-                        self._zmodem_saved_xonxoff = self.com.xonxoff
-                    if not self.com.rtscts and not self.com.dsrdtr:
-                        if not self.com.xonxoff:
-                            self.com.xonxoff = True
-                else:
-                    # Restore even when the port was closed mid-transfer so
-                    # the next open does not inherit hidden XON/XOFF state.
-                    saved = getattr(self, "_zmodem_saved_xonxoff", None)
-                    if saved is not None:
-                        if self.com.xonxoff != saved:
-                            self.com.xonxoff = saved
-                        self._zmodem_saved_xonxoff = None
-            except Exception:
-                pass
-
     def onUiInitDone(self):
         for key in self.config:
             self.setSerialConfig(key, self.widgetConfMap[key], self.config[key])
@@ -387,6 +360,11 @@ class Serial(COMM):
                 print("-- open serial")
                 self.onConnectionStatus.emit(ConnectionStatus.CONNECTING, "")
                 self.com.open()
+                # Drop bytes a previous session (or the driver) left queued;
+                # otherwise the remote shell receives stale ZMODEM payload as
+                # if the user had typed it.
+                self.com.reset_input_buffer()
+                self.com.reset_output_buffer()
                 self.status = ConnectionStatus.CONNECTED
                 self.onConnectionStatus.emit(self.status, "")
                 self.showSwitchSignal.emit(self.status)
@@ -541,6 +519,8 @@ class Serial(COMM):
                     try:
                         self.onConnectionStatus.emit(ConnectionStatus.CONNECTING, "")
                         self.com.open()
+                        self.com.reset_input_buffer()
+                        self.com.reset_output_buffer()
                         print("-- reopen serial")
                         waitingReconnect = False
                         self.onConnectionStatus.emit(ConnectionStatus.CONNECTED, _("Reconnected"))
