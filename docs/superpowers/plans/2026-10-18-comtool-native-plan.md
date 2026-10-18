@@ -61,7 +61,7 @@
 
 - [x] 设计/计划提交。
 - [x] native 实现提交（与旧 Python 应用隔离）。
-- [ ] 推送 `da6e9b0` 及 native 提交。
+- [x] 推送 `da6e9b0` 及 native 提交到 `origin/feature/live-port-refresh`。
 
 ## 8. 已知限制
 
