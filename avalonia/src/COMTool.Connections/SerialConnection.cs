@@ -50,7 +50,7 @@ public sealed class SerialConnection : IDisposable
         {
             port.Open();
             var pty = new PtyStreamConnection(
-                port.BaseStream,
+                new TimeoutRetryStream(port.BaseStream),
                 port.BaseStream,
                 resize: null,
                 close: () => port.Close(),

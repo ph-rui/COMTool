@@ -4,8 +4,12 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
+using COMTool.App.Services;
 using COMTool.App.ViewModels;
+using COMTool.Connections;
+using COMTool.Core.Config;
 using Iciclecreek.Terminal;
 
 namespace COMTool.App.Views;
@@ -13,20 +17,422 @@ namespace COMTool.App.Views;
 public partial class MainWindow : Window
 {
     private bool _sidebarVisible = true;
-    private TerminalControl? _terminal;
+    private bool _loaded;
+    private AppConfigService? _config;
+    private DispatcherTimer? _portTimer;
 
     public MainWindow()
     {
         InitializeComponent();
         UpdateMaximizeIcon();
-        Opened += (_, _) =>
+        Sidebar.SessionActivated += OnSessionActivated;
+        Opened += OnOpened;
+    }
+
+    private void OnOpened(object? sender, EventArgs e)
+    {
+        if (_loaded || DataContext is not MainViewModel viewModel)
         {
-            // Phase 0 smoke-test hook; removed when the real plugin host lands.
-            if (Environment.GetCommandLineArgs().Contains("--terminal"))
+            return;
+        }
+
+        _loaded = true;
+        if (Environment.GetCommandLineArgs().Contains("--demo"))
+        {
+            viewModel.LoadDemoSessions();
+        }
+        else
+        {
+            try
             {
-                OnAddTerminalClick(null, new RoutedEventArgs());
+                _config = AppConfigService.Load();
+                RefreshSidebar();
+                _portTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+                _portTimer.Tick += (_, _) => RefreshPorts();
+                _portTimer.Start();
+            }
+            catch (Exception ex)
+            {
+                _ = ShowErrorAsync($"Failed to load config: {ex.Message}");
+            }
+        }
+
+        if (Environment.GetCommandLineArgs().Contains("--terminal"))
+        {
+            AddLocalTerminal();
+        }
+    }
+
+    private void RefreshPorts()
+    {
+        if (_config is null)
+        {
+            return;
+        }
+
+        var scan = _config.RefreshPorts();
+        if (scan.Success)
+        {
+            RefreshSidebar();
+        }
+    }
+
+    private void RefreshSidebar()
+    {
+        if (_config is null || DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        var connectedSerial = viewModel.Tabs
+            .Where(tab => tab.Kind == SessionKind.Serial && IsTabConnected(tab))
+            .Select(tab => tab.SessionId)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var connectedSsh = viewModel.Tabs
+            .Where(tab => tab.Kind == SessionKind.Ssh && IsTabConnected(tab))
+            .Select(tab => tab.SessionId)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        viewModel.LoadSessions(_config, connectedSerial, connectedSsh);
+    }
+
+    private async void OnSessionActivated(object? sender, SessionItem item)
+    {
+        if (DataContext is not MainViewModel viewModel || _config is null)
+        {
+            return;
+        }
+
+        var existing = viewModel.FindTab(item.SessionId, item.Kind);
+        if (existing is not null && IsTabConnected(existing))
+        {
+            viewModel.SelectedTab = existing;
+            existing.Content.Focus();
+            return;
+        }
+
+        if (existing is not null)
+        {
+            CloseTab(existing);
+        }
+
+        try
+        {
+            if (item.Kind == SessionKind.Serial)
+            {
+                OpenSerialSession(item.SessionId);
+            }
+            else if (item.Kind == SessionKind.Ssh)
+            {
+                await OpenSshSessionAsync(item.SessionId);
+            }
+        }
+        catch (Exception ex)
+        {
+            await ShowErrorAsync(ex.Message);
+        }
+    }
+
+    private void OpenSerialSession(string port)
+    {
+        if (_config is null || DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        var session = _config.SerialSessions.Get(port);
+        if (session is null)
+        {
+            throw new InvalidOperationException($"Serial session {port} was not found.");
+        }
+
+        var connection = SerialConnection.Open(session.Serial);
+        var terminal = CreateTerminal();
+        var tab = new TerminalTab
+        {
+            Title = session.Port,
+            SessionId = session.Port,
+            Kind = SessionKind.Serial,
+            Content = terminal,
+            Connection = connection,
+            IsTransportOpen = () => connection.IsOpen,
+            CloseAction = () =>
+            {
+                try
+                {
+                    terminal.DetachConnection();
+                }
+                catch
+                {
+                    // The template may not have been applied if opening failed.
+                }
+
+                connection.Dispose();
+            },
+        };
+
+        terminal.AttachedToVisualTree += (_, _) =>
+            Dispatcher.UIThread.Post(
+                () => AttachTerminal(tab, terminal, connection.Pty),
+                DispatcherPriority.Loaded);
+        connection.Pty.ProcessExited += (_, _) => Dispatcher.UIThread.Post(() =>
+        {
+            tab.IsAlive = false;
+            RefreshSidebar();
+        });
+
+        viewModel.AddTab(tab);
+        RefreshSidebar();
+        terminal.Focus();
+    }
+
+    private async Task OpenSshSessionAsync(string key)
+    {
+        if (_config is null || DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        var session = _config.SshSessions.Get(key);
+        if (session is null)
+        {
+            throw new InvalidOperationException($"SSH session {key} was not found.");
+        }
+
+        string? password = null;
+        var remember = false;
+        if (string.IsNullOrWhiteSpace(session.SshKey))
+        {
+            password = _config.PasswordCache.Get(session.Key);
+            if (string.IsNullOrEmpty(password))
+            {
+                password = SecretProtector.Unprotect(session.EncryptedPassword);
+            }
+
+            if (string.IsNullOrEmpty(password))
+            {
+                var dialog = new SshPasswordDialog(SshSessionRules.Detail(session));
+                var accepted = await dialog.ShowDialog<bool>(this);
+                if (!accepted)
+                {
+                    return;
+                }
+
+                password = dialog.Password;
+                remember = dialog.Remember;
+            }
+        }
+
+        var connection = SshConnection.Connect(new SshConnectionOptions(
+            session.Host,
+            session.Port,
+            session.User,
+            Password: password,
+            KeyFile: session.SshKey,
+            Columns: 100,
+            Rows: 30));
+        _config.PasswordCache.Set(session.Key, password);
+        if (remember && !string.IsNullOrEmpty(password))
+        {
+            _config.RememberSshPassword(session, password, remember: true);
+        }
+
+        var terminal = CreateTerminal();
+        var tab = new TerminalTab
+        {
+            Title = SshSessionRules.DisplayName(session),
+            SessionId = session.Key,
+            Kind = SessionKind.Ssh,
+            Content = terminal,
+            Connection = connection,
+            IsTransportOpen = () => connection.IsConnected,
+            CloseAction = () =>
+            {
+                try
+                {
+                    terminal.DetachConnection();
+                }
+                catch
+                {
+                    // The template may not have been applied if opening failed.
+                }
+
+                connection.Dispose();
+            },
+        };
+
+        terminal.AttachedToVisualTree += (_, _) =>
+            Dispatcher.UIThread.Post(
+                () => AttachTerminal(tab, terminal, connection.Pty),
+                DispatcherPriority.Loaded);
+        connection.Pty.ProcessExited += (_, _) => Dispatcher.UIThread.Post(() =>
+        {
+            tab.IsAlive = false;
+            RefreshSidebar();
+        });
+
+        viewModel.AddTab(tab);
+        RefreshSidebar();
+        terminal.Focus();
+    }
+
+    private static bool IsTabConnected(TerminalTab tab) =>
+        tab.IsAlive && (tab.IsTransportOpen?.Invoke() ?? true);
+
+    private void AttachTerminal(
+        TerminalTab tab,
+        TerminalControl terminal,
+        PtyStreamConnection pty)
+    {
+        if (!tab.IsAlive)
+        {
+            return;
+        }
+
+        try
+        {
+            terminal.AttachConnection(pty);
+        }
+        catch (Exception ex)
+        {
+            tab.IsAlive = false;
+            _ = ShowErrorAsync($"Failed to attach terminal: {ex.Message}");
+        }
+    }
+
+    private TerminalControl CreateTerminal()
+    {
+        var terminal = new TerminalControl
+        {
+            FontFamily = new FontFamily("Consolas, Bitstream Vera Sans Mono, Courier New, monospace, Microsoft YaHei Mono, Microsoft YaHei"),
+            FontSize = 15,
+            Background = new SolidColorBrush(Color.Parse("#212121")),
+            Foreground = Brushes.White,
+            CursorColor = Color.Parse("#4caf50"),
+            BufferSize = 9999,
+        };
+        if (terminal.Options is { } terminalOptions)
+        {
+            terminalOptions.RightClickSelectsWord = false;
+        }
+
+        terminal.PointerPressed += OnTerminalPointerPressed;
+        terminal.KeyDown += OnTerminalKeyDown;
+        return terminal;
+    }
+
+    private void AddLocalTerminal()
+    {
+        if (DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        var terminal = CreateTerminal();
+        var tab = new TerminalTab
+        {
+            Title = "terminal",
+            SessionId = $"terminal:{Guid.NewGuid():N}",
+            Kind = SessionKind.Local,
+            Content = terminal,
+            CloseAction = () => terminal.Kill(),
+        };
+        terminal.AttachedToVisualTree += (_, _) =>
+        {
+            if (!tab.IsAlive)
+            {
+                return;
+            }
+
+            try
+            {
+                terminal.LaunchProcess();
+            }
+            catch (Exception ex)
+            {
+                tab.IsAlive = false;
+                _ = ShowErrorAsync($"Failed to start terminal: {ex.Message}");
             }
         };
+
+        viewModel.AddTab(tab);
+        terminal.Focus();
+    }
+
+    private void OnTabPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is Border { Tag: TerminalTab tab } && DataContext is MainViewModel viewModel)
+        {
+            viewModel.SelectedTab = tab;
+            tab.Content.Focus();
+        }
+    }
+
+    private void OnCloseTabClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: TerminalTab tab })
+        {
+            e.Handled = true;
+            CloseTab(tab);
+        }
+    }
+
+    private void CloseTab(TerminalTab tab)
+    {
+        if (DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        try
+        {
+            tab.CloseAction?.Invoke();
+        }
+        catch
+        {
+            // Closing a half-open transport must not keep the tab alive.
+        }
+
+        tab.IsAlive = false;
+        viewModel.CloseTab(tab);
+        RefreshSidebar();
+    }
+
+    private async Task ShowErrorAsync(string message)
+    {
+        var dialog = new Window
+        {
+            Title = "COMTool",
+            Width = 440,
+            Height = 190,
+            MinWidth = 320,
+            MinHeight = 160,
+            CanResize = false,
+            ShowInTaskbar = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+        };
+        var ok = new Button
+        {
+            Content = "OK",
+            Width = 80,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+        };
+        ok.Click += (_, _) => dialog.Close();
+        dialog.Content = new StackPanel
+        {
+            Margin = new Thickness(16),
+            Spacing = 12,
+            Children =
+            {
+                new TextBlock
+                {
+                    Text = message,
+                    TextWrapping = TextWrapping.Wrap,
+                },
+                ok,
+            },
+        };
+        await dialog.ShowDialog(this);
     }
 
     private void OnTitleBarPointerPressed(object? sender, PointerPressedEventArgs e)
@@ -123,50 +529,7 @@ public partial class MainWindow : Window
 
     private void OnAddTerminalClick(object? sender, RoutedEventArgs e)
     {
-        EmptyState.IsVisible = false;
-        TabHost.IsVisible = true;
-        ActiveTabTitle.Text = "terminal";
-
-        if (_terminal is not null)
-        {
-            return;
-        }
-
-        var terminal = new TerminalControl
-        {
-            FontFamily = new FontFamily("Consolas, Bitstream Vera Sans Mono, Courier New, monospace, Microsoft YaHei Mono, Microsoft YaHei"),
-            FontSize = 15,
-            Background = new SolidColorBrush(Color.Parse("#212121")),
-            Foreground = Brushes.White,
-            CursorColor = Color.Parse("#4caf50"),
-            BufferSize = 9999,
-        };
-        if (terminal.Options is { } terminalOptions)
-        {
-            terminalOptions.RightClickSelectsWord = false;
-        }
-        terminal.PointerPressed += OnTerminalPointerPressed;
-        terminal.KeyDown += OnTerminalKeyDown;
-        terminal.AttachedToVisualTree += (_, _) =>
-        {
-            try
-            {
-                terminal.LaunchProcess();
-            }
-            catch (Exception ex)
-            {
-                TabContentHost.Content = new TextBlock
-                {
-                    Text = $"Failed to start terminal: {ex.Message}",
-                    Margin = new Thickness(12),
-                    Foreground = new SolidColorBrush(Color.Parse("#f44336")),
-                    TextWrapping = TextWrapping.Wrap,
-                };
-            }
-        };
-        _terminal = terminal;
-        TabContentHost.Content = terminal;
-        terminal.Focus();
+        AddLocalTerminal();
     }
 
     private async void OnTerminalPointerPressed(object? sender, PointerPressedEventArgs e)
@@ -212,18 +575,20 @@ public partial class MainWindow : Window
         await terminal.PasteAsync();
     }
 
-    private void OnCloseTabClick(object? sender, RoutedEventArgs e)
-    {
-        _terminal?.Kill();
-        _terminal = null;
-        TabContentHost.Content = null;
-        TabHost.IsVisible = false;
-        EmptyState.IsVisible = true;
-    }
-
     protected override void OnClosed(EventArgs e)
     {
-        _terminal?.Kill();
+        _portTimer?.Stop();
+        _portTimer = null;
+        Sidebar.SessionActivated -= OnSessionActivated;
+
+        if (DataContext is MainViewModel viewModel)
+        {
+            foreach (var tab in viewModel.Tabs.ToList())
+            {
+                CloseTab(tab);
+            }
+        }
+
         base.OnClosed(e);
     }
 }

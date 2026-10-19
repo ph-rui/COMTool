@@ -113,6 +113,7 @@
           <!-- Empty state mirrors main2.py: one part above, two parts below. -->
           <Grid Name="EmptyState"
                 RowDefinitions="*,20,6,20,6,32,2*"
+                IsVisible="{Binding !HasTabs}"
                 Margin="0,3,0,0">
             <TextBlock Grid.Row="1"
                        Classes="EmptyTitle"
@@ -140,8 +141,9 @@
             </Button>
           </Grid>
 
-          <!-- Phase 0 tab host. The real TabControl is replaced in Phase 1. -->
-          <Grid Name="TabHost" IsVisible="False" RowDefinitions="Auto,*">
+          <Grid Name="TabHost"
+                IsVisible="{Binding HasTabs}"
+                RowDefinitions="Auto,*">
             <Grid Grid.Row="0" Height="40" ColumnDefinitions="27,*,Auto">
               <Button Grid.Column="0"
                       Width="27" Height="27"
@@ -160,38 +162,46 @@
                            Foreground="White" />
               </Button>
 
-              <StackPanel Grid.Column="1"
-                          Orientation="Horizontal"
-                          Margin="0,4,0,0"
-                          VerticalAlignment="Top">
-                <Border Name="ActiveTab"
-                        Height="36"
-                        MinWidth="100"
-                        Background="{DynamicResource TabSelectedBrush}"
-                        CornerRadius="4,4,0,0"
-                        Padding="12,0,4,0">
-                  <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="8">
-                    <TextBlock Name="ActiveTabTitle"
-                               Text="terminal"
-                               FontSize="12"
-                               Foreground="White"
-                               VerticalAlignment="Center" />
-                    <Button Name="CloseTabButton"
-                            Width="20" Height="20"
-                            MinWidth="0" MinHeight="0"
-                            Padding="0"
-                            Background="Transparent"
-                            BorderThickness="0"
-                            CornerRadius="10"
-                            Click="OnCloseTabClick">
-                      <TextBlock Text="&#xf00d;"
-                                 FontFamily="{DynamicResource IconFontAwesome}"
-                                 FontSize="12"
-                                 Foreground="White" />
-                    </Button>
-                  </StackPanel>
-                </Border>
-              </StackPanel>
+              <ItemsControl Grid.Column="1"
+                            ItemsSource="{Binding Tabs}"
+                            Margin="0,4,0,0"
+                            VerticalAlignment="Top"
+                            HorizontalAlignment="Left">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:TerminalTab">
+                    <Border Classes="TabItemBorder"
+                            Classes.selected="{Binding IsSelected}"
+                            PointerPressed="OnTabPointerPressed"
+                            Tag="{Binding}">
+                      <StackPanel Orientation="Horizontal"
+                                  VerticalAlignment="Center"
+                                  Spacing="8">
+                        <TextBlock Classes="TabTitle"
+                                   Text="{Binding Title}"
+                                   VerticalAlignment="Center" />
+                        <Button Width="20" Height="20"
+                                MinWidth="0" MinHeight="0"
+                                Padding="0"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                CornerRadius="10"
+                                Tag="{Binding}"
+                                Click="OnCloseTabClick">
+                          <TextBlock Classes="TabClose"
+                                     Text="&#xf00d;"
+                                     FontFamily="{DynamicResource IconFontAwesome}"
+                                     FontSize="12" />
+                        </Button>
+                      </StackPanel>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
 
               <StackPanel Grid.Column="2"
                           Orientation="Horizontal"
@@ -249,6 +259,7 @@
                     BorderThickness="1"
                     CornerRadius="3">
               <ContentControl Name="TabContentHost"
+                              Content="{Binding SelectedTab.Content}"
                               HorizontalContentAlignment="Stretch"
                               VerticalContentAlignment="Stretch" />
             </Border>

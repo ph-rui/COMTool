@@ -42,7 +42,10 @@
                     <ItemsControl ItemsSource="{Binding Items}">
                       <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:SessionItem">
-                          <Grid Height="40" ColumnDefinitions="16,*,Auto">
+                          <Grid Height="40"
+                                ColumnDefinitions="16,*,Auto"
+                                Cursor="Hand"
+                                Tapped="OnSessionTapped">
                             <TextBlock Grid.Column="0"
                                        Text="{Binding IconGlyph}"
                                        FontFamily="{DynamicResource IconFontAwesome}"

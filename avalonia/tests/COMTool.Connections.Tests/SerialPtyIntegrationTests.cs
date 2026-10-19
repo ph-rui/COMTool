@@ -61,6 +61,10 @@ public sealed class SerialPtyIntegrationTests
                 Flowcontrol = "None",
             });
 
+            // Let at least two 500 ms ReadTimeout periods expire before data
+            // arrives. The terminal read loop must not die on idle serial.
+            await Task.Delay(1200);
+
             var payload = Encoding.UTF8.GetBytes("serial pty ok");
             sender.Pty.WriterStream.Write(payload);
             sender.Pty.WriterStream.Flush();
