@@ -1,0 +1,181 @@
+using System.Text.Encodings.Web;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
+namespace COMTool.Core.Config;
+
+public sealed class ComtoolConfig
+{
+    [JsonPropertyName("version")]
+    public int Version { get; set; } = 3;
+
+    [JsonPropertyName("skin")]
+    public string Skin { get; set; } = "light";
+
+    [JsonPropertyName("locale")]
+    public string Locale { get; set; } = "en";
+
+    [JsonPropertyName("encoding")]
+    public string Encoding { get; set; } = "UTF-8";
+
+    [JsonPropertyName("skipVersion")]
+    public string? SkipVersion { get; set; }
+
+    [JsonPropertyName("connId")]
+    public string ConnId { get; set; } = "serial";
+
+    [JsonPropertyName("pluginsInfo")]
+    public JsonElement? PluginsInfo { get; set; }
+
+    [JsonPropertyName("activeItem")]
+    public string? ActiveItem { get; set; }
+
+    [JsonPropertyName("currItem")]
+    public string? CurrentItem { get; set; }
+
+    [JsonPropertyName("serialSessions")]
+    public List<SerialSession> SerialSessions { get; set; } = new();
+
+    [JsonPropertyName("serialSessionsMigrated")]
+    public bool SerialSessionsMigrated { get; set; }
+
+    [JsonPropertyName("sshSessions")]
+    public List<SshSession> SshSessions { get; set; } = new();
+
+    [JsonPropertyName("sshSessionsMigrated")]
+    public bool SshSessionsMigrated { get; set; }
+
+    [JsonPropertyName("sessionSidebar")]
+    public SessionSidebarConfig SessionSidebar { get; set; } = new();
+
+    [JsonPropertyName("items")]
+    public List<JsonElement> Items { get; set; } = new();
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? Extra { get; set; }
+
+    public static ComtoolConfig Load(string path)
+    {
+        if (!File.Exists(path))
+        {
+            return new ComtoolConfig();
+        }
+
+        var json = File.ReadAllText(path);
+        var config = JsonSerializer.Deserialize<ComtoolConfig>(json) ?? new ComtoolConfig();
+        if (config.Version != 3)
+        {
+            var backup = $"{path}.bak.{DateTime.Now:yyyy-MM-dd_HH-mm-ss}.json";
+            File.Copy(path, backup, overwrite: false);
+            return new ComtoolConfig();
+        }
+
+        return config;
+    }
+
+    public void Save(string path)
+    {
+        var directory = Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        var options = new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        };
+        File.WriteAllText(path, JsonSerializer.Serialize(this, options));
+    }
+}
+
+public sealed class SessionSidebarConfig
+{
+    [JsonPropertyName("visible")]
+    public bool Visible { get; set; } = true;
+
+    [JsonPropertyName("width")]
+    public int Width { get; set; } = 200;
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? Extra { get; set; }
+}
+
+public sealed class SerialSession
+{
+    [JsonPropertyName("port")]
+    public string Port { get; set; } = "";
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = "";
+
+    [JsonPropertyName("serial")]
+    public SerialConnectionConfig Serial { get; set; } = new();
+
+    [JsonPropertyName("updated")]
+    public long Updated { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? Extra { get; set; }
+}
+
+public sealed class SerialConnectionConfig
+{
+    [JsonPropertyName("port")]
+    public string Port { get; set; } = "";
+
+    [JsonPropertyName("baudrate")]
+    public int Baudrate { get; set; } = 115200;
+
+    [JsonPropertyName("bytesize")]
+    public int Bytesize { get; set; } = 8;
+
+    [JsonPropertyName("parity")]
+    public string Parity { get; set; } = "None";
+
+    [JsonPropertyName("stopbits")]
+    public string Stopbits { get; set; } = "1";
+
+    [JsonPropertyName("flowcontrol")]
+    public string Flowcontrol { get; set; } = "None";
+
+    [JsonPropertyName("rts")]
+    public bool Rts { get; set; }
+
+    [JsonPropertyName("dtr")]
+    public bool Dtr { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? Extra { get; set; }
+}
+
+public sealed class SshSession
+{
+    [JsonPropertyName("key")]
+    public string Key { get; set; } = "";
+
+    [JsonPropertyName("host")]
+    public string Host { get; set; } = "";
+
+    [JsonPropertyName("port")]
+    public int Port { get; set; } = 22;
+
+    [JsonPropertyName("user")]
+    public string User { get; set; } = "";
+
+    [JsonPropertyName("alias")]
+    public string Alias { get; set; } = "";
+
+    [JsonPropertyName("ssh_key")]
+    public string SshKey { get; set; } = "";
+
+    [JsonPropertyName("passwd_enc")]
+    public string EncryptedPassword { get; set; } = "";
+
+    [JsonPropertyName("updated")]
+    public long Updated { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? Extra { get; set; }
+}

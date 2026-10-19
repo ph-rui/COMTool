@@ -1,0 +1,124 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+  <Style Selector="Button.TitleBarButton, ToggleButton.TitleBarButton">
+    <Setter Property="Width" Value="35" />
+    <Setter Property="Height" Value="35" />
+    <Setter Property="MinWidth" Value="0" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="CornerRadius" Value="0" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="Foreground" Value="{DynamicResource TitleBarForegroundBrush}" />
+  </Style>
+
+  <Style Selector="Button.TitleBarButton:pointerover, ToggleButton.TitleBarButton:pointerover">
+    <Setter Property="Background" Value="{DynamicResource TitleBarHoverBrush}" />
+  </Style>
+
+  <Style Selector="ToggleButton.TitleBarButton:checked">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+
+  <Style Selector="ToggleButton.TitleBarButton:checked:pointerover">
+    <Setter Property="Background" Value="{DynamicResource TitleBarHoverBrush}" />
+  </Style>
+
+  <Style Selector="Button.WindowMinButton:pointerover">
+    <Setter Property="Background" Value="{DynamicResource MinimizeHoverBrush}" />
+  </Style>
+  <Style Selector="Button.WindowMaxButton:pointerover">
+    <Setter Property="Background" Value="{DynamicResource MaximizeHoverBrush}" />
+  </Style>
+  <Style Selector="Button.WindowCloseButton:pointerover">
+    <Setter Property="Background" Value="{DynamicResource CloseHoverBrush}" />
+  </Style>
+
+  <Style Selector="Button.PinButton">
+    <Setter Property="Width" Value="40" />
+    <Setter Property="MinWidth" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="CornerRadius" Value="20" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+  <Style Selector="Button.PinButton:pointerover">
+    <Setter Property="Background" Value="{DynamicResource TitleBarHoverBrush}" />
+  </Style>
+
+  <Style Selector="Button.EmptyAddButton">
+    <Setter Property="Width" Value="28" />
+    <Setter Property="Height" Value="28" />
+    <Setter Property="MinWidth" Value="0" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="CornerRadius" Value="5" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+  <Style Selector="Button.EmptyAddButton:pointerover">
+    <Setter Property="Background" Value="{DynamicResource AccentHoverBrush}" />
+  </Style>
+
+  <Style Selector="Button.SessionHandle">
+    <Setter Property="Width" Value="10" />
+    <Setter Property="Height" Value="48" />
+    <Setter Property="MinWidth" Value="0" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="Background" Value="#2196f3" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="CornerRadius" Value="4" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+  <Style Selector="Button.SessionHandle:pointerover">
+    <Setter Property="Background" Value="#3aa0f5" />
+  </Style>
+
+  <Style Selector="TextBlock.EmptyTitle">
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="Foreground" Value="{DynamicResource WindowTextBrush}" />
+    <Setter Property="HorizontalAlignment" Value="Stretch" />
+    <Setter Property="TextAlignment" Value="Center" />
+  </Style>
+
+  <Style Selector="TextBlock.SidebarTitle">
+    <Setter Property="FontSize" Value="14" />
+    <Setter Property="Foreground" Value="{DynamicResource SidebarTitleBrush}" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+
+  <Style Selector="TextBlock.SessionName">
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource SessionNameBrush}" />
+  </Style>
+
+  <Style Selector="TextBlock.SessionDetail">
+    <Setter Property="FontSize" Value="10" />
+    <Setter Property="Foreground" Value="{DynamicResource SessionDetailBrush}" />
+  </Style>
+
+  <Style Selector="TextBlock.SectionHeader">
+    <Setter Property="Height" Value="26" />
+    <Setter Property="FontSize" Value="11" />
+    <Setter Property="FontWeight" Value="Bold" />
+    <Setter Property="Foreground" Value="{DynamicResource SidebarSectionBrush}" />
+    <Setter Property="Padding" Value="8,0,0,0" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+
+  <Style Selector="ListBox.SessionList">
+    <Setter Property="Background" Value="{DynamicResource SidebarListBackgroundBrush}" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="0" />
+  </Style>
+</Styles>

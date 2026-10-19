@@ -1,0 +1,82 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:COMTool.App.ViewModels"
+             x:Class="COMTool.App.Views.SessionSidebar"
+             x:DataType="vm:MainViewModel">
+  <Grid RowDefinitions="24,5,*" Margin="0,5,0,0">
+    <!-- Header mirrors session_sidebar.py: star + user + "User sessions". -->
+    <Grid Grid.Row="0" Margin="10,1,8,1" ColumnDefinitions="Auto,6,Auto,6,*">
+      <TextBlock Grid.Column="0"
+                 Text="&#xf005;"
+                 FontFamily="{DynamicResource IconFontAwesome}"
+                 FontSize="15"
+                 Foreground="#f2b01e"
+                 VerticalAlignment="Center" />
+      <TextBlock Grid.Column="2"
+                 Text="&#xf007;"
+                 FontFamily="{DynamicResource IconFontAwesome}"
+                 FontSize="15"
+                 Foreground="#5b8fd6"
+                 VerticalAlignment="Center" />
+      <TextBlock Grid.Column="4"
+                 Classes="SidebarTitle"
+                 Text="User sessions" />
+    </Grid>
+
+    <Grid Grid.Row="2" Margin="16,0,0,0">
+      <Border Background="{DynamicResource SidebarListBackgroundBrush}"
+              BorderBrush="{DynamicResource SidebarBorderBrush}"
+              BorderThickness="1"
+              CornerRadius="3"
+              Padding="2">
+        <Grid>
+          <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                        VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding Sections}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:SidebarSection">
+                  <StackPanel>
+                    <TextBlock Classes="SectionHeader"
+                               Text="{Binding Title}"
+                               IsVisible="{Binding ShowHeader}" />
+                    <ItemsControl ItemsSource="{Binding Items}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:SessionItem">
+                          <Grid Height="40" ColumnDefinitions="16,*,Auto">
+                            <TextBlock Grid.Column="0"
+                                       Text="{Binding IconGlyph}"
+                                       FontFamily="{DynamicResource IconFontAwesome}"
+                                       FontSize="14"
+                                       Foreground="{Binding IconBrush}"
+                                       VerticalAlignment="Center"
+                                       Margin="6,0,0,0" />
+                            <StackPanel Grid.Column="1"
+                                        Margin="6,3,4,3"
+                                        VerticalAlignment="Center"
+                                        Spacing="0">
+                              <TextBlock Classes="SessionName" Text="{Binding Name}" />
+                              <TextBlock Classes="SessionDetail"
+                                         Text="{Binding Detail}"
+                                         IsVisible="{Binding Detail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                            </StackPanel>
+                          </Grid>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+
+          <TextBlock Text="No saved sessions"
+                     FontSize="12"
+                     Foreground="{DynamicResource WindowTextBrush}"
+                     Margin="4,8,4,0"
+                     VerticalAlignment="Top"
+                     IsVisible="{Binding !HasSessions}" />
+        </Grid>
+      </Border>
+    </Grid>
+  </Grid>
+</UserControl>

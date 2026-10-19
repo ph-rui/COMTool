@@ -24,3 +24,11 @@ comtool.*.json
 *.log
 config.*.json
 comtool_*_v*.*
+
+# Avalonia
+avalonia/**/bin/
+avalonia/**/obj/
+avalonia/publish/
+avalonia/.vs/
+*.user
+
