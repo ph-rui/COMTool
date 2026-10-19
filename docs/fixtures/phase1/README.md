@@ -8,6 +8,7 @@ functional evidence images, not final pixel baselines.
 | --- | --- |
 | `ui-chrome-fixed-850x500.png` | Borderless custom window: no native white strip above the title bar, Material Design minimize/maximize/close icons, and no 6px gap below the title bar. |
 | `sidebar-auto-hide-850x500.png` | The sidebar auto-collapsed after the pointer moved into the content area; the left hover strip and manual handle remain available. |
+| `encoding-focus-850x500.png` | Selecting UTF-8 from the encoding drop-down returns keyboard focus to the terminal; `echo FOCUS-MOUSE` is accepted immediately. |
 | `sessions-850x500.png` | Config-backed sidebar shows remembered SSH sessions and no tabs after restart. |
 | `two-tabs-850x500.png` | Multiple SSH tabs are open; `win-ssh` is selected, `local-ssh` is not. Sidebar status dots reflect open sessions. |
 | `switch-tab-850x500.png` | Clicking the `local-ssh` tab switches the terminal content back without reconnecting. |

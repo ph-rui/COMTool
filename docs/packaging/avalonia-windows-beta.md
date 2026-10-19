@@ -98,26 +98,21 @@ sandbox install:
 - `%APPDATA%\COMTool-Avalonia` and `%APPDATA%\comtool` both still existed after
   uninstall (no `-RemoveConfig`).
 
-The latest app binary (including the borderless title bar, Material Design
-window icons, auto-hiding sidebar and F11 row collapse) was published over SSH
-and copied to the Windows working path:
-`C:\Users\zhangrui\comtool-phase1-app.exe`.
+The latest app binary (including borderless chrome, auto-hiding sidebar and
+the encoding-drop-down focus fix) was published over SSH and copied to:
 
-- size: 55,955,871 bytes;
-- SHA256: `8f0feec0b807eabd383d64f18151c88ac46ad8e9e1421b9b69d7bd28f5015528`;
-- the remote copy matched that hash via `certutil`.
+- `C:\Users\zhangrui\comtool-phase1-app.exe`
+- `D:\Users\zhangrui\Desktop\comtool-phase1-app.exe`
+- `D:\Users\zhangrui\Desktop\comtool-phase1-app-fixed.exe`
 
-The previously running Desktop copy
-`D:\Users\zhangrui\Desktop\comtool-phase1-app.exe` was left untouched because
-that older build was still running in the interactive session. The new build
-was copied beside it as
-`D:\Users\zhangrui\Desktop\comtool-phase1-app-fixed.exe` (same SHA256), so the
-running app did not need to be interrupted for the update.
+- size: 55,955,844 bytes;
+- SHA256: `cb0ebedb4137dd5c25df44dc77c0d838324e080c4653e00010d929333d334b20`;
+- all remote copies matched that hash via `certutil`.
 
-The release zip is 50,139,928 bytes and is validated with SHA256:
+The release zip is 50,137,291 bytes and is validated with SHA256:
 
 ```text
-14ae813066cf15b3fa4956417447283eb5f8e5e9f15b7e3ba5736d1005026421
+b5b3b5d208f448bc1de6c66884cb851fe66aadc81e03b4334090ebedca7ca74b
 ```
 
 That hash is from the local packaging run and changes whenever the app is

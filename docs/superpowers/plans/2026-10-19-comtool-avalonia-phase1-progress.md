@@ -60,6 +60,11 @@ the hardware, soak, CI and two-week Beta gates are complete.
   exit.
 - Rebuilt the Beta packages and re-ran the full suite: 84/84 tests pass
   (Core 12, Connections 31, Terminal 11, ZMODEM 30), 0 warnings/0 errors.
+- Restored terminal focus when the encoding ComboBox closes. The
+  `DropDownClosed` handler posts `FocusSelectedTerminal` at input priority so
+  the popup's own focus restoration cannot win. Verified with mouse selection,
+  keyboard selection and Escape, followed immediately by
+  `echo FOCUS-OK` / `echo FOCUS-MOUSE`.
 - Added the non-modal-equivalent connection settings window with serial and SSH
   fields, validated port/baud/parity/stop-bit/flow values, key-file browsing,
   password remember, session upsert and immediate open/reconnect.
