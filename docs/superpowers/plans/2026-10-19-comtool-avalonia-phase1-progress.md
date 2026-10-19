@@ -152,6 +152,9 @@ Validated live in the UI under Xvfb:
 - Set `Xft.dpi` to 144 (150% scaling) and relaunched: the sidebar, tabs,
   encoding selector, terminal prompt and status line stayed unclipped and
   readable; no source change was needed.
+- Repeated the check at 192 DPI (200%) on a 2560x1600 Xvfb screen: the client
+  area scaled to 1700x1000 with no clipped title bar, tab strip or terminal
+  text.
 
 Validated headlessly on the Windows test host over SSH (no RDP used):
 
