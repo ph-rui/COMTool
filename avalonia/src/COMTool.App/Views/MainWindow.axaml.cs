@@ -1189,13 +1189,106 @@ public partial class MainWindow : Window
     private void OnDarkThemeClick(object? sender, RoutedEventArgs e) =>
         ApplyTheme("dark");
 
-    private async void OnAboutClick(object? sender, RoutedEventArgs e)
+    private async void OnAboutClick(object? sender, RoutedEventArgs e) =>
+        await ShowAboutAsync();
+
+    private async Task ShowAboutAsync()
     {
-        await ShowInfoAsync(
-            "About COMTool",
-            "COMTool v3.4.1\n\n"
-            + "A cross-platform serial port and SSH terminal.\n"
-            + "https://github.com/Neutree/COMTool");
+        var dialog = new Window
+        {
+            Title = "About COMTool",
+            Width = 560,
+            Height = 430,
+            MinWidth = 420,
+            MinHeight = 320,
+            CanResize = false,
+            ShowInTaskbar = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+        };
+
+        var links = new WrapPanel { ItemSpacing = 8, LineSpacing = 8 };
+        links.Children.Add(LinkButton("GitHub", "https://github.com/Neutree/COMTool"));
+        links.Children.Add(LinkButton(
+            "Releases",
+            "https://github.com/Neutree/COMTool/releases"));
+        links.Children.Add(LinkButton(
+            "Issues",
+            "https://github.com/Neutree/COMTool/issues"));
+        links.Children.Add(LinkButton("LGPL-3.0", "https://github.com/Neutree/COMTool#license"));
+        links.Children.Add(LinkButton("Donate", "https://neucrack.com/donate"));
+
+        var ok = new Button
+        {
+            Content = "OK",
+            Width = 80,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+        };
+        ok.Click += (_, _) => dialog.Close();
+        dialog.Content = new StackPanel
+        {
+            Margin = new Thickness(20),
+            Spacing = 10,
+            Children =
+            {
+                new TextBlock
+                {
+                    Text = "COMTool",
+                    FontSize = 26,
+                    FontWeight = FontWeight.Bold,
+                    Foreground = new SolidColorBrush(Color.Parse("#009688")),
+                },
+                new TextBlock
+                {
+                    Text = "v3.4.1",
+                    FontWeight = FontWeight.Bold,
+                    Foreground = new SolidColorBrush(Color.Parse("#009688")),
+                },
+                new TextBlock
+                {
+                    Text = "A cross-platform serial port and SSH terminal.\n"
+                        + "Open source, created by Neucrack and contributors.\n"
+                        + "Welcome to improve it together and add plugins.",
+                    TextWrapping = TextWrapping.Wrap,
+                },
+                new TextBlock
+                {
+                    Text = "Config path:\n" + (_config?.ConfigPath ?? "(not loaded)"),
+                    TextWrapping = TextWrapping.Wrap,
+                    Opacity = 0.8,
+                },
+                new TextBlock
+                {
+                    Text = "License: LGPL-3.0\n"
+                        + "You can buy me half a cup of coffee if this software helps.",
+                    TextWrapping = TextWrapping.Wrap,
+                },
+                links,
+                ok,
+            },
+        };
+        await dialog.ShowDialog(this);
+    }
+
+    private Button LinkButton(string text, string url)
+    {
+        var button = new Button
+        {
+            Content = text,
+            Padding = new Thickness(10, 4),
+        };
+        button.Click += async (_, _) =>
+        {
+            try
+            {
+                await Launcher.LaunchUriAsync(new Uri(url));
+            }
+            catch
+            {
+                // No browser is available in some headless sessions.
+            }
+        };
+        return button;
     }
 
     private void ApplyTheme(string skin)
