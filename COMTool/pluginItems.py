@@ -392,9 +392,13 @@ class PluginItem:
                 )
         return ""
 
-    def openConnection(self):
+    def openConnection(self, password=None):
         conn = self.currentConnection()
-        if conn is not None and hasattr(conn, "open"):
+        if conn is None or not hasattr(conn, "open"):
+            return
+        if password is not None and conn.id == "ssh":
+            conn.open(password=password)
+        else:
             conn.open()
 
     def onDel(self):

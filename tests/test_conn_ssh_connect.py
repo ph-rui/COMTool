@@ -5,13 +5,24 @@ import sys
 
 import pytest
 
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+pytest.importorskip("PyQt5")
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 import paramiko  # noqa: E402
+from PyQt5.QtWidgets import QApplication  # noqa: E402
 
-from COMTool.conn.conn_ssh import SSH_CONN  # noqa: E402
+import COMTool.conn.conn_ssh as conn_ssh  # noqa: E402
+from COMTool.conn.conn_ssh import SSH, SSH_CONN  # noqa: E402
+
+
+@pytest.fixture(scope="module")
+def app():
+    return QApplication.instance() or QApplication([])
 
 
 class FakeChannel:
@@ -91,3 +102,33 @@ def test_no_explicit_auth_keeps_agent_and_keys(fake_paramiko):
     client = fake_paramiko.last
     assert client.kwargs["look_for_keys"] is True
     assert client.kwargs["allow_agent"] is True
+
+
+class FakeSSHConn:
+    last = None
+
+    def __init__(self):
+        FakeSSHConn.last = self
+        self.password = None
+
+    def connect(self, host, port, user, password, ssh_key_file=None):
+        self.password = password
+
+
+def test_pending_sidebar_password_is_one_shot_and_not_persisted(app, monkeypatch):
+    monkeypatch.setattr(conn_ssh, "SSH_CONN", FakeSSHConn)
+    config = {
+        "host": "10.0.0.5",
+        "port": 22,
+        "user": "root",
+        "passwd": "",
+        "ssh_key": "",
+    }
+    ssh = SSH()
+    ssh.onInit(config)
+    ssh._pending_password = "secret"
+    ssh.checkAndConnect()
+
+    assert FakeSSHConn.last.password == "secret"
+    assert config["passwd"] == ""
+    assert ssh._pending_password is None

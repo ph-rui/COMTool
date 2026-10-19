@@ -82,3 +82,22 @@ def test_clicking_ssh_session_creates_tab_and_opens_password_settings(window, ap
     window.onSessionActivated("ssh:root@10.0.0.1:22")
     app.processEvents()
     assert len(window.items) == 1
+
+
+def test_cached_password_reconnects_without_settings(window, app, monkeypatch):
+    opened = []
+
+    def fake_open(item, password=None):
+        opened.append(password)
+
+    monkeypatch.setattr(main2.PluginItem, "openConnection", fake_open)
+    window._ssh_password_cache["root@10.0.0.1:22"] = "secret"
+
+    window.onSessionActivated("ssh:root@10.0.0.1:22")
+    app.processEvents()
+
+    assert len(window.items) == 1
+    item = window.items[0]
+    dialog = getattr(item, "settingsDialog", None)
+    assert dialog is None or not dialog.isVisible()
+    assert opened == ["secret"]
