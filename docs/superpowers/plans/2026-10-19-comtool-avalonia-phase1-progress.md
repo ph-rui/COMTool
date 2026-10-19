@@ -259,6 +259,26 @@ Validated headlessly on the Windows test host over SSH (no RDP used):
   config because `System.Text.Json` reflection metadata was trimmed. Windows
   AOT cannot be cross-compiled from Linux and needs MSVC Build Tools plus the
   Windows SDK or a Windows CI runner. AOT is not part of this package.
+- Fixed delayed single-character echo reported on Windows: the Moba keyword
+  highlighter holds a trailing partial phrase so a keyword split across output
+  chunks can still be colored, but `i` is a prefix of `info`, `invalid`,
+  `important` and others, so it stayed hidden until the next character or
+  Enter. `ZmodemStream` now flushes a pending prefix after 15 ms when no
+  continuation arrives, preserving the split-chunk path while making normal
+  input echo immediate. Added a highlighter flush test and a `ZmodemStream`
+  timing test; the full suite passes (13 Core, 31 Connections, 11 Terminal,
+  32 ZMODEM). Verified the old binary hides `i` after 2 s, while the release
+  build shows it within 0.35 s; evidence is
+  `docs/fixtures/phase1/terminal-single-char-echo-1000x650.png`.
+- Rebuilt the ReadyToRun Windows and Linux packages with the echo fix. New
+  Windows executable SHA256
+  `23eeccd59ac73ad15b11f6ae2a4676a4db109f16a71b5488bc9be9ff3a82bba1`
+  (175,554,992 bytes); Windows zip SHA256
+  `f1a521b1275278890f87e376852ef54e2cb5701adf2f167766ddbeb4695170cc`
+  (72,279,712 bytes); Linux tar SHA256
+  `ab45d6ccd8946b692fe5075a69760ff4981948f158859b360a5a4b0718357e96`
+  (69,556,475 bytes). Copied the new Windows executable to the C-drive and
+  Desktop working copies and verified both hashes over SSH.
 
 ## Still open for Phase 1
 

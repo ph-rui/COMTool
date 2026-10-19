@@ -77,17 +77,18 @@ Validated on Linux with Xvfb `:99` (1280x800, 100% scaling):
 
 - package built from the current Avalonia app sources with ReadyToRun enabled
   and single-file compression disabled;
-- tarball size 69,554,664 bytes, SHA256
-  `e3988fc054de3ec3a824a0b8af1661cbafa977e986bb3e569c5132d339e8c2f2`;
-- packaged executable size 168,869,687 bytes, SHA256
-  `eb35f1e7abac60ac95aa6f437c37d196131248fb44ec53f170f99f61abd571a4`;
+- tarball size 69,556,475 bytes, SHA256
+  `ab45d6ccd8946b692fe5075a69760ff4981948f158859b360a5a4b0718357e96`;
+- packaged executable size 168,873,783 bytes, SHA256
+  `d5f0edd5fac995d4e62c8c5c747340e64834078fc3c3349dc29fde252a65e4dc`;
 - warm startup to the first main window measured 0.66-0.70 s (median 0.66 s
   in the latest run) on Xvfb `:99`, down from 1.54 s for the previous
   compressed build; see `docs/fixtures/phase1/performance-2026-10-20.md`;
 - version `0.01`, the borderless window, auto-hiding sidebar, Material Design
   title-bar icons, centered settings/plugin/functional icons, remembered
-  window size, non-focus-stealing chrome controls and encoding-drop-down focus
-  return were exercised on Xvfb before packaging;
+  window size, non-focus-stealing chrome controls, encoding-drop-down focus
+  return and immediate single-character SSH echo were exercised on Xvfb
+  before packaging;
 - `bash -n` passed for all three scripts;
 - install created an executable app, absolute launcher symlink, desktop entry
   and icon;
