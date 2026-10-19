@@ -109,6 +109,18 @@ def test_migrate_terminal_tabs_and_saved_entries():
     assert "passwd" not in store.to_list()[0]
 
 
+def test_password_token_is_preserved_until_explicitly_cleared():
+    store = SshSessionStore()
+    store.upsert("host", 22, "root", passwd_enc="encrypted-token")
+    store.upsert("host", 22, "root", alias="renamed")
+    session = store.get("root@host:22")
+    assert session["alias"] == "renamed"
+    assert session["passwd_enc"] == "encrypted-token"
+
+    store.upsert("host", 22, "root", passwd_enc="")
+    assert store.get("root@host:22")["passwd_enc"] == ""
+
+
 def test_remove_and_invalid_entries():
     store = SshSessionStore(
         {
