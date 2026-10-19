@@ -1037,6 +1037,7 @@ public partial class MainWindow : Window
         _zmodemStreams.Remove(tab);
         viewModel.CloseTab(tab);
         UpdateConnectionStates();
+        RestoreTerminalFocus();
     }
 
     private void OnZmodemCancelClick(object? sender, RoutedEventArgs e)
@@ -1291,7 +1292,7 @@ public partial class MainWindow : Window
                 },
                 new TextBlock
                 {
-                    Text = "v3.4.1",
+                    Text = "v0.01",
                     FontWeight = FontWeight.Bold,
                     Foreground = new SolidColorBrush(Color.Parse("#009688")),
                 },
@@ -1410,6 +1411,11 @@ public partial class MainWindow : Window
     {
         // Let the ComboBox finish closing before moving focus back. Otherwise
         // the popup's focus restoration can immediately steal it again.
+        RestoreTerminalFocus();
+    }
+
+    private void RestoreTerminalFocus()
+    {
         Dispatcher.UIThread.Post(FocusSelectedTerminal, DispatcherPriority.Input);
     }
 
@@ -1693,6 +1699,7 @@ public partial class MainWindow : Window
             ? WindowState.Normal
             : WindowState.Maximized;
         UpdateMaximizeIcon();
+        RestoreTerminalFocus();
     }
 
     private void UpdateMaximizeIcon()
@@ -1721,6 +1728,7 @@ public partial class MainWindow : Window
         if (tab.Kind == SessionKind.Local)
         {
             await ShowErrorAsync("This development terminal has no saved connection settings.");
+            RestoreTerminalFocus();
             return;
         }
 
@@ -1753,6 +1761,8 @@ public partial class MainWindow : Window
             {
                 _settingsWindow = null;
             }
+
+            RestoreTerminalFocus();
         };
         window.Show(this);
     }

@@ -22,14 +22,14 @@ avalonia/src/COMTool.App/COMTool.App.csproj
 as `linux-x64`, self-contained, single-file, compressed, then creates:
 
 ```text
-avalonia/publish/package/COMTool-Avalonia-linux-x64-3.4.1-beta.1.tar.gz
+avalonia/publish/package/COMTool-Avalonia-linux-x64-0.01.tar.gz
 avalonia/publish/package/SHA256SUMS-linux.txt
 ```
 
 The archive layout is:
 
 ```text
-COMTool-Avalonia-linux-x64-3.4.1-beta.1/
+COMTool-Avalonia-linux-x64-0.01/
   app/COMTool.App
   app/comtool-avalonia.png
   install.sh
@@ -42,8 +42,8 @@ Use `SKIP_PUBLISH=1` to reuse an existing `avalonia/publish/linux-x64` output.
 ## Install
 
 ```bash
-tar -xzf COMTool-Avalonia-linux-x64-3.4.1-beta.1.tar.gz
-cd COMTool-Avalonia-linux-x64-3.4.1-beta.1
+tar -xzf COMTool-Avalonia-linux-x64-0.01.tar.gz
+cd COMTool-Avalonia-linux-x64-0.01
 ./install.sh
 ```
 
@@ -75,10 +75,11 @@ Python app and `~/.config/comtool` are untouched.
 Validated on Linux with Xvfb `:99` (1280x800, 100% scaling):
 
 - package built from the current Avalonia app sources;
-- tarball size 46,812,750 bytes, SHA256
-  `6a14114e4cf8846953d00fdf8bdbf115781dd315f9395f9606d635f652b3d60d`;
-- the borderless window, auto-hiding sidebar, Material Design title-bar icons
-  and encoding-drop-down focus return were exercised on Xvfb before packaging;
+- tarball size 46,813,067 bytes, SHA256
+  `d6e66792690e52610bf2503f45b2e4ee8d56a681d7fe56132d4799f01ea6eac5`;
+- version `0.01`, the borderless window, auto-hiding sidebar, Material Design
+  title-bar icons, non-focus-stealing chrome controls and encoding-drop-down
+  focus return were exercised on Xvfb before packaging;
 - `bash -n` passed for all three scripts;
 - install created an executable app, absolute launcher symlink, desktop entry
   and icon;

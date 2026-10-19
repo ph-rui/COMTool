@@ -65,6 +65,13 @@ the hardware, soak, CI and two-week Beta gates are complete.
   the popup's own focus restoration cannot win. Verified with mouse selection,
   keyboard selection and Escape, followed immediately by
   `echo FOCUS-OK` / `echo FOCUS-MOUSE`.
+- Set the Avalonia app and package version to `0.01`. Made title-bar,
+  settings, plugin-menu, tab-close, functional and sidebar-handle controls
+  non-focusable, and return focus to the selected terminal after
+  maximize/restore, settings close, tab close and encoding selection. Verified
+  maximize followed by Enter, settings close, plugin-menu close, tab click and
+  encoding selection with `echo MAX-ENTER`, `SETTINGS-OK`, `PLUS-OK`,
+  `TAB-OK`, `ENC-OK` and `UTF8-RESTORED`.
 - Added the non-modal-equivalent connection settings window with serial and SSH
   fields, validated port/baud/parity/stop-bit/flow values, key-file browsing,
   password remember, session upsert and immediate open/reconnect.

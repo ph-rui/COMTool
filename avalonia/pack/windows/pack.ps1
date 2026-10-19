@@ -19,7 +19,7 @@ require administrator rights.
 param(
     [string]$Source = (Join-Path $PSScriptRoot "../../publish/win-x64"),
     [string]$OutputDir = (Join-Path $PSScriptRoot "../../publish/package"),
-    [string]$Version = "3.4.1-beta.1",
+    [string]$Version = "0.01",
     [switch]$SkipPublish
 )
 

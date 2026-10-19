@@ -15,7 +15,7 @@
         FontFamily="{DynamicResource UiFontFamily}"
         FontSize="12"
         Icon="/Assets/logo.ico"
-        Title="COMTool v3.4.1"
+        Title="COMTool v0.01"
         CanResize="True"
         WindowDecorations="None">
 
@@ -47,7 +47,7 @@
                Margin="5,0,0,0"
                Stretch="Uniform" />
         <TextBlock Grid.Column="1"
-                   Text="COMTool v3.4.1"
+                   Text="COMTool v0.01"
                    Foreground="{DynamicResource TitleBarForegroundBrush}"
                    FontSize="12"
                    Margin="5,0,0,0"
@@ -170,6 +170,7 @@
                       Background="{DynamicResource AccentBrush}"
                       BorderThickness="0"
                       CornerRadius="5"
+                      Focusable="False"
                       HorizontalAlignment="Left"
                       VerticalAlignment="Top"
                       ToolTip.Tip="Settings"
@@ -194,6 +195,7 @@
                   <DataTemplate x:DataType="vm:TerminalTab">
                     <Border Classes="TabItemBorder"
                             Classes.selected="{Binding IsSelected}"
+                            Focusable="False"
                             PointerPressed="OnTabPointerPressed"
                             DoubleTapped="OnTabDoubleTapped"
                             ToolTip.Tip="Double click to detach as a window"
@@ -233,6 +235,7 @@
                         Background="{DynamicResource AccentBrush}"
                         BorderThickness="0"
                         CornerRadius="5"
+                        Focusable="False"
                         ToolTip.Tip="Load plugin from file">
                   <Button.Flyout>
                     <MenuFlyout Placement="BottomEdgeAlignedRight">
@@ -268,6 +271,7 @@
                         Background="Transparent"
                         BorderThickness="0"
                         CornerRadius="4"
+                        Focusable="False"
                         ToolTip.Tip="Functional"
                         Click="OnFunctionalClick">
                   <Image Source="/Assets/arrow-right.png"
