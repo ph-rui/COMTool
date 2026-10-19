@@ -4,7 +4,6 @@
     @update 2022-03-15 create
 '''
 from ast import arg
-import re
 from PyQt5.QtCore import QObject, Qt, QRect, pyqtSignal
 from PyQt5.QtWidgets import (QApplication, QWidget,QPushButton,QMessageBox,QDesktopWidget,QMainWindow,
                              QVBoxLayout,QHBoxLayout,QGridLayout,QTextEdit,QLabel,QRadioButton,QCheckBox,
@@ -19,6 +18,7 @@ try:
     from i18n import _
     import utils, parameters
     from conn.base import ConnectionStatus
+    from ..moba_syntax import highlight_line as _highlight_plain_output
     from ..zmodem.detector import ZmodemDetector
     from ..zmodem.io import ZmodemIO
     from ..zmodem.session import ZmodemSession
@@ -28,6 +28,7 @@ except ImportError:
     from COMTool.i18n import _
     from COMTool.Combobox import ComboBox
     from COMTool.conn.base import  ConnectionStatus
+    from COMTool.moba_syntax import highlight_line as _highlight_plain_output
     from COMTool.zmodem.detector import ZmodemDetector
     from COMTool.zmodem.io import ZmodemIO
     from COMTool.zmodem.session import ZmodemSession
@@ -68,19 +69,6 @@ class Terminal_Backend:
     def resize(self, width, height):
         self.screen.resize(columns=width, lines=height)
         self.screen.history = self.screen.history._replace(ratio = 1.0/height)
-
-
-# MobaXterm-style highlighting for plain program output.  This is applied only
-# to cells that have no ANSI color of their own, so `ls --color` etc. keep
-# their original colors.
-_HIGHLIGHT_IPV4 = re.compile(r"(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?![\w.])")
-_HIGHLIGHT_MAC = re.compile(
-    r"(?i)(?<![0-9a-f:])(?:[0-9a-f]{2}:){5}[0-9a-f]{2}(?![0-9a-f:])"
-)
-_HIGHLIGHT_IPV6 = re.compile(
-    r"(?i)(?<![\w:])(?=[0-9a-f:]*:[0-9a-f:]*:)[0-9a-f:]{2,}(?![\w:])"
-)
-_HIGHLIGHT_ERROR_LINE = re.compile(r"\b(?:RX|TX)\s+errors?\b", re.IGNORECASE)
 
 
 class Terminal_Frontend(QWidget):
@@ -269,23 +257,7 @@ class Terminal_Frontend(QWidget):
 
     def _highlight_line(self, text):
         """Return per-character highlight color names for plain output."""
-        colors = [None] * len(text)
-
-        def fill(match, color, only_empty=True, to_end=False):
-            end = len(text.rstrip()) if to_end else match.end()
-            for idx in range(match.start(), max(match.start(), end)):
-                if not only_empty or colors[idx] is None:
-                    colors[idx] = color
-
-        for match in _HIGHLIGHT_IPV4.finditer(text):
-            fill(match, "brightmagenta")
-        for match in _HIGHLIGHT_MAC.finditer(text):
-            fill(match, "brown")
-        for match in _HIGHLIGHT_IPV6.finditer(text):
-            fill(match, "brightmagenta")
-        for match in _HIGHLIGHT_ERROR_LINE.finditer(text):
-            fill(match, "brightred", only_empty=False, to_end=True)
-        return colors
+        return _highlight_plain_output(text)
 
     def paint_line_text(self, painter, screen, line_num, clear=False):
         start_x = 0
@@ -333,8 +305,17 @@ class Terminal_Frontend(QWidget):
         if bg and bg != 'default':
             painter.fillRect(rect, self.get_brush(bg))
 
+        # MobaXterm underlines URLs instead of giving them a foreground color.
+        underline = fg == "underline"
+        if underline:
+            painter.save()
+            font = painter.font()
+            font.setUnderline(True)
+            painter.setFont(font)
         painter.setPen(self.get_pen(fg))
         painter.drawText(rect, align, text)
+        if underline:
+            painter.restore()
 
     def paint_cursor(self, painter, screen):
         align = Qt.AlignTop | Qt.AlignLeft
