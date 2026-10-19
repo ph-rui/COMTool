@@ -44,6 +44,7 @@ try:
         ssh_display_name,
         ssh_session_detail,
     )
+    from secure_store import protect_password, unprotect_password
 except ImportError:
     from COMTool import helpAbout,autoUpdate, utils_ui
     from COMTool.Combobox import ComboBox
@@ -64,6 +65,7 @@ except ImportError:
         ssh_display_name,
         ssh_session_detail,
     )
+    from COMTool.secure_store import protect_password, unprotect_password
 
 from PyQt5.QtCore import pyqtSignal, Qt, QRect, QMargins, QCoreApplication, QTimer
 from PyQt5.QtWidgets import (QApplication, QWidget,QPushButton,QMessageBox,QDesktopWidget,QMainWindow,
@@ -342,6 +344,7 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
                         self.config, pluginConfig,
                         self.hintSignal, self.reloadWindowSignal,
                         self.onConnChnaged)
+        self._wireSshSignals(item)
         item.titleChanged = self.onItemTitleChanged
         self.tabAddItem(item)
         self.items.append(item)
@@ -928,6 +931,58 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         except Exception:
             pass
 
+    def _wireSshSignals(self, item):
+        for conn in getattr(item, "conns", []):
+            if (getattr(conn, "id", "") == "ssh"
+                    and hasattr(conn, "rememberPasswordChanged")):
+                conn.rememberPasswordChanged.connect(
+                    lambda enabled, i=item, c=conn:
+                    self._onSshRememberPasswordChanged(i, c, enabled)
+                )
+
+    def _onSshRememberPasswordChanged(self, item, conn, enabled):
+        try:
+            key = item.getSshSessionKey()
+            if not key or self.sshSessionStore is None:
+                return
+            session = (
+                self.sshSessionStore.get(key)
+                if self.sshSessionStore is not None
+                else None
+            )
+            if not enabled:
+                self._ssh_password_cache.pop(key, None)
+                if session and session.get("passwd_enc"):
+                    self.sshSessionStore.upsert(
+                        session.get("host"),
+                        session.get("port"),
+                        session.get("user"),
+                        alias=session.get("alias") or "",
+                        ssh_key=session.get("ssh_key") or "",
+                        passwd_enc="",
+                    )
+                    self.sshSessionStore.save(self.config)
+                    self.saveConfig()
+                return
+            if not conn.isConnected():
+                return
+            password = str(conn.getConfig().get("passwd") or "")
+            token = protect_password(password) if password else ""
+            if token:
+                self._ssh_password_cache[key] = password
+                self.sshSessionStore.upsert(
+                    session.get("host") if session else conn.getConfig().get("host"),
+                    session.get("port") if session else conn.getConfig().get("port"),
+                    session.get("user") if session else conn.getConfig().get("user"),
+                    alias=session.get("alias") if session else conn.getConfig().get("name") or "",
+                    ssh_key=session.get("ssh_key") if session else conn.getConfig().get("ssh_key") or "",
+                    passwd_enc=token,
+                )
+                self.sshSessionStore.save(self.config)
+                self.saveConfig()
+        except Exception as exc:
+            log.w("update SSH password preference failed: {}".format(exc))
+
     def _connectSshItem(self, item):
         if item.plugin.isConnected():
             return
@@ -935,14 +990,27 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         if str(config.get("ssh_key") or "").strip() or str(config.get("passwd") or "").strip():
             item.openConnection()
             return
-        cached_password = self._ssh_password_cache.get(item.getSshSessionKey())
+        key = item.getSshSessionKey()
+        cached_password = self._ssh_password_cache.get(key)
         if cached_password:
             item.openConnection(cached_password)
             return
-        # Saved sessions never contain passwords.  On the first connection in
-        # this app run, open the settings dialog so the user can enter one,
-        # then use the normal OPEN button.  The password is cached in memory
-        # after success and is not saved to disk.
+        session = (
+            self.sshSessionStore.get(key)
+            if self.sshSessionStore is not None
+            else None
+        )
+        stored_password = unprotect_password(
+            (session or {}).get("passwd_enc")
+        )
+        if stored_password:
+            self._ssh_password_cache[key] = stored_password
+            item.openConnection(stored_password)
+            return
+        # No key, cached password, or saved encrypted password.  Open the
+        # settings dialog so the user can enter one, then use OPEN.  A
+        # successful connection is cached in memory and, when the remember
+        # option is enabled, saved encrypted with Windows DPAPI.
         self.showSettings()
         conn = item.conns[item.currConnIdx] if item.currConnIdx < len(item.conns) else None
         if conn is None:
@@ -1105,12 +1173,21 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
                 return
             if self.sshSessionStore is None:
                 return
+            remember = bool(config.get("remember_password", True))
+            password = str(config.get("passwd") or "")
+            if not remember:
+                passwd_enc = ""
+            elif password:
+                passwd_enc = protect_password(password) or None
+            else:
+                passwd_enc = None
             self.sshSessionStore.upsert(
                 host,
                 config.get("port"),
                 config.get("user"),
                 alias=config.get("name") or "",
                 ssh_key=config.get("ssh_key") or "",
+                passwd_enc=passwd_enc,
             )
             self.sshSessionStore.save(self.config)
             self.saveConfig()

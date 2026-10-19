@@ -1,8 +1,9 @@
 """Persistence helpers for remembered SSH sessions.
 
-The store deliberately keeps only connection metadata.  Passwords are never
-written to the application config; SSH key paths are kept so key based
-sessions can reconnect without asking again.
+The store keeps connection metadata plus an optional password token that has
+already been encrypted by ``secure_store`` (Windows DPAPI).  Passwords are
+never written as plaintext; the token is only decrypted in memory when a
+session is opened.
 """
 
 import copy
@@ -106,6 +107,7 @@ class SshSessionStore:
         user = normalize_user(item.get("user"))
         alias = str(item.get("alias") or item.get("name") or "").strip()
         ssh_key = str(item.get("ssh_key") or "").strip()
+        passwd_enc = str(item.get("passwd_enc") or "").strip()
         return {
             "key": ssh_session_key(host, port, user),
             "host": host,
@@ -113,6 +115,7 @@ class SshSessionStore:
             "user": user,
             "alias": alias,
             "ssh_key": ssh_key,
+            "passwd_enc": passwd_enc,
             "updated": item.get("updated", 0),
         }
 
@@ -123,7 +126,13 @@ class SshSessionStore:
                 return copy.deepcopy(session)
         return None
 
-    def upsert(self, host, port, user, alias="", ssh_key=""):
+    def upsert(self, host, port, user, alias="", ssh_key="", passwd_enc=None):
+        """Add or update a session.
+
+        ``passwd_enc=None`` keeps the existing encrypted password, which is
+        what normal metadata/title updates should do.  Pass an empty string to
+        explicitly forget it, or a new token to replace it.
+        """
         host = str(host or "").strip()
         if not host:
             return None
@@ -132,6 +141,16 @@ class SshSessionStore:
         alias = str(alias or "").strip()
         ssh_key = str(ssh_key or "").strip()
         key = ssh_session_key(host, port, user)
+        existing_enc = ""
+        existing_index = None
+        for index, existing in enumerate(self.sessions):
+            if existing["key"] == key:
+                existing_enc = str(existing.get("passwd_enc") or "")
+                existing_index = index
+                break
+        if passwd_enc is None:
+            passwd_enc = existing_enc
+        passwd_enc = str(passwd_enc or "").strip()
         session = {
             "key": key,
             "host": host,
@@ -139,12 +158,12 @@ class SshSessionStore:
             "user": user,
             "alias": alias,
             "ssh_key": ssh_key,
+            "passwd_enc": passwd_enc,
             "updated": int(time.time()),
         }
-        for index, existing in enumerate(self.sessions):
-            if existing["key"] == key:
-                self.sessions[index] = session
-                return copy.deepcopy(session)
+        if existing_index is not None:
+            self.sessions[existing_index] = session
+            return copy.deepcopy(session)
         self.sessions.append(session)
         return copy.deepcopy(session)
 

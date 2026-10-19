@@ -127,6 +127,7 @@ class SSH(COMM):
     name = "SSH"
     showSwitchSignal = pyqtSignal(ConnectionStatus)
     connectSuccessSignal = pyqtSignal()
+    rememberPasswordChanged = pyqtSignal(bool)
     def onInit(self, config):
         self.conn = None
         self.config = config
@@ -136,6 +137,7 @@ class SSH(COMM):
             "port" : 22,
             "user" : "root",
             "passwd": "",
+            "remember_password": True,
             "ssh_key": "",
             "auto_reconnect": False,
             "saved": []
@@ -149,6 +151,7 @@ class SSH(COMM):
             "port" : None,
             "user" : None,
             "passwd": None,
+            "remember_password": None,
             "ssh_key": None,
             "auto_reconnect": None,
             "saved": None
@@ -210,6 +213,9 @@ class SSH(COMM):
     def onUiInitDone(self):
         for key in self.config:
             self.loadConfig(key, self.widgetConfMap[key], self.config[key])
+        self.rememberCheckbox.setChecked(
+            bool(self.config.get("remember_password", True))
+        )
 
     def onWidget(self):
         self.widget = QWidget()
@@ -229,6 +235,11 @@ class SSH(COMM):
         self.userInput = QLineEdit()
         self.passwdInput = QLineEdit()
         self.passwdInput.setEchoMode(QLineEdit.EchoMode.Password)
+        self.rememberCheckbox = QCheckBox(_("Remember password (encrypted)"))
+        self.rememberCheckbox.setToolTip(
+            _("Password is encrypted with the current user account; "
+              "leave unchecked to avoid saving it.")
+        )
         self.sshKeyInput = QLineEdit()
         self.sshKeyInputBtn = QPushButton(_("File"))
         self.savedCombobox = ComboBox()
@@ -243,18 +254,20 @@ class SSH(COMM):
         self.serialSettingsLayout.addWidget(self.userInput, 3, 1, 1, 2)
         self.serialSettingsLayout.addWidget(passwdLabel,4,0)
         self.serialSettingsLayout.addWidget(self.passwdInput, 4, 1, 1, 2)
-        self.serialSettingsLayout.addWidget(sshKeyLabel,5,0)
-        self.serialSettingsLayout.addWidget(self.sshKeyInput, 5, 1, 1, 1)
-        self.serialSettingsLayout.addWidget(self.sshKeyInputBtn, 5, 2, 1, 1)
-        self.serialSettingsLayout.addWidget(savedLabel,6,0)
-        self.serialSettingsLayout.addWidget(self.savedCombobox, 6, 1, 1, 2)
-        self.serialSettingsLayout.addWidget(self.serialOpenCloseButton, 7, 0, 1, 3)
+        self.serialSettingsLayout.addWidget(self.rememberCheckbox, 5, 1, 1, 2)
+        self.serialSettingsLayout.addWidget(sshKeyLabel,6,0)
+        self.serialSettingsLayout.addWidget(self.sshKeyInput, 6, 1, 1, 1)
+        self.serialSettingsLayout.addWidget(self.sshKeyInputBtn, 6, 2, 1, 1)
+        self.serialSettingsLayout.addWidget(savedLabel,7,0)
+        self.serialSettingsLayout.addWidget(self.savedCombobox, 7, 1, 1, 2)
+        self.serialSettingsLayout.addWidget(self.serialOpenCloseButton, 8, 0, 1, 3)
         self.widget.setLayout(self.serialSettingsLayout)
         self.widgetConfMap["name"]          = self.nameInput
         self.widgetConfMap["host"]          = self.hostInput
         self.widgetConfMap["port"]          = self.portInput
         self.widgetConfMap["user"]          = self.userInput
         self.widgetConfMap["passwd"]        = self.passwdInput
+        self.widgetConfMap["remember_password"] = None
         self.widgetConfMap["ssh_key"]       = self.sshKeyInput
         self.widgetConfMap["auto_reconnect"]= None
         self.widgetConfMap["saved"]         = None
@@ -270,6 +283,7 @@ class SSH(COMM):
         self.portInput.textChanged.connect(lambda : self.inputChanged("port", self.portInput, int))
         self.userInput.textChanged.connect(lambda : self.inputChanged("user", self.userInput))
         self.passwdInput.textChanged.connect(lambda : self.inputChanged("passwd", self.passwdInput))
+        self.rememberCheckbox.stateChanged.connect(self.onRememberPasswordChanged)
         self.sshKeyInput.textChanged.connect(lambda : self.inputChanged("ssh_key", self.sshKeyInput))
         self.savedCombobox.activated.connect(self.loadSavedItem)
         self.sshKeyInputBtn.clicked.connect(self.selectSshKeyFile)
@@ -300,6 +314,11 @@ class SSH(COMM):
                 self.displayNameChanged.emit()
         except:
             self.hintSignal.emit("error", _("Input error"), _("Input") + f' {conf_type} ' + _("error"))
+
+    def onRememberPasswordChanged(self, state):
+        enabled = bool(state)
+        self.config["remember_password"] = enabled
+        self.rememberPasswordChanged.emit(enabled)
 
     def disconnect(self):
         if self.isConnected():

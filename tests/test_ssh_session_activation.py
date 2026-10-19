@@ -101,3 +101,31 @@ def test_cached_password_reconnects_without_settings(window, app, monkeypatch):
     dialog = getattr(item, "settingsDialog", None)
     assert dialog is None or not dialog.isVisible()
     assert opened == ["secret"]
+
+
+def test_saved_encrypted_password_reconnects_after_restart(window, app, monkeypatch):
+    opened = []
+
+    def fake_open(item, password=None):
+        opened.append(password)
+
+    monkeypatch.setattr(main2.PluginItem, "openConnection", fake_open)
+    monkeypatch.setattr(
+        main2,
+        "unprotect_password",
+        lambda token: "secret" if token == "encrypted-token" else "",
+    )
+    window.sshSessionStore.upsert(
+        "10.0.0.1", 22, "root", alias="board",
+        passwd_enc="encrypted-token",
+    )
+    window._ssh_password_cache.clear()
+
+    window.onSessionActivated("ssh:root@10.0.0.1:22")
+    app.processEvents()
+
+    assert len(window.items) == 1
+    item = window.items[0]
+    dialog = getattr(item, "settingsDialog", None)
+    assert dialog is None or not dialog.isVisible()
+    assert opened == ["secret"]
