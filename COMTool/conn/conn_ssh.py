@@ -38,9 +38,32 @@ class SSH_CONN:
         import paramiko
         self.client = paramiko.SSHClient()
         self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        self.client.connect(host, port=port, username=user, password=password, key_filename=ssh_key_file)
+        # When the user selected a password or an explicit key, do not also
+        # scan the agent and ~/.ssh keys. That extra authentication round trip
+        # is a large part of the delay compared with MobaXterm.
+        have_explicit_auth = bool(password or ssh_key_file)
+        self.client.connect(
+            host,
+            port=port,
+            username=user,
+            password=password,
+            key_filename=ssh_key_file,
+            look_for_keys=not have_explicit_auth,
+            allow_agent=not have_explicit_auth,
+            timeout=10,
+            banner_timeout=10,
+            auth_timeout=10,
+        )
         self.channel = self.client.get_transport().open_session()
-        self.channel.get_pty(term="linux", width=pty_width, height=pty_height)
+        self.channel.get_pty(term="xterm-256color", width=pty_width, height=pty_height)
+        # Match common desktop terminals so tools such as ip/ls/grep emit
+        # their color escape sequences.  Some sshd configurations reject
+        # environment requests, so this is best effort.
+        for name, value in (("COLORTERM", "truecolor"), ("COLORFGBG", "15;0")):
+            try:
+                self.channel.set_environment_variable(name, value)
+            except Exception:
+                pass
         self.channel.invoke_shell()
 
     def settimeout(self, timeout):

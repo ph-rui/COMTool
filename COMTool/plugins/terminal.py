@@ -88,6 +88,14 @@ class Terminal_Frontend(QWidget):
                 'yellow': QColor("#ffeb3b"),
                 'magenta': QColor("#e85aad"),
                 'white': QColor("#cacaca"),
+                'brightblack': QColor("#666666"),
+                'brightred': QColor("#ff6b6b"),
+                'brightgreen': QColor("#7ee787"),
+                'brightyellow': QColor("#ffff66"),
+                'brightblue': QColor("#6cb6ff"),
+                'brightmagenta': QColor("#ff7cd6"),
+                'brightcyan': QColor("#66e0ff"),
+                'brightwhite': QColor("#ffffff"),
                 "selected": QColor(255, 255, 255, 80),
             }
         }
@@ -171,13 +179,25 @@ class Terminal_Frontend(QWidget):
         font.setPixelSize(self.font_p_size)
         return font
 
+    def _theme_color(self, color_name):
+        """Resolve named colors and pyte's 256/truecolor hex values."""
+        if not color_name:
+            return None
+        color = self.theme["colors"].get(color_name)
+        if color:
+            return color
+        text = str(color_name)
+        if len(text) == 6 and all(ch in "0123456789abcdefABCDEF" for ch in text):
+            return QColor("#" + text)
+        return None
+
     def get_pen(self, color_name="white", keyword = None):
         pen = self.pens.get(color_name)
         if not pen:
             if keyword:
                 color = self.theme.get(keyword)
             else:
-                color = self.theme["colors"].get(color_name)
+                color = self._theme_color(color_name)
             if not color:
                 pen = self.default_pen
             else:
@@ -188,7 +208,7 @@ class Terminal_Frontend(QWidget):
     def get_brush(self, color_name):
         brush = self.brushes.get(color_name)
         if not brush:
-            color = self.theme["colors"].get(color_name)
+            color = self._theme_color(color_name)
             if not color:
                 brush = self.default_brush
             else:
