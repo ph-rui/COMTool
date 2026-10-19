@@ -100,8 +100,8 @@ sandbox install:
   uninstall (no `-RemoveConfig`).
 
 The latest app binary (version `0.01`, borderless chrome, auto-hiding sidebar,
-non-focus-stealing chrome controls and encoding-dropdown focus return) was
-published over SSH and copied to:
+non-focus-stealing chrome controls, centered tool-strip icons and
+encoding-dropdown focus return) was published over SSH and copied to:
 
 - `C:\Users\zhangrui\COMTool-Avalonia.exe` (working copy)
 - `D:\Users\zhangrui\Desktop\COMTool-Avalonia.exe` (desktop copy)
@@ -112,14 +112,14 @@ its deletion; after the old instance was closed it was removed successfully.
 The Desktop now contains `COMTool-Avalonia.exe` plus the untouched Python
 `COMTool.lnk`; the new name avoids the previous collision.
 
-- size: 55,955,856 bytes;
-- SHA256: `83fa6d764668bc0701e4823c11d87cb656f8bf64b3e009cd3c29ab25fcfbf5ff`;
+- size: 55,955,847 bytes;
+- SHA256: `18ba70310ae48e33cef5ac49613599e9f414c83ca58a3bf88da3effed2a83827`;
 - both remote copies matched that hash via `certutil`.
 
-The release zip is 50,137,586 bytes and is validated with SHA256:
+The release zip is 50,138,607 bytes and is validated with SHA256:
 
 ```text
-694fa8ae5c6d0130d0f75815179b257270ae69443b9d346b3f275cc4c1ae0c8b
+a774817a093621423b285bbcc6f8917c332d808fde01396d63d8db3e2e5c0453
 ```
 
 That hash is from the local packaging run and changes whenever the app is

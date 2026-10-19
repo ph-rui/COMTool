@@ -173,6 +173,8 @@
                       Focusable="False"
                       HorizontalAlignment="Left"
                       VerticalAlignment="Top"
+                      HorizontalContentAlignment="Center"
+                      VerticalContentAlignment="Center"
                       ToolTip.Tip="Settings"
                       Click="OnSettingsClick">
                 <TextBlock Text="&#xf013;"
@@ -236,6 +238,8 @@
                         BorderThickness="0"
                         CornerRadius="5"
                         Focusable="False"
+                        HorizontalContentAlignment="Center"
+                        VerticalContentAlignment="Center"
                         ToolTip.Tip="Load plugin from file">
                   <Button.Flyout>
                     <MenuFlyout Placement="BottomEdgeAlignedRight">
@@ -272,6 +276,8 @@
                         BorderThickness="0"
                         CornerRadius="4"
                         Focusable="False"
+                        HorizontalContentAlignment="Center"
+                        VerticalContentAlignment="Center"
                         ToolTip.Tip="Functional"
                         Click="OnFunctionalClick">
                   <Image Source="/Assets/arrow-right.png"
