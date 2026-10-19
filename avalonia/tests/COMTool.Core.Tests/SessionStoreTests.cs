@@ -119,6 +119,19 @@ public sealed class SessionStoreTests
     }
 
     [Fact]
+    public void SshStore_GetReturnsIndependentCopy()
+    {
+        var store = new SshSessionStore();
+        store.Upsert("host", 22, "user", encryptedPassword: "token");
+
+        var session = store.Get("user@host:22");
+        Assert.NotNull(session);
+        session!.EncryptedPassword = "";
+
+        Assert.Equal("token", store.Sessions[0].EncryptedPassword);
+    }
+
+    [Fact]
     public void SshStore_InvalidPort_FallsBackTo22()
     {
         var store = new SshSessionStore();

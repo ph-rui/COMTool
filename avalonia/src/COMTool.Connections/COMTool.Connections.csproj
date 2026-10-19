@@ -14,6 +14,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\COMTool.Core\COMTool.Core.csproj" />
+    <ProjectReference Include="..\COMTool.Zmodem\COMTool.Zmodem.csproj" />
   </ItemGroup>
 
 </Project>

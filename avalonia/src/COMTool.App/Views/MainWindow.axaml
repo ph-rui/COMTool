@@ -29,6 +29,14 @@
             Background="{DynamicResource TitleBarBackgroundBrush}"
             PointerPressed="OnTitleBarPointerPressed"
             DoubleTapped="OnTitleBarDoubleTapped">
+      <Border.ContextMenu>
+        <ContextMenu>
+          <MenuItem Header="Light theme" Click="OnLightThemeClick" />
+          <MenuItem Header="Dark theme" Click="OnDarkThemeClick" />
+          <Separator />
+          <MenuItem Header="About COMTool" Click="OnAboutClick" />
+        </ContextMenu>
+      </Border.ContextMenu>
       <Grid ColumnDefinitions="40,104,40,35,*,35,35,35">
         <Image Grid.Column="0"
                Source="/Assets/logo.png"
@@ -106,7 +114,8 @@
                     Width="3"
                     Background="{DynamicResource WindowBackgroundBrush}"
                     ResizeDirection="Columns"
-                    ResizeBehavior="PreviousAndNext" />
+                    ResizeBehavior="PreviousAndNext"
+                    DragCompleted="OnSidebarSplitterDragCompleted" />
 
       <Grid Grid.Column="2" Margin="16,0,0,0">
         <Grid Name="MainStack">
@@ -130,7 +139,10 @@
                     ToolTip.Tip="Load plugin from file">
               <Button.Flyout>
                 <MenuFlyout Placement="BottomEdgeAlignedLeft">
-                  <MenuItem Header="terminal" Click="OnAddTerminalClick" />
+                  <MenuItem Header="Send Receive - dbg" Click="OnUnsupportedPluginClick" />
+                  <MenuItem Header="protocol - protocol" Click="OnUnsupportedPluginClick" />
+                  <MenuItem Header="terminal - terminal" Click="OnAddTerminalClick" />
+                  <MenuItem Header="Graph - graph" Click="OnUnsupportedPluginClick" />
                   <MenuItem Header="Load plugin from file" IsEnabled="False" />
                 </MenuFlyout>
               </Button.Flyout>
@@ -143,19 +155,20 @@
 
           <Grid Name="TabHost"
                 IsVisible="{Binding HasTabs}"
-                RowDefinitions="Auto,*">
-            <Grid Grid.Row="0" Height="40" ColumnDefinitions="27,*,Auto">
+                RowDefinitions="36,*">
+            <Grid Grid.Row="0" Height="36" ColumnDefinitions="27,*,Auto">
               <Button Grid.Column="0"
                       Width="27" Height="27"
                       MinWidth="0" MinHeight="0"
                       Padding="0"
-                      Margin="0,4,0,0"
+                      Margin="0,3,0,0"
                       Background="{DynamicResource AccentBrush}"
                       BorderThickness="0"
                       CornerRadius="5"
                       HorizontalAlignment="Left"
                       VerticalAlignment="Top"
-                      ToolTip.Tip="Settings">
+                      ToolTip.Tip="Settings"
+                      Click="OnSettingsClick">
                 <TextBlock Text="&#xf013;"
                            FontFamily="{DynamicResource IconFontAwesome}"
                            FontSize="16"
@@ -164,7 +177,7 @@
 
               <ItemsControl Grid.Column="1"
                             ItemsSource="{Binding Tabs}"
-                            Margin="0,4,0,0"
+                            Margin="10,0,0,0"
                             VerticalAlignment="Top"
                             HorizontalAlignment="Left">
                 <ItemsControl.ItemsPanel>
@@ -184,18 +197,14 @@
                         <TextBlock Classes="TabTitle"
                                    Text="{Binding Title}"
                                    VerticalAlignment="Center" />
-                        <Button Width="20" Height="20"
+                        <Button Classes="TabCloseButton"
+                                Width="16" Height="16"
                                 MinWidth="0" MinHeight="0"
                                 Padding="0"
-                                Background="Transparent"
-                                BorderThickness="0"
-                                CornerRadius="10"
                                 Tag="{Binding}"
                                 Click="OnCloseTabClick">
-                          <TextBlock Classes="TabClose"
-                                     Text="&#xf00d;"
-                                     FontFamily="{DynamicResource IconFontAwesome}"
-                                     FontSize="12" />
+                          <Image Source="/Assets/close.png"
+                                 Width="10" Height="10" />
                         </Button>
                       </StackPanel>
                     </Border>
@@ -205,28 +214,32 @@
 
               <StackPanel Grid.Column="2"
                           Orientation="Horizontal"
-                          Spacing="4"
-                          Margin="0,4,0,0"
+                          Spacing="0"
+                          Margin="0,3,0,0"
                           VerticalAlignment="Top">
-                <Button Width="24" Height="24"
+                <Button Width="32" Height="32"
                         MinWidth="0" MinHeight="0"
                         Padding="0"
                         Background="{DynamicResource AccentBrush}"
                         BorderThickness="0"
-                        CornerRadius="4"
+                        CornerRadius="5"
                         ToolTip.Tip="Load plugin from file">
                   <Button.Flyout>
                     <MenuFlyout Placement="BottomEdgeAlignedRight">
-                      <MenuItem Header="terminal" Click="OnAddTerminalClick" />
+                      <MenuItem Header="Send Receive - dbg" Click="OnUnsupportedPluginClick" />
+                      <MenuItem Header="protocol - protocol" Click="OnUnsupportedPluginClick" />
+                      <MenuItem Header="terminal - terminal" Click="OnAddTerminalClick" />
+                      <MenuItem Header="Graph - graph" Click="OnUnsupportedPluginClick" />
                       <MenuItem Header="Load plugin from file" IsEnabled="False" />
                     </MenuFlyout>
                   </Button.Flyout>
                   <TextBlock Text="&#xf067;"
                              FontFamily="{DynamicResource IconFontAwesome}"
-                             FontSize="13"
+                             FontSize="16"
                              Foreground="White" />
                 </Button>
-                <ComboBox Width="97" Height="31"
+                <ComboBox Classes="EncodingCombo"
+                          Width="97" Height="31"
                           MinWidth="60"
                           SelectedIndex="1"
                           VerticalAlignment="Top">
@@ -240,29 +253,63 @@
                 <Button Width="31" Height="31"
                         MinWidth="0" MinHeight="0"
                         Padding="0"
-                        Background="{DynamicResource WindowBackgroundBrush}"
-                        BorderBrush="{DynamicResource SidebarBorderBrush}"
-                        BorderThickness="1"
+                        Background="Transparent"
+                        BorderThickness="0"
                         CornerRadius="4"
-                        ToolTip.Tip="Functional">
-                  <TextBlock Text="&#xf061;"
-                             FontFamily="{DynamicResource IconFontAwesome}"
-                             FontSize="13"
-                             Foreground="{DynamicResource WindowTextBrush}" />
+                        ToolTip.Tip="Functional"
+                        Click="OnFunctionalClick">
+                  <Image Source="/Assets/arrow-right.png"
+                         Width="31" Height="31" />
                 </Button>
               </StackPanel>
             </Grid>
 
-            <Border Grid.Row="1"
-                    Background="White"
-                    BorderBrush="{DynamicResource SidebarBorderBrush}"
-                    BorderThickness="1"
-                    CornerRadius="3">
-              <ContentControl Name="TabContentHost"
-                              Content="{Binding SelectedTab.Content}"
-                              HorizontalContentAlignment="Stretch"
-                              VerticalContentAlignment="Stretch" />
-            </Border>
+            <Grid Grid.Row="1" RowDefinitions="*,6,30">
+              <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+                <Border Grid.Column="0"
+                        Background="White"
+                        BorderBrush="{DynamicResource SidebarBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="3"
+                        Padding="9">
+                  <ContentControl Name="TabContentHost"
+                                  Content="{Binding SelectedTab.Content}"
+                                  HorizontalContentAlignment="Stretch"
+                                  VerticalContentAlignment="Stretch" />
+                </Border>
+
+                <Border Grid.Column="1"
+                        Name="FunctionalPanel"
+                        Width="180"
+                        IsVisible="{Binding SelectedTab.IsFunctionalVisible}"
+                        Background="{DynamicResource WindowBackgroundBrush}"
+                        BorderBrush="{DynamicResource SidebarBorderBrush}"
+                        BorderThickness="1,1,1,1"
+                        CornerRadius="0,3,3,0">
+                  <StackPanel Margin="8" Spacing="8">
+                    <TextBlock Text="Functional"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource SidebarTitleBrush}" />
+                    <Button Content="Load config"
+                            Height="28"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center"
+                            Click="OnLoadConfigClick" />
+                    <Button Content="Share config"
+                            Height="28"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center"
+                            Click="OnShareConfigClick" />
+                  </StackPanel>
+                </Border>
+              </Grid>
+              <TextBlock Grid.Row="2"
+                         Text="{Binding SelectedTab.StatusMessage}"
+                         FontSize="12"
+                         Foreground="{Binding SelectedTab.StatusBrush}"
+                         Margin="4,0,4,0"
+                         VerticalAlignment="Center" />
+            </Grid>
           </Grid>
         </Grid>
       </Grid>

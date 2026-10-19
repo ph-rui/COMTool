@@ -41,6 +41,34 @@ still the default release.
   switching and close buttons. Serial titles use the port name; SSH titles use
   the alias or host.
 
+- Added the Python-exact main-window slice: 36px tab bar, no-gap 32x32
+  add button, 97x31 encoding selector, `arrow-right.png` functional button,
+  9px terminal inset, 6px gap and 30px status row.
+- Added the non-modal-equivalent connection settings window with serial and SSH
+  fields, validated port/baud/parity/stop-bit/flow values, key-file browsing,
+  password remember, session upsert and immediate open/reconnect.
+- Added SetupAPI friendly-name/device-description discovery for Windows COM
+  ports with a parser unit test; scans still fall back to bare names.
+- Added in-place sidebar connection-state updates and persisted sidebar
+  `visible`/`width` values (`sessionSidebar`, clamped to 160-320px).
+- Added the functional panel with `Load config` and `Share config`. Sharing an
+  SSH session copies non-secret fields and never clears the remembered token.
+- Added status text/colors for connected, disconnected, ZMODEM progress,
+  success and error states. The terminal's native scrollbar is hidden to match
+  Python while scrollback remains available.
+- Added a hidden theme selector and About dialog on the title-bar context menu.
+- Added `run.log` with 2 MB rotation in the independent Beta config directory.
+- Ported the full ZMODEM engine: ZDLE subpackets, CRC16/32, offsets, file
+  metadata, sender, receiver, resumable offsets/cancel handling, and a stream
+  interceptor that automatically detects `rz`/`sz`.
+- ZMODEM now routes serial/SSH bytes through `ZmodemStream`, auto-starts
+  receive sessions, prompts for outgoing files, saves received files through
+  the Avalonia picker, suppresses terminal input during a session, and restores
+  the shell prompt/trailing bytes afterward.
+- Added simulated end-to-end ZMODEM tests in both directions, subpacket/offset
+  round-trips, and 63 passing tests total (Core 12, Connections 29, Terminal 8,
+  ZMODEM 14).
+
 ## Evidence
 
 Screenshots and descriptions: `docs/fixtures/phase1/`.
@@ -73,17 +101,12 @@ Validated headlessly on the Windows test host over SSH (no RDP used):
 
 ## Still open for Phase 1
 
-- Python-exact layout/spacing for the tab bar and all top-right controls.
-- Settings/language/help/about/donation UI and a visible theme selector
-  (startup theme selection is implemented).
-- Sidebar hint/status messages and translated context-menu text.
-- Serial port descriptions (Windows SetupAPI/WMI), hotplug UI refresh and a
-  Windows serial receive/loopback test.
-- SSH disconnect detection and automatic reconnect (currently a stale transport
-  is reopened when the session is clicked again).
-- Full ZMODEM sender/receiver and `rz`/`sz` transfer tests.
-- Windows DPAPI remember-password flow exercised through the interactive UI;
-  the stored token is already proven to decrypt and connect headlessly.
+- Language switching and complete help/donation/update UI; About is present.
+- Tab icon/detach behavior and the remaining Python keyboard shortcuts.
+- Serial auto-reconnect, SSH disconnect detection/automatic reconnect, and
+  translated status/context-menu text.
+- Windows SetupAPI descriptions and serial receive/loopback on hardware.
+- Real lrzsz `rz`/`sz` transfers, large-file soak, and speed/ETA display.
 - CI run, DPI checks, 8-hour soak, and the final 1:1 screenshot review.
 
 ## Default-version gate

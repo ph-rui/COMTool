@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using COMTool.App.Services;
 using COMTool.App.ViewModels;
 using COMTool.App.Views;
 
@@ -16,8 +17,10 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        AppLog.Initialize();
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+            desktop.Exit += (_, _) => AppLog.Info("COMTool Avalonia exiting");
             Resources["UiFontFamily"] = new FontFamily(
                 OperatingSystem.IsWindows() ? "Microsoft YaHei" : "DejaVu Sans");
 

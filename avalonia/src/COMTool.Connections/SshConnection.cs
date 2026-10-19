@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Renci.SshNet;
 
 namespace COMTool.Connections;

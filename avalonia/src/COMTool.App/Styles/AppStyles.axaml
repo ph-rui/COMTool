@@ -85,8 +85,8 @@
 
   <Style Selector="Border.TabItemBorder">
     <Setter Property="Height" Value="36" />
-    <Setter Property="MinWidth" Value="100" />
-    <Setter Property="Padding" Value="12,0,4,0" />
+    <Setter Property="MinWidth" Value="112" />
+    <Setter Property="Padding" Value="14,0,4,0" />
     <Setter Property="Margin" Value="0,0,2,0" />
     <Setter Property="Background" Value="{DynamicResource TabBarBackgroundBrush}" />
     <Setter Property="CornerRadius" Value="4,4,0,0" />
@@ -106,6 +106,31 @@
   </Style>
   <Style Selector="Border.TabItemBorder.selected TextBlock.TabClose">
     <Setter Property="Foreground" Value="White" />
+  </Style>
+
+  <Style Selector="Button.TabCloseButton">
+    <Setter Property="Background" Value="#79b0e0" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+  <Style Selector="Button.TabCloseButton:pointerover">
+    <Setter Property="Background" Value="#cc2626" />
+  </Style>
+
+  <Style Selector="ComboBox.EncodingCombo">
+    <Setter Property="Background" Value="{DynamicResource WindowBackgroundBrush}" />
+    <Setter Property="BorderBrush" Value="#dde4ec" />
+    <Setter Property="BorderThickness" Value="2" />
+    <Setter Property="CornerRadius" Value="5" />
+    <Setter Property="Foreground" Value="{DynamicResource WindowTextBrush}" />
+    <Setter Property="Padding" Value="3,1,10,1" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+  <Style Selector="ComboBox.EncodingCombo:pointerover">
+    <Setter Property="BorderBrush" Value="#26a2ff" />
   </Style>
 
   <Style Selector="TextBlock.EmptyTitle">
