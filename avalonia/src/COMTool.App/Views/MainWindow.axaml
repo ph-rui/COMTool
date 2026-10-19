@@ -238,11 +238,12 @@
                              FontSize="16"
                              Foreground="White" />
                 </Button>
-                <ComboBox Classes="EncodingCombo"
+                <ComboBox Name="EncodingCombo"
+                          Classes="EncodingCombo"
                           Width="97" Height="31"
                           MinWidth="60"
-                          SelectedIndex="1"
-                          VerticalAlignment="Top">
+                          VerticalAlignment="Top"
+                          SelectionChanged="OnEncodingChanged">
                   <ComboBoxItem Content="ASCII" />
                   <ComboBoxItem Content="UTF-8" />
                   <ComboBoxItem Content="UTF-16" />

@@ -109,6 +109,8 @@ Validated headlessly on the Windows test host over SSH (no RDP used):
 
 ## Still open for Phase 1
 
+- Terminal byte transcoding for non-UTF-8 encodings; the selector currently
+  persists the chosen encoding only.
 - Language switching and complete help/donation/update UI; About is present.
 - Tab icon/detach behavior and the remaining Python keyboard shortcuts.
 - Serial auto-reconnect, SSH disconnect detection/automatic reconnect, and
