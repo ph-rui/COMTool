@@ -202,7 +202,23 @@ public sealed class MobaKeywordHighlighter
         var chars = new char[charCount];
         _decoder.GetChars(raw, 0, raw.Length, chars, 0, flush: false);
 
-        var text = _textCarry + new string(chars);
+        var decoded = new string(chars);
+        if (decoded.Contains('\uFFFD'))
+        {
+            // Not valid UTF-8 (for example a GBK serial stream). Preserve the
+            // original bytes rather than replacing them with U+FFFD.
+            if (_textCarry.Length > 0)
+            {
+                output.AddRange(Encoding.UTF8.GetBytes(_textCarry));
+                _textCarry = "";
+            }
+
+            _decoder.Reset();
+            output.AddRange(raw);
+            return;
+        }
+
+        var text = _textCarry + decoded;
         _textCarry = "";
         var hold = allowHold ? FindHoldLength(text) : 0;
         if (hold > 0)
@@ -274,14 +290,35 @@ public sealed class MobaKeywordHighlighter
             }
         }
 
+        var hasColor = false;
+        foreach (var value in colors)
+        {
+            if (value is not null)
+            {
+                hasColor = true;
+                break;
+            }
+        }
+
+        if (!hasColor)
+        {
+            output.AddRange(Encoding.UTF8.GetBytes(text));
+            return;
+        }
+
         var index = 0;
         while (index < colors.Length)
         {
             var color = colors[index];
             if (color is null)
             {
-                output.AddRange(Encoding.UTF8.GetBytes(text[index].ToString()));
-                index++;
+                var start = index;
+                while (index < colors.Length && colors[index] is null)
+                {
+                    index++;
+                }
+
+                output.AddRange(Encoding.UTF8.GetBytes(text, start, index - start));
                 continue;
             }
 
