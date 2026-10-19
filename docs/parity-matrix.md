@@ -128,7 +128,7 @@
 | PKG-03 | macOS 包 | P1 | 未开始 | arm64/x64、签名、公证 |
 | PKG-04 | 安装/卸载/升级 | P0 | 完成 | Windows per-user 安装/升级/卸载实测；Linux per-user 安装/升级/卸载实测，均保留 Python 配置和 Beta 配置 |
 | PKG-05 | 包体积/启动时间 | P1 | 部分 | Windows zip 47.8MiB / 单文件 53.4MiB，Linux tar 45MiB；与 Python 版启动时间对比待补 |
-| PKG-06 | CI 构建 | P0 | 部分 | 三平台矩阵、测试、产物 |
+| PKG-06 | CI 构建 | P0 | 部分 | 已有三平台 build/test、Linux real-lrzsz、Windows 打包上传，并新增 Linux 包上传；CI 尚未实际跑通 |
 
 ## 10. 测试与验收
 

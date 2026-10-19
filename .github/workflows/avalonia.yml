@@ -6,6 +6,7 @@ on:
     paths:
       - "avalonia/**"
       - "docs/parity-matrix.md"
+      - "docs/packaging/**"
       - "docs/fixtures/ui/**"
       - "docs/fixtures/phase0/**"
       - "docs/fixtures/phase1/**"
@@ -16,6 +17,7 @@ on:
     paths:
       - "avalonia/**"
       - "docs/parity-matrix.md"
+      - "docs/packaging/**"
       - "docs/fixtures/ui/**"
       - "docs/fixtures/phase0/**"
       - "docs/fixtures/phase1/**"
@@ -103,3 +105,31 @@ jobs:
         with:
           name: comtool-avalonia-beta-win-x64
           path: avalonia/publish/package/
+
+  publish-linux:
+    name: publish linux x64
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Validate installer scripts
+        run: |
+          bash -n avalonia/pack/linux/pack.sh
+          bash -n avalonia/pack/linux/install.sh
+          bash -n avalonia/pack/linux/uninstall.sh
+
+      - name: Build Linux package
+        run: ./avalonia/pack/linux/pack.sh
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: comtool-avalonia-beta-linux-x64
+          path: |
+            avalonia/publish/package/COMTool-Avalonia-linux-x64-*.tar.gz
+            avalonia/publish/package/SHA256SUMS-linux.txt
