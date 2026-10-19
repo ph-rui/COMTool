@@ -31,6 +31,8 @@ still the default release.
 - Right-clicking a sidebar row offers `Open` and `Remove session`. Removal asks
   for confirmation, updates the Beta config and leaves any open tab running,
   matching Python.
+- The `skin` field selects the light or dark Avalonia resource set at startup.
+  The dark palette follows the Python dark QSS for window, sidebar and tabs.
 - A failed serial scan preserves remembered sessions; only a successful scan is
   allowed to prune absent ports.
 - Serial reads retry `SerialPort` timeouts instead of terminating the terminal
@@ -60,7 +62,8 @@ Validated live in the UI under Xvfb:
 ## Still open for Phase 1
 
 - Python-exact layout/spacing for the tab bar and all top-right controls.
-- Settings/theme/language/help/about/donation UI and persistence.
+- Settings/language/help/about/donation UI and a visible theme selector
+  (startup theme selection is implemented).
 - Sidebar hint/status messages and translated context-menu text.
 - Serial port descriptions (Windows SetupAPI/WMI), hotplug UI refresh and a
   Windows serial receive/loopback test.
