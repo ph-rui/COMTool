@@ -69,7 +69,7 @@ Linux self-contained, single-file:
   -o publish/linux-x64
 ```
 
-## Current Phase 0 scope
+## Current implementation (Phase 0 + Phase 1)
 
 Implemented:
 
@@ -86,13 +86,16 @@ Implemented:
   fixture. The full sender/receiver is still to port.
 - One-way Python config import and Windows DPAPI round-trip via
   `tools/COMTool.Phase0Smoke`.
+- Config-backed session sidebar with serial/SSH session activation, dynamic
+  multi-tab terminal host, SSH password prompt/cache and tab close/reconnect.
 - 45 passing tests across Core, Connections, Terminal and ZMODEM.
 
 Not implemented yet:
 
 - Full tab bar/plugin selector parity and the complete settings/theme/language
   UI.
-- Wiring the real serial/SSH backends and credential resolver into the UI.
+- Serial-port descriptions, Windows serial receive and SSH disconnect
+  auto-reconnect.
 - Full ZMODEM sender/receiver and `rz`/`sz` transfer tests.
 - CI execution, 8-hour soak, hotplug/reconnect and Windows serial receive.
 
@@ -105,4 +108,4 @@ uses:
 - Avalonia Beta: `%APPDATA%\COMTool-Avalonia\config.json`
 
 On Linux the equivalent directories are `~/.config/comtool` and
-`~/.config/comtool-avalonia`. Python config import will be one-way during beta.
+`~/.config/comtool-avalonia`. Python config import is one-way during beta.

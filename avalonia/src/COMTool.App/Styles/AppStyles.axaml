@@ -83,6 +83,31 @@
     <Setter Property="Background" Value="#3aa0f5" />
   </Style>
 
+  <Style Selector="Border.TabItemBorder">
+    <Setter Property="Height" Value="36" />
+    <Setter Property="MinWidth" Value="100" />
+    <Setter Property="Padding" Value="12,0,4,0" />
+    <Setter Property="Margin" Value="0,0,2,0" />
+    <Setter Property="Background" Value="{DynamicResource TabBarBackgroundBrush}" />
+    <Setter Property="CornerRadius" Value="4,4,0,0" />
+  </Style>
+  <Style Selector="Border.TabItemBorder.selected">
+    <Setter Property="Background" Value="{DynamicResource TabSelectedBrush}" />
+  </Style>
+  <Style Selector="TextBlock.TabTitle">
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="Foreground" Value="{DynamicResource WindowTextBrush}" />
+  </Style>
+  <Style Selector="Border.TabItemBorder.selected TextBlock.TabTitle">
+    <Setter Property="Foreground" Value="White" />
+  </Style>
+  <Style Selector="TextBlock.TabClose">
+    <Setter Property="Foreground" Value="{DynamicResource WindowTextBrush}" />
+  </Style>
+  <Style Selector="Border.TabItemBorder.selected TextBlock.TabClose">
+    <Setter Property="Foreground" Value="White" />
+  </Style>
+
   <Style Selector="TextBlock.EmptyTitle">
     <Setter Property="FontSize" Value="12" />
     <Setter Property="Foreground" Value="{DynamicResource WindowTextBrush}" />
