@@ -9,6 +9,11 @@
   <ItemGroup>
     <PackageReference Include="SSH.NET" Version="2026.0.0" />
     <PackageReference Include="System.IO.Ports" Version="10.0.12" />
+    <PackageReference Include="Porta.Pty" Version="2.2.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\COMTool.Core\COMTool.Core.csproj" />
   </ItemGroup>
 
 </Project>

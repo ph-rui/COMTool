@@ -141,6 +141,12 @@ public partial class MainWindow : Window
             CursorColor = Color.Parse("#4caf50"),
             BufferSize = 9999,
         };
+        if (terminal.Options is { } terminalOptions)
+        {
+            terminalOptions.RightClickSelectsWord = false;
+        }
+        terminal.PointerPressed += OnTerminalPointerPressed;
+        terminal.KeyDown += OnTerminalKeyDown;
         terminal.AttachedToVisualTree += (_, _) =>
         {
             try
@@ -161,6 +167,49 @@ public partial class MainWindow : Window
         _terminal = terminal;
         TabContentHost.Content = terminal;
         terminal.Focus();
+    }
+
+    private async void OnTerminalPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is not TerminalControl terminal)
+        {
+            return;
+        }
+
+        var point = e.GetCurrentPoint(terminal);
+        if (!point.Properties.IsRightButtonPressed)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        if (terminal.Terminal.Selection.HasSelection)
+        {
+            await terminal.CopyAsync();
+            terminal.Terminal.Selection.ClearSelection();
+            return;
+        }
+
+        await terminal.PasteAsync();
+    }
+
+    private async void OnTerminalKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (sender is not TerminalControl terminal || e.Key != Key.V)
+        {
+            return;
+        }
+
+        var modifiers = e.KeyModifiers;
+        var paste = modifiers == KeyModifiers.Control
+            || modifiers == (KeyModifiers.Control | KeyModifiers.Shift);
+        if (!paste)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        await terminal.PasteAsync();
     }
 
     private void OnCloseTabClick(object? sender, RoutedEventArgs e)

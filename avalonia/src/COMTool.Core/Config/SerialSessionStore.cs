@@ -163,12 +163,10 @@ public sealed class SerialSessionStore
 
     public IReadOnlyList<SerialSession> SortedSessions() =>
         Sessions
-            .OrderBy(item => NaturalKey(item.Port))
-            .ThenBy(item => NaturalKey(item.Name))
+            .OrderBy(item => item.Port, NaturalStringComparer.Instance)
+            .ThenBy(item => item.Name, NaturalStringComparer.Instance)
             .Select(Clone)
             .ToList();
-
-    private static string NaturalKey(string value) => value.ToLowerInvariant();
 
     private static SerialSession Clone(SerialSession session) => new()
     {

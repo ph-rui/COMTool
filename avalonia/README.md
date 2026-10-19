@@ -34,7 +34,12 @@ Phase 0 development flags:
 - `--terminal` opens the terminal spike and launches the system shell.
 
 The flags are temporary scaffolding and must not be part of the Phase 1
-feature surface.
+feature surface. `tools/COMTool.Phase0Smoke` exercises DPAPI, config import,
+terminal throughput, serial enumeration, SSH shell output and PTY resize:
+
+```bash
+dotnet run --project tools/COMTool.Phase0Smoke -- --dpapi --config --terminal --ports
+```
 
 ## Publish
 
@@ -73,18 +78,23 @@ Implemented:
 - Left-edge sidebar handle matching the Python UI.
 - Light-theme tokens for the main shell.
 - Config models, session normalization/pruning and independent Beta config path.
-- Terminal spike based on `Iciclecreek.Avalonia.Terminal` / XTerm.NET.
-- Unit tests for config round-trip, unknown-field preservation, session
-  deduplication/pruning and SSH key/password retention.
+- Terminal rendering with ANSI, 256 colors, CJK/wide characters, selection,
+  copy/paste, resize and 1MB/10MB throughput checks.
+- Serial and SSH `IPtyConnection` adapters (`SerialConnection`, `SshConnection`),
+  Windows COM enumeration and Linux socat PTY read/write tests.
+- ZMODEM CRC/header codec and detector, including a real `lrzsz` ZRQINIT
+  fixture. The full sender/receiver is still to port.
+- One-way Python config import and Windows DPAPI round-trip via
+  `tools/COMTool.Phase0Smoke`.
+- 45 passing tests across Core, Connections, Terminal and ZMODEM.
 
 Not implemented yet:
 
-- Full tab bar and plugin selector parity.
-- Dark theme and the complete settings/language/help UI.
-- Real serial/SSH connection backends.
-- ZMODEM integration.
-- Python config import and DPAPI token migration.
-- Terminal performance and 256-color/CJK validation.
+- Full tab bar/plugin selector parity and the complete settings/theme/language
+  UI.
+- Wiring the real serial/SSH backends and credential resolver into the UI.
+- Full ZMODEM sender/receiver and `rz`/`sz` transfer tests.
+- CI execution, 8-hour soak, hotplug/reconnect and Windows serial receive.
 
 ## Data isolation
 
