@@ -24,6 +24,9 @@ functional evidence images, not final pixel baselines.
 | `dark-theme-menu-1176x552.png` | Live dark-theme switch; `skin` persists in the independent Beta config. |
 | `moba-keyword-highlighting-1176x552.png` | Error red, success green, warning yellow, IP magenta, and URL underline on a live SSH session; ANSI colors take precedence. |
 | `sidebar-hidden-1176x552.png` | Sessions sidebar hidden with its floating reopen handle; `sessionSidebar.visible=false` is persisted. |
+| `zmodem-active-850x500.png` | Real `sz` receive over SSH shows the Python-style transfer label, 150px progress bar and 90px Cancel button in the status row. |
+| `zmodem-cancelled-850x500.png` | Cancel writes ZCAN, restores the panel and reports `File transfer cancelled`. |
+| `zmodem-cancel-input-850x500.png` | Terminal input and the remote shell prompt work again after cancelling a ZMODEM transfer. |
 
 The tab title rule matches Python: serial tabs use the port name, SSH tabs use
 the alias when present and the host otherwise. Closing a tab only closes the
