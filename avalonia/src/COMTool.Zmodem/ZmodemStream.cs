@@ -29,6 +29,7 @@ public sealed class ZmodemStream : Stream
     private readonly object _gate = new();
     private readonly List<byte> _terminal = new();
     private readonly ZmodemDetector _detector = new();
+    private readonly MobaKeywordHighlighter _highlighter = new();
     private readonly CancellationTokenSource _cancellation = new();
     private readonly Task _pump;
     private ZmodemIo? _sessionIo;
@@ -291,9 +292,10 @@ public sealed class ZmodemStream : Stream
         var result = _detector.Feed(data);
         if (result.TerminalData.Length > 0)
         {
+            var terminalData = _highlighter.Transform(result.TerminalData);
             lock (_gate)
             {
-                _terminal.AddRange(result.TerminalData);
+                _terminal.AddRange(terminalData);
                 Monitor.PulseAll(_gate);
             }
         }
@@ -373,7 +375,7 @@ public sealed class ZmodemStream : Stream
             _sessionIo = null;
             if (result.Trailing.Length > 0)
             {
-                _terminal.AddRange(result.Trailing.TakeLast(4096));
+                _terminal.AddRange(_highlighter.Transform(result.Trailing.TakeLast(4096).ToArray()));
                 Monitor.PulseAll(_gate);
             }
         }

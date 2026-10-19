@@ -58,6 +58,8 @@ still the default release.
   Python while scrollback remains available.
 - Added a hidden theme selector and About dialog on the title-bar context menu.
 - Added `run.log` with 2 MB rotation in the independent Beta config directory.
+- Added MobaXterm-style plain-output keyword highlighting with ANSI
+  foreground/background precedence, URL underlining and UTF-8-safe chunking.
 - Ported the full ZMODEM engine: ZDLE subpackets, CRC16/32, offsets, file
   metadata, sender, receiver, resumable offsets/cancel handling, and a stream
   interceptor that automatically detects `rz`/`sz`.
