@@ -25,6 +25,7 @@ public partial class MainWindow : Window
     private AppConfigService? _config;
     private DispatcherTimer? _portTimer;
     private ConnectionSettingsWindow? _settingsWindow;
+    private readonly Dictionary<TerminalTab, ZmodemTiming> _zmodemTimings = new();
     private static readonly IBrush StatusInfoBrush =
         new SolidColorBrush(Color.Parse("#008200"));
     private static readonly IBrush StatusWarningBrush =
@@ -476,16 +477,34 @@ public partial class MainWindow : Window
         zmodem.Progress += progress => Dispatcher.UIThread.Post(() =>
         {
             var percent = progress.Total is > 0
-                ? (int)(progress.Sent * 100 / progress.Total.Value)
+                ? (int)Math.Clamp(progress.Sent * 100 / progress.Total.Value, 0, 100)
                 : 0;
+            if (!_zmodemTimings.TryGetValue(tab, out var timing)
+                || !string.Equals(timing.Name, progress.Name, StringComparison.Ordinal))
+            {
+                timing = new ZmodemTiming(progress.Name, DateTime.UtcNow, progress.Sent);
+                _zmodemTimings[tab] = timing;
+            }
+
+            var elapsed = Math.Max(
+                0.001,
+                (DateTime.UtcNow - timing.StartedAt).TotalSeconds);
+            var rate = Math.Max(0, progress.Sent - timing.StartBytes) / elapsed;
+            var detail = rate > 0 ? $" {FormatRate(rate)}" : "";
+            if (progress.Total is > 0 && rate > 0 && progress.Total.Value > progress.Sent)
+            {
+                detail += $" ETA {FormatEta((progress.Total.Value - progress.Sent) / rate)}";
+            }
+
             tab.StatusMessage =
-                $"{(progress.IsSend ? "Sending" : "Receiving")} {progress.Name} {percent}%";
+                $"{(progress.IsSend ? "Sending" : "Receiving")} {progress.Name} {percent}%{detail}";
             tab.StatusBrush = StatusProgressBrush;
         });
         zmodem.TransferCompleted += result =>
             Dispatcher.UIThread.Post(() => { _ = CompleteZmodemAsync(tab, result); });
         zmodem.TransferFailed += message => Dispatcher.UIThread.Post(() =>
         {
+            _zmodemTimings.Remove(tab);
             tab.StatusMessage = $"ZMODEM error: {message}";
             tab.StatusBrush = StatusErrorBrush;
         });
@@ -523,6 +542,7 @@ public partial class MainWindow : Window
 
     private async Task CompleteZmodemAsync(TerminalTab tab, ZmodemTransferResult result)
     {
+        _zmodemTimings.Remove(tab);
         if (result.IsSend)
         {
             tab.StatusMessage = "Files sent";
@@ -670,6 +690,7 @@ public partial class MainWindow : Window
         }
 
         tab.IsAlive = false;
+        _zmodemTimings.Remove(tab);
         viewModel.CloseTab(tab);
         UpdateConnectionStates();
     }
@@ -1219,6 +1240,31 @@ public partial class MainWindow : Window
         e.Handled = true;
         await terminal.PasteAsync();
     }
+
+    private static string FormatRate(double bytesPerSecond)
+    {
+        if (bytesPerSecond >= 1024 * 1024)
+        {
+            return $"{bytesPerSecond / (1024 * 1024):0.0} MB/s";
+        }
+
+        if (bytesPerSecond >= 1024)
+        {
+            return $"{bytesPerSecond / 1024:0.0} KB/s";
+        }
+
+        return $"{bytesPerSecond:0} B/s";
+    }
+
+    private static string FormatEta(double seconds)
+    {
+        var duration = TimeSpan.FromSeconds(Math.Max(0, seconds));
+        return duration.TotalHours >= 1
+            ? duration.ToString(@"h\:mm\:ss")
+            : duration.ToString(@"m\:ss");
+    }
+
+    private sealed record ZmodemTiming(string Name, DateTime StartedAt, long StartBytes);
 
     protected override void OnClosed(EventArgs e)
     {
