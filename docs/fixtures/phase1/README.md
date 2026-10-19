@@ -11,6 +11,7 @@ functional evidence images, not final pixel baselines.
 | `encoding-focus-850x500.png` | Selecting UTF-8 from the encoding drop-down returns keyboard focus to the terminal; `echo FOCUS-MOUSE` is accepted immediately. |
 | `version-focus-0.01-1280x800.png` | The title bar reports `COMTool v0.01`; after maximize, settings close, plugin-menu close, tab click and encoding selection, the terminal still accepts `echo ...` and Enter. |
 | `chrome-icons-centered-850x500.png` | The settings gear, plugin plus and functional arrow icons are centered inside their blue/transparent controls instead of sticking to the top-left corner; `echo ALIGN-OK` still works. |
+| `window-size-restored-1000x650.png` | The window was resized to 1000x650, closed, and reopened at 1000x650; closing it while maximized still saved the previous normal size instead of the full-screen size. |
 | `about-version-0.01-1280x800.png` | The About dialog reports `v0.01` with the Beta config path and existing project links. |
 | `sessions-850x500.png` | Config-backed sidebar shows remembered SSH sessions and no tabs after restart. |
 | `two-tabs-850x500.png` | Multiple SSH tabs are open; `win-ssh` is selected, `local-ssh` is not. Sidebar status dots reflect open sessions. |
