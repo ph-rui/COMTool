@@ -75,10 +75,10 @@ Python app and `~/.config/comtool` are untouched.
 Validated on Linux with Xvfb `:99` (1280x800, 100% scaling):
 
 - package built from the current Avalonia app sources;
-- tarball size 46,814,240 bytes, SHA256
-  `c68c814373f8e751ac53c322c8fcac1facdff2ae7fd4946fa2dc67c9cc11ef73`;
-- the borderless window, auto-hiding sidebar and Material Design title-bar
-  icons were exercised on Xvfb before packaging;
+- tarball size 46,812,750 bytes, SHA256
+  `6a14114e4cf8846953d00fdf8bdbf115781dd315f9395f9606d635f652b3d60d`;
+- the borderless window, auto-hiding sidebar, Material Design title-bar icons
+  and encoding-drop-down focus return were exercised on Xvfb before packaging;
 - `bash -n` passed for all three scripts;
 - install created an executable app, absolute launcher symlink, desktop entry
   and icon;

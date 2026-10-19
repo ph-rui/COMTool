@@ -1406,6 +1406,21 @@ public partial class MainWindow : Window
         _config.Save();
     }
 
+    private void OnEncodingDropDownClosed(object? sender, EventArgs e)
+    {
+        // Let the ComboBox finish closing before moving focus back. Otherwise
+        // the popup's focus restoration can immediately steal it again.
+        Dispatcher.UIThread.Post(FocusSelectedTerminal, DispatcherPriority.Input);
+    }
+
+    private void FocusSelectedTerminal()
+    {
+        if (DataContext is MainViewModel { SelectedTab.Content: { } content })
+        {
+            content.Focus();
+        }
+    }
+
     private void OnSessionsToggle(object? sender, RoutedEventArgs e)
     {
         SetSidebarVisible(!_sidebarVisible);
