@@ -99,5 +99,10 @@ public sealed class SerialCatalogTests
         Assert.Equal(
             System.IO.Ports.Handshake.XOnXOff,
             SerialConnection.ParseHandshake("XON/XOFF"));
+        // System.IO.Ports does not expose DSR/DTR flow control. It must not
+        // fall through to the unrelated RTS/CTS + XON/XOFF mode.
+        Assert.Equal(
+            System.IO.Ports.Handshake.None,
+            SerialConnection.ParseHandshake("DSR/DTR"));
     }
 }

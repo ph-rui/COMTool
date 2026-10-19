@@ -87,7 +87,10 @@ public sealed class SerialConnection : IDisposable
         {
             "XON/XOFF" or "XONXOFF" or "SOFTWARE" => Handshake.XOnXOff,
             "RTS/CTS" or "RTSCTS" or "HARDWARE" => Handshake.RequestToSend,
-            "DSR/DTR" or "DSRDTR" => Handshake.RequestToSendXOnXOff,
+            // System.IO.Ports has no DSR/DTR handshake mode. Mapping it to
+            // RequestToSendXOnXOff would silently enable unrelated RTS/CTS and
+            // XON/XOFF flow control, so keep the line configuration neutral.
+            "DSR/DTR" or "DSRDTR" => Handshake.None,
             _ => Handshake.None,
         };
 
