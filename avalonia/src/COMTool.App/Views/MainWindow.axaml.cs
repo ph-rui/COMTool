@@ -139,6 +139,30 @@ public partial class MainWindow : Window
             return;
         }
 
+        foreach (var tab in viewModel.Tabs)
+        {
+            if (!tab.IsAlive || tab.IsTransportOpen is null)
+            {
+                continue;
+            }
+
+            var connected = false;
+            try
+            {
+                connected = tab.IsTransportOpen();
+            }
+            catch
+            {
+                // A disposed SSH client or serial port is simply disconnected.
+            }
+
+            if (!connected && tab.StatusMessage != "Connection lose")
+            {
+                tab.StatusMessage = "Connection lose";
+                tab.StatusBrush = StatusWarningBrush;
+            }
+        }
+
         var (serial, ssh) = ConnectedSessions();
         viewModel.UpdateConnectionStates(serial, ssh);
     }
