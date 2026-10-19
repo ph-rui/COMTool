@@ -1,7 +1,7 @@
-"""Left-hand list of remembered serial sessions."""
+"""Left-hand list of remembered serial and SSH sessions."""
 
 from PyQt5.QtCore import QSize, Qt, QTimer, pyqtSignal
-from PyQt5.QtGui import QPalette
+from PyQt5.QtGui import QColor, QPalette
 from PyQt5.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -17,18 +17,21 @@ import qtawesome as qta
 try:
     from .i18n import _
     from .serial_sessions import normalize_port
+    from .ssh_sessions import SSH_SESSION_PREFIX
 except ImportError:
     from i18n import _
     from serial_sessions import normalize_port
+    from ssh_sessions import SSH_SESSION_PREFIX
 
 
 class SessionItemWidget(QWidget):
-    """Two-line session row: port name plus hardware description."""
+    """Two-line session row: name plus endpoint/hardware description."""
 
-    def __init__(self, port, detail, connected, parent=None):
+    def __init__(self, name, detail, connected, icon_name="fa.plug", parent=None):
         super().__init__(parent)
         self.setObjectName("sessionItem")
         self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        self._icon_name = icon_name
         layout = QHBoxLayout(self)
         layout.setContentsMargins(6, 3, 4, 3)
         layout.setSpacing(6)
@@ -41,7 +44,7 @@ class SessionItemWidget(QWidget):
         text = QVBoxLayout()
         text.setContentsMargins(0, 0, 0, 0)
         text.setSpacing(0)
-        self.nameLabel = QLabel(port)
+        self.nameLabel = QLabel(name)
         self.nameLabel.setObjectName("sessionName")
         self.nameLabel.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         text.addWidget(self.nameLabel)
@@ -64,7 +67,7 @@ class SessionItemWidget(QWidget):
     def set_connected(self, connected):
         color = "#43a047" if connected else "#90a4ae"
         self.iconLabel.setPixmap(
-            qta.icon("fa.plug", color=color).pixmap(QSize(14, 14))
+            qta.icon(self._icon_name, color=color).pixmap(QSize(14, 14))
         )
 
     def set_selected(self, selected):
@@ -145,19 +148,26 @@ class SessionSidebar(QWidget):
         self._messageTimer.setSingleShot(True)
         self._messageTimer.timeout.connect(self._clearMessage)
 
-    def set_sessions(self, sessions, connected_ports=None, active_port=None):
+    def set_sessions(self, sessions, connected_ports=None, active_port=None,
+                     ssh_sessions=None, connected_ssh=None, active_ssh=None):
         connected = {normalize_port(port) for port in (connected_ports or [])}
         active = normalize_port(active_port)
+        connected_ssh = set(connected_ssh or [])
+        active_ssh = str(active_ssh or "")
+        sessions = sessions or []
+        ssh_sessions = ssh_sessions or []
         self.listWidget.clear()
 
-        if not sessions:
-            item = QListWidgetItem(_("No saved serial sessions"))
+        if not sessions and not ssh_sessions:
+            item = QListWidgetItem(_("No saved sessions"))
             item.setFlags(Qt.NoItemFlags)
             item.setSizeHint(QSize(0, 32))
             self.listWidget.addItem(item)
             return
 
         selected = None
+        if sessions and ssh_sessions:
+            self._add_section_header(_("Serial"))
         for session in sessions:
             port = session["port"]
             name = session.get("name") or port
@@ -166,19 +176,65 @@ class SessionSidebar(QWidget):
             else:
                 head, detail = port, ""
             is_connected = normalize_port(port) in connected
-            item = QListWidgetItem()
-            item.setData(Qt.UserRole, port)
-            item.setToolTip(name)
-            item.setSizeHint(QSize(0, 40))
-            self.listWidget.addItem(item)
-            self.listWidget.setItemWidget(
-                item, SessionItemWidget(head, detail, is_connected)
+            item = self._add_session_item(
+                head,
+                detail,
+                is_connected,
+                port,
+                name,
+                "fa.plug",
             )
             if normalize_port(port) == active:
                 selected = item
+
+        if ssh_sessions:
+            self._add_section_header(_("SSH"))
+        for session in ssh_sessions:
+            head = session.get("alias") or session.get("host") or ""
+            detail = "{}@{}:{}".format(
+                session.get("user") or "",
+                session.get("host") or "",
+                session.get("port") or 22,
+            )
+            data = SSH_SESSION_PREFIX + session.get("key", "")
+            tooltip = "{}\n{}".format(head, detail) if head else detail
+            item = self._add_session_item(
+                head,
+                detail,
+                session.get("key") in connected_ssh,
+                data,
+                tooltip,
+                "fa.server",
+            )
+            if session.get("key") == active_ssh:
+                selected = item
+
         if selected is not None:
             self.listWidget.setCurrentItem(selected)
         self._updateSelectionColors()
+
+    def _add_section_header(self, text):
+        dark = self.palette().color(QPalette.Window).lightness() < 128
+        item = QListWidgetItem("  " + text)
+        item.setFlags(Qt.NoItemFlags)
+        item.setSizeHint(QSize(0, 26))
+        font = item.font()
+        font.setBold(True)
+        font.setPointSize(max(7, font.pointSize() - 1))
+        item.setFont(font)
+        item.setForeground(QColor("#9aa7b1" if dark else "#607d8b"))
+        self.listWidget.addItem(item)
+
+    def _add_session_item(self, head, detail, connected, data, tooltip, icon_name):
+        item = QListWidgetItem()
+        item.setData(Qt.UserRole, data)
+        item.setToolTip(tooltip)
+        item.setSizeHint(QSize(0, 40))
+        self.listWidget.addItem(item)
+        self.listWidget.setItemWidget(
+            item, SessionItemWidget(head, detail, connected, icon_name)
+        )
+        return item
 
     def _updateSelectionColors(self):
         for index in range(self.listWidget.count()):
@@ -191,18 +247,34 @@ class SessionSidebar(QWidget):
         key = normalize_port(port)
         for index in range(self.listWidget.count()):
             item = self.listWidget.item(index)
-            if normalize_port(item.data(Qt.UserRole)) == key:
+            data = item.data(Qt.UserRole)
+            if data is not None and normalize_port(data) == key:
                 row = self.listWidget.itemWidget(item)
                 if isinstance(row, SessionItemWidget):
                     row.set_connected(connected)
                 return
 
-    def update_active(self, active_port):
+    def set_ssh_status(self, key, connected):
+        data = SSH_SESSION_PREFIX + str(key or "")
+        for index in range(self.listWidget.count()):
+            item = self.listWidget.item(index)
+            if item.data(Qt.UserRole) == data:
+                row = self.listWidget.itemWidget(item)
+                if isinstance(row, SessionItemWidget):
+                    row.set_connected(connected)
+                return
+
+    def update_active(self, active_port, active_ssh=None):
         active = normalize_port(active_port)
+        active_ssh_data = SSH_SESSION_PREFIX + str(active_ssh or "")
         selected = None
         for index in range(self.listWidget.count()):
             item = self.listWidget.item(index)
-            if normalize_port(item.data(Qt.UserRole)) == active:
+            data = item.data(Qt.UserRole)
+            if data is None:
+                continue
+            if ((active and normalize_port(data) == active)
+                    or (active_ssh and data == active_ssh_data)):
                 selected = item
                 break
         self.listWidget.setCurrentItem(selected)
@@ -219,22 +291,22 @@ class SessionSidebar(QWidget):
         self.messageLabel.hide()
 
     def _onItemClicked(self, item):
-        port = item.data(Qt.UserRole)
-        if port:
-            self.sessionActivated.emit(str(port))
+        data = item.data(Qt.UserRole)
+        if data:
+            self.sessionActivated.emit(str(data))
 
     def _showContextMenu(self, pos):
         item = self.listWidget.itemAt(pos)
         if item is None:
             return
-        port = item.data(Qt.UserRole)
-        if not port:
+        data = item.data(Qt.UserRole)
+        if not data:
             return
         menu = QMenu(self)
         openAction = menu.addAction(_("Open"))
         removeAction = menu.addAction(_("Remove session"))
         action = menu.exec_(self.listWidget.viewport().mapToGlobal(pos))
         if action == openAction:
-            self.sessionActivated.emit(str(port))
+            self.sessionActivated.emit(str(data))
         elif action == removeAction:
-            self.removeRequested.emit(str(port))
+            self.removeRequested.emit(str(data))

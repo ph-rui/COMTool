@@ -95,6 +95,7 @@ class SSH(COMM):
         self.conn = None
         self.config = config
         default = {
+            "name": "",
             "host" : "127.0.0.1",
             "port" : 22,
             "user" : "root",
@@ -107,6 +108,7 @@ class SSH(COMM):
             if not k in self.config:
                 self.config[k] = default[k]
         self.widgetConfMap = {
+            "name": None,
             "host" : None,
             "port" : None,
             "user" : None,
@@ -140,6 +142,32 @@ class SSH(COMM):
         '''
         return self.config
 
+    def getDisplayName(self):
+        alias = str(self.config.get("name") or "").strip()
+        if alias:
+            return alias
+        host = str(self.config.get("host") or "").strip()
+        return host or self.name
+
+    def getDisplayDetail(self):
+        return "{}@{}:{}".format(
+            self.config.get("user") or "",
+            self.config.get("host") or "",
+            self.config.get("port") or 22,
+        )
+
+    def open(self):
+        """Connect without relying on the settings button state."""
+        if self.busy or self.isConnected() or self.status == ConnectionStatus.CONNECTING:
+            return
+        if not str(self.config.get("host") or "").strip():
+            return
+        self.busy = True
+        self.isOpened = False
+        t = threading.Thread(target=self.openCloseSerialProcess)
+        t.setDaemon(True)
+        t.start()
+
     def onUiInitDone(self):
         for key in self.config:
             self.loadConfig(key, self.widgetConfMap[key], self.config[key])
@@ -147,12 +175,15 @@ class SSH(COMM):
     def onWidget(self):
         self.widget = QWidget()
         self.serialSettingsLayout = QGridLayout()
+        nameLabel = QLabel(_("Name"))
         hostLabel = QLabel(_("Host"))
         portLabel = QLabel(_("Port"))
         userLabel = QLabel(_("User"))
         passwdLabel = QLabel(_("Password"))
         sshKeyLabel = QLabel(_("SSH key"))
         savedLabel = QLabel(_("Saved"))
+        self.nameInput = QLineEdit()
+        self.nameInput.setPlaceholderText(_("Optional alias"))
         self.hostInput = QLineEdit()
         self.portInput = QLineEdit()
         self.portInput.setInputMethodHints(Qt.ImhDigitsOnly | Qt.ImhLatinOnly | Qt.ImhPreferNumbers)
@@ -163,21 +194,24 @@ class SSH(COMM):
         self.sshKeyInputBtn = QPushButton(_("File"))
         self.savedCombobox = ComboBox()
         self.serialOpenCloseButton = QPushButton(_("OPEN"))
-        self.serialSettingsLayout.addWidget(hostLabel,0,0)
-        self.serialSettingsLayout.addWidget(self.hostInput, 0, 1, 1, 2)
-        self.serialSettingsLayout.addWidget(portLabel,1,0)
-        self.serialSettingsLayout.addWidget(self.portInput, 1, 1, 1, 2)
-        self.serialSettingsLayout.addWidget(userLabel,2,0)
-        self.serialSettingsLayout.addWidget(self.userInput, 2, 1, 1, 2)
-        self.serialSettingsLayout.addWidget(passwdLabel,3,0)
-        self.serialSettingsLayout.addWidget(self.passwdInput, 3, 1, 1, 2)
-        self.serialSettingsLayout.addWidget(sshKeyLabel,4,0)
-        self.serialSettingsLayout.addWidget(self.sshKeyInput, 4, 1, 1, 1)
-        self.serialSettingsLayout.addWidget(self.sshKeyInputBtn, 4, 2, 1, 1)
-        self.serialSettingsLayout.addWidget(savedLabel,5,0)
-        self.serialSettingsLayout.addWidget(self.savedCombobox, 5, 1, 1, 2)
-        self.serialSettingsLayout.addWidget(self.serialOpenCloseButton, 6, 0, 1, 3)
+        self.serialSettingsLayout.addWidget(nameLabel,0,0)
+        self.serialSettingsLayout.addWidget(self.nameInput, 0, 1, 1, 2)
+        self.serialSettingsLayout.addWidget(hostLabel,1,0)
+        self.serialSettingsLayout.addWidget(self.hostInput, 1, 1, 1, 2)
+        self.serialSettingsLayout.addWidget(portLabel,2,0)
+        self.serialSettingsLayout.addWidget(self.portInput, 2, 1, 1, 2)
+        self.serialSettingsLayout.addWidget(userLabel,3,0)
+        self.serialSettingsLayout.addWidget(self.userInput, 3, 1, 1, 2)
+        self.serialSettingsLayout.addWidget(passwdLabel,4,0)
+        self.serialSettingsLayout.addWidget(self.passwdInput, 4, 1, 1, 2)
+        self.serialSettingsLayout.addWidget(sshKeyLabel,5,0)
+        self.serialSettingsLayout.addWidget(self.sshKeyInput, 5, 1, 1, 1)
+        self.serialSettingsLayout.addWidget(self.sshKeyInputBtn, 5, 2, 1, 1)
+        self.serialSettingsLayout.addWidget(savedLabel,6,0)
+        self.serialSettingsLayout.addWidget(self.savedCombobox, 6, 1, 1, 2)
+        self.serialSettingsLayout.addWidget(self.serialOpenCloseButton, 7, 0, 1, 3)
         self.widget.setLayout(self.serialSettingsLayout)
+        self.widgetConfMap["name"]          = self.nameInput
         self.widgetConfMap["host"]          = self.hostInput
         self.widgetConfMap["port"]          = self.portInput
         self.widgetConfMap["user"]          = self.userInput
@@ -192,6 +226,7 @@ class SSH(COMM):
         self.serialOpenCloseButton.clicked.connect(self.openCloseSerial)
         self.showSwitchSignal.connect(self.showSwitch)
         self.connectSuccessSignal.connect(self.saveConnectInfo)
+        self.nameInput.textChanged.connect(lambda : self.inputChanged("name", self.nameInput))
         self.hostInput.textChanged.connect(lambda : self.inputChanged("host", self.hostInput))
         self.portInput.textChanged.connect(lambda : self.inputChanged("port", self.portInput, int))
         self.userInput.textChanged.connect(lambda : self.inputChanged("user", self.userInput))
@@ -201,15 +236,19 @@ class SSH(COMM):
         self.sshKeyInputBtn.clicked.connect(self.selectSshKeyFile)
 
     def loadConfig(self, conf_type, obj, value):
-        if conf_type in ["host", "port", "user", "ssh_key"]:
+        if conf_type in ["name", "host", "port", "user", "ssh_key"]:
             obj.setText(str(value))
         elif conf_type == "saved":
             for v in value:
+                alias = str(v.get("name") or "").strip()
                 item = '{}:{} - {}'.format(v["host"], v["port"], v["user"])
+                if alias:
+                    item += " ({})".format(alias)
                 self.savedCombobox.addItem(item)
 
     def loadSavedItem(self, idx):
         conf = self.config["saved"][idx]
+        self.nameInput.setText(str(conf.get("name") or ""))
         self.hostInput.setText(conf["host"])
         self.portInput.setText(str(conf["port"]))
         self.userInput.setText(conf["user"])
@@ -218,6 +257,8 @@ class SSH(COMM):
     def inputChanged(self, conf_type, obj, convertType=str):
         try:
             self.config[conf_type] = convertType(obj.text().strip())
+            if conf_type in ("name", "host"):
+                self.displayNameChanged.emit()
         except:
             self.hintSignal.emit("error", _("Input error"), _("Input") + f' {conf_type} ' + _("error"))
 
@@ -314,19 +355,22 @@ class SSH(COMM):
             "host": self.config["host"],
             "port": self.config["port"],
             "user": self.config["user"],
-            "ssh_key": self.config["ssh_key"]
+            "ssh_key": self.config["ssh_key"],
+            "name": str(self.config.get("name") or "").strip(),
             }
-        try:
-            idx = self.config["saved"].index(item)
-        except Exception:
-            print(item, self.config["saved"])
-            idx  = -1
+        idx = -1
+        for index, saved in enumerate(self.config["saved"]):
+            if all(saved.get(key) == item.get(key) for key in ("host", "port", "user", "ssh_key")):
+                idx = index
+                break
         if idx >= 0:
             self.config["saved"].pop(idx)
             self.savedCombobox.removeItem(idx)
         self.config["saved"].append(item)
-        item = '{}:{} - {}'.format(self.config["host"], self.config["port"], self.config["user"])
-        self.savedCombobox.addItem(item)
+        label = '{}:{} - {}'.format(self.config["host"], self.config["port"], self.config["user"])
+        if item["name"]:
+            label += " ({})".format(item["name"])
+        self.savedCombobox.addItem(label)
 
     def checkTarget(self, config):
         if config["ssh_key"] and not os.path.exists(config["ssh_key"]):
