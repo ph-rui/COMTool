@@ -41,7 +41,7 @@ public sealed class SshConnection : IDisposable
 
     public TimeSpan ConnectTime { get; }
 
-    public bool IsConnected => _client.IsConnected;
+    public bool IsConnected => _client.IsConnected && !Pty.IsInputCompleted;
 
     public static SshConnection Connect(SshConnectionOptions options)
     {
@@ -89,7 +89,12 @@ public sealed class SshConnection : IDisposable
             Timeout = timeout,
         };
 
-        var client = new SshClient(connectionInfo);
+        var client = new SshClient(connectionInfo)
+        {
+            // Detect a silently dropped network path instead of waiting for
+            // the next terminal keystroke to observe the broken socket.
+            KeepAliveInterval = TimeSpan.FromSeconds(15),
+        };
         var started = System.Diagnostics.Stopwatch.StartNew();
         try
         {

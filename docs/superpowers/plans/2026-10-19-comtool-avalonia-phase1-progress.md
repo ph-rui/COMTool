@@ -86,8 +86,9 @@ still the default release.
 - Added a pyte golden fixture generated with pyte 0.8.2 at 60x20/LNM and a
   matching XTerm.NET screen test. The same byte stream now checks text,
   wrapping, tabs, erase sequences, cursor addressing, wide characters and
-  final cursor position against the Python backend. Unit tests are 83 total
-  (Core 12, Connections 31, Terminal 11, ZMODEM 29).
+  final cursor position against the Python backend. Unit tests are 84 total
+  (Core 12, Connections 31, Terminal 11, ZMODEM 30).
+- Made transport EOF a first-class liveness signal (`ZmodemStream.IsInputCompleted`, surfaced through `PtyStreamConnection`) and enabled SSH keepalives. Killing the SSH child now changes the live tab to `Connection lose` on the next poll; clicking the remembered session reconnects with its cached key and no password dialog.
 
 ## Evidence
 
