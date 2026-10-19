@@ -50,6 +50,16 @@ internal static class Program
             await RunAsync("SSH password", () => CheckSshPassword(sshPassword));
         }
 
+        if (parsed.ContainsKey("stored-ssh"))
+        {
+            await RunAsync("Stored SSH config", CheckStoredSsh);
+        }
+
+        if (parsed.ContainsKey("stored-serial"))
+        {
+            Run("Stored serial config", CheckStoredSerial);
+        }
+
         Console.WriteLine(_failures == 0 ? "RESULT: PASS" : $"RESULT: FAIL ({_failures})");
         return _failures == 0 ? 0 : 1;
     }
@@ -267,6 +277,52 @@ internal static class Program
             Rows: 40,
             Timeout: TimeSpan.FromSeconds(20)));
         await VerifyShell(connection, verifyResize: false);
+    }
+
+    private static async Task CheckStoredSsh()
+    {
+        var path = ConfigPaths.AvaloniaConfigFile();
+        var config = ComtoolConfig.Load(path);
+        var store = new SshSessionStore();
+        store.Load(config);
+        if (store.Sessions.Count == 0)
+        {
+            throw new InvalidOperationException($"no SSH sessions in {path}");
+        }
+
+        foreach (var session in store.Sessions)
+        {
+            var password = SecretProtector.Unprotect(session.EncryptedPassword);
+            Console.WriteLine(
+                $"{session.Key} token={session.EncryptedPassword.Length} password={password.Length}");
+            if (session.EncryptedPassword.Length > 0 && password.Length == 0)
+            {
+                throw new InvalidOperationException("stored password could not be decrypted");
+            }
+
+            using var connection = SshConnection.Connect(new SshConnectionOptions(
+                session.Host,
+                session.Port,
+                session.User,
+                Password: password,
+                KeyFile: session.SshKey,
+                Columns: 100,
+                Rows: 40,
+                Timeout: TimeSpan.FromSeconds(20)));
+            await VerifyShell(connection, verifyResize: false);
+        }
+    }
+
+    private static void CheckStoredSerial()
+    {
+        var path = ConfigPaths.AvaloniaConfigFile();
+        var config = ComtoolConfig.Load(path);
+        var store = new SerialSessionStore();
+        store.Load(config);
+        var session = store.SortedSessions().FirstOrDefault()
+            ?? throw new InvalidOperationException($"no serial sessions in {path}");
+        using var connection = SerialConnection.Open(session.Serial);
+        Console.WriteLine($"opened {session.Port}, open={connection.IsOpen}");
     }
 
     private static async Task VerifyShell(SshConnection connection, bool verifyResize = true)

@@ -39,6 +39,8 @@ terminal throughput, serial enumeration, SSH shell output and PTY resize:
 
 ```bash
 dotnet run --project tools/COMTool.Phase0Smoke -- --dpapi --config --terminal --ports
+# Windows headless check of the real Beta config, DPAPI token and serial session:
+dotnet run --project tools/COMTool.Phase0Smoke -- --stored-ssh --stored-serial
 ```
 
 ## Publish

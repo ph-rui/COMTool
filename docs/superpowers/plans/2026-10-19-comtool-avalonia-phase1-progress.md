@@ -59,6 +59,18 @@ Validated live in the UI under Xvfb:
 - Opened two tabs and switched between them.
 - Closed a tab; the sidebar session remained.
 
+Validated headlessly on the Windows test host over SSH (no RDP used):
+
+- Seeded `%APPDATA%\COMTool-Avalonia\config.json` with a serial session and
+  an SSH session whose `passwd_enc` was produced by Windows DPAPI.
+- `COMTool.Phase0Smoke --stored-ssh` read the Beta config, decrypted the
+  208-character DPAPI token, connected to Windows OpenSSH and verified shell
+  output.
+- `COMTool.Phase0Smoke --stored-serial` read the Beta config and opened the
+  configured `COM97` port.
+- The published single-file app started from that config, stayed responsive at
+  193 MB working set, and did not alter the stored serial/SSH entries.
+
 ## Still open for Phase 1
 
 - Python-exact layout/spacing for the tab bar and all top-right controls.
@@ -70,8 +82,8 @@ Validated live in the UI under Xvfb:
 - SSH disconnect detection and automatic reconnect (currently a stale transport
   is reopened when the session is clicked again).
 - Full ZMODEM sender/receiver and `rz`/`sz` transfer tests.
-- Windows DPAPI remember-password flow exercised through the UI, not only the
-  primitive/smoke tool.
+- Windows DPAPI remember-password flow exercised through the interactive UI;
+  the stored token is already proven to decrypt and connect headlessly.
 - CI run, DPI checks, 8-hour soak, and the final 1:1 screenshot review.
 
 ## Default-version gate
