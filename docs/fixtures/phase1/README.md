@@ -36,6 +36,7 @@ functional evidence images, not final pixel baselines.
 | `f11-fullscreen-1280x800.png` | F11 toggles the Python-style full-screen mode: the custom title bar is hidden and the window covers the 1280x800 display; F11 restores the 850x500 window with the title bar. |
 | `about-dialog-850x500.png` | About dialog shows version, description, config path, LGPL license and working GitHub/Releases/Issues/Donate links. |
 | `connect-error-850x500.png` | Clicking a remembered SSH session while the server is down shows the Python-style `Error` dialog with `Connect Failed` and the underlying `Connection refused` detail. |
+| `dpi-150-1280x800.png` | At 150% X11 scaling (`Xft.dpi=144`) the sidebar, tabs, encoding selector, terminal prompt and status line remain unclipped and readable. |
 
 The tab title rule matches Python: serial tabs use the port name, SSH tabs use
 the alias when present and the host otherwise. Closing a tab only closes the
