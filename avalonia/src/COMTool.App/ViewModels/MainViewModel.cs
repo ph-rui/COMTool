@@ -66,6 +66,9 @@ public sealed partial class TerminalTab : ObservableObject
     private IBrush _statusBrush = new SolidColorBrush(Color.Parse("#008200"));
 
     [ObservableProperty]
+    private IBrush _tabDotBrush = new SolidColorBrush(Color.Parse("#4caf50"));
+
+    [ObservableProperty]
     private bool _isFunctionalVisible;
 
     [ObservableProperty]
@@ -257,25 +260,55 @@ public partial class MainViewModel : ViewModelBase
 
     public void CloseTab(TerminalTab tab)
     {
+        if (RemoveTab(tab) >= 0)
+        {
+            OnPropertyChanged(nameof(HasTabs));
+        }
+    }
+
+    /// <summary>
+    /// Removes a tab from the main tab strip without closing its connection.
+    /// The returned index is used to reinsert it when a detached window closes.
+    /// </summary>
+    public int RemoveTabForDetach(TerminalTab tab)
+    {
+        var index = RemoveTab(tab);
+        if (index >= 0)
+        {
+            OnPropertyChanged(nameof(HasTabs));
+        }
+
+        return index;
+    }
+
+    public void InsertDetachedTab(TerminalTab tab, int index)
+    {
+        index = Math.Clamp(index, 0, Tabs.Count);
+        Tabs.Insert(index, tab);
+        SelectedTab = tab;
+        OnPropertyChanged(nameof(HasTabs));
+    }
+
+    private int RemoveTab(TerminalTab tab)
+    {
         var index = Tabs.IndexOf(tab);
         if (index < 0)
         {
-            return;
+            return -1;
         }
 
         var wasSelected = ReferenceEquals(SelectedTab, tab);
         Tabs.RemoveAt(index);
-        OnPropertyChanged(nameof(HasTabs));
 
-        if (!wasSelected)
+        if (wasSelected)
         {
-            return;
+            SelectedTab = Tabs.Count switch
+            {
+                0 => null,
+                _ => Tabs[Math.Min(index, Tabs.Count - 1)],
+            };
         }
 
-        SelectedTab = Tabs.Count switch
-        {
-            0 => null,
-            _ => Tabs[Math.Min(index, Tabs.Count - 1)],
-        };
+        return index;
     }
 }

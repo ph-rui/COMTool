@@ -115,6 +115,23 @@ Validated live in the UI under Xvfb:
   without a password prompt.
 - Opened two tabs and switched between them.
 - Closed a tab; the sidebar session remained.
+- Double-clicked a tab to detach it; ran `echo DETACH-OK` in the detached
+  window, then closed the window and reattached the live tab without a second
+  SSH connection or duplicated terminal buffer.
+- Fixed the duplicate buffer at its source: `TerminalControl` defaults
+  `Process` to `bash`/`cmd.exe` and launches it on load. Every external
+  serial/SSH tab now sets `Process = string.Empty`, so a local shell can no
+  longer print its MOTD/prompt into the stream-backed terminal when reparented.
+- Verified the switched-on local terminal path separately with `--terminal`:
+  the app still launches a local `bash` and `echo LOCAL-OK` works.
+- Replaced the comma-separated Qt font family with a platform monospace family;
+  resize and detach now keep correct column metrics (`CharWidth` ~9px at the
+  850x500 window) and clean wrapping.
+- Killed the sshd child while a tab was detached; `ShellStream.Closed` marked
+  the connection dead, the sidebar dot changed to disconnected, and clicking
+  the session closed the dead detached window and reconnected.
+- Closed the main window while a tab was detached; both windows and the
+  dotnet process exited with no orphan process.
 
 Validated headlessly on the Windows test host over SSH (no RDP used):
 
@@ -137,9 +154,10 @@ Validated headlessly on the Windows test host over SSH (no RDP used):
 - Terminal byte transcoding for non-UTF-8 encodings; the selector currently
   persists the chosen encoding only.
 - Language switching and complete help/donation/update UI; About is present.
-- Tab icon/detach behavior and the remaining Python keyboard shortcuts.
-- Serial auto-reconnect, SSH disconnect detection/automatic reconnect, and
-  translated status/context-menu text.
+- Remaining Python keyboard shortcuts.
+- Serial auto-reconnect and translated status/context-menu text. SSH
+  disconnect detection is complete; Python's `auto_reconnect` defaults to
+  false, so no separate automatic reconnect behavior was added.
 - Windows serial receive/loopback on hardware.
 - Large-file (100MB+) ZMODEM soak and serial-port throughput validation.
 - CI run, DPI checks, 8-hour soak, and the final 1:1 screenshot review.

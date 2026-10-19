@@ -24,6 +24,7 @@ public sealed class SshConnection : IDisposable
     private readonly SshClient _client;
     private readonly ShellStream _shell;
     private int _disposed;
+    private int _transportFaulted;
 
     private SshConnection(
         SshClient client,
@@ -35,13 +36,19 @@ public sealed class SshConnection : IDisposable
         _shell = shell;
         Pty = pty;
         ConnectTime = connectTime;
+        _shell.Closed += (_, _) => OnTransportFaulted();
+        _shell.ErrorOccurred += (_, _) => OnTransportFaulted();
+        _client.ErrorOccurred += (_, _) => OnTransportFaulted();
     }
 
     public PtyStreamConnection Pty { get; }
 
     public TimeSpan ConnectTime { get; }
 
-    public bool IsConnected => _client.IsConnected && !Pty.IsInputCompleted;
+    public bool IsConnected =>
+        Volatile.Read(ref _transportFaulted) == 0
+        && _client.IsConnected
+        && !Pty.IsInputCompleted;
 
     public static SshConnection Connect(SshConnectionOptions options)
     {
@@ -140,6 +147,33 @@ public sealed class SshConnection : IDisposable
             client.Dispose();
             throw;
         }
+    }
+
+    /// <summary>
+    /// The shell channel can end without the reader observing EOF, for example
+    /// when the remote session process exits while the TCP connection remains
+    /// open. The channel's Closed event is then the only liveness signal, and
+    /// it must reach the tab even when terminal output is not being consumed.
+    /// </summary>
+    private void OnTransportFaulted()
+    {
+        if (Interlocked.Exchange(ref _transportFaulted, 1) != 0)
+        {
+            return;
+        }
+
+        _ = Task.Run(
+            () =>
+            {
+                try
+                {
+                    Pty.Close(-1);
+                }
+                catch
+                {
+                    // The transport is already gone.
+                }
+            });
     }
 
     public void Dispose()

@@ -190,10 +190,15 @@
                     <Border Classes="TabItemBorder"
                             Classes.selected="{Binding IsSelected}"
                             PointerPressed="OnTabPointerPressed"
+                            DoubleTapped="OnTabDoubleTapped"
+                            ToolTip.Tip="Double click to detach as a window"
                             Tag="{Binding}">
                       <StackPanel Orientation="Horizontal"
                                   VerticalAlignment="Center"
-                                  Spacing="8">
+                                  Spacing="6">
+                        <Ellipse Width="8" Height="8"
+                                 Fill="{Binding TabDotBrush}"
+                                 VerticalAlignment="Center" />
                         <TextBlock Classes="TabTitle"
                                    Text="{Binding Title}"
                                    VerticalAlignment="Center" />
