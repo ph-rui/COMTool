@@ -18,6 +18,7 @@ try:
     from i18n import _
     import utils, parameters
     from conn.base import ConnectionStatus
+    from ..fast_screen import FastHistoryScreen
     from ..moba_syntax import highlight_line as _highlight_plain_output
     from ..zmodem.detector import ZmodemDetector
     from ..zmodem.io import ZmodemIO
@@ -28,6 +29,7 @@ except ImportError:
     from COMTool.i18n import _
     from COMTool.Combobox import ComboBox
     from COMTool.conn.base import  ConnectionStatus
+    from COMTool.fast_screen import FastHistoryScreen
     from COMTool.moba_syntax import highlight_line as _highlight_plain_output
     from COMTool.zmodem.detector import ZmodemDetector
     from COMTool.zmodem.io import ZmodemIO
@@ -59,7 +61,7 @@ def _format_size(size) -> str:
 
 class Terminal_Backend:
     def __init__(self) -> None:
-        self.screen = pyte.HistoryScreen(60, 20, history=9999, ratio = 0.05)
+        self.screen = FastHistoryScreen(60, 20, history=9999, ratio=0.05)
         self.screen.set_mode(pyte.modes.LNM)
         self.stream = pyte.ByteStream(self.screen)
 
@@ -72,6 +74,8 @@ class Terminal_Backend:
 
 
 class Terminal_Frontend(QWidget):
+    repaintRequested = pyqtSignal()
+
     def __init__(self, send_func, resizeConnFunc, isConnectedFunc) -> None:
         super().__init__()
         self.send = send_func
@@ -166,6 +170,11 @@ class Terminal_Frontend(QWidget):
         # timer for check change
         self.startTimer(100)
         self.updatePixmapLock = threading.Lock()
+        # Painting is coalesced onto the GUI thread.  Receiver threads feed
+        # pyte immediately, but never touch QPixmap/QPainter themselves.
+        self._repaint_pending = False
+        self._repaint_lock = threading.Lock()
+        self.repaintRequested.connect(self._flush_pending, Qt.QueuedConnection)
         # selection
         self.selectionStart = None
         self.lastSelection = None
@@ -323,10 +332,15 @@ class Terminal_Frontend(QWidget):
         self.cursor_x = cursor.x
         self.cursor_y = cursor.y
         char = ""
-        if self.cursor_y >= len(screen.display):
+        if self.cursor_y >= screen.lines:
             cursor_x_pixel_width = 0
         else:
-            line = screen.display[self.cursor_y]
+            # Only build the cursor line; screen.display would rebuild every
+            # visible line on every keystroke/repaint.
+            line = "".join(
+                screen.buffer[self.cursor_y][column].data or ""
+                for column in range(screen.columns)
+            )
             # to get actual text before cursor.x
             x = self.cursor_x
             while 1:
@@ -360,7 +374,7 @@ class Terminal_Frontend(QWidget):
                 self.backend.screen.prev_page()
             else:
                 self.backend.screen.next_page()
-            self.update()
+            self._request_repaint()
         except:
             import traceback
             traceback.print_exc()
@@ -388,6 +402,7 @@ class Terminal_Frontend(QWidget):
                 break
             lastBottom = bottom
         self.updatePixmapLock.release()
+        self._request_repaint()
 
 
     def paintEvent(self, event):
@@ -421,9 +436,29 @@ class Terminal_Frontend(QWidget):
         '''
             scheduled check change
         '''
+        self._request_repaint()
+
+    def _request_repaint(self):
+        """Coalesce repaint requests from receiver threads and the timer."""
+        with self._repaint_lock:
+            if self._repaint_pending:
+                return
+            self._repaint_pending = True
+        try:
+            self.repaintRequested.emit()
+        except RuntimeError:
+            # The tab may have been closed while data was still in flight.
+            pass
+
+    def _flush_pending(self):
+        """Paint pending terminal changes on the GUI thread."""
+        with self._repaint_lock:
+            self._repaint_pending = False
         self.updatePixmapLock.acquire()
-        self.updatePixmap()
-        self.updatePixmapLock.release()
+        try:
+            self.updatePixmap()
+        finally:
+            self.updatePixmapLock.release()
 
     def onReceived(self, data:bytes):
         '''
@@ -431,9 +466,11 @@ class Terminal_Frontend(QWidget):
             lock to make sure receive thread not change screen when check changes here
         '''
         self.updatePixmapLock.acquire()
-        self.backend.feed(data)
-        self.updatePixmap()
-        self.updatePixmapLock.release()
+        try:
+            self.backend.feed(data)
+        finally:
+            self.updatePixmapLock.release()
+        self._request_repaint()
 
     def updatePixmap(self):
         cursor = self.backend.screen.cursor

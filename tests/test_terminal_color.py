@@ -93,3 +93,14 @@ def test_plain_output_gets_mobaxterm_style_highlights(app):
     assert frontend._highlight_line("status=true")[7:11] == ["brightgreen"] * 4
 
     frontend.deleteLater()
+
+
+def test_received_data_paints_on_the_gui_thread(app):
+    frontend = _frontend()
+    frontend.onReceived(b"hello\r\nworld\r\n")
+
+    assert frontend._repaint_pending is True
+    app.processEvents()
+    assert frontend._repaint_pending is False
+    assert frontend.backend.screen.dirty == set()
+    frontend.deleteLater()
