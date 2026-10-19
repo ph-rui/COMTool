@@ -28,6 +28,7 @@ public partial class MainWindow : Window
     private ConnectionSettingsWindow? _settingsWindow;
     private readonly Dictionary<TerminalTab, ZmodemTiming> _zmodemTimings = new();
     private readonly Dictionary<TerminalTab, ZmodemStream> _zmodemStreams = new();
+    private readonly Dictionary<TerminalTab, DetachedTabState> _detachedTabs = new();
     private static readonly IBrush StatusInfoBrush =
         new SolidColorBrush(Color.Parse("#008200"));
     private static readonly IBrush StatusWarningBrush =
@@ -98,6 +99,10 @@ public partial class MainWindow : Window
         var scan = _config.RefreshPorts();
         if (!scan.Success)
         {
+            // A failed scan means "do not prune remembered sessions", not
+            // "stop watching live tabs". Connection state is independent of
+            // port enumeration.
+            UpdateConnectionStates();
             return;
         }
 
@@ -122,11 +127,11 @@ public partial class MainWindow : Window
                 new HashSet<string>(StringComparer.OrdinalIgnoreCase));
         }
 
-        var serial = viewModel.Tabs
+        var serial = AllTabs()
             .Where(tab => tab.Kind == SessionKind.Serial && IsTabConnected(tab))
             .Select(tab => tab.SessionId)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var ssh = viewModel.Tabs
+        var ssh = AllTabs()
             .Where(tab => tab.Kind == SessionKind.Ssh && IsTabConnected(tab))
             .Select(tab => tab.SessionId)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -140,7 +145,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        foreach (var tab in viewModel.Tabs)
+        foreach (var tab in AllTabs())
         {
             if (!tab.IsAlive || tab.IsTransportOpen is null)
             {
@@ -161,6 +166,7 @@ public partial class MainWindow : Window
             {
                 tab.StatusMessage = "Connection lose";
                 tab.StatusBrush = StatusWarningBrush;
+                tab.TabDotBrush = StatusWarningBrush;
             }
         }
 
@@ -184,6 +190,20 @@ public partial class MainWindow : Window
         if (DataContext is not MainViewModel viewModel || _config is null)
         {
             return;
+        }
+
+        var detached = FindDetachedTab(item);
+        if (detached is not null)
+        {
+            if (IsTabConnected(detached))
+            {
+                _detachedTabs[detached].Window.Activate();
+                detached.Content.Focus();
+                return;
+            }
+
+            _detachedTabs[detached].SuppressReattach = true;
+            _detachedTabs[detached].Window.Close();
         }
 
         var existing = viewModel.FindTab(item.SessionId, item.Kind);
@@ -301,15 +321,26 @@ public partial class MainWindow : Window
         };
         SubscribeZmodem(tab, connection.Pty.Zmodem);
 
+        var terminalAttached = false;
         terminal.AttachedToVisualTree += (_, _) =>
             Dispatcher.UIThread.Post(
-                () => AttachTerminal(tab, terminal, connection.Pty),
+                () =>
+                {
+                    if (terminalAttached)
+                    {
+                        return;
+                    }
+
+                    terminalAttached = true;
+                    AttachTerminal(tab, terminal, connection.Pty);
+                },
                 DispatcherPriority.Loaded);
         connection.Pty.ProcessExited += (_, _) => Dispatcher.UIThread.Post(() =>
         {
             tab.IsAlive = false;
             tab.StatusMessage = "Connection lose";
             tab.StatusBrush = StatusWarningBrush;
+            tab.TabDotBrush = StatusWarningBrush;
             UpdateConnectionStates();
         });
 
@@ -411,15 +442,26 @@ public partial class MainWindow : Window
         };
 
         SubscribeZmodem(tab, connection.Pty.Zmodem);
+        var terminalAttached = false;
         terminal.AttachedToVisualTree += (_, _) =>
             Dispatcher.UIThread.Post(
-                () => AttachTerminal(tab, terminal, connection.Pty),
+                () =>
+                {
+                    if (terminalAttached)
+                    {
+                        return;
+                    }
+
+                    terminalAttached = true;
+                    AttachTerminal(tab, terminal, connection.Pty);
+                },
                 DispatcherPriority.Loaded);
         connection.Pty.ProcessExited += (_, _) => Dispatcher.UIThread.Post(() =>
         {
             tab.IsAlive = false;
             tab.StatusMessage = "Connection lose";
             tab.StatusBrush = StatusWarningBrush;
+            tab.TabDotBrush = StatusWarningBrush;
             UpdateConnectionStates();
         });
 
@@ -452,11 +494,34 @@ public partial class MainWindow : Window
         }
     }
 
+    private static FontFamily TerminalFontFamily()
+    {
+        // Avalonia treats the comma-separated Qt family list as one name and
+        // falls back to a proportional UI font, which gives every cell the
+        // width of a wide fallback glyph. Pick a real monospace family.
+        if (OperatingSystem.IsWindows())
+        {
+            return new FontFamily("Consolas");
+        }
+
+        if (OperatingSystem.IsMacOS())
+        {
+            return new FontFamily("Menlo");
+        }
+
+        return new FontFamily("DejaVu Sans Mono");
+    }
+
     private TerminalControl CreateTerminal()
     {
         var terminal = new TerminalControl
         {
-            FontFamily = new FontFamily("Consolas, Bitstream Vera Sans Mono, Courier New, monospace, Microsoft YaHei Mono, Microsoft YaHei"),
+            // The control defaults Process to bash/cmd and auto-launches it when
+            // loaded. These tabs always attach an external serial/SSH stream, so
+            // an empty Process stops a local shell from starting on reparent and
+            // writing its own prompt into the terminal buffer.
+            Process = string.Empty,
+            FontFamily = TerminalFontFamily(),
             FontSize = 15,
             Background = new SolidColorBrush(Color.Parse("#212121")),
             Foreground = Brushes.White,
@@ -729,6 +794,173 @@ public partial class MainWindow : Window
         {
             e.Handled = true;
             CloseTab(tab);
+        }
+    }
+
+    private void OnTabDoubleTapped(object? sender, TappedEventArgs e)
+    {
+        if (sender is not Border { Tag: TerminalTab tab }
+            || DataContext is not MainViewModel viewModel
+            || viewModel.Tabs.IndexOf(tab) < 0)
+        {
+            return;
+        }
+
+        if (!tab.IsAlive
+            || (e.Source is Control source
+                && source.FindAncestorOfType<Button>(includeSelf: true) is not null))
+        {
+            return;
+        }
+
+        // Removing the control from the visual tree must not be treated as the
+        // end of its process. The terminal library has an explicit reparent
+        // handshake for exactly this case.
+        (tab.Content as TerminalControl)?.BeginReparent();
+        var index = viewModel.RemoveTabForDetach(tab);
+        if (index < 0)
+        {
+            (tab.Content as TerminalControl)?.EndReparent();
+            return;
+        }
+
+        e.Handled = true;
+        Dispatcher.UIThread.Post(
+            () => ShowDetachedTab(tab, index),
+            DispatcherPriority.Loaded);
+    }
+
+    private void ShowDetachedTab(TerminalTab tab, int index)
+    {
+        if (!tab.IsAlive)
+        {
+            // The connection can drop between the double-click and this post.
+            // Keep the tab in the strip instead of losing it.
+            (tab.Content as TerminalControl)?.EndReparent();
+            if (DataContext is MainViewModel deadViewModel)
+            {
+                deadViewModel.InsertDetachedTab(tab, index);
+            }
+
+            return;
+        }
+
+        Window? window = null;
+        try
+        {
+            window = new Window
+            {
+                Title = tab.Title,
+                Width = 850,
+                Height = 500,
+                MinWidth = 500,
+                MinHeight = 320,
+                WindowStartupLocation = WindowStartupLocation.CenterScreen,
+                Background = Background,
+                FontFamily = FontFamily,
+                FontSize = FontSize,
+                Icon = Icon,
+                Content = tab.Content,
+            };
+            var state = new DetachedTabState(window, index);
+            _detachedTabs[tab] = state;
+            // Closing fires while the terminal is still in this window's visual
+            // tree, before Avalonia detaches it. Suppress the terminal library's
+            // implicit process cleanup for the trip back to the main window.
+            window.Closing += (_, _) => (tab.Content as TerminalControl)?.BeginReparent();
+            window.Closed += (_, _) => OnDetachedTabClosed(tab, state);
+            window.Show();
+            (tab.Content as TerminalControl)?.EndReparent();
+            tab.Content.Focus();
+        }
+        catch (Exception ex)
+        {
+            _detachedTabs.Remove(tab);
+            if (window is not null)
+            {
+                window.Content = null;
+                window.Close();
+            }
+
+            (tab.Content as TerminalControl)?.EndReparent();
+            if (DataContext is MainViewModel viewModel)
+            {
+                viewModel.InsertDetachedTab(tab, index);
+            }
+
+            _ = ShowErrorAsync($"Failed to detach tab: {ex.Message}");
+        }
+    }
+
+    private void OnDetachedTabClosed(TerminalTab tab, DetachedTabState state)
+    {
+        if (!_detachedTabs.Remove(tab))
+        {
+            return;
+        }
+
+        if (state.SuppressReattach || !tab.IsAlive)
+        {
+            DisposeDetachedTab(tab);
+            return;
+        }
+
+        (tab.Content as TerminalControl)?.BeginReparent();
+        state.Window.Content = null;
+        if (DataContext is MainViewModel viewModel)
+        {
+            viewModel.InsertDetachedTab(tab, state.Index);
+            (tab.Content as TerminalControl)?.EndReparent();
+            tab.Content.Focus();
+        }
+
+        UpdateConnectionStates();
+    }
+
+    private void DisposeDetachedTab(TerminalTab tab)
+    {
+        try
+        {
+            tab.CloseAction?.Invoke();
+        }
+        catch
+        {
+            // The transport may already be gone with its detached window.
+        }
+
+        tab.IsAlive = false;
+        tab.IsZmodemActive = false;
+        _zmodemTimings.Remove(tab);
+        _zmodemStreams.Remove(tab);
+    }
+
+    private TerminalTab? FindDetachedTab(SessionItem item)
+    {
+        foreach (var tab in _detachedTabs.Keys)
+        {
+            if (tab.Kind == item.Kind
+                && string.Equals(tab.SessionId, item.SessionId, StringComparison.OrdinalIgnoreCase))
+            {
+                return tab;
+            }
+        }
+
+        return null;
+    }
+
+    private IEnumerable<TerminalTab> AllTabs()
+    {
+        if (DataContext is MainViewModel viewModel)
+        {
+            foreach (var tab in viewModel.Tabs)
+            {
+                yield return tab;
+            }
+        }
+
+        foreach (var tab in _detachedTabs.Keys)
+        {
+            yield return tab;
         }
     }
 
@@ -1394,12 +1626,23 @@ public partial class MainWindow : Window
 
     private sealed record ZmodemTiming(string Name, DateTime StartedAt, long StartBytes);
 
+    private sealed record DetachedTabState(Window Window, int Index)
+    {
+        public bool SuppressReattach { get; set; }
+    }
+
     protected override void OnClosed(EventArgs e)
     {
         _portTimer?.Stop();
         _portTimer = null;
         Sidebar.SessionActivated -= OnSessionActivated;
         Sidebar.RemoveRequested -= OnSessionRemoveRequested;
+
+        foreach (var state in _detachedTabs.Values.ToList())
+        {
+            state.SuppressReattach = true;
+            state.Window.Close();
+        }
 
         if (DataContext is MainViewModel viewModel)
         {

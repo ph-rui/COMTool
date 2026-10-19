@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.RegularExpressions;
 using COMTool.Connections;
 
 namespace COMTool.Connections.Tests;
@@ -102,6 +103,32 @@ public sealed class SshIntegrationTests
                     "30 90",
                     TimeSpan.FromSeconds(10));
                 Assert.Contains("30 90", size, StringComparison.Ordinal);
+
+                // Killing the remote shell ends the SSH channel without
+                // necessarily closing the TCP connection. The shell channel's
+                // Closed event must mark the connection dead even when no
+                // terminal reader is consuming output.
+                var pidText = await ReadCommand(
+                    connection,
+                    "printf 'SHELLPID-%d\\n' $$\n",
+                    text => Regex.IsMatch(text, @"SHELLPID-(\d+)"),
+                    TimeSpan.FromSeconds(10));
+                var match = Regex.Match(pidText, @"SHELLPID-(\d+)");
+                Assert.True(match.Success, pidText);
+                var shellPid = int.Parse(match.Groups[1].Value);
+                using (var shellProcess = Process.GetProcessById(shellPid))
+                {
+                    shellProcess.Kill();
+                    shellProcess.WaitForExit(2000);
+                }
+
+                var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+                while (connection.IsConnected && DateTime.UtcNow < deadline)
+                {
+                    await Task.Delay(50);
+                }
+
+                Assert.False(connection.IsConnected);
             }
 
             using (var reconnected = SshConnection.Connect(options))
@@ -159,10 +186,21 @@ public sealed class SshIntegrationTests
         throw new TimeoutException($"sshd did not listen on port {port}");
     }
 
-    private static async Task<string> ReadCommand(
+    private static Task<string> ReadCommand(
         SshConnection connection,
         string command,
         string marker,
+        TimeSpan timeout) =>
+        ReadCommand(
+            connection,
+            command,
+            text => text.Contains(marker, StringComparison.Ordinal),
+            timeout);
+
+    private static async Task<string> ReadCommand(
+        SshConnection connection,
+        string command,
+        Func<string, bool> isComplete,
         TimeSpan timeout)
     {
         var writer = connection.Pty.WriterStream;
@@ -194,7 +232,7 @@ public sealed class SshIntegrationTests
             }
 
             text.Append(Encoding.UTF8.GetString(buffer, 0, count));
-            if (text.ToString().Contains(marker, StringComparison.Ordinal))
+            if (isComplete(text.ToString()))
             {
                 return text.ToString();
             }
