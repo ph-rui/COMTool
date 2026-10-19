@@ -1,0 +1,278 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:COMTool.App.ViewModels"
+        xmlns:views="using:COMTool.App.Views"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        d:DesignWidth="850" d:DesignHeight="500"
+        x:Class="COMTool.App.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Width="850" Height="500"
+        MinWidth="500" MinHeight="320"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource WindowBackgroundBrush}"
+        FontFamily="{DynamicResource UiFontFamily}"
+        FontSize="12"
+        Icon="/Assets/logo.ico"
+        Title="COMTool v3.4.1"
+        WindowDecorations="BorderOnly">
+
+  <Design.DataContext>
+    <vm:MainViewModel />
+  </Design.DataContext>
+
+  <Grid RowDefinitions="35,6,*" Background="{DynamicResource WindowBackgroundBrush}">
+    <!-- Custom title bar: logo, title, pin, session toggle, window buttons. -->
+    <Border Grid.Row="0"
+            Name="TitleBar"
+            Background="{DynamicResource TitleBarBackgroundBrush}"
+            PointerPressed="OnTitleBarPointerPressed"
+            DoubleTapped="OnTitleBarDoubleTapped">
+      <Grid ColumnDefinitions="40,104,40,35,*,35,35,35">
+        <Image Grid.Column="0"
+               Source="/Assets/logo.png"
+               Width="35" Height="35"
+               Margin="5,0,0,0"
+               Stretch="Uniform" />
+        <TextBlock Grid.Column="1"
+                   Text="COMTool v3.4.1"
+                   Foreground="{DynamicResource TitleBarForegroundBrush}"
+                   FontSize="12"
+                   Margin="5,0,0,0"
+                   VerticalAlignment="Center" />
+        <Button Grid.Column="2"
+                Name="PinButton"
+                Classes="PinButton"
+                ToolTip.Tip="Always on top"
+                Click="OnPinClick">
+          <TextBlock Name="PinIcon"
+                     Text="&#xf670;"
+                     FontFamily="{DynamicResource IconPhosphor}"
+                     FontSize="16"
+                     Foreground="{DynamicResource TitleBarForegroundBrush}" />
+        </Button>
+        <Button Grid.Column="3"
+                Name="SessionsButton"
+                Classes="TitleBarButton"
+                ToolTip.Tip="Show/hide sessions"
+                Click="OnSessionsToggle">
+          <TextBlock Text="&#xf03a;"
+                     FontFamily="{DynamicResource IconFontAwesome}"
+                     FontSize="18"
+                     Foreground="{DynamicResource TitleBarForegroundBrush}" />
+        </Button>
+
+        <Button Grid.Column="5"
+                Classes="TitleBarButton WindowMinButton"
+                ToolTip.Tip="Minimize"
+                Click="OnMinimizeClick">
+          <TextBlock Text="&#xf2d1;"
+                     FontFamily="{DynamicResource IconFontAwesome}"
+                     FontSize="14"
+                     Foreground="{DynamicResource TitleBarForegroundBrush}" />
+        </Button>
+        <Button Grid.Column="6"
+                Name="MaximizeButton"
+                Classes="TitleBarButton WindowMaxButton"
+                ToolTip.Tip="Maximize"
+                Click="OnMaximizeClick">
+          <TextBlock Name="MaximizeIcon"
+                     Text="&#xf2d0;"
+                     FontFamily="{DynamicResource IconFontAwesome}"
+                     FontSize="13"
+                     Foreground="{DynamicResource TitleBarForegroundBrush}" />
+        </Button>
+        <Button Grid.Column="7"
+                Classes="TitleBarButton WindowCloseButton"
+                ToolTip.Tip="Close"
+                Click="OnCloseClick">
+          <TextBlock Text="&#xf00d;"
+                     FontFamily="{DynamicResource IconFontAwesome}"
+                     FontSize="15"
+                     Foreground="{DynamicResource TitleBarForegroundBrush}" />
+        </Button>
+      </Grid>
+    </Border>
+
+    <Grid Grid.Row="2"
+          Name="BodyGrid"
+          Margin="16,0,10,10"
+          ColumnDefinitions="220,3,*">
+      <views:SessionSidebar Grid.Column="0" Name="Sidebar" />
+
+      <GridSplitter Grid.Column="1"
+                    Name="SidebarSplitter"
+                    Width="3"
+                    Background="{DynamicResource WindowBackgroundBrush}"
+                    ResizeDirection="Columns"
+                    ResizeBehavior="PreviousAndNext" />
+
+      <Grid Grid.Column="2" Margin="16,0,0,0">
+        <Grid Name="MainStack">
+          <!-- Empty state mirrors main2.py: one part above, two parts below. -->
+          <Grid Name="EmptyState"
+                RowDefinitions="*,20,6,20,6,32,2*"
+                Margin="0,3,0,0">
+            <TextBlock Grid.Row="1"
+                       Classes="EmptyTitle"
+                       Text="Select a session from the left"
+                       VerticalAlignment="Center" />
+            <TextBlock Grid.Row="3"
+                       Classes="EmptyTitle"
+                       Text="or click + to add a plugin"
+                       VerticalAlignment="Center" />
+            <Button Grid.Row="5"
+                    Classes="EmptyAddButton"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    ToolTip.Tip="Load plugin from file">
+              <Button.Flyout>
+                <MenuFlyout Placement="BottomEdgeAlignedLeft">
+                  <MenuItem Header="terminal" Click="OnAddTerminalClick" />
+                  <MenuItem Header="Load plugin from file" IsEnabled="False" />
+                </MenuFlyout>
+              </Button.Flyout>
+              <TextBlock Text="&#xf067;"
+                         FontFamily="{DynamicResource IconFontAwesome}"
+                         FontSize="14"
+                         Foreground="White" />
+            </Button>
+          </Grid>
+
+          <!-- Phase 0 tab host. The real TabControl is replaced in Phase 1. -->
+          <Grid Name="TabHost" IsVisible="False" RowDefinitions="Auto,*">
+            <Grid Grid.Row="0" Height="40" ColumnDefinitions="27,*,Auto">
+              <Button Grid.Column="0"
+                      Width="27" Height="27"
+                      MinWidth="0" MinHeight="0"
+                      Padding="0"
+                      Margin="0,4,0,0"
+                      Background="{DynamicResource AccentBrush}"
+                      BorderThickness="0"
+                      CornerRadius="5"
+                      HorizontalAlignment="Left"
+                      VerticalAlignment="Top"
+                      ToolTip.Tip="Settings">
+                <TextBlock Text="&#xf013;"
+                           FontFamily="{DynamicResource IconFontAwesome}"
+                           FontSize="16"
+                           Foreground="White" />
+              </Button>
+
+              <StackPanel Grid.Column="1"
+                          Orientation="Horizontal"
+                          Margin="0,4,0,0"
+                          VerticalAlignment="Top">
+                <Border Name="ActiveTab"
+                        Height="36"
+                        MinWidth="100"
+                        Background="{DynamicResource TabSelectedBrush}"
+                        CornerRadius="4,4,0,0"
+                        Padding="12,0,4,0">
+                  <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="8">
+                    <TextBlock Name="ActiveTabTitle"
+                               Text="terminal"
+                               FontSize="12"
+                               Foreground="White"
+                               VerticalAlignment="Center" />
+                    <Button Name="CloseTabButton"
+                            Width="20" Height="20"
+                            MinWidth="0" MinHeight="0"
+                            Padding="0"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            CornerRadius="10"
+                            Click="OnCloseTabClick">
+                      <TextBlock Text="&#xf00d;"
+                                 FontFamily="{DynamicResource IconFontAwesome}"
+                                 FontSize="12"
+                                 Foreground="White" />
+                    </Button>
+                  </StackPanel>
+                </Border>
+              </StackPanel>
+
+              <StackPanel Grid.Column="2"
+                          Orientation="Horizontal"
+                          Spacing="4"
+                          Margin="0,4,0,0"
+                          VerticalAlignment="Top">
+                <Button Width="24" Height="24"
+                        MinWidth="0" MinHeight="0"
+                        Padding="0"
+                        Background="{DynamicResource AccentBrush}"
+                        BorderThickness="0"
+                        CornerRadius="4"
+                        ToolTip.Tip="Load plugin from file">
+                  <Button.Flyout>
+                    <MenuFlyout Placement="BottomEdgeAlignedRight">
+                      <MenuItem Header="terminal" Click="OnAddTerminalClick" />
+                      <MenuItem Header="Load plugin from file" IsEnabled="False" />
+                    </MenuFlyout>
+                  </Button.Flyout>
+                  <TextBlock Text="&#xf067;"
+                             FontFamily="{DynamicResource IconFontAwesome}"
+                             FontSize="13"
+                             Foreground="White" />
+                </Button>
+                <ComboBox Width="97" Height="31"
+                          MinWidth="60"
+                          SelectedIndex="1"
+                          VerticalAlignment="Top">
+                  <ComboBoxItem Content="ASCII" />
+                  <ComboBoxItem Content="UTF-8" />
+                  <ComboBoxItem Content="UTF-16" />
+                  <ComboBoxItem Content="GBK" />
+                  <ComboBoxItem Content="GB2312" />
+                  <ComboBoxItem Content="GB18030" />
+                </ComboBox>
+                <Button Width="31" Height="31"
+                        MinWidth="0" MinHeight="0"
+                        Padding="0"
+                        Background="{DynamicResource WindowBackgroundBrush}"
+                        BorderBrush="{DynamicResource SidebarBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        ToolTip.Tip="Functional">
+                  <TextBlock Text="&#xf061;"
+                             FontFamily="{DynamicResource IconFontAwesome}"
+                             FontSize="13"
+                             Foreground="{DynamicResource WindowTextBrush}" />
+                </Button>
+              </StackPanel>
+            </Grid>
+
+            <Border Grid.Row="1"
+                    Background="White"
+                    BorderBrush="{DynamicResource SidebarBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="3">
+              <ContentControl Name="TabContentHost"
+                              HorizontalContentAlignment="Stretch"
+                              VerticalContentAlignment="Stretch" />
+            </Border>
+          </Grid>
+        </Grid>
+      </Grid>
+    </Grid>
+
+    <Button Grid.Row="2"
+            Name="SessionHandle"
+            Classes="SessionHandle"
+            ZIndex="10"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Center"
+            Margin="6,0,0,0"
+            ToolTip.Tip="Show/hide sessions"
+            Click="OnSessionHandleClick">
+      <TextBlock Name="SessionHandleIcon"
+                 Text="&#xf053;"
+                 FontFamily="{DynamicResource IconFontAwesome}"
+                 FontSize="7"
+                 Foreground="White"
+                 HorizontalAlignment="Center"
+                 VerticalAlignment="Center" />
+    </Button>
+  </Grid>
+</Window>

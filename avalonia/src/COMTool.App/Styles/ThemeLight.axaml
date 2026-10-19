@@ -1,0 +1,29 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#f5f5f5" />
+  <SolidColorBrush x:Key="WindowTextBrush" Color="#6b6b6b" />
+  <SolidColorBrush x:Key="TitleBarBackgroundBrush" Color="#0b1722" />
+  <SolidColorBrush x:Key="TitleBarForegroundBrush" Color="#ffffff" />
+  <SolidColorBrush x:Key="TitleBarHoverBrush" Color="#273b4e" />
+  <SolidColorBrush x:Key="MinimizeHoverBrush" Color="#2ba13e" />
+  <SolidColorBrush x:Key="MaximizeHoverBrush" Color="#cf9001" />
+  <SolidColorBrush x:Key="CloseHoverBrush" Color="#df2f25" />
+  <SolidColorBrush x:Key="AccentBrush" Color="#0f88eb" />
+  <SolidColorBrush x:Key="AccentHoverBrush" Color="#0772ca" />
+  <SolidColorBrush x:Key="SidebarTitleBrush" Color="#37474f" />
+  <SolidColorBrush x:Key="SidebarBorderBrush" Color="#cfd8dc" />
+  <SolidColorBrush x:Key="SidebarListBackgroundBrush" Color="#ffffff" />
+  <SolidColorBrush x:Key="SidebarSectionBrush" Color="#607d8b" />
+  <SolidColorBrush x:Key="SessionNameBrush" Color="#263238" />
+  <SolidColorBrush x:Key="SessionDetailBrush" Color="#607d8b" />
+  <SolidColorBrush x:Key="SessionConnectedBrush" Color="#43a047" />
+  <SolidColorBrush x:Key="SessionDisconnectedBrush" Color="#90a4ae" />
+  <SolidColorBrush x:Key="TabBarBackgroundBrush" Color="#e6e6e6" />
+  <SolidColorBrush x:Key="TabSelectedBrush" Color="#0f88eb" />
+  <SolidColorBrush x:Key="TabForegroundBrush" Color="#0f88eb" />
+
+  <FontFamily x:Key="IconFontAwesome">avares://COMTool.App/Assets/Fonts/fontawesome6-solid.ttf#Font Awesome 6 Free Solid</FontFamily>
+  <FontFamily x:Key="IconMaterialDesign">avares://COMTool.App/Assets/Fonts/materialdesignicons6.ttf#Material Design Icons</FontFamily>
+  <FontFamily x:Key="IconPhosphor">avares://COMTool.App/Assets/Fonts/phosphor.ttf#Phosphor</FontFamily>
+  <FontFamily x:Key="UiFontFamily">DejaVu Sans</FontFamily>
+</ResourceDictionary>

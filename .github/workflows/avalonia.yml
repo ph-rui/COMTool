@@ -1,0 +1,74 @@
+name: avalonia
+
+on:
+  push:
+    branches: [avalonia, main]
+    paths:
+      - "avalonia/**"
+      - "docs/parity-matrix.md"
+      - "docs/fixtures/ui/**"
+      - "docs/superpowers/specs/2026-10-19-comtool-avalonia-parallel-design.md"
+      - "docs/superpowers/plans/2026-10-19-comtool-avalonia-phase0-*.md"
+  pull_request:
+    paths:
+      - "avalonia/**"
+      - "docs/parity-matrix.md"
+      - "docs/fixtures/ui/**"
+      - "docs/superpowers/specs/2026-10-19-comtool-avalonia-parallel-design.md"
+      - "docs/superpowers/plans/2026-10-19-comtool-avalonia-phase0-*.md"
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: build and test
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore avalonia/COMTool.Avalonia.sln
+
+      - name: Build
+        run: dotnet build avalonia/COMTool.Avalonia.sln -c Release --no-restore
+
+      - name: Test
+        run: dotnet test avalonia/COMTool.Avalonia.sln -c Release --no-build
+
+  publish-windows:
+    name: publish windows x64
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Publish self-contained
+        run: >
+          dotnet publish avalonia/src/COMTool.App/COMTool.App.csproj
+          -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:EnableCompressionInSingleFile=true
+          -p:DebugType=None -p:DebugSymbols=false
+          -o avalonia/publish/win-x64
+
+      - name: Remove debug symbols
+        shell: pwsh
+        run: Get-ChildItem avalonia/publish/win-x64 -Filter *.pdb | Remove-Item
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: comtool-avalonia-win-x64-phase0
+          path: avalonia/publish/win-x64/
