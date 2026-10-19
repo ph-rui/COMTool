@@ -26,6 +26,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         UpdateMaximizeIcon();
         Sidebar.SessionActivated += OnSessionActivated;
+        Sidebar.RemoveRequested += OnSessionRemoveRequested;
         Opened += OnOpened;
     }
 
@@ -70,11 +71,56 @@ public partial class MainWindow : Window
             return;
         }
 
+        var previous = _config.Ports
+            .Select(port => port.Device)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var scan = _config.RefreshPorts();
-        if (scan.Success)
+        if (!scan.Success)
+        {
+            return;
+        }
+
+        var current = scan.Ports
+            .Select(port => port.Device)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (!previous.SetEquals(current))
         {
             RefreshSidebar();
         }
+        else
+        {
+            UpdateConnectionStates();
+        }
+    }
+
+    private (HashSet<string> Serial, HashSet<string> Ssh) ConnectedSessions()
+    {
+        if (DataContext is not MainViewModel viewModel)
+        {
+            return (new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+        }
+
+        var serial = viewModel.Tabs
+            .Where(tab => tab.Kind == SessionKind.Serial && IsTabConnected(tab))
+            .Select(tab => tab.SessionId)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var ssh = viewModel.Tabs
+            .Where(tab => tab.Kind == SessionKind.Ssh && IsTabConnected(tab))
+            .Select(tab => tab.SessionId)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return (serial, ssh);
+    }
+
+    private void UpdateConnectionStates()
+    {
+        if (DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        var (serial, ssh) = ConnectedSessions();
+        viewModel.UpdateConnectionStates(serial, ssh);
     }
 
     private void RefreshSidebar()
@@ -84,15 +130,8 @@ public partial class MainWindow : Window
             return;
         }
 
-        var connectedSerial = viewModel.Tabs
-            .Where(tab => tab.Kind == SessionKind.Serial && IsTabConnected(tab))
-            .Select(tab => tab.SessionId)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var connectedSsh = viewModel.Tabs
-            .Where(tab => tab.Kind == SessionKind.Ssh && IsTabConnected(tab))
-            .Select(tab => tab.SessionId)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        viewModel.LoadSessions(_config, connectedSerial, connectedSsh);
+        var (serial, ssh) = ConnectedSessions();
+        viewModel.LoadSessions(_config, serial, ssh);
     }
 
     private async void OnSessionActivated(object? sender, SessionItem item)
@@ -130,6 +169,51 @@ public partial class MainWindow : Window
         {
             await ShowErrorAsync(ex.Message);
         }
+    }
+
+    private async void OnSessionRemoveRequested(object? sender, SessionItem item)
+    {
+        if (_config is null || DataContext is not MainViewModel)
+        {
+            return;
+        }
+
+        string label;
+        string kind;
+        if (item.Kind == SessionKind.Ssh)
+        {
+            var session = _config.SshSessions.Get(item.SessionId);
+            label = session is null
+                ? item.SessionId
+                : $"{SshSessionRules.DisplayName(session)} ({SshSessionRules.Detail(session)})";
+            kind = "SSH";
+        }
+        else
+        {
+            label = item.SessionId;
+            kind = "serial";
+        }
+
+        var confirmed = await ShowConfirmAsync(
+            "Remove session",
+            $"Remove this {kind} session from memory?\n{label}");
+        if (!confirmed)
+        {
+            return;
+        }
+
+        if (item.Kind == SessionKind.Ssh)
+        {
+            _config.SshSessions.Remove(item.SessionId);
+            _config.PasswordCache.Remove(item.SessionId);
+        }
+        else
+        {
+            _config.SerialSessions.Remove(item.SessionId);
+        }
+
+        _config.Save();
+        RefreshSidebar();
     }
 
     private void OpenSerialSession(string port)
@@ -177,11 +261,11 @@ public partial class MainWindow : Window
         connection.Pty.ProcessExited += (_, _) => Dispatcher.UIThread.Post(() =>
         {
             tab.IsAlive = false;
-            RefreshSidebar();
+            UpdateConnectionStates();
         });
 
         viewModel.AddTab(tab);
-        RefreshSidebar();
+        UpdateConnectionStates();
         terminal.Focus();
     }
 
@@ -267,11 +351,11 @@ public partial class MainWindow : Window
         connection.Pty.ProcessExited += (_, _) => Dispatcher.UIThread.Post(() =>
         {
             tab.IsAlive = false;
-            RefreshSidebar();
+            UpdateConnectionStates();
         });
 
         viewModel.AddTab(tab);
-        RefreshSidebar();
+        UpdateConnectionStates();
         terminal.Focus();
     }
 
@@ -394,7 +478,57 @@ public partial class MainWindow : Window
 
         tab.IsAlive = false;
         viewModel.CloseTab(tab);
-        RefreshSidebar();
+        UpdateConnectionStates();
+    }
+
+    private async Task<bool> ShowConfirmAsync(string title, string message)
+    {
+        var dialog = new Window
+        {
+            Title = title,
+            Width = 440,
+            Height = 190,
+            MinWidth = 320,
+            MinHeight = 160,
+            CanResize = false,
+            ShowInTaskbar = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+        };
+        var yes = new Button
+        {
+            Content = "Yes",
+            Width = 80,
+            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+        };
+        yes.Click += (_, _) => dialog.Close(true);
+        var no = new Button
+        {
+            Content = "No",
+            Width = 80,
+            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+        };
+        no.Click += (_, _) => dialog.Close(false);
+        dialog.Content = new StackPanel
+        {
+            Margin = new Thickness(16),
+            Spacing = 12,
+            Children =
+            {
+                new TextBlock
+                {
+                    Text = message,
+                    TextWrapping = TextWrapping.Wrap,
+                },
+                new StackPanel
+                {
+                    Orientation = Avalonia.Layout.Orientation.Horizontal,
+                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                    Spacing = 8,
+                    Children = { no, yes },
+                },
+            },
+        };
+        return await dialog.ShowDialog<bool>(this);
     }
 
     private async Task ShowErrorAsync(string message)
@@ -580,6 +714,7 @@ public partial class MainWindow : Window
         _portTimer?.Stop();
         _portTimer = null;
         Sidebar.SessionActivated -= OnSessionActivated;
+        Sidebar.RemoveRequested -= OnSessionRemoveRequested;
 
         if (DataContext is MainViewModel viewModel)
         {

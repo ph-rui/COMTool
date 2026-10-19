@@ -14,20 +14,26 @@ public enum SessionKind
     Ssh,
 }
 
-public sealed class SessionItem
+public sealed partial class SessionItem : ObservableObject
 {
     public required string Name { get; init; }
     public required string SessionId { get; init; }
     public required SessionKind Kind { get; init; }
     public string? Detail { get; init; }
-    public bool IsConnected { get; init; }
+
+    [ObservableProperty]
+    private bool _isConnected;
 
     public bool IsSsh => Kind == SessionKind.Ssh;
 
     public string IconGlyph => IsSsh ? "\uf233" : "\uf1e6";
+
     public IBrush IconBrush => IsConnected
         ? new SolidColorBrush(Color.Parse("#43a047"))
         : new SolidColorBrush(Color.Parse("#90a4ae"));
+
+    partial void OnIsConnectedChanged(bool value) =>
+        OnPropertyChanged(nameof(IconBrush));
 }
 
 public sealed class SidebarSection
@@ -140,6 +146,18 @@ public partial class MainViewModel : ViewModelBase
         Sections.Add(ssh);
         HasSessions = true;
         OnPropertyChanged(nameof(HasSessions));
+    }
+
+    public void UpdateConnectionStates(
+        IReadOnlySet<string> connectedSerial,
+        IReadOnlySet<string> connectedSsh)
+    {
+        foreach (var item in Sections.SelectMany(section => section.Items))
+        {
+            item.IsConnected = item.Kind == SessionKind.Serial
+                ? connectedSerial.Contains(item.SessionId)
+                : connectedSsh.Contains(item.SessionId);
+        }
     }
 
     public void LoadSessions(

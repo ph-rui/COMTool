@@ -11,6 +11,9 @@ evidence images, not final pixel baselines.
 | `password-dialog-850x500.png` | A password-only SSH session prompts on first open; the password field is masked and "Remember password" defaults on. |
 | `windows-ssh-850x500.png` | Password-authenticated SSH to the Windows test host renders the shell output, including CJK wide characters. |
 | `password-cache-850x500.png` | Closing `win-ssh` and clicking the remembered sidebar session reopens it without a password prompt (in-memory cache). |
+| `context-menu-850x500.png` | Right-clicking a session shows `Open` / `Remove session`. |
+| `remove-confirm-850x500.png` | Removing an SSH session asks for confirmation and names the exact session. |
+| `session-removed-850x500.png` | Confirming removal updates the sidebar and persists only the remaining session. |
 
 The tab title rule matches Python: serial tabs use the port name, SSH tabs use
 the alias when present and the host otherwise. Closing a tab only closes the
