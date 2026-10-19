@@ -16,6 +16,7 @@ if ROOT not in sys.path:
 from PyQt5.QtWidgets import QApplication, QLabel  # noqa: E402
 
 from COMTool import main2, parameters  # noqa: E402
+from COMTool.conn import ConnectionStatus  # noqa: E402
 from COMTool.widgets import EventFilter  # noqa: E402
 
 
@@ -28,6 +29,7 @@ class FakePlugin:
     displayNameFromConnection = False
 
     def onInit(self, config):
+        config.setdefault("version", 1)
         self.config = config
 
     def onIsAddConnWidget(self):
@@ -130,6 +132,37 @@ def test_switching_tabs_closes_previous_settings_dialog(window, app):
     assert first.settingsDialog is first_dialog
     assert first_dialog.isVisible()
     assert first.settingWidget.isVisible()
+
+
+def test_plugin_selector_opens_settings_for_new_terminal(window, app):
+    window.pluginClasses.append(FakePlugin)
+    window.addPluginInfo(FakePlugin)
+    index = window.pluginsSelector.findText("Fake - fake")
+    assert index >= 0
+    window.pluginsSelector.setCurrentIndex(index)
+
+    window.onPluginSelectorChanged(index)
+    app.processEvents()
+
+    item = window.getCurrentItem()
+    assert item is not None
+    assert item.plugin.id == "fake"
+    assert item.settingsDialog is not None
+    assert item.settingsDialog.isVisible()
+
+
+def test_successful_connection_closes_settings_dialog(window, app):
+    item = window.addItem(FakePlugin, setCurrent=True, pluginConfig={"version": 1})
+    app.processEvents()
+
+    window.showSettings()
+    app.processEvents()
+    dialog = item.settingsDialog
+    assert dialog.isVisible()
+
+    window.onConnChnaged(item.plugin, ConnectionStatus.CONNECTED, "")
+    app.processEvents()
+    assert not dialog.isVisible()
 
 
 def test_closing_tab_closes_its_settings_dialog(window, app):
