@@ -297,6 +297,8 @@ class Serial(COMM):
                     idx = i
                     break
             obj.setCurrentIndex(idx)
+            if value:
+                self.com.port = str(value)
         elif conf_type in ["baudrate", "bytesize", "parity", "stopbits"]:
             values = getCommboboxItems(obj)
             idx = 0
@@ -432,10 +434,14 @@ class Serial(COMM):
         combo = self.serialPortCombobox
         was_popup_visible = self._popup_visible
         preferred = combo.currentData(Qt.UserRole) or self.config.get("port")
+        # Only pick the first port automatically for a brand-new terminal
+        # whose config has no remembered device. A saved session with a
+        # missing COM port must stay pointed at that port so auto-connect
+        # fails cleanly instead of silently opening a different device.
         startup_select_first = (
             not self._initial_scan_done
             and bool(ports)
-            and choose_index(ports, preferred) < 0
+            and not preferred
         )
         selected = -1
         self._applying_ports = True
