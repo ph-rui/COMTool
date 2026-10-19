@@ -235,31 +235,61 @@ public partial class MainWindow : Window
             return;
         }
 
-        var detached = FindDetachedTab(item);
-        if (detached is not null)
+        // An SSH session is a saved endpoint, not a single connection. If one
+        // is already live, every click opens another independent connection so
+        // the same host can be used in parallel. With no live connection the
+        // old reconnect behavior is kept: dead tabs are discarded first.
+        if (item.Kind == SessionKind.Ssh)
         {
-            if (IsTabConnected(detached))
+            var matching = AllTabs()
+                .Where(tab => tab.Kind == SessionKind.Ssh
+                    && string.Equals(tab.SessionId, item.SessionId, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (!matching.Any(IsTabConnected))
             {
-                _detachedTabs[detached].Window.Activate();
-                detached.Content.Focus();
+                foreach (var dead in matching)
+                {
+                    if (_detachedTabs.TryGetValue(dead, out var state))
+                    {
+                        state.SuppressReattach = true;
+                        state.Window.Close();
+                    }
+                    else if (viewModel.Tabs.Contains(dead))
+                    {
+                        CloseTab(dead);
+                    }
+                }
+            }
+        }
+        // Serial ports stay exclusive to one tab.
+        else
+        {
+            var detached = FindDetachedTab(item);
+            if (detached is not null)
+            {
+                if (IsTabConnected(detached))
+                {
+                    _detachedTabs[detached].Window.Activate();
+                    detached.Content.Focus();
+                    return;
+                }
+
+                _detachedTabs[detached].SuppressReattach = true;
+                _detachedTabs[detached].Window.Close();
+            }
+
+            var existing = viewModel.FindTab(item.SessionId, item.Kind);
+            if (existing is not null && IsTabConnected(existing))
+            {
+                viewModel.SelectedTab = existing;
+                existing.Content.Focus();
                 return;
             }
 
-            _detachedTabs[detached].SuppressReattach = true;
-            _detachedTabs[detached].Window.Close();
-        }
-
-        var existing = viewModel.FindTab(item.SessionId, item.Kind);
-        if (existing is not null && IsTabConnected(existing))
-        {
-            viewModel.SelectedTab = existing;
-            existing.Content.Focus();
-            return;
-        }
-
-        if (existing is not null)
-        {
-            CloseTab(existing);
+            if (existing is not null)
+            {
+                CloseTab(existing);
+            }
         }
 
         try
@@ -585,6 +615,14 @@ public partial class MainWindow : Window
                 DispatcherPriority.Loaded);
         terminal.PointerPressed += OnTerminalPointerPressed;
         terminal.KeyDown += OnTerminalKeyDown;
+        // The terminal's own double-click handling may mark the event handled
+        // for word selection. Observe it anyway so the whole terminal pane
+        // mirrors the title bar and maximize button.
+        terminal.AddHandler(
+            InputElement.DoubleTappedEvent,
+            OnTerminalDoubleTapped,
+            RoutingStrategies.Bubble,
+            handledEventsToo: true);
         return terminal;
     }
 
@@ -1222,6 +1260,17 @@ public partial class MainWindow : Window
         ToggleMaximize();
     }
 
+    private void OnTerminalDoubleTapped(object? sender, TappedEventArgs e)
+    {
+        if (sender is not TerminalControl)
+        {
+            return;
+        }
+
+        ToggleMaximize();
+        e.Handled = true;
+    }
+
     private void OnPinClick(object? sender, RoutedEventArgs e)
     {
         Topmost = !Topmost;
@@ -1680,7 +1729,9 @@ public partial class MainWindow : Window
 
         var config = _config.Config.SessionSidebar;
         _sidebarWidth = ClampSidebarWidth(config.Width);
-        SetSidebarVisible(config.Visible, persist: false);
+        // Start with the sessions visible even if the panel was collapsed when
+        // the app last closed. Auto-hide still collapses it during use.
+        SetSidebarVisible(true, persist: false);
     }
 
     private void ApplyWindowSizeConfig()
@@ -1894,11 +1945,15 @@ public partial class MainWindow : Window
         window.Show(this);
     }
 
-    private async Task OpenSerialFromSettingsAsync(string port)
+    private async Task OpenSerialFromSettingsAsync(string port, TerminalTab? currentTab)
     {
         if (DataContext is MainViewModel viewModel)
         {
-            var existing = viewModel.FindTab(port, SessionKind.Serial);
+            var existing = currentTab is { Kind: SessionKind.Serial } currentSerial
+                && string.Equals(currentSerial.SessionId, port, StringComparison.OrdinalIgnoreCase)
+                && viewModel.Tabs.Contains(currentSerial)
+                ? currentSerial
+                : viewModel.FindTab(port, SessionKind.Serial);
             if (existing is not null)
             {
                 CloseTab(existing);
@@ -1910,15 +1965,16 @@ public partial class MainWindow : Window
         await Task.CompletedTask;
     }
 
-    private async Task OpenSshFromSettingsAsync(string key)
+    private async Task OpenSshFromSettingsAsync(string key, TerminalTab? currentTab)
     {
-        if (DataContext is MainViewModel viewModel)
+        if (DataContext is MainViewModel viewModel
+            && currentTab is { Kind: SessionKind.Ssh } currentSsh
+            && string.Equals(currentSsh.SessionId, key, StringComparison.OrdinalIgnoreCase)
+            && viewModel.Tabs.Contains(currentSsh))
         {
-            var existing = viewModel.FindTab(key, SessionKind.Ssh);
-            if (existing is not null)
-            {
-                CloseTab(existing);
-            }
+            // Replace only the tab whose settings were edited; other parallel
+            // connections to the same saved session must stay open.
+            CloseTab(currentSsh);
         }
 
         await OpenSshSessionAsync(key);

@@ -29,8 +29,8 @@ public partial class ConnectionSettingsWindow : Window
 
     private readonly AppConfigService _config;
     private readonly TerminalTab? _currentTab;
-    private readonly Func<string, Task> _openSerial;
-    private readonly Func<string, Task> _openSsh;
+    private readonly Func<string, TerminalTab?, Task> _openSerial;
+    private readonly Func<string, TerminalTab?, Task> _openSsh;
     private readonly Func<string, Task> _showError;
 
     // Avalonia's XAML runtime loader requires a public parameterless
@@ -45,8 +45,8 @@ public partial class ConnectionSettingsWindow : Window
     public ConnectionSettingsWindow(
         AppConfigService config,
         TerminalTab? currentTab,
-        Func<string, Task> openSerial,
-        Func<string, Task> openSsh,
+        Func<string, TerminalTab?, Task> openSerial,
+        Func<string, TerminalTab?, Task> openSsh,
         Func<string, Task> showError)
     {
         _config = config;
@@ -215,7 +215,7 @@ public partial class ConnectionSettingsWindow : Window
         _config.SerialSessions.Upsert(port.Device, serial);
         _config.Save();
         Close();
-        await _openSerial(port.Device);
+        await _openSerial(port.Device, _currentTab);
     }
 
     private async Task OpenSshAsync()
@@ -263,7 +263,7 @@ public partial class ConnectionSettingsWindow : Window
 
         _config.Save();
         Close();
-        await _openSsh(session.Key);
+        await _openSsh(session.Key, _currentTab);
     }
 
     private void OnCloseClick(object? sender, RoutedEventArgs e) => Close();
