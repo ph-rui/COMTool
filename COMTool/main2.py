@@ -912,6 +912,23 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
                 pass
         return None
 
+    def _focusTerminal(self, item):
+        """Give keyboard focus back to a terminal after a sidebar click.
+
+        Clicking a remembered session leaves focus on the sidebar's list
+        widget.  Defer the focus change so it wins over the click handler and
+        also works when the tab was already the current tab.
+        """
+        def focus():
+            try:
+                if item.widget is None or not item.widget.isVisible():
+                    return
+                item.plugin.onActive()
+            except Exception:
+                pass
+
+        QTimer.singleShot(0, focus)
+
     def _focusItem(self, item):
         if item.widget.parent() is not None and self.tabWidget.indexOf(item.widget) >= 0:
             self.tabWidget.setCurrentWidget(item.widget)
@@ -921,6 +938,7 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
             item.widget.raise_()
             item.widget.activateWindow()
             self.updateMainStack()
+        self._focusTerminal(item)
 
     def _cacheSshPassword(self, item):
         try:
@@ -1057,6 +1075,7 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
             pluginConfig={},
         )
         self.updateMainStack()
+        self._focusTerminal(item)
         self._connectSshItem(item)
 
     def onSessionActivated(self, session_id):
@@ -1086,6 +1105,7 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         )
         self.updateMainStack()
         item.openConnection()
+        self._focusTerminal(item)
 
     def onSessionRemoveRequested(self, session_id):
         session_id = str(session_id or "")
