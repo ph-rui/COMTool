@@ -304,12 +304,44 @@
                   </StackPanel>
                 </Border>
               </Grid>
-              <TextBlock Grid.Row="2"
-                         Text="{Binding SelectedTab.StatusMessage}"
-                         FontSize="12"
-                         Foreground="{Binding SelectedTab.StatusBrush}"
-                         Margin="4,0,4,0"
-                         VerticalAlignment="Center" />
+              <Grid Grid.Row="2" ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0"
+                           Text="{Binding SelectedTab.StatusMessage}"
+                           FontSize="12"
+                           Foreground="{Binding SelectedTab.StatusBrush}"
+                           Margin="4,0,4,0"
+                           TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center" />
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            Spacing="6"
+                            VerticalAlignment="Center"
+                            IsVisible="{Binding SelectedTab.IsZmodemActive}">
+                  <TextBlock Text="{Binding SelectedTab.ZmodemLabel}"
+                             MaxWidth="220"
+                             TextTrimming="CharacterEllipsis"
+                             VerticalAlignment="Center" />
+                  <Grid Width="150" Height="18" VerticalAlignment="Center">
+                    <ProgressBar Minimum="0"
+                                 Maximum="100"
+                                 Value="{Binding SelectedTab.ZmodemProgress}"
+                                 IsIndeterminate="{Binding SelectedTab.IsZmodemIndeterminate}" />
+                    <TextBlock Text="{Binding SelectedTab.ZmodemPercentText}"
+                               FontSize="10"
+                               Foreground="White"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center" />
+                  </Grid>
+                  <Button Content="Cancel"
+                          Width="90"
+                          Height="24"
+                          MinHeight="0"
+                          Padding="0"
+                          HorizontalContentAlignment="Center"
+                          IsEnabled="{Binding SelectedTab.IsZmodemCancellable}"
+                          Click="OnZmodemCancelClick" />
+                </StackPanel>
+              </Grid>
             </Grid>
           </Grid>
         </Grid>

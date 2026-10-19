@@ -48,6 +48,15 @@ jobs:
       - name: Test
         run: dotnet test avalonia/COMTool.Avalonia.sln -c Release --no-build
 
+      - name: Test real lrzsz transfers
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lrzsz
+          LRZSZ_DIR=/usr/bin dotnet test \
+            avalonia/tests/COMTool.Connections.Tests/COMTool.Connections.Tests.csproj \
+            -c Release --no-build --filter FullyQualifiedName~LrzszZmodemTests
+
   publish-windows:
     name: publish windows x64
     needs: build

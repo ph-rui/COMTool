@@ -68,6 +68,24 @@ public sealed partial class TerminalTab : ObservableObject
     [ObservableProperty]
     private bool _isFunctionalVisible;
 
+    [ObservableProperty]
+    private bool _isZmodemActive;
+
+    [ObservableProperty]
+    private bool _isZmodemIndeterminate;
+
+    [ObservableProperty]
+    private bool _isZmodemCancellable = true;
+
+    [ObservableProperty]
+    private string _zmodemLabel = "";
+
+    [ObservableProperty]
+    private double _zmodemProgress;
+
+    [ObservableProperty]
+    private string _zmodemPercentText = "";
+
     public bool IsSessionTab => Kind is SessionKind.Serial or SessionKind.Ssh;
 }
 

@@ -27,6 +27,7 @@ public partial class MainWindow : Window
     private DispatcherTimer? _portTimer;
     private ConnectionSettingsWindow? _settingsWindow;
     private readonly Dictionary<TerminalTab, ZmodemTiming> _zmodemTimings = new();
+    private readonly Dictionary<TerminalTab, ZmodemStream> _zmodemStreams = new();
     private static readonly IBrush StatusInfoBrush =
         new SolidColorBrush(Color.Parse("#008200"));
     private static readonly IBrush StatusWarningBrush =
@@ -498,8 +499,18 @@ public partial class MainWindow : Window
             return;
         }
 
+        _zmodemStreams[tab] = zmodem;
         zmodem.SendRequested += request =>
-            Dispatcher.UIThread.Post(() => { _ = PromptZmodemSendAsync(tab, zmodem); });
+            Dispatcher.UIThread.Post(() =>
+            {
+                tab.IsZmodemActive = true;
+                tab.IsZmodemIndeterminate = true;
+                tab.IsZmodemCancellable = true;
+                tab.ZmodemLabel = "Select files to send...";
+                tab.ZmodemPercentText = "";
+                tab.ZmodemProgress = 0;
+                _ = PromptZmodemSendAsync(tab, zmodem);
+            });
         zmodem.Progress += progress => Dispatcher.UIThread.Post(() =>
         {
             var percent = progress.Total is > 0
@@ -522,6 +533,12 @@ public partial class MainWindow : Window
                 detail += $" ETA {FormatEta((progress.Total.Value - progress.Sent) / rate)}";
             }
 
+            tab.IsZmodemActive = true;
+            tab.IsZmodemIndeterminate = progress.Total is not > 0;
+            tab.IsZmodemCancellable = true;
+            tab.ZmodemLabel = progress.Name;
+            tab.ZmodemProgress = percent;
+            tab.ZmodemPercentText = $"{percent}%";
             tab.StatusMessage =
                 $"{(progress.IsSend ? "Sending" : "Receiving")} {progress.Name} {percent}%{detail}";
             tab.StatusBrush = StatusProgressBrush;
@@ -531,8 +548,16 @@ public partial class MainWindow : Window
         zmodem.TransferFailed += message => Dispatcher.UIThread.Post(() =>
         {
             _zmodemTimings.Remove(tab);
+            tab.IsZmodemActive = false;
             tab.StatusMessage = $"ZMODEM error: {message}";
             tab.StatusBrush = StatusErrorBrush;
+        });
+        zmodem.TransferCancelled += () => Dispatcher.UIThread.Post(() =>
+        {
+            _zmodemTimings.Remove(tab);
+            tab.IsZmodemActive = false;
+            tab.StatusMessage = "File transfer cancelled";
+            tab.StatusBrush = StatusWarningBrush;
         });
     }
 
@@ -553,14 +578,21 @@ public partial class MainWindow : Window
             .Select(file => file.Path.LocalPath)
             .Where(File.Exists)
             .ToArray();
-        if (paths.Length == 0)
+        if (paths.Length == 0 || !tab.IsZmodemActive)
         {
             zmodem.CancelSend();
+            tab.IsZmodemActive = false;
             tab.StatusMessage = "File transfer cancelled";
             tab.StatusBrush = StatusWarningBrush;
             return;
         }
 
+        tab.IsZmodemActive = true;
+        tab.IsZmodemIndeterminate = true;
+        tab.IsZmodemCancellable = true;
+        tab.ZmodemLabel = "Sending...";
+        tab.ZmodemPercentText = "";
+        tab.ZmodemProgress = 0;
         tab.StatusMessage = "Sending...";
         tab.StatusBrush = StatusProgressBrush;
         zmodem.StartSend(paths);
@@ -569,6 +601,7 @@ public partial class MainWindow : Window
     private async Task CompleteZmodemAsync(TerminalTab tab, ZmodemTransferResult result)
     {
         _zmodemTimings.Remove(tab);
+        tab.IsZmodemActive = false;
         if (result.IsSend)
         {
             tab.StatusMessage = "Files sent";
@@ -716,9 +749,26 @@ public partial class MainWindow : Window
         }
 
         tab.IsAlive = false;
+        tab.IsZmodemActive = false;
         _zmodemTimings.Remove(tab);
+        _zmodemStreams.Remove(tab);
         viewModel.CloseTab(tab);
         UpdateConnectionStates();
+    }
+
+    private void OnZmodemCancelClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel viewModel
+            || viewModel.SelectedTab is not { } tab
+            || !_zmodemStreams.TryGetValue(tab, out var zmodem))
+        {
+            return;
+        }
+
+        tab.IsZmodemCancellable = false;
+        tab.ZmodemLabel = "Cancelling...";
+        zmodem.CancelSend();
+        zmodem.CancelTransfer();
     }
 
     private async Task<bool> ShowConfirmAsync(string title, string message)

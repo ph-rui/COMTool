@@ -137,6 +137,53 @@ public sealed class ZmodemTransferTests
     }
 
     [Fact]
+    public async Task CancelPendingSendRaisesCancelled()
+    {
+        using var input = new QueueReadStream();
+        using var stream = new ZmodemStream(input, _ => { });
+        var requested = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var cancelled = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var failed = new TaskCompletionSource<string>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        stream.SendRequested += _ => requested.TrySetResult();
+        stream.TransferCancelled += () => cancelled.TrySetResult();
+        stream.TransferFailed += message => failed.TrySetResult(message);
+
+        input.Feed(ZmodemCodec.EncodeHexHeader(ZmodemCodec.FrameZRInit, new byte[4]));
+        await requested.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        stream.CancelSend();
+
+        await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.False(stream.IsTransferActive);
+        Assert.False(failed.Task.IsCompleted);
+    }
+
+    [Fact]
+    public async Task CancelActiveReceiveRaisesCancelled()
+    {
+        using var input = new QueueReadStream();
+        using var stream = new ZmodemStream(input, _ => { });
+        var cancelled = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        stream.TransferCancelled += () => cancelled.TrySetResult();
+
+        input.Feed(ZmodemCodec.EncodeHexHeader(ZmodemCodec.FrameZRQInit, new byte[4]));
+        var active = false;
+        for (var attempt = 0; attempt < 50 && !active; attempt++)
+        {
+            await Task.Delay(20);
+            active = stream.IsTransferActive;
+        }
+
+        Assert.True(active);
+        stream.CancelTransfer();
+        await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.False(stream.IsTransferActive);
+    }
+
+    [Fact]
     public async Task StreamDetectsAndSendsZmodemSession()
     {
         var directory = Path.Combine(

@@ -73,9 +73,14 @@ still the default release.
   round-trips, keyword highlighting tests, and an opt-in real-lrzsz integration
   suite. Real `sz` receive and `rz` send of 64KB binary files now pass through
   the production `PtyStreamConnection`/`ZmodemStream` path.
-- Test suite is now 78 passing tests (Core 12, Connections 31, Terminal 8,
-  ZMODEM 27) without `lrzsz`; set `LRZSZ_DIR` to enable the two real-transfer
+- Test suite is now 80 passing tests (Core 12, Connections 31, Terminal 8,
+  ZMODEM 29) without `lrzsz`; set `LRZSZ_DIR` to enable the two real-transfer
   tests.
+- Added the Python-style ZMODEM status controls: transfer label, 150px
+  progress bar with percentage, and a 90px Cancel button. Cancel writes ZCAN,
+  cleans temporary files, restores terminal input/prompt, and reports
+  `File transfer cancelled`. Verified with a 200MB `sz` receive over the local
+  SSH test server.
 
 ## Evidence
 

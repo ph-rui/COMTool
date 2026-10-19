@@ -36,6 +36,7 @@ public sealed class ZmodemStream : Stream
     private ZHeader? _pendingSendHeader;
     private byte[] _pendingSendRemainder = Array.Empty<byte>();
     private bool _sessionActive;
+    private bool _cancelRequested;
     private bool _completed;
     private bool _disposed;
 
@@ -56,6 +57,8 @@ public sealed class ZmodemStream : Stream
     public event Action<ZmodemTransferResult>? TransferCompleted;
 
     public event Action<string>? TransferFailed;
+
+    public event Action? TransferCancelled;
 
     public event Action<ZmodemProgressInfo>? Progress;
 
@@ -86,6 +89,7 @@ public sealed class ZmodemStream : Stream
             }
 
             _sessionActive = true;
+            _cancelRequested = false;
             _sessionIo = new ZmodemIo(WriteProtocol);
         }
 
@@ -118,6 +122,7 @@ public sealed class ZmodemStream : Stream
 
     public void CancelSend()
     {
+        var hadPending = false;
         lock (_gate)
         {
             if (_pendingSendHeader is null)
@@ -125,11 +130,16 @@ public sealed class ZmodemStream : Stream
                 return;
             }
 
+            hadPending = true;
             _pendingSendHeader = null;
             _pendingSendRemainder = Array.Empty<byte>();
         }
 
         _write(CancelSequence());
+        if (hadPending)
+        {
+            TransferCancelled?.Invoke();
+        }
     }
 
     public void CancelTransfer()
@@ -137,6 +147,12 @@ public sealed class ZmodemStream : Stream
         ZmodemIo? io;
         lock (_gate)
         {
+            if (!_sessionActive)
+            {
+                return;
+            }
+
+            _cancelRequested = true;
             io = _sessionIo;
         }
 
@@ -332,6 +348,7 @@ public sealed class ZmodemStream : Stream
         {
             _sessionIo = io;
             _sessionActive = true;
+            _cancelRequested = false;
             _detector.Reset();
         }
 
@@ -372,6 +389,7 @@ public sealed class ZmodemStream : Stream
         lock (_gate)
         {
             _sessionActive = false;
+            _cancelRequested = false;
             _sessionIo = null;
             if (result.Trailing.Length > 0)
             {
@@ -385,12 +403,21 @@ public sealed class ZmodemStream : Stream
 
     private void FailTransfer(Exception exception)
     {
+        var cancelled = false;
         lock (_gate)
         {
+            cancelled = _cancelRequested;
             _sessionActive = false;
+            _cancelRequested = false;
             _sessionIo = null;
             _pendingSendHeader = null;
             _pendingSendRemainder = Array.Empty<byte>();
+        }
+
+        if (cancelled)
+        {
+            TransferCancelled?.Invoke();
+            return;
         }
 
         TransferFailed?.Invoke(exception.Message);
