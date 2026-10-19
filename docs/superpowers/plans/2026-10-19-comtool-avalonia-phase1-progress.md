@@ -150,6 +150,13 @@ Validated headlessly on the Windows test host over SSH (no RDP used):
   USB-Enhanced-SERIAL-A CH344` and the other expected natural-sorted devices.
 - The published executable embeds `Assets/logo.ico`; PowerShell
   `ExtractAssociatedIcon` returns a 32x32 icon.
+- Republished the latest app after the detach/font/F11 fixes, copied it to
+  `C:\Users\zhangrui\comtool-phase1-app.exe` and the Desktop over SSH, verified
+  both SHA256 hashes, and started/stopped it without touching the Python
+  config.
+- Rebuilt the Windows Beta zip from that binary; `app/COMTool.App.exe` inside
+  the zip matches the published hash and the package hash is recorded in
+  `docs/packaging/avalonia-windows-beta.md`.
 
 ## Still open for Phase 1
 
