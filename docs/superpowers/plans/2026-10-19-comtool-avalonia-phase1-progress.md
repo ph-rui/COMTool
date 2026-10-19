@@ -124,6 +124,9 @@ Validated live in the UI under Xvfb:
 - Detached two tabs at once; the second window cascaded 24px instead of hiding
   the first, closing one reattached only its tab, and closing the main window
   removed the remaining detached window and shell.
+- Sent 5MB over the local SSH session at 1MB/s (`PERF-DONE`): output completed
+  within the 6s screenshot, RSS rose 202MB -> 232MB and then stayed flat, CPU
+  returned to ~8% idle, and `echo INPUT-OK` was accepted immediately.
 - Fixed the duplicate buffer at its source: `TerminalControl` defaults
   `Process` to `bash`/`cmd.exe` and launches it on load. Every external
   serial/SSH tab now sets `Process = string.Empty`, so a local shell can no
