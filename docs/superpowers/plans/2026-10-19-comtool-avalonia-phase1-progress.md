@@ -2,9 +2,10 @@
 
 Date: 2026-10-19
 
-Status: **in progress**. The session sidebar and terminal tab host now use the
-real Avalonia Beta config and real serial/SSH transports. The Python version is
-still the default release.
+Status: **Phase 1 features and packaging implemented; release hardening remains**.
+The session sidebar, terminal tab host, serial/SSH transports, ZMODEM, tab
+detach and Beta packages are working. Python remains the default release until
+the hardware, soak, CI and two-week Beta gates are complete.
 
 ## Implemented in this slice
 
@@ -183,18 +184,18 @@ Validated headlessly on the Windows test host over SSH (no RDP used):
 
 - Terminal byte transcoding for non-UTF-8 encodings; the selector currently
   persists the chosen encoding only.
-- Language switching and plugin help/update UI; About with donation links is
-  present.
+- Language switching, translated status/context-menu text and plugin
+  help/update UI; About with donation links is present.
 - DSR/DTR hardware flow control; `System.IO.Ports` has no equivalent mode, so
   the port is left neutral instead of silently enabling RTS/CTS + XON/XOFF.
-- Remaining Python keyboard shortcuts.
-- Translated status/context-menu text and language switching. SSH
-  disconnect detection and manual reconnect are complete; Python's SSH
-  `auto_reconnect` defaults to false, is not exposed in settings, and the
-  serial connection has no auto-reconnect setting.
-- Windows serial receive/loopback on hardware.
-- Large-file (100MB+) ZMODEM soak and serial-port throughput validation.
-- CI run, DPI checks, 8-hour soak, and the final 1:1 screenshot review.
+- Windows serial receive/loopback, hotplug and occupied-port tests on hardware;
+  the UI scan/prune logic and Linux PTY path are implemented.
+- Serial-port throughput validation (the 1MB/s test used SSH).
+- Received-file save dialog on a real desktop; the headless Linux picker hangs
+  under Xvfb.
+- CI run, 200%/Windows DPI checks, 8-hour soak and the final 1:1 screenshot
+  review.
+- Two-week small-scope Beta use before any default-version switch.
 
 ## Default-version gate
 
