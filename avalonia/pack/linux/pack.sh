@@ -17,12 +17,16 @@ name="COMTool-Avalonia-linux-x64-$version"
 dotnet="${DOTNET:-dotnet}"
 
 if [[ "${SKIP_PUBLISH:-0}" != "1" ]]; then
+    # ReadyToRun removes most startup JIT; leaving single-file compression off
+    # avoids decompressing the native payload on every launch. The package is
+    # larger, but the startup comparison is in docs/fixtures/phase1.
     echo "Publishing self-contained linux-x64 app..."
     "$dotnet" publish "$project" \
         -c Release -r linux-x64 --self-contained true \
         -p:PublishSingleFile=true \
         -p:IncludeNativeLibrariesForSelfExtract=true \
-        -p:EnableCompressionInSingleFile=true \
+        -p:EnableCompressionInSingleFile=false \
+        -p:PublishReadyToRun=true \
         -p:DebugType=None -p:DebugSymbols=false \
         -o "$source_dir"
 fi

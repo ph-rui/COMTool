@@ -1,6 +1,6 @@
 # COMTool Avalonia Beta Windows package
 
-The Avalonia Beta ships as a compressed self-contained single-file executable
+The Avalonia Beta ships as a ReadyToRun self-contained single-file executable
 plus two per-user installer scripts. It is deliberately separate from the
 Python COMTool app so the stable app, its launcher and its config are never
 modified.
@@ -19,13 +19,20 @@ The script publishes:
 avalonia/src/COMTool.App/COMTool.App.csproj
 ```
 
-with `win-x64`, self-contained, single-file and compression enabled, then
-produces:
+with `win-x64`, self-contained, single-file, ReadyToRun and compression
+disabled, then produces:
 
 ```text
 avalonia/publish/package/COMTool-Avalonia-Beta-win-x64-0.01.zip
 avalonia/publish/package/SHA256SUMS.txt
 ```
+
+ReadyToRun removes most JIT work during startup; disabling single-file
+compression avoids decompressing the large native payload on every launch.
+The trade-off is a larger on-disk executable (about 168 MiB) and a larger
+zip (about 69 MiB), while the download remains practical because the payload
+compresses well. The release startup comparison is recorded in
+`docs/fixtures/phase1/performance-2026-10-20.md`.
 
 The zip layout is:
 
@@ -101,30 +108,25 @@ sandbox install:
 
 The latest app binary (version `0.01`, borderless chrome, auto-hiding sidebar,
 non-focus-stealing chrome controls, centered tool-strip icons, remembered
-window size and encoding-dropdown focus return) was published over SSH and
-copied to:
+window size, encoding-dropdown focus return, and the ReadyToRun release build)
+was published over SSH and copied to:
 
 - `C:\Users\zhangrui\COMTool-Avalonia.exe` (working copy)
 - `D:\Users\zhangrui\Desktop\COMTool-Avalonia.exe` (desktop copy)
 
-The old C-drive `comtool-phase1-app.exe` was removed. The old Desktop
-`COMTool.exe` was still running during the copy, so Windows initially refused
-its deletion; after the old instance was closed it was removed successfully.
-The Desktop now contains `COMTool-Avalonia.exe` plus the untouched Python
-`COMTool.lnk`; the new name avoids the previous collision.
-
-- size: 55,956,140 bytes;
-- SHA256: `5198382aaa8daee2929b7adbdd47b153ed647a81cbc21a331547a3161a58bcfb`;
+- size: 175,550,896 bytes;
+- SHA256: `25a03a62a3b14d8b23f08b9a395980682eb58976ab45076b051f6c48a19b9cea`;
 - both remote copies matched that hash via `certutil`.
 
-The release zip is 50,143,842 bytes and is validated with SHA256:
+The release zip is 72,018,013 bytes and is validated with SHA256:
 
 ```text
-922ceb1a686f8e9c95f7007369f27658dd6b2e8900dc309efa52534240dd8b37
+5e86c8887fd9d935367a8987cac87ee6f69388da371b39b27551fdb8cb32366f
 ```
 
 That hash is from the local packaging run and changes whenever the app is
-rebuilt.
+rebuilt. Linux warm-start measurements took the packaged app from 1.54 s to
+0.69 s; Windows startup still needs confirmation on the target desktop.
 
 ## Signing
 

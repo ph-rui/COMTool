@@ -30,12 +30,16 @@ $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "../../.."))
 $project = Join-Path $repoRoot "avalonia/src/COMTool.App/COMTool.App.csproj"
 
 if (-not $SkipPublish) {
+    # ReadyToRun removes most startup JIT; leaving single-file compression off
+    # avoids decompressing the native payload on every launch. The package is
+    # larger, but the startup comparison is in docs/fixtures/phase1.
     Write-Host "Publishing self-contained win-x64 app..."
     & dotnet publish $project `
         -c Release -r win-x64 --self-contained true `
         -p:PublishSingleFile=true `
         -p:IncludeNativeLibrariesForSelfExtract=true `
-        -p:EnableCompressionInSingleFile=true `
+        -p:EnableCompressionInSingleFile=false `
+        -p:PublishReadyToRun=true `
         -p:DebugType=None -p:DebugSymbols=false `
         -o $Source
     if ($LASTEXITCODE -ne 0) {
