@@ -103,6 +103,32 @@ def test_cached_password_reconnects_without_settings(window, app, monkeypatch):
     assert opened == ["secret"]
 
 
+def test_reselecting_current_ssh_session_focuses_terminal(window, app, monkeypatch):
+    opened = []
+
+    def fake_open(item, password=None):
+        opened.append(password)
+
+    monkeypatch.setattr(main2.PluginItem, "openConnection", fake_open)
+    window._ssh_password_cache["root@10.0.0.1:22"] = "secret"
+
+    window.onSessionActivated("ssh:root@10.0.0.1:22")
+    app.processEvents()
+    item = window.items[0]
+    terminal = item.plugin.widget.terminal
+
+    # Clicking the already-current row leaves focus in the sidebar.  The
+    # activation path must hand it back to the terminal.
+    window.sessionSidebar.listWidget.setFocus()
+    assert QApplication.focusWidget() is window.sessionSidebar.listWidget
+
+    window.onSessionActivated("ssh:root@10.0.0.1:22")
+    app.processEvents()
+
+    assert opened == ["secret", "secret"]
+    assert QApplication.focusWidget() is terminal
+
+
 def test_saved_encrypted_password_reconnects_after_restart(window, app, monkeypatch):
     opened = []
 
