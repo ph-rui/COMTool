@@ -42,6 +42,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         UpdateMaximizeIcon();
+        AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Tunnel);
         Sidebar.SessionActivated += OnSessionActivated;
         Sidebar.RemoveRequested += OnSessionRemoveRequested;
         Opened += OnOpened;
@@ -1165,6 +1166,21 @@ public partial class MainWindow : Window
     {
         Topmost = !Topmost;
         PinIcon.Text = Topmost ? "\uf9f7" : "\uf670";
+    }
+
+    private void OnWindowKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.F11)
+        {
+            return;
+        }
+
+        // Python's title-bar mixin treats F11 as a full-screen toggle and
+        // hides the title bar while full screen is active.
+        var fullScreen = WindowState == WindowState.FullScreen;
+        WindowState = fullScreen ? WindowState.Normal : WindowState.FullScreen;
+        TitleBar.IsVisible = fullScreen;
+        e.Handled = true;
     }
 
     private void OnLightThemeClick(object? sender, RoutedEventArgs e) =>

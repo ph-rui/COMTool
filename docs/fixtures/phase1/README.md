@@ -33,6 +33,7 @@ functional evidence images, not final pixel baselines.
 | `tab-detached-850x500.png` | Double-clicking a tab detaches the live terminal into an 850x500 `local-ssh` window; the shell still accepts `echo DETACH-OK` without reconnecting. |
 | `tab-reattached-850x500.png` | Closing the detached window returns the same live tab and buffer to the main window; there is no duplicated MOTD, prompt, or second shell. |
 | `detached-loss-850x500.png` | The SSH child was killed while its tab was detached; the main window remains responsive and the dead detached session can be reopened from the sidebar. |
+| `f11-fullscreen-1280x800.png` | F11 toggles the Python-style full-screen mode: the custom title bar is hidden and the window covers the 1280x800 display; F11 restores the 850x500 window with the title bar. |
 
 The tab title rule matches Python: serial tabs use the port name, SSH tabs use
 the alias when present and the host otherwise. Closing a tab only closes the

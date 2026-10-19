@@ -132,6 +132,8 @@ Validated live in the UI under Xvfb:
   the session closed the dead detached window and reconnected.
 - Closed the main window while a tab was detached; both windows and the
   dotnet process exited with no orphan process.
+- Pressed F11: the custom title bar hid, the window covered the 1280x800
+  display, and a second F11 restored the 850x500 window and title bar.
 
 Validated headlessly on the Windows test host over SSH (no RDP used):
 
