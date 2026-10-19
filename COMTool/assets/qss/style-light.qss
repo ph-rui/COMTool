@@ -575,3 +575,6 @@ QListWidget::item:hover {
 #sessionItem, #sessionItem QLabel {
     background-color: transparent;
 }
+#sessionSidebarUserIcon {
+    background-color: transparent;
+}
