@@ -139,6 +139,9 @@ Validated live in the UI under Xvfb:
 - Stopped the local sshd and clicked `local-ssh`: the UI showed an `Error`
   dialog with `Connect Failed` and `Connection refused`, then reconnected
   normally after the server was restarted.
+- Set `Xft.dpi` to 144 (150% scaling) and relaunched: the sidebar, tabs,
+  encoding selector, terminal prompt and status line stayed unclipped and
+  readable; no source change was needed.
 
 Validated headlessly on the Windows test host over SSH (no RDP used):
 

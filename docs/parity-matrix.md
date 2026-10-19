@@ -22,7 +22,7 @@
 | UI-11 | 帮助、关于、捐赠、更新提示 | P1 | 部分 | `About COMTool` 已包含版本、说明、配置路径、License、GitHub/Releases/Issues/捐赠链接；插件帮助和更新检测待补 |
 | UI-12 | 状态栏、错误/成功提示 | P0 | 完成 | 连接/断线/ZMODEM 进度/取消/成功/错误颜色和 `Connection lose` 实测；Python 无状态超时自动清除 |
 | UI-13 | 快捷键与鼠标行为 | P0 | 部分 | 终端选择/右键复制粘贴、Ctrl+V/Ctrl+Shift+V、终端功能键和 F11 全屏切换已验证；插件内其余 Python 快捷键待补 |
-| UI-14 | 高 DPI | P1 | 未开始 | 100%/150%/200% 下布局和字体 |
+| UI-14 | 高 DPI | P1 | 部分 | X11 `Xft.dpi=144`（150%）下窗口、侧栏、标签、编码下拉和终端均无裁切，文字清晰；200% 和 Windows 150%/200% 待测 |
 | UI-15 | 窗口尺寸/位置/分栏恢复 | P1 | 不适用 | Python 每次以 850x500 居中启动，不持久化窗口位置；Avalonia 相同。侧栏宽度/可见性已恢复 |
 
 ## 2. 终端
@@ -37,7 +37,7 @@
 | TERM-06 | 粘贴 | P0 | 完成 | 右键、Ctrl+V/Ctrl+Shift+V、中文已验证 |
 | TERM-07 | MobaXterm 关键字高亮 | P0 | 完成 | 错误红、成功绿、警告黄、URL 下划线、ANSI 优先；流式高亮测试通过 |
 | TERM-08 | 光标显示 | P0 | 完成 | 光标颜色/位置正常，隐藏/显示和宽字符推进已通过单元测试 |
-| TERM-09 | 字体/字号配置 | P1 | 部分 | 默认字体改为平台等宽字体（Windows Consolas / macOS Menlo / Linux DejaVu Sans Mono），resize/分离渲染已正常；字号配置和 DPI 待补 |
+| TERM-09 | 字体/字号配置 | P1 | 完成 | Python 固定 15px；Avalonia 同样固定 15px，并改为平台等宽字体（Windows Consolas / macOS Menlo / Linux DejaVu Sans Mono），resize/分离渲染正常 |
 | TERM-10 | 终端输入映射 | P0 | 完成 | 文本、Enter、Ctrl+C/V、方向键、Home/End、Insert/Delete、F1-F12 已通过 `cat -v` 实测 |
 | TERM-11 | 断线/重连显示 | P0 | 完成 | SSH 通道 `Closed`/错误事件立即置为断开；主窗口和分离窗口均显示断线，侧栏圆点变灰，点击会话用缓存凭据重连且不重复提示 |
 | TERM-12 | ZMODEM 字节流接入 | P0 | 完成 | 自动检测、流路由、发送/接收引擎、保存对话框已接入 |
