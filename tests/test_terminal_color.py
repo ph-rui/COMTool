@@ -44,3 +44,25 @@ def test_default_color_still_uses_theme(app):
     assert frontend.get_pen("default").color().name() == "#ffffff"
     assert frontend.get_brush("default").color().name() == "#212121"
     frontend.deleteLater()
+
+
+def test_plain_output_gets_mobaxterm_style_highlights(app):
+    frontend = _frontend()
+
+    ip_colors = frontend._highlight_line("inet 172.16.66.48 netmask 255.255.255.0")
+    assert ip_colors[5] == "brightmagenta"
+    assert ip_colors[16] == "brightmagenta"
+
+    mac_colors = frontend._highlight_line("ether fe:fc:fe:ed:91:b7")
+    assert mac_colors[6] == "brown"
+
+    ipv6_colors = frontend._highlight_line("inet6 fe80::920f:2317:d1e8:9ba9/64")
+    assert ipv6_colors[6] == "brightmagenta"
+
+    error_colors = frontend._highlight_line(
+        "        RX errors 0 dropped 0 overruns 0 frame 0"
+    )
+    assert error_colors[8] == "brightred"
+    assert error_colors[-1] == "brightred"
+
+    frontend.deleteLater()
