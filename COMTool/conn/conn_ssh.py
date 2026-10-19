@@ -25,6 +25,19 @@ except Exception:
 import socket, threading, time, re
 
 
+def _preload_paramiko():
+    # paramiko takes roughly half a second to import on a cold Python process.
+    # Load it in the background at startup so the first SSH connect is not
+    # blocked by that import.
+    try:
+        import paramiko  # noqa: F401
+    except Exception:
+        pass
+
+
+threading.Thread(target=_preload_paramiko, daemon=True).start()
+
+
 class SSH_CONN:
     def __init__(self) -> None:
         self.channel = None
@@ -142,6 +155,8 @@ class SSH(COMM):
         }
         self.isOpened = False
         self.busy = False
+        # One-shot password supplied by sidebar reconnect; never stored in config.
+        self._pending_password = None
         self.status = ConnectionStatus.CLOSED
         self.widget = None
         self.serverModeClientsConns = {
@@ -179,12 +194,13 @@ class SSH(COMM):
             self.config.get("port") or 22,
         )
 
-    def open(self):
+    def open(self, password=None):
         """Connect without relying on the settings button state."""
         if self.busy or self.isConnected() or self.status == ConnectionStatus.CONNECTING:
             return
         if not str(self.config.get("host") or "").strip():
             return
+        self._pending_password = password
         self.busy = True
         self.isOpened = False
         t = threading.Thread(target=self.openCloseSerialProcess)
@@ -365,13 +381,19 @@ class SSH(COMM):
 
     def checkAndConnect(self):
         print("-- connect")
-        ok, msg = self.checkTarget(self.config)
-        if not ok:
-            raise Exception(_("Config error") + ": " + f'{self.config["host"]}:{self.config["port"]}' + ", " + msg)
-        print("-- connect", f'{self.config["host"]}:{self.config["port"]}')
-        self.conn = SSH_CONN()
-        self.conn.connect(self.config["host"], self.config["port"], self.config["user"], self.config["passwd"], self.config["ssh_key"])
-        self.connectSuccessSignal.emit()
+        password = self._pending_password
+        if password is None:
+            password = self.config.get("passwd") or ""
+        try:
+            ok, msg = self.checkTarget(self.config)
+            if not ok:
+                raise Exception(_("Config error") + ": " + f'{self.config["host"]}:{self.config["port"]}' + ", " + msg)
+            print("-- connect", f'{self.config["host"]}:{self.config["port"]}')
+            self.conn = SSH_CONN()
+            self.conn.connect(self.config["host"], self.config["port"], self.config["user"], password, self.config["ssh_key"])
+            self.connectSuccessSignal.emit()
+        finally:
+            self._pending_password = None
 
     def saveConnectInfo(self):
         item = {

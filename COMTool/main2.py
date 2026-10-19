@@ -205,6 +205,10 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         self._port_descriptions = {}
         self._suppressed_session_ports = set()
         self._suppressed_ssh_session_keys = set()
+        # Passwords are deliberately never written to config.json.  Keep the
+        # last successful password in memory only so a session that is still
+        # open in this run can reconnect from the sidebar without prompting.
+        self._ssh_password_cache = {}
         # hover-to-show remembered-session sidebar
         self.sessionHoverStrip = None
         self.sessionHandle = None
@@ -426,6 +430,7 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
                         if status == ConnectionStatus.CONNECTED:
                             item.sshSessionRecorded = True
                             self._suppressed_ssh_session_keys.discard(session_key)
+                            self._cacheSshPassword(item)
                             self.recordSshSession(item)
                         elif status in (ConnectionStatus.CLOSED, ConnectionStatus.LOSE):
                             self.recordSshSession(item)
@@ -914,6 +919,15 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
             item.widget.activateWindow()
             self.updateMainStack()
 
+    def _cacheSshPassword(self, item):
+        try:
+            config = item.getSshConfig()
+            password = str(config.get("passwd") or "")
+            if password:
+                self._ssh_password_cache[item.getSshSessionKey()] = password
+        except Exception:
+            pass
+
     def _connectSshItem(self, item):
         if item.plugin.isConnected():
             return
@@ -921,8 +935,14 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         if str(config.get("ssh_key") or "").strip() or str(config.get("passwd") or "").strip():
             item.openConnection()
             return
-        # Saved sessions never contain passwords.  Open the settings dialog so
-        # the user can enter one, then use the normal OPEN button.
+        cached_password = self._ssh_password_cache.get(item.getSshSessionKey())
+        if cached_password:
+            item.openConnection(cached_password)
+            return
+        # Saved sessions never contain passwords.  On the first connection in
+        # this app run, open the settings dialog so the user can enter one,
+        # then use the normal OPEN button.  The password is cached in memory
+        # after success and is not saved to disk.
         self.showSettings()
         conn = item.conns[item.currConnIdx] if item.currConnIdx < len(item.conns) else None
         if conn is None:
@@ -1023,6 +1043,7 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
             if reply != QMessageBox.Yes:
                 return
             self._suppressed_ssh_session_keys.add(key)
+            self._ssh_password_cache.pop(key, None)
             if self.sshSessionStore is not None:
                 self.sshSessionStore.remove(key)
                 self.sshSessionStore.save(self.config)
