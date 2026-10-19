@@ -88,6 +88,8 @@ Implemented:
   `tools/COMTool.Phase0Smoke`.
 - Config-backed session sidebar with serial/SSH session activation, dynamic
   multi-tab terminal host, SSH password prompt/cache and tab close/reconnect.
+- Sidebar context menu with confirmed session removal and a dark theme resource
+  set selected from the stored `skin` value.
 - 45 passing tests across Core, Connections, Terminal and ZMODEM.
 
 Not implemented yet:

@@ -14,6 +14,7 @@ evidence images, not final pixel baselines.
 | `context-menu-850x500.png` | Right-clicking a session shows `Open` / `Remove session`. |
 | `remove-confirm-850x500.png` | Removing an SSH session asks for confirmation and names the exact session. |
 | `session-removed-850x500.png` | Confirming removal updates the sidebar and persists only the remaining session. |
+| `dark-theme-850x500.png` | `skin: "dark"` in the Beta config selects the dark resource set on startup. |
 
 The tab title rule matches Python: serial tabs use the port name, SSH tabs use
 the alias when present and the host otherwise. Closing a tab only closes the

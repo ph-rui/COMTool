@@ -47,6 +47,7 @@ public partial class MainWindow : Window
             try
             {
                 _config = AppConfigService.Load();
+                ThemeManager.Apply(_config.Config.Skin);
                 RefreshSidebar();
                 _portTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
                 _portTimer.Tick += (_, _) => RefreshPorts();
