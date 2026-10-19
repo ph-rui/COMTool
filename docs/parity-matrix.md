@@ -35,7 +35,7 @@
 | TERM-04 | 滚动回看 | P0 | 完成 | 历史缓冲、滚轮/PageUp/PageDown 已实现；滚动条按 Python 隐藏 |
 | TERM-05 | 选择与复制 | P0 | 完成 | 左键拖选、右键复制、高亮已验证 |
 | TERM-06 | 粘贴 | P0 | 完成 | 右键、Ctrl+V/Ctrl+Shift+V、中文已验证 |
-| TERM-07 | MobaXterm 关键字高亮 | P0 | 未开始 | 错误红、成功绿、警告黄、URL 下划线、ANSI 优先 |
+| TERM-07 | MobaXterm 关键字高亮 | P0 | 完成 | 错误红、成功绿、警告黄、URL 下划线、ANSI 优先；流式高亮测试通过 |
 | TERM-08 | 光标显示 | P0 | 部分 | 颜色/位置正常；隐藏/宽字符光标待逐项验证 |
 | TERM-09 | 字体/字号配置 | P1 | 部分 | 默认字体、等宽、DPI |
 | TERM-10 | 终端输入映射 | P0 | 部分 | 文本、Enter、Ctrl+C/V 已验证；方向键/F1-F12 待补 |
@@ -134,7 +134,7 @@
 
 | ID | 项目 | 优先级 | 状态 | 验收要点 |
 |---|---|---|---|---|
-| TST-01 | 单元测试 | P0 | 完成 | 63 项通过（Core 12/Connections 29/Terminal 8/ZMODEM 14） |
+| TST-01 | 单元测试 | P0 | 完成 | 72 项通过（Core 12/Connections 29/Terminal 8/ZMODEM 23） |
 | TST-02 | 终端 golden 测试 | P0 | 未开始 | 同一字节流与 Python 屏幕快照对比 |
 | TST-03 | ZMODEM 集成测试 | P0 | 完成 | 模拟双向自动收发、32KB/12KB/9KB 文件内容校验通过 |
 | TST-04 | SSH/串口集成测试 | P0 | 部分 | 本地 sshd、Windows 配置内 SSH/串口、Linux socat PTY 已测 |
