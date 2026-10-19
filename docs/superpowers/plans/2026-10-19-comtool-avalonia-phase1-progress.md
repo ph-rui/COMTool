@@ -169,9 +169,10 @@ Validated headlessly on the Windows test host over SSH (no RDP used):
 - DSR/DTR hardware flow control; `System.IO.Ports` has no equivalent mode, so
   the port is left neutral instead of silently enabling RTS/CTS + XON/XOFF.
 - Remaining Python keyboard shortcuts.
-- Serial auto-reconnect and translated status/context-menu text. SSH
-  disconnect detection is complete; Python's `auto_reconnect` defaults to
-  false, so no separate automatic reconnect behavior was added.
+- Translated status/context-menu text and language switching. SSH
+  disconnect detection and manual reconnect are complete; Python's SSH
+  `auto_reconnect` defaults to false, is not exposed in settings, and the
+  serial connection has no auto-reconnect setting.
 - Windows serial receive/loopback on hardware.
 - Large-file (100MB+) ZMODEM soak and serial-port throughput validation.
 - CI run, DPI checks, 8-hour soak, and the final 1:1 screenshot review.

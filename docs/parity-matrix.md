@@ -54,7 +54,7 @@
 | SER-05 | 流控/RTS/DTR | P0 | 部分 | RTS/CTS、XON/XOFF 与 RTS/DTR 引脚映射已实现；`System.IO.Ports` 不提供 DSR/DTR 流控，已避免错误映射为 RTS/CTS+XON/XOFF，原生实现待补 |
 | SER-06 | 打开/关闭/占用错误 | P0 | 部分 | Windows COM99/97/23 打开通过； UI 错误文案待补 |
 | SER-07 | 收发数据 | P0 | 部分 | Linux PTY 收发通过；Windows 接收待硬件回环 |
-| SER-08 | 自动重连 | P1 | 未开始 | 断线间隔、提示、取消 |
+| SER-08 | 自动重连 | P1 | 不适用 | Python 串口连接没有自动重连配置；手动点击会话重连已完成，TCP/UDP 的自动重连属于网络插件 |
 | SER-09 | 会话保存与恢复 | P0 | 部分 | 侧栏/标签生命周期已接入；Windows 配置内串口已 headless 打开，UI 收发待硬件 |
 | SER-10 | 设备消失清理 | P0 | 部分 | UI 仅在成功扫描后清理；硬件消失场景待测 |
 
@@ -68,7 +68,7 @@
 | SSH-04 | 记住密码（DPAPI） | P0 | 完成 | 设置页记住密码、DPAPI 加密保存、Windows 解密连接已验证 |
 | SSH-05 | 密码缓存重连 | P0 | 完成 | 关闭标签后再次点击不重复提示（同一进程） |
 | SSH-06 | 会话侧栏保存/点击打开 | P0 | 完成 | 已有会话去重、别名、点击自动连接已验证 |
-| SSH-07 | 断线重连 | P1 | 未开始 | 间隔、状态、密码不重复提示 |
+| SSH-07 | 断线重连 | P1 | 不适用 | Python SSH 的 `auto_reconnect` 默认 false 且设置页未暴露；Avalonia 手动点击会话重连、密码缓存不重复提示已验证 |
 | SSH-08 | PTY 尺寸 | P0 | 完成 | Linux `stty size` = 40x100 验证通过 |
 | SSH-09 | Shell 输出与终端 | P0 | 完成 | SSH shell 已接入多标签终端并通过 UI 验证 |
 | SSH-10 | 连接速度 | P0 | 完成 | 首次 187-446ms，重连 33ms |
