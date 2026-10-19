@@ -348,6 +348,21 @@ class Serial(COMM):
         t.setDaemon(True)
         t.start()
 
+    def open(self):
+        """Open the configured port explicitly (used by session restore)."""
+        if self.busy or self.isConnected() or self.status == ConnectionStatus.CONNECTING:
+            return
+        if not self.config.get("port"):
+            return
+        # The port combobox may still be empty while the first scan is in
+        # flight, so do not rely on setSerialConfig having touched com.port.
+        self.com.port = self.config["port"]
+        self.isOpened = False
+        self.busy = True
+        t = threading.Thread(target=self.openCloseSerialProcess)
+        t.setDaemon(True)
+        t.start()
+
     def openCloseSerialProcess(self):
         if self.isOpened:
             print("-- close serial")
