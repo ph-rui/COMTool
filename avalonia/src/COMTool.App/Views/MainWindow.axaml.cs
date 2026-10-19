@@ -233,7 +233,10 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            await ShowErrorAsync(ex.Message);
+            var action = item.Kind == SessionKind.Serial
+                ? "Open Failed"
+                : "Connect Failed";
+            await ShowErrorAsync($"{action}\n{ex.Message}");
         }
     }
 
@@ -1096,7 +1099,7 @@ public partial class MainWindow : Window
     {
         var dialog = new Window
         {
-            Title = "COMTool",
+            Title = "Error",
             Width = 440,
             Height = 190,
             MinWidth = 320,
