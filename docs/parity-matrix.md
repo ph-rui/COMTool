@@ -41,7 +41,7 @@
 | TERM-10 | 终端输入映射 | P0 | 完成 | 文本、Enter、Ctrl+C/V、方向键、Home/End、Insert/Delete、F1-F12 已通过 `cat -v` 实测 |
 | TERM-11 | 断线/重连显示 | P0 | 完成 | SSH 通道 `Closed`/错误事件立即置为断开；主窗口和分离窗口均显示断线，侧栏圆点变灰，点击会话用缓存凭据重连且不重复提示 |
 | TERM-12 | ZMODEM 字节流接入 | P0 | 完成 | 自动检测、流路由、发送/接收引擎、保存对话框已接入 |
-| TERM-13 | 大流量性能 | P0 | 完成 | 终端解析基准 1MB 约 70-112ms、10MB 约 232-935ms；SSH 实测 5MB/1MB/s 连续输出按时完成，RSS +29MB 后稳定，随后输入立即回显 |
+| TERM-13 | 大流量性能 | P0 | 完成 | C# 解析 1MB 约 108ms、10MB 约 240ms；Python/pyte 同载荷约 616ms/5.0s；本地 SSH 10MB 端到端 C# 约 1.0-1.24s、Python 约 7.55-9.26s，见 `performance-2026-10-20.md` |
 
 ## 3. 串口
 
@@ -127,14 +127,14 @@
 | PKG-02 | Linux 包 | P1 | 部分 | 自包含 `linux-x64` tar + per-user install/uninstall 已实测（X11）；Wayland 与 AppImage 待验证 |
 | PKG-03 | macOS 包 | P1 | 未开始 | arm64/x64、签名、公证 |
 | PKG-04 | 安装/卸载/升级 | P0 | 完成 | Windows per-user 安装/升级/卸载实测；Linux per-user 安装/升级/卸载实测，均保留 Python 配置和 Beta 配置 |
-| PKG-05 | 包体积/启动时间 | P1 | 部分 | Windows zip 47.8MiB / 单文件 53.4MiB，Linux tar 45MiB；与 Python 版启动时间对比待补 |
+| PKG-05 | 包体积/启动时间 | P1 | 完成 | R2R + 不压缩：Windows zip 68.7MiB / 单文件 167.4MiB，Linux tar 66.3MiB；Linux 同机 warm start 0.70s vs Python 0.60s（原压缩包 1.54s），见 `performance-2026-10-20.md` |
 | PKG-06 | CI 构建 | P0 | 部分 | 已有三平台 build/test、Linux real-lrzsz、Windows 打包上传，并新增 Linux 包上传；CI 尚未实际跑通 |
 
 ## 10. 测试与验收
 
 | ID | 项目 | 优先级 | 状态 | 验收要点 |
 |---|---|---|---|---|
-| TST-01 | 单元测试 | P0 | 完成 | 84 项通过（Core 12/Connections 31/Terminal 11/ZMODEM 30） |
+| TST-01 | 单元测试 | P0 | 完成 | 85 项通过（Core 13/Connections 31/Terminal 11/ZMODEM 30） |
 | TST-02 | 终端 golden 测试 | P0 | 完成 | 同一字节流与 Python pyte 0.8.2（60x20、LNM）屏幕行/光标快照一致 |
 | TST-03 | ZMODEM 集成测试 | P0 | 完成 | 模拟双向收发和真实 lrzsz 双向 64KB 二进制文件内容校验通过 |
 | TST-04 | SSH/串口集成测试 | P0 | 部分 | 本地 sshd、Windows 配置内 SSH/串口、Linux socat PTY 已测 |

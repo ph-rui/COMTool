@@ -19,7 +19,8 @@ Set `DOTNET=/path/to/dotnet` if `dotnet` is not on `PATH`. The script publishes
 avalonia/src/COMTool.App/COMTool.App.csproj
 ```
 
-as `linux-x64`, self-contained, single-file, compressed, then creates:
+as `linux-x64`, self-contained, single-file, ReadyToRun and uncompressed, then
+creates:
 
 ```text
 avalonia/publish/package/COMTool-Avalonia-linux-x64-0.01.tar.gz
@@ -74,9 +75,15 @@ Python app and `~/.config/comtool` are untouched.
 
 Validated on Linux with Xvfb `:99` (1280x800, 100% scaling):
 
-- package built from the current Avalonia app sources;
-- tarball size 46,817,723 bytes, SHA256
-  `bee061c88fd013aafd3061be81d3d5024be1ff4ac6f27d4292a7742913694125`;
+- package built from the current Avalonia app sources with ReadyToRun enabled
+  and single-file compression disabled;
+- tarball size 69,555,407 bytes, SHA256
+  `56bd9b827b6eccd05458e1030eff7c46a86cf72602268f37aeab729f3486427d`;
+- packaged executable size 168,868,663 bytes, SHA256
+  `d4a87905dee8e5f665aaa6c74ebbbaee3999bd238b214904514f11c4b87be52a`;
+- warm startup to the first main window measured 0.69 s (median of five runs)
+  on Xvfb `:99`, down from 1.54 s for the previous compressed build; see
+  `docs/fixtures/phase1/performance-2026-10-20.md`;
 - version `0.01`, the borderless window, auto-hiding sidebar, Material Design
   title-bar icons, centered settings/plugin/functional icons, remembered
   window size, non-focus-stealing chrome controls and encoding-drop-down focus

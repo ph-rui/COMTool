@@ -45,6 +45,7 @@ functional evidence images, not final pixel baselines.
 | `connect-error-850x500.png` | Clicking a remembered SSH session while the server is down shows the Python-style `Error` dialog with `Connect Failed` and the underlying `Connection refused` detail. |
 | `dpi-150-1280x800.png` | At 150% X11 scaling (`Xft.dpi=144`) the sidebar, tabs, encoding selector, terminal prompt and status line remain unclipped and readable. |
 | `dpi-200-1736x1036.png` | At 200% scaling on a 2560x1600 Xvfb display the 850x500 logical window is 1700x1000 client pixels; title bar, tabs, terminal text and prompt are all crisp and unclipped. |
+| `performance-2026-10-20.md` | Startup, terminal parsing, SSH 10 MB throughput, R2R packaging and Native AOT experiment measurements. |
 
 The tab title rule matches Python: serial tabs use the port name, SSH tabs use
 the alias when present and the host otherwise. Closing a tab only closes the
