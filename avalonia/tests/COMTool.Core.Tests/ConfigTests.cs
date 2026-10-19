@@ -126,6 +126,26 @@ public sealed class ConfigTests : IDisposable
     }
 
     [Fact]
+    public void SaveAndLoad_RoundTripsWindowSize()
+    {
+        var path = Path.Combine(_directory, "config.json");
+        var config = new ComtoolConfig
+        {
+            Window = new WindowConfig
+            {
+                Width = 1000,
+                Height = 650,
+            },
+        };
+
+        config.Save(path);
+        var loaded = ComtoolConfig.Load(path);
+
+        Assert.Equal(1000, loaded.Window.Width);
+        Assert.Equal(650, loaded.Window.Height);
+    }
+
+    [Fact]
     public void AvaloniaConfigDirectory_IsSeparateFromPython()
     {
         Assert.NotEqual(

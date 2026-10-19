@@ -48,6 +48,9 @@ public sealed class ComtoolConfig
     [JsonPropertyName("sessionSidebar")]
     public SessionSidebarConfig SessionSidebar { get; set; } = new();
 
+    [JsonPropertyName("window")]
+    public WindowConfig Window { get; set; } = new();
+
     [JsonPropertyName("items")]
     public List<JsonElement> Items { get; set; } = new();
 
@@ -97,6 +100,18 @@ public sealed class SessionSidebarConfig
 
     [JsonPropertyName("width")]
     public int Width { get; set; } = 200;
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? Extra { get; set; }
+}
+
+public sealed class WindowConfig
+{
+    [JsonPropertyName("width")]
+    public int Width { get; set; } = 850;
+
+    [JsonPropertyName("height")]
+    public int Height { get; set; } = 500;
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? Extra { get; set; }

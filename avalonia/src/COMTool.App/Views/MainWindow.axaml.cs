@@ -48,11 +48,19 @@ public partial class MainWindow : Window
         new SolidColorBrush(Color.Parse("#c62828"));
     private static readonly IBrush StatusProgressBrush =
         new SolidColorBrush(Color.Parse("#1565c0"));
+    private const double DefaultWindowWidth = 850;
+    private const double DefaultWindowHeight = 500;
+    private const double MinimumWindowWidth = 500;
+    private const double MinimumWindowHeight = 320;
+    private double _lastNormalWidth = DefaultWindowWidth;
+    private double _lastNormalHeight = DefaultWindowHeight;
 
     public MainWindow()
     {
         InitializeComponent();
         UpdateMaximizeIcon();
+        SizeChanged += OnWindowSizeChanged;
+        ApplySavedWindowSizeBeforeShow();
         _sessionHoverTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromMilliseconds(250),
@@ -102,6 +110,7 @@ public partial class MainWindow : Window
                 ThemeManager.Apply(_config.Config.Skin);
                 ApplyEncodingConfig();
                 ApplySidebarConfig();
+                ApplyWindowSizeConfig();
                 RefreshSidebar();
                 _portTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
                 _portTimer.Tick += (_, _) => RefreshPorts();
@@ -1656,6 +1665,106 @@ public partial class MainWindow : Window
         SetSidebarVisible(config.Visible, persist: false);
     }
 
+    private void ApplyWindowSizeConfig()
+    {
+        if (_config is null)
+        {
+            return;
+        }
+
+        var config = _config.Config.Window;
+        if (config is null)
+        {
+            return;
+        }
+
+        ApplyWindowSize(config);
+    }
+
+    private void ApplySavedWindowSizeBeforeShow()
+    {
+        if (Design.IsDesignMode || Environment.GetCommandLineArgs().Contains("--demo"))
+        {
+            return;
+        }
+
+        var config = AppConfigService.TryReadWindowConfig();
+        if (config is not null)
+        {
+            ApplyWindowSize(config);
+        }
+    }
+
+    private void ApplyWindowSize(WindowConfig config)
+    {
+        var width = NormalizeWindowSize(
+            config.Width,
+            DefaultWindowWidth,
+            MinimumWindowWidth);
+        var height = NormalizeWindowSize(
+            config.Height,
+            DefaultWindowHeight,
+            MinimumWindowHeight);
+        Width = width;
+        Height = height;
+        _lastNormalWidth = width;
+        _lastNormalHeight = height;
+    }
+
+    private static double NormalizeWindowSize(int value, double fallback, double minimum) =>
+        value >= minimum && value <= 10000 ? value : fallback;
+
+    private void OnWindowSizeChanged(object? sender, SizeChangedEventArgs e)
+    {
+        if (WindowState != WindowState.Normal
+            || !double.IsFinite(e.NewSize.Width)
+            || !double.IsFinite(e.NewSize.Height)
+            || e.NewSize.Width < MinimumWindowWidth
+            || e.NewSize.Height < MinimumWindowHeight)
+        {
+            return;
+        }
+
+        _lastNormalWidth = e.NewSize.Width;
+        _lastNormalHeight = e.NewSize.Height;
+    }
+
+    private void PersistWindowSize()
+    {
+        if (_config is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var width = (int)Math.Round(
+                Math.Clamp(_lastNormalWidth, MinimumWindowWidth, 10000));
+            var height = (int)Math.Round(
+                Math.Clamp(_lastNormalHeight, MinimumWindowHeight, 10000));
+            var config = _config.Config.Window;
+            if (config is null)
+            {
+                config = new WindowConfig();
+                _config.Config.Window = config;
+            }
+
+            if (config.Width == width && config.Height == height)
+            {
+                return;
+            }
+
+            config.Width = width;
+            config.Height = height;
+            _config.Save();
+            AppLog.Info($"Window size saved: {width}x{height}");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("Failed to save window size", ex);
+        }
+    }
+
     private void OnSidebarSplitterDragCompleted(object? sender, VectorEventArgs e)
     {
         _sidebarWidth = ClampSidebarWidth(BodyGrid.ColumnDefinitions[0].ActualWidth);
@@ -2012,8 +2121,10 @@ public partial class MainWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        PersistWindowSize();
         _portTimer?.Stop();
         _portTimer = null;
+        SizeChanged -= OnWindowSizeChanged;
         Sidebar.SessionActivated -= OnSessionActivated;
         Sidebar.RemoveRequested -= OnSessionRemoveRequested;
 

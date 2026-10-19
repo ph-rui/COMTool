@@ -77,6 +77,12 @@ the hardware, soak, CI and two-week Beta gates are complete.
   stuck to the upper-left corner of the blue control. Setting
   `HorizontalContentAlignment`/`VerticalContentAlignment` to `Center` matches
   the Python reference; `echo ALIGN-OK` still works after the change.
+- Added user-requested window-size persistence. The Avalonia config now stores
+  `window.width`/`window.height`; the saved size is applied before the window is
+  shown so it still opens centered, and the last normal size is saved on close.
+  Closing while maximized saves the pre-maximize size. Verified 1000x650 was
+  restored after close/reopen and after maximizing, closing and reopening;
+  config round-trip test added.
 - Added the non-modal-equivalent connection settings window with serial and SSH
   fields, validated port/baud/parity/stop-bit/flow values, key-file browsing,
   password remember, session upsert and immediate open/reconnect.

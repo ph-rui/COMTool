@@ -1,3 +1,4 @@
+using System.Text.Json;
 using COMTool.Connections;
 using COMTool.Core.Config;
 
@@ -11,6 +12,25 @@ public sealed class AppConfigService
 {
     private readonly SerialSessionStore _serialSessions = new();
     private readonly SshSessionStore _sshSessions = new();
+
+    public static WindowConfig? TryReadWindowConfig()
+    {
+        try
+        {
+            var path = ConfigPaths.AvaloniaConfigFile();
+            if (!File.Exists(path))
+            {
+                return null;
+            }
+
+            return JsonSerializer.Deserialize<ComtoolConfig>(File.ReadAllText(path))?.Window;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("Failed to read window size", ex);
+            return null;
+        }
+    }
 
     private AppConfigService(ComtoolConfig config, string configPath)
     {
