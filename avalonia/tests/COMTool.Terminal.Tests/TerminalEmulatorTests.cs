@@ -28,6 +28,70 @@ public sealed class TerminalEmulatorTests
     }
 
     [Fact]
+    public void MatchesPythonPyteGoldenScreen()
+    {
+        var path = Path.Combine(
+            AppContext.BaseDirectory,
+            "Golden",
+            "terminal-basic.json");
+        using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+        var root = document.RootElement;
+        var data = Convert.FromHexString(root.GetProperty("data_hex").GetString()!);
+        var expectedLines = root.GetProperty("lines")
+            .EnumerateArray()
+            .Select(line => line.GetString() ?? "")
+            .ToArray();
+        var expectedCursor = root.GetProperty("cursor")
+            .EnumerateArray()
+            .Select(value => value.GetInt32())
+            .ToArray();
+
+        using var terminal = new TerminalEmulator(columns: 60, rows: 20);
+        terminal.Write(data);
+
+        Assert.Equal(
+            expectedLines,
+            terminal.VisibleLines().Select(line => line.TrimEnd()).ToArray());
+        Assert.Equal(expectedCursor[0], terminal.CursorX);
+        Assert.Equal(expectedCursor[1], terminal.CursorY);
+    }
+
+    [Fact]
+    public void TracksCursorVisibilityAndWideCharacterAdvance()
+    {
+        using var terminal = new TerminalEmulator(columns: 80, rows: 24);
+        Assert.True(terminal.CursorVisible);
+
+        terminal.Write("\x1b[?25l");
+        Assert.False(terminal.CursorVisible);
+
+        terminal.Write("中文");
+        Assert.Equal(4, terminal.CursorX);
+
+        terminal.Write("\x1b[?25h");
+        Assert.True(terminal.CursorVisible);
+    }
+
+    [Fact]
+    public void HandlesWrappingTabsAndEraseSequences()
+    {
+        using var terminal = new TerminalEmulator(columns: 8, rows: 4);
+        terminal.Write("123456789");
+        Assert.Equal(1, terminal.CursorY);
+        Assert.Equal(1, terminal.CursorX);
+
+        terminal.Write("\r\n\tX");
+        Assert.Equal(8, terminal.CursorX);
+
+        terminal.Write("\x1b[2K\rY");
+        Assert.StartsWith("Y", terminal.LineText(2));
+
+        terminal.Write("\x1b[2J");
+        terminal.Write("\x1b[HZ");
+        Assert.StartsWith("Z", terminal.LineText(0));
+    }
+
+    [Fact]
     public void UsesXterm256Palette()
     {
         using var terminal = new TerminalEmulator();

@@ -1,0 +1,30 @@
+{
+  "source": "pyte 0.8.2, Screen(60, 20), LNM mode",
+  "data_hex": "434f4d546f6f6c20676f6c64656e0d0a726564201b5b33316d4552524f521b5b306d20677265656e201b5b33326d4f4b1b5b306d0d0a7769646520e4b8ade6968720656e640d0a7461620973746f700d0a1b5b363b3548706f736974696f6e65640d0a65726173652d746869731b5b324b0d6b6570740d0a1b5b3f32356c68696464656e20637572736f721b5b3f3235680d0a1b5b31303b314874656e0d0a1b5b31313b3148656c6576656e0d0a1b5b31323b31481b5b316d7477656c76651b5b306d0d0a",
+  "cursor": [
+    0,
+    12
+  ],
+  "lines": [
+    "COMTool golden",
+    "red ERROR green OK",
+    "wide 中文 end",
+    "tab     stop",
+    "",
+    "    positioned",
+    "kept",
+    "hidden cursor",
+    "",
+    "ten",
+    "eleven",
+    "twelve",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    ""
+  ]
+}

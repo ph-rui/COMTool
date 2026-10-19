@@ -22,4 +22,8 @@
     <ProjectReference Include="..\..\src\COMTool.Terminal\COMTool.Terminal.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="Golden\terminal-basic.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
