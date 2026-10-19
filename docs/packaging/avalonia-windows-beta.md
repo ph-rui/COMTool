@@ -89,7 +89,7 @@ until it is deleted manually; it contains only the uninstall script and
 Checked on `zlgmcu\zhangrui` (Windows 10, PowerShell 5.1) with a temporary
 sandbox install:
 
-- installer copied `COMTool.App.exe` (55,951,764 bytes) to the requested path;
+- installer copied the packaged `COMTool.App.exe` to the requested path;
 - `install.json` recorded `3.4.1-beta.1`;
 - `HKCU` uninstall entry contained `DisplayName`, `DisplayVersion`,
   `InstallLocation` and the quoted `UninstallString`;
@@ -98,13 +98,14 @@ sandbox install:
 - `%APPDATA%\COMTool-Avalonia` and `%APPDATA%\comtool` both still existed after
   uninstall (no `-RemoveConfig`).
 
-The latest app binary (commit `7c31ce1`, including tab detach and F11) was
-published over SSH and copied to both the Windows working path and Desktop:
+The latest app binary (including tab detach, error dialogs and the local
+terminal launch guard) was published over SSH and copied to both the Windows
+working path and Desktop:
 `C:\Users\zhangrui\comtool-phase1-app.exe` and
 `D:\Users\zhangrui\Desktop\comtool-phase1-app.exe`.
 
-- size: 55,951,764 bytes;
-- SHA256: `e4335c115916a87d4c9fb93490dea78e0f676c0926ce1ceaab67794fc300b5fa`;
+- size: 55,955,852 bytes;
+- SHA256: `32e1e50878b4a03f53df65273b9f1754b3b9ae93baa9c0f22b9e24019e924326`;
 - both remote copies matched that hash via `certutil`;
 - the app started, wrote `run.log`, and was stopped without touching the
   Python config.
@@ -112,7 +113,7 @@ published over SSH and copied to both the Windows working path and Desktop:
 The release zip itself is validated with SHA256:
 
 ```text
-23797e89f1bbcb49446b1cdebec6360e6d482230687fe52de28b82b1c92b1b7a
+a49c6e051763e47b8ffd4e0fd2ed79bd421749935b4efb25ab258f7db28b365f
 ```
 
 That hash is from the local packaging run and changes whenever the app is
