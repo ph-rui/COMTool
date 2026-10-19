@@ -30,11 +30,11 @@ class SessionItemWidget(QWidget):
         self.setObjectName("sessionItem")
         self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(7, 3, 4, 3)
-        layout.setSpacing(7)
+        layout.setContentsMargins(6, 3, 4, 3)
+        layout.setSpacing(6)
 
         self.iconLabel = QLabel()
-        self.iconLabel.setFixedSize(18, 18)
+        self.iconLabel.setFixedSize(16, 16)
         self.iconLabel.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         layout.addWidget(self.iconLabel, 0, Qt.AlignVCenter)
 
@@ -75,7 +75,7 @@ class SessionItemWidget(QWidget):
         )
         if self.detailLabel is not None:
             self.detailLabel.setStyleSheet(
-                "color: {}; font-size: 11px;".format(detail_color)
+                "color: {}; font-size: 10px;".format(detail_color)
             )
 
 
@@ -126,10 +126,18 @@ class SessionSidebar(QWidget):
         self.listWidget.itemClicked.connect(self._onItemClicked)
         self.listWidget.itemSelectionChanged.connect(self._updateSelectionColors)
         self.listWidget.customContextMenuRequested.connect(self._showContextMenu)
-        layout.addWidget(self.listWidget, 1)
+        # Indent the bordered list under the header, like the nested
+        # MobaXterm session tree. This keeps the header and rows visually
+        # distinct without adding another toolbar.
+        listRow = QHBoxLayout()
+        listRow.setContentsMargins(16, 0, 0, 0)
+        listRow.setSpacing(0)
+        listRow.addWidget(self.listWidget)
+        layout.addLayout(listRow, 1)
 
         self.messageLabel = QLabel("")
         self.messageLabel.setObjectName("sessionSidebarMessage")
+        self.messageLabel.setContentsMargins(16, 0, 0, 0)
         self.messageLabel.setWordWrap(True)
         self.messageLabel.hide()
         layout.addWidget(self.messageLabel)
