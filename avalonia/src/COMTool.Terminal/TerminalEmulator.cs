@@ -60,6 +60,8 @@ public sealed class TerminalEmulator : IDisposable
 
     public int CursorY => _terminal.Buffer.Y;
 
+    public bool CursorVisible => _terminal.CursorVisible;
+
     public void Write(ReadOnlySpan<byte> bytes) => _terminal.Write(bytes);
 
     public void Write(string text) => _terminal.Write(text);

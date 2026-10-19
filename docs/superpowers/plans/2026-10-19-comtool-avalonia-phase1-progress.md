@@ -81,6 +81,13 @@ still the default release.
   cleans temporary files, restores terminal input/prompt, and reports
   `File transfer cancelled`. Verified with a 200MB `sz` receive over the local
   SSH test server.
+- Verified terminal input mappings with `cat -v`: arrows, Home/End,
+  Insert/Delete and F1-F12 emit the xterm sequences expected by the shell.
+- Added a pyte golden fixture generated with pyte 0.8.2 at 60x20/LNM and a
+  matching XTerm.NET screen test. The same byte stream now checks text,
+  wrapping, tabs, erase sequences, cursor addressing, wide characters and
+  final cursor position against the Python backend. Unit tests are 83 total
+  (Core 12, Connections 31, Terminal 11, ZMODEM 29).
 
 ## Evidence
 
