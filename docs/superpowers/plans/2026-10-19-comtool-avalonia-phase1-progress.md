@@ -165,6 +165,10 @@ Validated headlessly on the Windows test host over SSH (no RDP used):
 - Rebuilt the Windows Beta zip from that binary; `app/COMTool.App.exe` inside
   the zip matches the published hash and the package hash is recorded in
   `docs/packaging/avalonia-windows-beta.md`.
+- Added a portable `linux-x64` package with per-user install/uninstall scripts.
+  The installed app started from the test prefix, created only its own
+  `~/.config/comtool-avalonia`, survived a repeated install, and uninstall kept
+  the Beta config while leaving the Python app/config untouched.
 
 ## Still open for Phase 1
 

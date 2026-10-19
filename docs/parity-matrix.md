@@ -124,10 +124,10 @@
 | ID | 功能 | 优先级 | 状态 | 验收要点 |
 |---|---|---|---|---|
 | PKG-01 | Windows 自包含包 | P0 | 完成 | `win-x64` 单文件自包含启动；应用图标已嵌入 |
-| PKG-02 | Linux 包 | P1 | 部分 | tar/AppImage、X11/Wayland |
+| PKG-02 | Linux 包 | P1 | 部分 | 自包含 `linux-x64` tar + per-user install/uninstall 已实测（X11）；Wayland 与 AppImage 待验证 |
 | PKG-03 | macOS 包 | P1 | 未开始 | arm64/x64、签名、公证 |
-| PKG-04 | 安装/卸载/升级 | P0 | 完成 | 独立 per-user 安装标识、快捷方式、卸载项、原子升级；Windows 实测安装/升级/卸载且 Python 配置保留 |
-| PKG-05 | 包体积/启动时间 | P1 | 部分 | 与 Python 版对比并记录 |
+| PKG-04 | 安装/卸载/升级 | P0 | 完成 | Windows per-user 安装/升级/卸载实测；Linux per-user 安装/升级/卸载实测，均保留 Python 配置和 Beta 配置 |
+| PKG-05 | 包体积/启动时间 | P1 | 部分 | Windows zip 47.8MiB / 单文件 53.4MiB，Linux tar 45MiB；与 Python 版启动时间对比待补 |
 | PKG-06 | CI 构建 | P0 | 部分 | 三平台矩阵、测试、产物 |
 
 ## 10. 测试与验收
