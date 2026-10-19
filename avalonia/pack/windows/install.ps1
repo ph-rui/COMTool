@@ -25,7 +25,7 @@ param(
     [string]$Source = (Join-Path $PSScriptRoot "app"),
     [string]$InstallDir = (Join-Path $env:LOCALAPPDATA "Programs\COMTool Avalonia"),
     [string]$SupportDir = (Join-Path $env:LOCALAPPDATA "COMTool Avalonia"),
-    [string]$Version = "3.4.1-beta.1",
+    [string]$Version = "0.01",
     [switch]$NoShortcuts,
     [switch]$NoLaunch
 )

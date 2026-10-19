@@ -23,7 +23,7 @@ with `win-x64`, self-contained, single-file and compression enabled, then
 produces:
 
 ```text
-avalonia/publish/package/COMTool-Avalonia-Beta-win-x64-3.4.1-beta.1.zip
+avalonia/publish/package/COMTool-Avalonia-Beta-win-x64-0.01.zip
 avalonia/publish/package/SHA256SUMS.txt
 ```
 
@@ -90,7 +90,8 @@ Checked on `zlgmcu\zhangrui` (Windows 10, PowerShell 5.1) with a temporary
 sandbox install:
 
 - installer copied the packaged `COMTool.App.exe` to the requested path;
-- `install.json` recorded `3.4.1-beta.1`;
+- `install.json` version handling was verified with the previous package; the
+  default is now `0.01`;
 - `HKCU` uninstall entry contained `DisplayName`, `DisplayVersion`,
   `InstallLocation` and the quoted `UninstallString`;
 - shortcuts were skipped with `-NoShortcuts`;
@@ -98,24 +99,27 @@ sandbox install:
 - `%APPDATA%\COMTool-Avalonia` and `%APPDATA%\comtool` both still existed after
   uninstall (no `-RemoveConfig`).
 
-The latest app binary (including borderless chrome, auto-hiding sidebar and
-the encoding-drop-down focus fix) was published over SSH and copied to:
+The latest app binary (version `0.01`, borderless chrome, auto-hiding sidebar,
+non-focus-stealing chrome controls and encoding-dropdown focus return) was
+published over SSH and copied to:
 
-- `C:\Users\zhangrui\comtool-phase1-app.exe` (working copy)
-- `D:\Users\zhangrui\Desktop\COMTool.exe` (formal desktop copy)
+- `C:\Users\zhangrui\COMTool-Avalonia.exe` (working copy)
+- `D:\Users\zhangrui\Desktop\COMTool-Avalonia.exe` (desktop copy)
 
-The old Desktop `comtool-phase1-app.exe` and the temporary
-`comtool-phase1-app-fixed.exe` name were removed; the desktop now uses the
-formal `COMTool.exe` name.
+The old C-drive `comtool-phase1-app.exe` was removed. The old Desktop
+`COMTool.exe` was still running in the interactive session during the copy, so
+Windows refused its deletion; it must be closed before removing that stale
+file. The new `COMTool-Avalonia.exe` avoids the name collision with the Python
+`COMTool.lnk`.
 
-- size: 55,955,844 bytes;
-- SHA256: `cb0ebedb4137dd5c25df44dc77c0d838324e080c4653e00010d929333d334b20`;
-- all remote copies matched that hash via `certutil`.
+- size: 55,955,856 bytes;
+- SHA256: `83fa6d764668bc0701e4823c11d87cb656f8bf64b3e009cd3c29ab25fcfbf5ff`;
+- both remote copies matched that hash via `certutil`.
 
-The release zip is 50,137,291 bytes and is validated with SHA256:
+The release zip is 50,137,586 bytes and is validated with SHA256:
 
 ```text
-b5b3b5d208f448bc1de6c66884cb851fe66aadc81e03b4334090ebedca7ca74b
+694fa8ae5c6d0130d0f75815179b257270ae69443b9d346b3f275cc4c1ae0c8b
 ```
 
 That hash is from the local packaging run and changes whenever the app is

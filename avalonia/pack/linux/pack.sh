@@ -2,7 +2,7 @@
 # Builds the portable COMTool Avalonia Beta Linux x64 package.
 #
 # Environment:
-#   VERSION=3.4.1-beta.1   package version
+#   VERSION=0.01   package version
 #   SKIP_PUBLISH=1         reuse avalonia/publish/linux-x64
 #   DOTNET=/path/to/dotnet dotnet executable (default: dotnet)
 set -euo pipefail
@@ -12,7 +12,7 @@ repo_root="$(cd "$script_dir/../../.." && pwd)"
 project="$repo_root/avalonia/src/COMTool.App/COMTool.App.csproj"
 source_dir="$repo_root/avalonia/publish/linux-x64"
 output_dir="$repo_root/avalonia/publish/package"
-version="${VERSION:-3.4.1-beta.1}"
+version="${VERSION:-0.01}"
 name="COMTool-Avalonia-linux-x64-$version"
 dotnet="${DOTNET:-dotnet}"
 

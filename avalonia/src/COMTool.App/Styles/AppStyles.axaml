@@ -6,6 +6,7 @@
     <Setter Property="Height" Value="35" />
     <Setter Property="MinWidth" Value="0" />
     <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Focusable" Value="False" />
     <Setter Property="Padding" Value="0" />
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="BorderThickness" Value="0" />
@@ -40,6 +41,7 @@
   <Style Selector="Button.PinButton">
     <Setter Property="Width" Value="40" />
     <Setter Property="MinWidth" Value="0" />
+    <Setter Property="Focusable" Value="False" />
     <Setter Property="Padding" Value="0" />
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="BorderThickness" Value="0" />
@@ -56,6 +58,7 @@
     <Setter Property="Height" Value="28" />
     <Setter Property="MinWidth" Value="0" />
     <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Focusable" Value="False" />
     <Setter Property="Padding" Value="0" />
     <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
     <Setter Property="BorderThickness" Value="0" />
@@ -72,6 +75,7 @@
     <Setter Property="Height" Value="48" />
     <Setter Property="MinWidth" Value="0" />
     <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Focusable" Value="False" />
     <Setter Property="Padding" Value="0" />
     <Setter Property="Background" Value="#2196f3" />
     <Setter Property="BorderThickness" Value="0" />
@@ -111,6 +115,7 @@
   <Style Selector="Button.TabCloseButton">
     <Setter Property="Background" Value="#79b0e0" />
     <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Focusable" Value="False" />
     <Setter Property="CornerRadius" Value="8" />
     <Setter Property="HorizontalContentAlignment" Value="Center" />
     <Setter Property="VerticalContentAlignment" Value="Center" />
