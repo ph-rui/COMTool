@@ -92,6 +92,17 @@ public sealed class PtyStreamConnection : IPtyConnection, IDisposable
         _exitCode = exitCode;
         try
         {
+            // Stop the ZMODEM pump even when the transport itself is owned by
+            // the caller (SSH disposes its shell in the close callback).
+            try
+            {
+                Zmodem?.Dispose();
+            }
+            catch
+            {
+                // The transport may already be gone.
+            }
+
             _close?.Invoke();
         }
         finally
