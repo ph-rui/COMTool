@@ -107,10 +107,10 @@ published over SSH and copied to:
 - `D:\Users\zhangrui\Desktop\COMTool-Avalonia.exe` (desktop copy)
 
 The old C-drive `comtool-phase1-app.exe` was removed. The old Desktop
-`COMTool.exe` was still running in the interactive session during the copy, so
-Windows refused its deletion; it must be closed before removing that stale
-file. The new `COMTool-Avalonia.exe` avoids the name collision with the Python
-`COMTool.lnk`.
+`COMTool.exe` was still running during the copy, so Windows initially refused
+its deletion; after the old instance was closed it was removed successfully.
+The Desktop now contains `COMTool-Avalonia.exe` plus the untouched Python
+`COMTool.lnk`; the new name avoids the previous collision.
 
 - size: 55,955,856 bytes;
 - SHA256: `83fa6d764668bc0701e4823c11d87cb656f8bf64b3e009cd3c29ab25fcfbf5ff`;
