@@ -234,7 +234,7 @@ Validated headlessly on the Windows test host over SSH (no RDP used):
 
 - Benchmarked startup on Xvfb `:99` over five warm runs: Python 0.56-0.60 s,
   the previous Avalonia compressed single-file package 1.54 s, and the
-  R2R/uncompressed package 0.69-0.70 s. The full data is in
+  R2R/uncompressed package 0.66-0.70 s. The full data is in
   `docs/fixtures/phase1/performance-2026-10-20.md`.
 - Benchmarked terminal throughput: Avalonia parsed 1 MB in 103-126 ms and
   10 MB in 226-248 ms; Python/pyte took 550-662 ms and 4.82-5.40 s for the
@@ -242,14 +242,18 @@ Validated headlessly on the Windows test host over SSH (no RDP used):
   Avalonia and 7.55-9.26 s on Python.
 - Changed both packaging scripts to `PublishReadyToRun=true` and
   `EnableCompressionInSingleFile=false`. This trades package size for
-  startup: Windows zip 72,018,013 bytes, Windows executable 175,550,896
-  bytes; Linux tar 69,555,407 bytes, Linux executable 168,868,663 bytes.
+  startup: Windows zip 72,019,633 bytes, Windows executable 175,550,896
+  bytes; Linux tar 69,554,664 bytes, Linux executable 168,869,687 bytes.
 - Rebuilt the Linux tar and Windows package and updated SHA256 records.
   Copied the new Windows executable to the C-drive and Desktop working
   copies; both `certutil` hashes matched
-  `25a03a62a3b14d8b23f08b9a395980682eb58976ab45076b051f6c48a19b9cea`.
+  `0d76b2fb8fda7cb1c2cc3caa6af7fef5521a4771ee62505bf705b81d31011b2f`.
   Windows startup and the larger-file SmartScreen/AV behavior still need
   target-desktop confirmation.
+- Fixed the first-keystroke focus bug found during Windows SSH testing: the
+  terminal is now focused after its template is attached and only when its
+  tab is selected. Verified on Linux with both SSH and local terminal tabs;
+  evidence is `docs/fixtures/phase1/terminal-autofocus-ssh-1000x650.png`.
 - Evaluated Native AOT on Linux as a follow-up: it started in 0.325 s with
   about 116 MB RSS and a 43 MB folder payload, but did not load the existing
   config because `System.Text.Json` reflection metadata was trimmed. Windows

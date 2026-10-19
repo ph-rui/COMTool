@@ -379,6 +379,7 @@ public partial class MainWindow : Window
 
                     terminalAttached = true;
                     AttachTerminal(tab, terminal, connection.Pty);
+                    FocusTerminalWhenSelected(tab, terminal);
                 },
                 DispatcherPriority.Loaded);
         connection.Pty.ProcessExited += (_, _) => Dispatcher.UIThread.Post(() =>
@@ -392,7 +393,6 @@ public partial class MainWindow : Window
 
         viewModel.AddTab(tab);
         UpdateConnectionStates();
-        terminal.Focus();
     }
 
     private async Task OpenSshSessionAsync(string key)
@@ -500,6 +500,7 @@ public partial class MainWindow : Window
 
                     terminalAttached = true;
                     AttachTerminal(tab, terminal, connection.Pty);
+                    FocusTerminalWhenSelected(tab, terminal);
                 },
                 DispatcherPriority.Loaded);
         connection.Pty.ProcessExited += (_, _) => Dispatcher.UIThread.Post(() =>
@@ -513,7 +514,6 @@ public partial class MainWindow : Window
 
         viewModel.AddTab(tab);
         UpdateConnectionStates();
-        terminal.Focus();
     }
 
     private static bool IsTabConnected(TerminalTab tab) =>
@@ -815,6 +815,7 @@ public partial class MainWindow : Window
             try
             {
                 terminal.LaunchProcess();
+                FocusTerminalWhenSelected(tab, terminal);
             }
             catch (Exception ex)
             {
@@ -825,7 +826,6 @@ public partial class MainWindow : Window
         };
 
         viewModel.AddTab(tab);
-        terminal.Focus();
     }
 
     private void OnTabPointerPressed(object? sender, PointerPressedEventArgs e)
@@ -1434,6 +1434,24 @@ public partial class MainWindow : Window
         {
             content.Focus();
         }
+    }
+
+    private void FocusTerminalWhenSelected(TerminalTab tab, TerminalControl terminal)
+    {
+        // The terminal is not in the visual tree yet when the tab is added.
+        // Focus it after the template has been applied, otherwise the first
+        // keystrokes go to the session sidebar or the window itself.
+        Dispatcher.UIThread.Post(
+            () =>
+            {
+                if (tab.IsAlive
+                    && DataContext is MainViewModel viewModel
+                    && ReferenceEquals(viewModel.SelectedTab, tab))
+                {
+                    terminal.Focus();
+                }
+            },
+            DispatcherPriority.Input);
     }
 
     private void OnSessionsToggle(object? sender, RoutedEventArgs e)

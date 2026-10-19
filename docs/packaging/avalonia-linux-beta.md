@@ -77,13 +77,13 @@ Validated on Linux with Xvfb `:99` (1280x800, 100% scaling):
 
 - package built from the current Avalonia app sources with ReadyToRun enabled
   and single-file compression disabled;
-- tarball size 69,555,407 bytes, SHA256
-  `56bd9b827b6eccd05458e1030eff7c46a86cf72602268f37aeab729f3486427d`;
-- packaged executable size 168,868,663 bytes, SHA256
-  `d4a87905dee8e5f665aaa6c74ebbbaee3999bd238b214904514f11c4b87be52a`;
-- warm startup to the first main window measured 0.69 s (median of five runs)
-  on Xvfb `:99`, down from 1.54 s for the previous compressed build; see
-  `docs/fixtures/phase1/performance-2026-10-20.md`;
+- tarball size 69,554,664 bytes, SHA256
+  `e3988fc054de3ec3a824a0b8af1661cbafa977e986bb3e569c5132d339e8c2f2`;
+- packaged executable size 168,869,687 bytes, SHA256
+  `eb35f1e7abac60ac95aa6f437c37d196131248fb44ec53f170f99f61abd571a4`;
+- warm startup to the first main window measured 0.66-0.70 s (median 0.66 s
+  in the latest run) on Xvfb `:99`, down from 1.54 s for the previous
+  compressed build; see `docs/fixtures/phase1/performance-2026-10-20.md`;
 - version `0.01`, the borderless window, auto-hiding sidebar, Material Design
   title-bar icons, centered settings/plugin/functional icons, remembered
   window size, non-focus-stealing chrome controls and encoding-drop-down focus

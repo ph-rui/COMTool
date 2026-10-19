@@ -23,7 +23,7 @@ Five warm runs per build, median reported.
 | Avalonia, previous release (single-file + compression) | 1.54 s | current Beta package before this change |
 | Avalonia, `dotnet` DLL | 1.32 s | no single-file extraction |
 | Avalonia, R2R + compression | 1.12 s | smaller on-disk executable |
-| Avalonia, R2R + no compression | **0.69-0.70 s** | new release packaging |
+| Avalonia, R2R + no compression | **0.66-0.70 s** | new release packaging (latest median 0.66 s) |
 | Avalonia, R2R folder publish | 0.87 s | no single-file; not used for the release |
 | Avalonia, Native AOT (Linux experiment) | **0.32 s** | experimental; configuration loading failed |
 
