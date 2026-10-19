@@ -164,7 +164,10 @@ Validated headlessly on the Windows test host over SSH (no RDP used):
 
 - Terminal byte transcoding for non-UTF-8 encodings; the selector currently
   persists the chosen encoding only.
-- Language switching and complete help/donation/update UI; About is present.
+- Language switching and plugin help/update UI; About with donation links is
+  present.
+- DSR/DTR hardware flow control; `System.IO.Ports` has no equivalent mode, so
+  the port is left neutral instead of silently enabling RTS/CTS + XON/XOFF.
 - Remaining Python keyboard shortcuts.
 - Serial auto-reconnect and translated status/context-menu text. SSH
   disconnect detection is complete; Python's `auto_reconnect` defaults to

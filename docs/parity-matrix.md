@@ -51,7 +51,7 @@
 | SER-02 | 自然排序 | P0 | 完成 | COM2 < COM10，`/dev/ttyUSB2` < `ttyUSB10` |
 | SER-03 | 热插拔刷新 | P0 | 部分 | UI 定时扫描/设备集变化刷新已接入；硬件热插拔待测 |
 | SER-04 | 波特率/数据位/校验/停止位 | P0 | 完成 | 映射与可编辑自定义波特率设置页已实现 |
-| SER-05 | 流控/RTS/DTR | P0 | 部分 | 映射已实现；DSR/DTR 平台差异待验证 |
+| SER-05 | 流控/RTS/DTR | P0 | 部分 | RTS/CTS、XON/XOFF 与 RTS/DTR 引脚映射已实现；`System.IO.Ports` 不提供 DSR/DTR 流控，已避免错误映射为 RTS/CTS+XON/XOFF，原生实现待补 |
 | SER-06 | 打开/关闭/占用错误 | P0 | 部分 | Windows COM99/97/23 打开通过； UI 错误文案待补 |
 | SER-07 | 收发数据 | P0 | 部分 | Linux PTY 收发通过；Windows 接收待硬件回环 |
 | SER-08 | 自动重连 | P1 | 未开始 | 断线间隔、提示、取消 |
