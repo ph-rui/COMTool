@@ -35,6 +35,7 @@ functional evidence images, not final pixel baselines.
 | `zmodem-cancelled-850x500.png` | Cancel writes ZCAN, restores the panel and reports `File transfer cancelled`. |
 | `zmodem-cancel-input-850x500.png` | Terminal input and the remote shell prompt work again after cancelling a ZMODEM transfer. |
 | `terminal-key-mappings-850x500.png` | `cat -v` shows the expected sequences for arrows, Home/End, Insert/Delete and F1-F12, including both SS3 and CSI forms. |
+| `terminal-autofocus-ssh-1000x650.png` | Clicking an SSH session immediately focuses the new terminal; `echo PACKAGE_FOCUS` is accepted and executed without clicking the terminal area first. |
 | `connection-lose-850x500.png` | Killing the SSH child leaves the TCP socket silently closed; the status polling detects EOF and shows `Connection lose` with the sidebar dot disconnected. |
 | `ssh-reconnected-850x500.png` | Clicking the remembered session closes the dead tab and reconnects with the cached key, without a password prompt. |
 | `tab-detached-850x500.png` | Double-clicking a tab detaches the live terminal into an 850x500 `local-ssh` window; the shell still accepts `echo DETACH-OK` without reconnecting. |
