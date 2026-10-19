@@ -76,6 +76,8 @@ class Parameters:
         "currItem": None,
         "serialSessions": [],
         "serialSessionsMigrated": False,
+        "sshSessions": [],
+        "sshSessionsMigrated": False,
         "sessionSidebar": {
             "visible": True,
             "width": 200,

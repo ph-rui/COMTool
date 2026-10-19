@@ -13,11 +13,13 @@ try:
     from Combobox import ComboBox
     from conn import ConnectionStatus, conns
     from parameters import log, configFilePath
+    from ssh_sessions import ssh_session_key
 except ImportError:
     from COMTool.Combobox import ComboBox
     from COMTool.conn import ConnectionStatus, conns
     from COMTool.i18n import _
     from COMTool.parameters import log, configFilePath
+    from COMTool.ssh_sessions import ssh_session_key
 
 class PluginItem:
     # display name
@@ -43,6 +45,7 @@ class PluginItem:
         self.dataToSend = []
         self.fileToSend = []
         self.serialSessionRecorded = False
+        self.sshSessionRecorded = False
         # widgets
         self.settingWidget = None
         self.mainWidget = None
@@ -359,6 +362,35 @@ class PluginItem:
         if conn is None or conn.id != "serial":
             return ""
         return conn.getDisplayName()
+
+    def isSshConnection(self):
+        conn = self.currentConnection()
+        return conn is not None and conn.id == "ssh"
+
+    def getSshConfig(self):
+        conn = self.currentConnection()
+        if conn is None or conn.id != "ssh":
+            return {}
+        return conn.getConfig()
+
+    def getSshSessionKey(self):
+        config = self.getSshConfig()
+        return ssh_session_key(
+            config.get("host"),
+            config.get("port"),
+            config.get("user"),
+        )
+
+    def getDisplayDetail(self):
+        if self.isSshConnection():
+            config = self.getSshConfig()
+            if config:
+                return "{}@{}:{}".format(
+                    config.get("user") or "",
+                    config.get("host") or "",
+                    config.get("port") or 22,
+                )
+        return ""
 
     def openConnection(self):
         conn = self.currentConnection()

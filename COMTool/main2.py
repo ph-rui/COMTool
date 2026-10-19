@@ -38,6 +38,12 @@ try:
     from session_sidebar import SessionSidebar
     from session_watcher import SerialPortWatcher
     from connection_settings import ConnectionSettingsDialog
+    from ssh_sessions import (
+        SSH_SESSION_PREFIX,
+        SshSessionStore,
+        ssh_display_name,
+        ssh_session_detail,
+    )
 except ImportError:
     from COMTool import helpAbout,autoUpdate, utils_ui
     from COMTool.Combobox import ComboBox
@@ -52,6 +58,12 @@ except ImportError:
     from COMTool.session_sidebar import SessionSidebar
     from COMTool.session_watcher import SerialPortWatcher
     from COMTool.connection_settings import ConnectionSettingsDialog
+    from COMTool.ssh_sessions import (
+        SSH_SESSION_PREFIX,
+        SshSessionStore,
+        ssh_display_name,
+        ssh_session_detail,
+    )
 
 from PyQt5.QtCore import pyqtSignal, Qt, QRect, QMargins, QCoreApplication, QTimer
 from PyQt5.QtWidgets import (QApplication, QWidget,QPushButton,QMessageBox,QDesktopWidget,QMainWindow,
@@ -177,8 +189,9 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         self.items = []
         self.pluginClasses = []
         self.helpWindow = None
-        # remembered serial sessions
+        # remembered serial and SSH sessions
         self.sessionStore = None
+        self.sshSessionStore = None
         self.portWatcher = None
         self.sessionSidebar = None
         self.bodySplitter = None
@@ -191,6 +204,7 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         self._available_ports_known = False
         self._port_descriptions = {}
         self._suppressed_session_ports = set()
+        self._suppressed_ssh_session_keys = set()
         # hover-to-show remembered-session sidebar
         self.sessionHoverStrip = None
         self.sessionHandle = None
@@ -204,6 +218,7 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
 
     def initSerialSessions(self):
         self.sessionStore = SerialSessionStore(self.config)
+        self.sshSessionStore = SshSessionStore(self.config)
         config_dict = getattr(self.config, "config", self.config)
         if not config_dict.get("serialSessionsMigrated", False):
             migrated = self.sessionStore.migrate_items(self.config["items"])
@@ -211,6 +226,13 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
             self.sessionStore.save(self.config)
             if migrated:
                 log.i("migrated {} serial session(s)".format(migrated))
+            self.saveConfig()
+        if not config_dict.get("sshSessionsMigrated", False):
+            migrated = self.sshSessionStore.migrate_items(self.config["items"])
+            self.config["sshSessionsMigrated"] = True
+            self.sshSessionStore.save(self.config)
+            if migrated:
+                log.i("migrated {} SSH session(s)".format(migrated))
             self.saveConfig()
         self.refreshSessionSidebar()
         self.portWatcher = SerialPortWatcher(self)
@@ -341,20 +363,34 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         self.tabWidget.addTab(item.widget, title)
         self.tabWidget.setTabToolTip(
             self.tabWidget.count() - 1,
-            title + _(", Double click to detach as a window"),
+            self._tabToolTip(item),
         )
+
+    def _tabToolTip(self, item):
+        tooltip = item.getDisplayName()
+        try:
+            detail = item.getDisplayDetail()
+        except Exception:
+            detail = ""
+        if detail:
+            tooltip = "{}  ({})".format(tooltip, detail)
+        return tooltip + _(", Double click to detach as a window")
 
     def onItemTitleChanged(self, item):
         title = item.getDisplayName()
         for i in range(self.tabWidget.count()):
             if self.tabWidget.widget(i) == item.widget:
                 self.tabWidget.setTabText(i, title)
-                self.tabWidget.setTabToolTip(
-                    i, title + _(", Double click to detach as a window")
-                )
+                self.tabWidget.setTabToolTip(i, self._tabToolTip(item))
                 break
         if item.widget.isWindow():
             item.widget.setWindowTitle(title)
+        try:
+            if item.plugin.id == "terminal" and item.isSshConnection():
+                self.recordSshSession(item)
+                self.refreshSessionSidebar()
+        except Exception as exc:
+            log.w("update SSH session title failed: {}".format(exc))
 
     def onConnChnaged(self, plugin, status:ConnectionStatus, msg):
         for item in self.items:
@@ -364,9 +400,7 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
                     if self.tabWidget.widget(i) == item.widget:
                         self.setTabIcon(status, i)
                         self.tabWidget.setTabText(i, title)
-                        self.tabWidget.setTabToolTip(
-                            i, title + _(", Double click to detach as a window")
-                        )
+                        self.tabWidget.setTabToolTip(i, self._tabToolTip(item))
                         break
                 item.widget.setWindowTitle(title + " - {}".format(_("Connected" if status == ConnectionStatus.CONNECTED else _("Connection lose") if status == ConnectionStatus.LOSE else _("Disconnected"))))
                 if (status == ConnectionStatus.CONNECTED
@@ -387,8 +421,16 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
                         self.sessionSidebar.set_port_status(
                             port, status == ConnectionStatus.CONNECTED
                         )
+                    elif item.plugin.id == "terminal" and item.isSshConnection():
+                        session_key = item.getSshSessionKey()
+                        if status == ConnectionStatus.CONNECTED:
+                            item.sshSessionRecorded = True
+                            self._suppressed_ssh_session_keys.discard(session_key)
+                            self.recordSshSession(item)
+                        elif status in (ConnectionStatus.CLOSED, ConnectionStatus.LOSE):
+                            self.recordSshSession(item)
                 except Exception as exc:
-                    log.w("update serial session from connection status failed: {}".format(exc))
+                    log.w("update remembered session from connection status failed: {}".format(exc))
                 self.refreshSessionSidebar()
                 break
 
@@ -777,23 +819,43 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         if self.sessionStore is None or self.sessionSidebar is None:
             return
         connected = set()
+        connected_ssh = set()
         for item in self.items:
             try:
-                if item.plugin.id == "terminal" and item.isSerialConnection():
+                if item.plugin.id != "terminal":
+                    continue
+                if item.isSerialConnection():
                     if item.plugin.getConnStatus() == ConnectionStatus.CONNECTED:
                         connected.add(item.getSerialPort())
+                elif item.isSshConnection():
+                    if item.plugin.getConnStatus() == ConnectionStatus.CONNECTED:
+                        connected_ssh.add(item.getSshSessionKey())
             except Exception:
                 pass
         active = None
+        active_ssh = None
         item = self.getCurrentItem()
         if item is not None:
             try:
                 if item.plugin.id == "terminal" and item.isSerialConnection():
                     active = item.getSerialPort()
+                elif item.plugin.id == "terminal" and item.isSshConnection():
+                    active_ssh = item.getSshSessionKey()
             except Exception:
                 active = None
+                active_ssh = None
+        ssh_sessions = (
+            self.sshSessionStore.sorted_sessions()
+            if self.sshSessionStore is not None
+            else []
+        )
         self.sessionSidebar.set_sessions(
-            self.sessionStore.sorted_sessions(), connected, active
+            self.sessionStore.sorted_sessions(),
+            connected,
+            active,
+            ssh_sessions,
+            connected_ssh,
+            active_ssh,
         )
 
     def onPortsScanned(self, ports, success):
@@ -830,22 +892,98 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
                 pass
         return None
 
-    def onSessionActivated(self, port):
-        item = self._findSerialItem(port)
+    def _findSshItem(self, key):
+        key = str(key or "")
+        for item in self.items:
+            try:
+                if (item.plugin.id == "terminal"
+                        and item.isSshConnection()
+                        and item.getSshSessionKey() == key):
+                    return item
+            except Exception:
+                pass
+        return None
+
+    def _focusItem(self, item):
+        if item.widget.parent() is not None and self.tabWidget.indexOf(item.widget) >= 0:
+            self.tabWidget.setCurrentWidget(item.widget)
+            self.mainStack.setCurrentWidget(self.tabWidget)
+        else:
+            item.widget.show()
+            item.widget.raise_()
+            item.widget.activateWindow()
+            self.updateMainStack()
+
+    def _connectSshItem(self, item):
+        if item.plugin.isConnected():
+            return
+        config = item.getSshConfig()
+        if str(config.get("ssh_key") or "").strip() or str(config.get("passwd") or "").strip():
+            item.openConnection()
+            return
+        # Saved sessions never contain passwords.  Open the settings dialog so
+        # the user can enter one, then use the normal OPEN button.
+        self.showSettings()
+        conn = item.conns[item.currConnIdx] if item.currConnIdx < len(item.conns) else None
+        if conn is None:
+            return
+
+        def focus_password():
+            try:
+                conn.passwdInput.setFocus()
+                conn.passwdInput.selectAll()
+            except Exception:
+                pass
+
+        QTimer.singleShot(0, focus_password)
+
+    def _activateSshSession(self, key):
+        item = self._findSshItem(key)
         if item is not None:
-            if item.widget.parent() is not None and self.tabWidget.indexOf(item.widget) >= 0:
-                self.tabWidget.setCurrentWidget(item.widget)
-                self.mainStack.setCurrentWidget(self.tabWidget)
-            else:
-                item.widget.show()
-                item.widget.raise_()
-                item.widget.activateWindow()
-                self.updateMainStack()
+            self._focusItem(item)
+            self._connectSshItem(item)
+            return
+        pluginClass = self.getPluginClassById("terminal")
+        session = (
+            self.sshSessionStore.get(key)
+            if self.sshSessionStore is not None
+            else None
+        )
+        if pluginClass is None or session is None:
+            return
+        connsConfigs = {
+            "currConn": "ssh",
+            "ssh": {
+                "name": session.get("alias") or "",
+                "host": session.get("host") or "",
+                "port": session.get("port") or 22,
+                "user": session.get("user") or "",
+                "ssh_key": session.get("ssh_key") or "",
+                "passwd": "",
+            },
+        }
+        item = self.addItem(
+            pluginClass,
+            setCurrent=True,
+            connsConfigs=connsConfigs,
+            pluginConfig={},
+        )
+        self.updateMainStack()
+        self._connectSshItem(item)
+
+    def onSessionActivated(self, session_id):
+        session_id = str(session_id or "")
+        if session_id.startswith(SSH_SESSION_PREFIX):
+            self._activateSshSession(session_id[len(SSH_SESSION_PREFIX):])
+            return
+        item = self._findSerialItem(session_id)
+        if item is not None:
+            self._focusItem(item)
             if not item.plugin.isConnected():
                 item.openConnection()
             return
         pluginClass = self.getPluginClassById("terminal")
-        session = self.sessionStore.get(port) if self.sessionStore is not None else None
+        session = self.sessionStore.get(session_id) if self.sessionStore is not None else None
         if pluginClass is None or session is None:
             return
         connsConfigs = {
@@ -861,18 +999,47 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         self.updateMainStack()
         item.openConnection()
 
-    def onSessionRemoveRequested(self, port):
+    def onSessionRemoveRequested(self, session_id):
+        session_id = str(session_id or "")
+        if session_id.startswith(SSH_SESSION_PREFIX):
+            key = session_id[len(SSH_SESSION_PREFIX):]
+            session = (
+                self.sshSessionStore.get(key)
+                if self.sshSessionStore is not None
+                else None
+            )
+            label = ssh_session_detail(session) if session else key
+            if session:
+                alias = ssh_display_name(session)
+                if alias and alias != session.get("host"):
+                    label = "{} ({})".format(alias, label)
+            reply = QMessageBox.question(
+                self,
+                _("Remove session"),
+                _("Remove this SSH session from memory?") + "\n" + label,
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if reply != QMessageBox.Yes:
+                return
+            self._suppressed_ssh_session_keys.add(key)
+            if self.sshSessionStore is not None:
+                self.sshSessionStore.remove(key)
+                self.sshSessionStore.save(self.config)
+                self.saveConfig()
+            self.refreshSessionSidebar()
+            return
         reply = QMessageBox.question(
             self,
             _("Remove session"),
-            _("Remove this serial session from memory?") + "\n" + str(port),
+            _("Remove this serial session from memory?") + "\n" + session_id,
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
         )
         if reply != QMessageBox.Yes:
             return
-        self._suppressed_session_ports.add(normalize_port(port))
-        self.sessionStore.remove(port)
+        self._suppressed_session_ports.add(normalize_port(session_id))
+        self.sessionStore.remove(session_id)
         self.sessionStore.save(self.config)
         self.saveConfig()
         self.refreshSessionSidebar()
@@ -901,6 +1068,33 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
             self.saveConfig()
         except Exception as exc:
             log.w("record serial session failed: {}".format(exc))
+
+    def recordSshSession(self, item):
+        try:
+            if item.plugin.id != "terminal" or not item.isSshConnection():
+                return
+            if not getattr(item, "sshSessionRecorded", False):
+                return
+            config = item.getSshConfig()
+            host = str(config.get("host") or "").strip()
+            if not host:
+                return
+            key = item.getSshSessionKey()
+            if key in self._suppressed_ssh_session_keys:
+                return
+            if self.sshSessionStore is None:
+                return
+            self.sshSessionStore.upsert(
+                host,
+                config.get("port"),
+                config.get("user"),
+                alias=config.get("name") or "",
+                ssh_key=config.get("ssh_key") or "",
+            )
+            self.sshSessionStore.save(self.config)
+            self.saveConfig()
+        except Exception as exc:
+            log.w("record SSH session failed: {}".format(exc))
 
     def setSessionsSidebarVisible(self, visible):
         cfg = None
@@ -1180,9 +1374,10 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
             self.receiveProgressStop = True
             if self.portWatcher is not None:
                 self.portWatcher.stop()
-            # capture the latest serial settings before plugins close
+            # capture the latest session settings before plugins close
             for item in self.items:
                 self.recordSerialSession(item)
+                self.recordSshSession(item)
             # inform plugins
             for item in self.items:
                 item.onDel()
@@ -1276,7 +1471,7 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         self.settingsButton.setChecked(visible)
 
     def _settingsDialogTitle(self, item):
-        return "{} - {}".format(item.getDisplayName(), _("Serial settings"))
+        return "{} - {}".format(item.getDisplayName(), _("Connection settings"))
 
     def closeSettingsDialog(self, item, delete=False):
         dialog = getattr(item, "settingsDialog", None)
