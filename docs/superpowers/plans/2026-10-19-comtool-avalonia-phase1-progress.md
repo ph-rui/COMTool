@@ -48,14 +48,15 @@ still the default release.
   fields, validated port/baud/parity/stop-bit/flow values, key-file browsing,
   password remember, session upsert and immediate open/reconnect.
 - Added SetupAPI friendly-name/device-description discovery for Windows COM
-  ports with a parser unit test; scans still fall back to bare names.
+  ports with a parser unit test; Windows `--ports` now prints full descriptions.
 - Added in-place sidebar connection-state updates and persisted sidebar
-  `visible`/`width` values (`sessionSidebar`, clamped to 160-320px).
+  `visible`/`width` values (`sessionSidebar`, clamped to 160-320px). The
+  hide/show toggle and splitter drag were exercised live and saved correctly.
 - Added the functional panel with `Load config` and `Share config`. Sharing an
   SSH session copies non-secret fields and never clears the remembered token.
 - Added status text/colors for connected, disconnected, ZMODEM progress,
-  success and error states. The terminal's native scrollbar is hidden to match
-  Python while scrollback remains available.
+  success and error states, including transfer rate and ETA. The terminal's
+  native scrollbar is hidden to match Python while scrollback remains available.
 - Added a hidden theme selector and About dialog on the title-bar context menu.
 - Added `run.log` with 2 MB rotation in the independent Beta config directory.
 - Added MobaXterm-style plain-output keyword highlighting with ANSI
@@ -69,8 +70,8 @@ still the default release.
   the Avalonia picker, suppresses terminal input during a session, and restores
   the shell prompt/trailing bytes afterward.
 - Added simulated end-to-end ZMODEM tests in both directions, subpacket/offset
-  round-trips, and 63 passing tests total (Core 12, Connections 29, Terminal 8,
-  ZMODEM 14).
+  round-trips, keyword highlighting tests, and 75 passing tests total (Core
+  12, Connections 29, Terminal 8, ZMODEM 26).
 
 ## Evidence
 
@@ -101,6 +102,10 @@ Validated headlessly on the Windows test host over SSH (no RDP used):
   configured `COM97` port.
 - The published single-file app started from that config, stayed responsive at
   193 MB working set, and did not alter the stored serial/SSH entries.
+- `--ports` returned `COM97 USB-Enhanced-SERIAL-B CH344`, `COM99
+  USB-Enhanced-SERIAL-A CH344` and the other expected natural-sorted devices.
+- The published executable embeds `Assets/logo.ico`; PowerShell
+  `ExtractAssociatedIcon` returns a 32x32 icon.
 
 ## Still open for Phase 1
 
@@ -108,8 +113,8 @@ Validated headlessly on the Windows test host over SSH (no RDP used):
 - Tab icon/detach behavior and the remaining Python keyboard shortcuts.
 - Serial auto-reconnect, SSH disconnect detection/automatic reconnect, and
   translated status/context-menu text.
-- Windows SetupAPI descriptions and serial receive/loopback on hardware.
-- Real lrzsz `rz`/`sz` transfers, large-file soak, and speed/ETA display.
+- Windows serial receive/loopback on hardware.
+- Real lrzsz `rz`/`sz` transfers and large-file soak.
 - CI run, DPI checks, 8-hour soak, and the final 1:1 screenshot review.
 
 ## Default-version gate
