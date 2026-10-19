@@ -714,9 +714,6 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         # sessions
         self.sessionSidebar.sessionActivated.connect(self.onSessionActivated)
         self.sessionSidebar.removeRequested.connect(self.onSessionRemoveRequested)
-        self.sessionSidebar.collapseRequested.connect(
-            lambda: self.setSessionsSidebarVisible(False)
-        )
         self.bodySplitter.splitterMoved.connect(self.onSessionSplitterMoved)
         # main
         self.tabWidget.currentChanged.connect(self.onSwitchTab)

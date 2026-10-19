@@ -8,7 +8,6 @@ from PyQt5.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMenu,
-    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -28,15 +27,16 @@ class SessionItemWidget(QWidget):
 
     def __init__(self, port, detail, connected, parent=None):
         super().__init__(parent)
+        self.setObjectName("sessionItem")
         self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 3, 4, 3)
+        layout.setContentsMargins(7, 3, 4, 3)
         layout.setSpacing(7)
 
-        self.dot = QLabel()
-        self.dot.setFixedSize(12, 12)
-        self.dot.setAttribute(Qt.WA_TransparentForMouseEvents, True)
-        layout.addWidget(self.dot, 0, Qt.AlignVCenter)
+        self.iconLabel = QLabel()
+        self.iconLabel.setFixedSize(18, 18)
+        self.iconLabel.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        layout.addWidget(self.iconLabel, 0, Qt.AlignVCenter)
 
         text = QVBoxLayout()
         text.setContentsMargins(0, 0, 0, 0)
@@ -46,7 +46,8 @@ class SessionItemWidget(QWidget):
         self.nameLabel.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         text.addWidget(self.nameLabel)
         if detail:
-            self.detailLabel = QLabel(detail)
+            # Keep MobaXterm's "COMxx (hardware description)" convention.
+            self.detailLabel = QLabel("({})".format(detail))
             self.detailLabel.setObjectName("sessionDescription")
             self.detailLabel.setAttribute(Qt.WA_TransparentForMouseEvents, True)
             text.addWidget(self.detailLabel)
@@ -61,8 +62,10 @@ class SessionItemWidget(QWidget):
         self.set_connected(connected)
 
     def set_connected(self, connected):
-        color = "#43a047" if connected else "#9e9e9e"
-        self.dot.setPixmap(qta.icon("fa.circle", color=color).pixmap(QSize(10, 10)))
+        color = "#43a047" if connected else "#90a4ae"
+        self.iconLabel.setPixmap(
+            qta.icon("fa.plug", color=color).pixmap(QSize(14, 14))
+        )
 
     def set_selected(self, selected):
         name_color = self._selected_color if selected else self._name_color
@@ -79,7 +82,6 @@ class SessionItemWidget(QWidget):
 class SessionSidebar(QWidget):
     sessionActivated = pyqtSignal(str)
     removeRequested = pyqtSignal(str)
-    collapseRequested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -88,26 +90,23 @@ class SessionSidebar(QWidget):
         self.setMaximumWidth(320)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 6, 0, 0)
-        layout.setSpacing(4)
+        layout.setContentsMargins(0, 5, 0, 0)
+        layout.setSpacing(5)
 
         header = QHBoxLayout()
-        header.setContentsMargins(8, 0, 4, 0)
-        header.setSpacing(4)
+        header.setContentsMargins(10, 1, 8, 1)
+        header.setSpacing(6)
+        self.headerIcon = QLabel()
+        self.headerIcon.setObjectName("sessionSidebarIcon")
+        self.headerIcon.setPixmap(
+            qta.icon("fa.star", color="#f2b01e").pixmap(QSize(15, 15))
+        )
+        self.headerIcon.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         title = QLabel(_("User sessions"))
         title.setObjectName("sessionSidebarTitle")
-        self.countLabel = QLabel("0")
-        self.countLabel.setObjectName("sessionSidebarCount")
-        self.collapseButton = QToolButton()
-        self.collapseButton.setAutoRaise(True)
-        self.collapseButton.setIcon(qta.icon("fa.chevron-left", color="#607d8b"))
-        self.collapseButton.setIconSize(QSize(14, 14))
-        self.collapseButton.setToolTip(_("Hide sessions"))
-        self.collapseButton.clicked.connect(lambda: self.collapseRequested.emit())
+        header.addWidget(self.headerIcon, 0, Qt.AlignVCenter)
         header.addWidget(title)
         header.addStretch(1)
-        header.addWidget(self.countLabel)
-        header.addWidget(self.collapseButton)
         layout.addLayout(header)
 
         self.listWidget = QListWidget()
@@ -131,15 +130,10 @@ class SessionSidebar(QWidget):
         self._messageTimer.setSingleShot(True)
         self._messageTimer.timeout.connect(self._clearMessage)
 
-    def _makeIcon(self, connected):
-        color = "#43a047" if connected else "#9e9e9e"
-        return qta.icon("fa.circle", color=color)
-
     def set_sessions(self, sessions, connected_ports=None, active_port=None):
         connected = {normalize_port(port) for port in (connected_ports or [])}
         active = normalize_port(active_port)
         self.listWidget.clear()
-        self.countLabel.setText(str(len(sessions)))
 
         if not sessions:
             item = QListWidgetItem(_("No saved serial sessions"))
