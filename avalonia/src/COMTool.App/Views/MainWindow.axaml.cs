@@ -22,6 +22,7 @@ public partial class MainWindow : Window
     private bool _sidebarVisible = true;
     private double _sidebarWidth = 220;
     private bool _loaded;
+    private bool _applyingEncoding;
     private AppConfigService? _config;
     private DispatcherTimer? _portTimer;
     private ConnectionSettingsWindow? _settingsWindow;
@@ -63,6 +64,7 @@ public partial class MainWindow : Window
                 _config = AppConfigService.Load();
                 AppLog.Info($"Config loaded: {_config.ConfigPath}");
                 ThemeManager.Apply(_config.Config.Skin);
+                ApplyEncodingConfig();
                 ApplySidebarConfig();
                 RefreshSidebar();
                 _portTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
@@ -883,6 +885,58 @@ public partial class MainWindow : Window
 
         ThemeManager.Apply(skin);
         _config.Config.Skin = skin;
+        _config.Save();
+    }
+
+    private void ApplyEncodingConfig()
+    {
+        if (_config is null)
+        {
+            return;
+        }
+
+        var selected = 1;
+        for (var index = 0; index < EncodingCombo.Items.Count; index++)
+        {
+            if (EncodingCombo.Items[index] is ComboBoxItem item
+                && string.Equals(
+                    item.Content?.ToString(),
+                    _config.Config.Encoding,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                selected = index;
+                break;
+            }
+        }
+
+        _applyingEncoding = true;
+        try
+        {
+            EncodingCombo.SelectedIndex = selected;
+        }
+        finally
+        {
+            _applyingEncoding = false;
+        }
+    }
+
+    private void OnEncodingChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (_applyingEncoding
+            || _config is null
+            || sender is not ComboBox combo
+            || combo.SelectedItem is not ComboBoxItem item)
+        {
+            return;
+        }
+
+        var encoding = item.Content?.ToString();
+        if (string.IsNullOrWhiteSpace(encoding))
+        {
+            return;
+        }
+
+        _config.Config.Encoding = encoding;
         _config.Save();
     }
 
