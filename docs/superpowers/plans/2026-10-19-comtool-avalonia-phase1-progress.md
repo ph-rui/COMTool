@@ -72,6 +72,11 @@ the hardware, soak, CI and two-week Beta gates are complete.
   maximize followed by Enter, settings close, plugin-menu close, tab click and
   encoding selection with `echo MAX-ENTER`, `SETTINGS-OK`, `PLUS-OK`,
   `TAB-OK`, `ENC-OK` and `UTF8-RESTORED`.
+- Fixed the actual tool-strip display defect: the settings gear, plugin plus
+  and functional button inherited top-left content alignment, so their icons
+  stuck to the upper-left corner of the blue control. Setting
+  `HorizontalContentAlignment`/`VerticalContentAlignment` to `Center` matches
+  the Python reference; `echo ALIGN-OK` still works after the change.
 - Added the non-modal-equivalent connection settings window with serial and SSH
   fields, validated port/baud/parity/stop-bit/flow values, key-file browsing,
   password remember, session upsert and immediate open/reconnect.
