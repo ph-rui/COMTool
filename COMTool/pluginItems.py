@@ -42,6 +42,7 @@ class PluginItem:
         self.sendProcess = None
         self.dataToSend = []
         self.fileToSend = []
+        self.serialSessionRecorded = False
         # widgets
         self.settingWidget = None
         self.mainWidget = None
@@ -326,6 +327,32 @@ class PluginItem:
                 if 'multiple access' in str(e):
                     self.hintSignal.emit("error", _("Error"), "device disconnected or multiple access on port?")
                 continue
+
+    def currentConnection(self):
+        if not self.isAddConn:
+            return None
+        return self.conns[self.currConnIdx]
+
+    def isSerialConnection(self):
+        conn = self.currentConnection()
+        return conn is not None and conn.id == "serial"
+
+    def getSerialConfig(self):
+        conn = self.currentConnection()
+        if conn is None or conn.id != "serial":
+            return {}
+        return conn.getConfig()
+
+    def getSerialPort(self):
+        conn = self.currentConnection()
+        if conn is None or conn.id != "serial":
+            return ""
+        return conn.getDisplayName()
+
+    def openConnection(self):
+        conn = self.currentConnection()
+        if conn is not None and hasattr(conn, "open"):
+            conn.open()
 
     def onDel(self):
         self.receiveProgressStop = True

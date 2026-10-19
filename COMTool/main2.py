@@ -34,6 +34,9 @@ try:
     from pluginItems import PluginItem
     from widgets import TitleBar, CustomTitleBarWindowMixin, EventFilter, ButtonCombbox, HelpWidget
     from settings_behavior import should_auto_hide_settings
+    from serial_sessions import SerialSessionStore, session_name, normalize_port
+    from session_sidebar import SessionSidebar
+    from session_watcher import SerialPortWatcher
 except ImportError:
     from COMTool import helpAbout,autoUpdate, utils_ui
     from COMTool.Combobox import ComboBox
@@ -44,12 +47,15 @@ except ImportError:
     from COMTool.pluginItems import PluginItem
     from .widgets import TitleBar, CustomTitleBarWindowMixin, EventFilter, ButtonCombbox, HelpWidget
     from COMTool.settings_behavior import should_auto_hide_settings
+    from COMTool.serial_sessions import SerialSessionStore, session_name, normalize_port
+    from COMTool.session_sidebar import SessionSidebar
+    from COMTool.session_watcher import SerialPortWatcher
 
 from PyQt5.QtCore import pyqtSignal, Qt, QRect, QMargins, QCoreApplication, QTimer
 from PyQt5.QtWidgets import (QApplication, QWidget,QPushButton,QMessageBox,QDesktopWidget,QMainWindow,
                              QVBoxLayout,QHBoxLayout,QGridLayout,QTextEdit,QLabel,QRadioButton,QCheckBox,
                              QLineEdit,QGroupBox,QSplitter,QFileDialog, QScrollArea, QTabWidget, QMenu, QSplashScreen,
-                             QAbstractSpinBox)
+                             QAbstractSpinBox,QStackedWidget)
 from PyQt5.QtGui import QIcon,QFont,QTextCursor,QPixmap,QColor, QCloseEvent, QCursor, QPainter, QPen
 import qtawesome as qta # https://github.com/spyder-ide/qtawesome
 import threading
@@ -157,11 +163,12 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         self.uiLoadConfigs()
         log.i("init main window complete")
         self.loadPluginsInfoList()
-        self.loadPluginItems()
-        log.i("load plugin items complete")
+        self.initSerialSessions()
+        log.i("load serial sessions complete")
         self.initEvent()
         self.updateSettingsButton()
         self.updateSettingsAutoHide(self.getCurrentItem())
+        self.updateMainStack()
 
     def initVar(self):
         self.loadPluginStr = _("Load plugin from file")
@@ -169,6 +176,20 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         self.items = []
         self.pluginClasses = []
         self.helpWindow = None
+        # remembered serial sessions
+        self.sessionStore = None
+        self.portWatcher = None
+        self.sessionSidebar = None
+        self.bodySplitter = None
+        self.mainStack = None
+        self.emptyWidget = None
+        self.emptyPluginsSelector = None
+        self.rightContent = None
+        self.sessionsButton = None
+        self._available_ports = set()
+        self._available_ports_known = False
+        self._port_descriptions = {}
+        self._suppressed_session_ports = set()
         # hover-to-show settings panel (currently used by the terminal plugin)
         self.settingsHoverStrip = None
         self.settingsHandle = None
@@ -179,6 +200,21 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         self._settings_hover_timer.setInterval(250)
         self._settings_hover_timer.timeout.connect(self._checkSettingsAutoHide)
 
+
+    def initSerialSessions(self):
+        self.sessionStore = SerialSessionStore(self.config)
+        config_dict = getattr(self.config, "config", self.config)
+        if not config_dict.get("serialSessionsMigrated", False):
+            migrated = self.sessionStore.migrate_items(self.config["items"])
+            self.config["serialSessionsMigrated"] = True
+            self.sessionStore.save(self.config)
+            if migrated:
+                log.i("migrated {} serial session(s)".format(migrated))
+            self.saveConfig()
+        self.refreshSessionSidebar()
+        self.portWatcher = SerialPortWatcher(self)
+        self.portWatcher.portsScanned.connect(self.onPortsScanned)
+        self.portWatcher.start()
 
     def loadPluginsInfoList(self):
         for id, pluginClass in builtinPlugins.items(): 
@@ -285,14 +321,18 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         if setCurrent:
             self.tabWidget.setCurrentWidget(item.widget)
         if not nameSaved:
-            self.config["items"].append({
+            config_entry = {
                     "name": name,
                     "pluginId": pluginClass.id,
                     "config": {
                         "conns": connsConfigs,
                         "plugin": pluginConfig
                         }
-                })
+                }
+            self.config["items"].append(config_entry)
+            item.configEntry = config_entry
+        self.updateMainStack()
+        self.refreshSessionSidebar()
         return item
 
     def tabAddItem(self, item):
@@ -328,6 +368,22 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
                         )
                         break
                 item.widget.setWindowTitle(title + " - {}".format(_("Connected" if status == ConnectionStatus.CONNECTED else _("Connection lose") if status == ConnectionStatus.LOSE else _("Disconnected"))))
+                try:
+                    if item.plugin.id == "terminal" and item.isSerialConnection():
+                        port = item.getSerialPort()
+                        if status == ConnectionStatus.CONNECTED:
+                            item.serialSessionRecorded = True
+                            self._suppressed_session_ports.discard(normalize_port(port))
+                            self.recordSerialSession(item, allow_unavailable=True)
+                        elif status in (ConnectionStatus.CLOSED, ConnectionStatus.LOSE):
+                            self.recordSerialSession(item)
+                        self.sessionSidebar.set_port_status(
+                            port, status == ConnectionStatus.CONNECTED
+                        )
+                except Exception as exc:
+                    log.w("update serial session from connection status failed: {}".format(exc))
+                self.refreshSessionSidebar()
+                break
 
     def setTabIcon(self, status:ConnectionStatus, i:int):
         if status == ConnectionStatus.CONNECTED:
@@ -338,8 +394,10 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
             self.tabWidget.setTabIcon(i, QIcon())
 
     def addPluginInfo(self, pluginClass):
-        self.pluginsSelector.insertItem(self.pluginsSelector.count() - 1,
-                                        f'{pluginClass.name} - {pluginClass.id}')
+        text = f'{pluginClass.name} - {pluginClass.id}'
+        for selector in (self.pluginsSelector, getattr(self, "emptyPluginsSelector", None)):
+            if selector is not None:
+                selector.insertItem(selector.count() - 1, text)
 
     def _importPlugin(self, path, test = False):
         if not os.path.exists(path):
@@ -392,8 +450,9 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
             self.addItem(pluginClass, setCurrent=True)
         return True, ""
 
-    def onPluginSelectorChanged(self, idx):
-        text = self.pluginsSelector.currentText()
+    def onPluginSelectorChanged(self, idx, selector=None):
+        selector = selector or self.pluginsSelector
+        text = selector.currentText()
         if text == self.loadPluginStr:
             oldPath = os.getcwd()
             fileName_choose, filetype = QFileDialog.getOpenFileName(self,
@@ -439,12 +498,24 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         self.pluginsSelector = ButtonCombbox(icon="fa.plus", btnClass="smallBtn2")
         self.pluginsSelector.addItem(self.loadPluginStr)
         self.pluginsSelector.activated.connect(self.onPluginSelectorChanged)
+        self.emptyPluginsSelector = ButtonCombbox(icon="fa.plus", btnClass="smallBtn2")
+        self.emptyPluginsSelector.addItem(self.loadPluginStr)
+
+        # sessions toggle in the title bar is always visible, even with no tabs
+        self.sessionsButton = QPushButton()
+        self.sessionsButton.setCheckable(True)
+        self.sessionsButton.setChecked(True)
+        self.sessionsButton.setFixedHeight(35)
+        self.sessionsButton.setMinimumWidth(35)
+        self.sessionsButton.setProperty("class", "menuItem")
+        utils_ui.setButtonIcon(self.sessionsButton, "fa.list")
+        self.sessionsButton.setToolTip(_("Show/hide sessions"))
 
         # title bar
         title = parameters.appName+" v"+version.__version__
         iconPath = self.DataPath+"/"+parameters.appIcon
         log.i("icon path: " + iconPath)
-        self.titleBar = TitleBar(self, icon=iconPath, title=title, brothers=[], widgets=[[self.skinButton, self.languageCombobox, self.aboutButton], []])
+        self.titleBar = TitleBar(self, icon=iconPath, title=title, brothers=[], widgets=[[self.sessionsButton, self.skinButton, self.languageCombobox, self.aboutButton], []])
         CustomTitleBarWindowMixin.__init__(self, titleBar=self.titleBar, init = True)
         self.setWindowTitle(title)
 
@@ -474,19 +545,73 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         tabConerLayoutRight.addWidget(self.functionalButton)
         self.tabWidget.setCornerWidget(tabConerWidget, Qt.TopLeftCorner)
         self.tabWidget.setCornerWidget(tabConerWidgetRight, Qt.TopRightCorner)
+
+        # empty state shown when no plugin tab is open
+        self.emptyWidget = QWidget()
+        emptyLayout = QVBoxLayout(self.emptyWidget)
+        emptyLayout.addStretch(1)
+        emptyTitle = QLabel(_("Select a session from the left"))
+        emptyTitle.setAlignment(Qt.AlignCenter)
+        emptyTitle.setObjectName("emptyStateTitle")
+        emptyLayout.addWidget(emptyTitle)
+        emptyHint = QLabel(_("or click + to add a plugin"))
+        emptyHint.setAlignment(Qt.AlignCenter)
+        emptyHint.setObjectName("emptyStateHint")
+        emptyLayout.addWidget(emptyHint)
+        emptyRow = QHBoxLayout()
+        emptyRow.addStretch(1)
+        emptyRow.addWidget(self.emptyPluginsSelector)
+        emptyRow.addStretch(1)
+        emptyLayout.addLayout(emptyRow)
+        emptyLayout.addStretch(2)
+        self.mainStack = QStackedWidget()
+        self.mainStack.addWidget(self.emptyWidget)
+        self.mainStack.addWidget(self.tabWidget)
+
+        self.rightContent = QWidget()
+        rightLayout = QVBoxLayout(self.rightContent)
+        rightLayout.setContentsMargins(16, 0, 0, 0)
+        rightLayout.setSpacing(0)
+        rightLayout.addWidget(self.mainStack)
+
+        self.sessionSidebar = SessionSidebar()
+        self.bodySplitter = QSplitter(Qt.Horizontal)
+        self.bodySplitter.setChildrenCollapsible(False)
+        self.bodySplitter.setHandleWidth(3)
+        self.bodySplitter.addWidget(self.sessionSidebar)
+        self.bodySplitter.addWidget(self.rightContent)
+        self.bodySplitter.setStretchFactor(0, 0)
+        self.bodySplitter.setStretchFactor(1, 1)
+
         self.contentLayout = QVBoxLayout()
         self.contentWidget.setLayout(self.contentLayout)
         self.contentLayout.setContentsMargins(16, 0, 10, 10)
-        self.contentLayout.addWidget(self.tabWidget)
+        self.contentLayout.addWidget(self.bodySplitter)
+
         # thin hover area for auto showing the settings panel
         self.settingsHoverStrip = SettingsHoverStrip(self.tabWidget)
         self.settingsHoverStrip.hovered.connect(self.onSettingsHoverStripEntered)
         self.settingsHoverStrip.hide()
         # visible chevron button in the left margin, click to show/hide the panel
-        self.settingsHandle = SettingsHandle(self.contentWidget)
+        self.settingsHandle = SettingsHandle(self.rightContent)
         self.settingsHandle.clicked.connect(self.onSettingsHandleClicked)
         self.settingsHandle.hovered.connect(self.onSettingsHandleHovered)
         self.settingsHandle.hide()
+
+        sidebar_cfg = {}
+        try:
+            sidebar_cfg = self.config["sessionSidebar"] or {}
+        except Exception:
+            pass
+        sidebar_visible = sidebar_cfg.get("visible", True)
+        try:
+            sidebar_width = int(sidebar_cfg.get("width", 200))
+        except Exception:
+            sidebar_width = 200
+        sidebar_width = max(160, min(320, sidebar_width))
+        self.sessionSidebar.setVisible(sidebar_visible)
+        self.sessionsButton.setChecked(sidebar_visible)
+        QTimer.singleShot(0, lambda: self.applySessionSidebarLayout(sidebar_visible, sidebar_width))
 
         if sys.platform == 'darwin':
             self.macOsAddDockMenu()
@@ -494,6 +619,43 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         self.resize(850, 500)
         self.MoveToCenter()
         self.show()
+
+    def applySessionSidebarLayout(self, visible, width):
+        if self.bodySplitter is None:
+            return
+        self.sessionSidebar.setVisible(bool(visible))
+        self.sessionsButton.setChecked(bool(visible))
+        total = max(1, self.bodySplitter.width())
+        if visible:
+            self.bodySplitter.setSizes([max(160, width), max(1, total - max(160, width))])
+        else:
+            self.bodySplitter.setSizes([0, total])
+        self.positionSettingsHoverStrip()
+
+    def toggleSessionsSidebar(self):
+        visible = not self.sessionSidebar.isVisible()
+        cfg = None
+        try:
+            cfg = self.config["sessionSidebar"]
+        except Exception:
+            cfg = {}
+            self.config["sessionSidebar"] = cfg
+        cfg["visible"] = visible
+        width = cfg.get("width", 200)
+        self.applySessionSidebarLayout(visible, width)
+
+    def onSessionSplitterMoved(self, pos, index):
+        if not self.sessionSidebar.isVisible():
+            return
+        cfg = None
+        try:
+            cfg = self.config["sessionSidebar"]
+        except Exception:
+            cfg = {}
+            self.config["sessionSidebar"] = cfg
+        sizes = self.bodySplitter.sizes()
+        if sizes:
+            cfg["width"] = max(160, min(320, sizes[0]))
 
     def add_new_window(self):
         import copy
@@ -515,11 +677,22 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
     def initEvent(self):
         # menu
         self.settingsButton.clicked.connect(self.toggleSettings)
+        self.sessionsButton.clicked.connect(self.toggleSessionsSidebar)
+        self.emptyPluginsSelector.activated.connect(
+            lambda idx: self.onPluginSelectorChanged(idx, self.emptyPluginsSelector)
+        )
         self.languageCombobox.currentIndexChanged.connect(self.onLanguageChanged)
         self.encodingCombobox.currentIndexChanged.connect(lambda: self.bindVar(self.encodingCombobox, self.config, "encoding"))
         self.functionalButton.clicked.connect(self.toggleFunctional)
         self.skinButton.currentIndexChanged.connect(self.skinChange)
         self.aboutButton.clicked.connect(self.showAbout)
+        # sessions
+        self.sessionSidebar.sessionActivated.connect(self.onSessionActivated)
+        self.sessionSidebar.removeRequested.connect(self.onSessionRemoveRequested)
+        self.sessionSidebar.collapseRequested.connect(
+            lambda: self.setSessionsSidebarVisible(False)
+        )
+        self.bodySplitter.splitterMoved.connect(self.onSessionSplitterMoved)
         # main
         self.tabWidget.currentChanged.connect(self.onSwitchTab)
         self.tabWidget.tabCloseRequested.connect(self.closeTab)
@@ -576,6 +749,156 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
             item.plugin.onActive()
         self.updateSettingsButton()
         self.updateSettingsAutoHide(item)
+        self.refreshSessionSidebar()
+        self.updateMainStack()
+
+    def updateMainStack(self):
+        if self.mainStack is None:
+            return
+        if self.tabWidget.count() > 0:
+            self.mainStack.setCurrentWidget(self.tabWidget)
+        else:
+            self.mainStack.setCurrentWidget(self.emptyWidget)
+
+    def refreshSessionSidebar(self):
+        if self.sessionStore is None or self.sessionSidebar is None:
+            return
+        connected = set()
+        for item in self.items:
+            try:
+                if item.plugin.id == "terminal" and item.isSerialConnection():
+                    if item.plugin.getConnStatus() == ConnectionStatus.CONNECTED:
+                        connected.add(item.getSerialPort())
+            except Exception:
+                pass
+        active = None
+        item = self.getCurrentItem()
+        if item is not None:
+            try:
+                if item.plugin.id == "terminal" and item.isSerialConnection():
+                    active = item.getSerialPort()
+            except Exception:
+                active = None
+        self.sessionSidebar.set_sessions(
+            self.sessionStore.sorted_sessions(), connected, active
+        )
+
+    def onPortsScanned(self, ports, success):
+        if not success:
+            return
+        self._available_ports = {normalize_port(port.device) for port in ports}
+        self._available_ports_known = True
+        self._port_descriptions = {
+            normalize_port(port.device): port.description for port in ports
+        }
+        names_changed = self.sessionStore.update_descriptions(ports)
+        removed = self.sessionStore.prune([port.device for port in ports])
+        if removed:
+            self.sessionStore.save(self.config)
+            self.saveConfig()
+        elif names_changed:
+            self.sessionStore.save(self.config)
+            self.saveConfig()
+        self.refreshSessionSidebar()
+        if removed:
+            self.sessionSidebar.show_message(
+                _("Removed missing serial session(s): ") + ", ".join(removed)
+            )
+
+    def _findSerialItem(self, port):
+        key = normalize_port(port)
+        for item in self.items:
+            try:
+                if (item.plugin.id == "terminal"
+                        and item.isSerialConnection()
+                        and normalize_port(item.getSerialPort()) == key):
+                    return item
+            except Exception:
+                pass
+        return None
+
+    def onSessionActivated(self, port):
+        item = self._findSerialItem(port)
+        if item is not None:
+            if item.widget.parent() is not None and self.tabWidget.indexOf(item.widget) >= 0:
+                self.tabWidget.setCurrentWidget(item.widget)
+                self.mainStack.setCurrentWidget(self.tabWidget)
+            else:
+                item.widget.show()
+                item.widget.raise_()
+                item.widget.activateWindow()
+                self.updateMainStack()
+            if not item.plugin.isConnected():
+                item.openConnection()
+            return
+        pluginClass = self.getPluginClassById("terminal")
+        session = self.sessionStore.get(port) if self.sessionStore is not None else None
+        if pluginClass is None or session is None:
+            return
+        connsConfigs = {
+            "currConn": "serial",
+            "serial": dict(session["serial"]),
+        }
+        item = self.addItem(
+            pluginClass,
+            setCurrent=True,
+            connsConfigs=connsConfigs,
+            pluginConfig={},
+        )
+        self.updateMainStack()
+        item.openConnection()
+
+    def onSessionRemoveRequested(self, port):
+        reply = QMessageBox.question(
+            self,
+            _("Remove session"),
+            _("Remove this serial session from memory?") + "\n" + str(port),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+        self._suppressed_session_ports.add(normalize_port(port))
+        self.sessionStore.remove(port)
+        self.sessionStore.save(self.config)
+        self.saveConfig()
+        self.refreshSessionSidebar()
+
+    def recordSerialSession(self, item, allow_unavailable=False):
+        try:
+            if item.plugin.id != "terminal" or not item.isSerialConnection():
+                return
+            if not getattr(item, "serialSessionRecorded", False):
+                return
+            port = item.getSerialPort()
+            key = normalize_port(port)
+            if not port or key in self._suppressed_session_ports:
+                return
+            if (not allow_unavailable
+                    and self._available_ports_known
+                    and key not in self._available_ports):
+                return
+            description = self._port_descriptions.get(key, "")
+            existing = self.sessionStore.get(port)
+            name = session_name(port, description) if description else None
+            if not name and existing is not None:
+                name = existing.get("name")
+            self.sessionStore.upsert(port, item.getSerialConfig(), name)
+            self.sessionStore.save(self.config)
+            self.saveConfig()
+        except Exception as exc:
+            log.w("record serial session failed: {}".format(exc))
+
+    def setSessionsSidebarVisible(self, visible):
+        cfg = None
+        try:
+            cfg = self.config["sessionSidebar"]
+        except Exception:
+            cfg = {}
+            self.config["sessionSidebar"] = cfg
+        cfg["visible"] = bool(visible)
+        width = cfg.get("width", 200)
+        self.applySessionSidebarLayout(bool(visible), width)
 
     def positionSettingsHoverStrip(self):
         if self.settingsHoverStrip is None:
@@ -690,24 +1013,42 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
             self.hideSettings()
 
     def closeTab(self, idx):
-        # only one, ignore
-        if self.tabWidget.count() == 1:
-            return
         item = None
         for _item in self.items:
             if _item.widget == self.tabWidget.widget(idx):
                 item = _item
                 break
+        if item is None:
+            return
+        self.recordSerialSession(item)
         self.tabWidget.removeTab(idx)
-        for _item in self.config["items"]:
-            if _item["name"] == item.name:
-                self.config["items"].remove(_item)
-                break
+        config_entry = getattr(item, "configEntry", None)
+        if config_entry is not None:
+            for index, entry in enumerate(self.config["items"]):
+                if entry is config_entry:
+                    self.config["items"].pop(index)
+                    break
+        else:
+            for _item in list(self.config["items"]):
+                if _item.get("name") == item.name:
+                    self.config["items"].remove(_item)
+                    break
         item.onDel()
         self.items.remove(item)
+        self.updateSettingsButton()
+        self.updateSettingsAutoHide(self.getCurrentItem())
+        self.refreshSessionSidebar()
+        self.updateMainStack()
 
     def onTabDoubleClicked(self, idx):
-        item = self.getCurrentItem()
+        widget = self.tabWidget.widget(idx)
+        item = None
+        for _item in self.items:
+            if _item.widget == widget:
+                item = _item
+                break
+        if item is None:
+            return
         self.tabWidget.removeTab(idx)
         parent = item.widget.parent()
         item.widget.setWindowFlag(Qt.Window) # this method is not stable in QT, do not use it
@@ -715,6 +1056,7 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         item.widget.setWindowTitle(item.getDisplayName())
         item.widget.closeEvent = lambda event: self.onPluginWindowClose(item, parent)
         item.widget.show()
+        self.updateMainStack()
 
     def onPluginWindowClose(self, item, parent):
         self.recoverTab(item, parent)
@@ -731,11 +1073,13 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
             # item.widget.setParent(parent)
             status = item.plugin.getConnStatus()
             self.setTabIcon(status, i)
+            self.updateMainStack()
         # prevent close and add this widget to tab
         insertIdx = self.tabWidget.count()
         idx = self.items.index(item)
         for i in range(self.tabWidget.count()):
             widget = self.tabWidget.widget(i)
+            idx2 = -1
             for _item in self.items:
                 if _item.widget == widget:
                     idx2 = self.items.index(_item)
@@ -800,6 +1144,11 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         #                              QMessageBox.No, QMessageBox.No)
         if 1: # reply == QMessageBox.Yes:
             self.receiveProgressStop = True
+            if self.portWatcher is not None:
+                self.portWatcher.stop()
+            # capture the latest serial settings before plugins close
+            for item in self.items:
+                self.recordSerialSession(item)
             # inform plugins
             for item in self.items:
                 item.onDel()
@@ -845,12 +1194,14 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
     def keyPressEvent(self, event):
         CustomTitleBarWindowMixin.keyPressEvent(self, event)
         item = self.getCurrentItem()
-        item.onKeyPressEvent(event)
+        if item is not None:
+            item.onKeyPressEvent(event)
 
     def keyReleaseEvent(self,event):
         CustomTitleBarWindowMixin.keyReleaseEvent(self, event)
         item = self.getCurrentItem()
-        item.onKeyReleaseEvent(event)
+        if item is not None:
+            item.onKeyReleaseEvent(event)
 
     def getCurrentItem(self, idx = False):
         widget = self.tabWidget.currentWidget()
@@ -861,7 +1212,10 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
                 return item
 
     def toggleSettings(self):
-        widget = self.getCurrentItem().settingWidget
+        item = self.getCurrentItem()
+        if item is None:
+            return
+        widget = item.settingWidget
         if widget.isVisible():
             self.hideSettings()
         else:

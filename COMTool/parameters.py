@@ -74,6 +74,12 @@ class Parameters:
         },
         "activeItem": "dbg-1",
         "currItem": None,
+        "serialSessions": [],
+        "serialSessionsMigrated": False,
+        "sessionSidebar": {
+            "visible": True,
+            "width": 200,
+        },
         "items": [
             # {
             #     "name": "dbg-1",
