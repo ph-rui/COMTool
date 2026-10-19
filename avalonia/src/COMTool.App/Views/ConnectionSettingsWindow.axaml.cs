@@ -181,7 +181,10 @@ public partial class ConnectionSettingsWindow : Window
         }
         catch (Exception ex)
         {
-            await _showError(ex.Message);
+            var action = ConnectionTypeCombo.SelectedIndex == 1
+                ? "Connect Failed"
+                : "Open Failed";
+            await _showError($"{action}\n{ex.Message}");
         }
     }
 

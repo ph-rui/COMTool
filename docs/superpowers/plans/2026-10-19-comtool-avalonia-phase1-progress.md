@@ -136,6 +136,9 @@ Validated live in the UI under Xvfb:
   display, and a second F11 restored the 850x500 window and title bar.
 - Opened the About dialog from the title-bar menu; it shows the version,
   config path, LGPL license and GitHub/Releases/Issues/Donate links.
+- Stopped the local sshd and clicked `local-ssh`: the UI showed an `Error`
+  dialog with `Connect Failed` and `Connection refused`, then reconnected
+  normally after the server was restarted.
 
 Validated headlessly on the Windows test host over SSH (no RDP used):
 
