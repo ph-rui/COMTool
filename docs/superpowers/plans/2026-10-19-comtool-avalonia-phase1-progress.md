@@ -70,8 +70,12 @@ still the default release.
   the Avalonia picker, suppresses terminal input during a session, and restores
   the shell prompt/trailing bytes afterward.
 - Added simulated end-to-end ZMODEM tests in both directions, subpacket/offset
-  round-trips, keyword highlighting tests, and 76 passing tests total (Core
-  12, Connections 29, Terminal 8, ZMODEM 27).
+  round-trips, keyword highlighting tests, and an opt-in real-lrzsz integration
+  suite. Real `sz` receive and `rz` send of 64KB binary files now pass through
+  the production `PtyStreamConnection`/`ZmodemStream` path.
+- Test suite is now 78 passing tests (Core 12, Connections 31, Terminal 8,
+  ZMODEM 27) without `lrzsz`; set `LRZSZ_DIR` to enable the two real-transfer
+  tests.
 
 ## Evidence
 
@@ -116,7 +120,7 @@ Validated headlessly on the Windows test host over SSH (no RDP used):
 - Serial auto-reconnect, SSH disconnect detection/automatic reconnect, and
   translated status/context-menu text.
 - Windows serial receive/loopback on hardware.
-- Real lrzsz `rz`/`sz` transfers and large-file soak.
+- Large-file (100MB+) ZMODEM soak and serial-port throughput validation.
 - CI run, DPI checks, 8-hour soak, and the final 1:1 screenshot review.
 
 ## Default-version gate
