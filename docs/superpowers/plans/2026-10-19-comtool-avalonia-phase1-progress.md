@@ -28,6 +28,9 @@ still the default release.
   the sidebar. Clicking it reconnects. Closing/reopening a password session does
   not prompt again in the same process.
 - Connected sidebar dots are derived from open tabs and their transport state.
+- Right-clicking a sidebar row offers `Open` and `Remove session`. Removal asks
+  for confirmation, updates the Beta config and leaves any open tab running,
+  matching Python.
 - A failed serial scan preserves remembered sessions; only a successful scan is
   allowed to prune absent ports.
 - Serial reads retry `SerialPort` timeouts instead of terminating the terminal
@@ -58,7 +61,7 @@ Validated live in the UI under Xvfb:
 
 - Python-exact layout/spacing for the tab bar and all top-right controls.
 - Settings/theme/language/help/about/donation UI and persistence.
-- Sidebar context menu (Open/Remove session) and confirmation dialogs.
+- Sidebar hint/status messages and translated context-menu text.
 - Serial port descriptions (Windows SetupAPI/WMI), hotplug UI refresh and a
   Windows serial receive/loopback test.
 - SSH disconnect detection and automatic reconnect (currently a stale transport
