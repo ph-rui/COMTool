@@ -61,6 +61,8 @@ public sealed class PtyStreamConnection : IPtyConnection, IDisposable
 
     public Stream WriterStream => _writerStream;
 
+    public bool IsInputCompleted => Zmodem?.IsInputCompleted ?? false;
+
     public bool SupportsCancellableRead => false;
 
     public int Pid => 0;

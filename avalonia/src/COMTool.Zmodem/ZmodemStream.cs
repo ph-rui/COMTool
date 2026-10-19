@@ -68,7 +68,23 @@ public sealed class ZmodemStream : Stream
         {
             lock (_gate)
             {
-                return _sessionActive;
+                return _sessionActive || _pendingSendHeader is not null;
+            }
+        }
+    }
+
+    /// <summary>
+    /// True once the underlying transport read loop has ended. A closed SSH
+    /// channel or unplugged serial device can reach EOF without the caller
+    /// disposing the wrapper, so the UI uses this as a liveness signal.
+    /// </summary>
+    public bool IsInputCompleted
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _completed;
             }
         }
     }
@@ -122,7 +138,6 @@ public sealed class ZmodemStream : Stream
 
     public void CancelSend()
     {
-        var hadPending = false;
         lock (_gate)
         {
             if (_pendingSendHeader is null)
@@ -130,16 +145,12 @@ public sealed class ZmodemStream : Stream
                 return;
             }
 
-            hadPending = true;
             _pendingSendHeader = null;
             _pendingSendRemainder = Array.Empty<byte>();
         }
 
         _write(CancelSequence());
-        if (hadPending)
-        {
-            TransferCancelled?.Invoke();
-        }
+        TransferCancelled?.Invoke();
     }
 
     public void CancelTransfer()

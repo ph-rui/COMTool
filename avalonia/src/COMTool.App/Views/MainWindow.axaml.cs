@@ -284,7 +284,7 @@ public partial class MainWindow : Window
             Content = terminal,
             Connection = connection,
             StatusMessage = $"Connected {session.Port}",
-            IsTransportOpen = () => connection.IsOpen,
+            IsTransportOpen = () => connection.IsOpen && !connection.Pty.IsInputCompleted,
             CloseAction = () =>
             {
                 try

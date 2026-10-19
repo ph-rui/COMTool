@@ -184,6 +184,21 @@ public sealed class ZmodemTransferTests
     }
 
     [Fact]
+    public async Task TransportEofCompletesInputStream()
+    {
+        using var input = new QueueReadStream();
+        using var stream = new ZmodemStream(input, _ => { });
+        input.Complete();
+
+        for (var attempt = 0; attempt < 100 && !stream.IsInputCompleted; attempt++)
+        {
+            await Task.Delay(20);
+        }
+
+        Assert.True(stream.IsInputCompleted);
+    }
+
+    [Fact]
     public async Task StreamDetectsAndSendsZmodemSession()
     {
         var directory = Path.Combine(
@@ -239,6 +254,8 @@ public sealed class ZmodemTransferTests
         private int _offset;
 
         public void Feed(byte[] data) => _chunks.Add(data);
+
+        public void Complete() => _chunks.CompleteAdding();
 
         public override int Read(byte[] buffer, int offset, int count)
         {
