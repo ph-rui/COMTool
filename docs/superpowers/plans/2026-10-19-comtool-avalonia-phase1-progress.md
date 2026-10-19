@@ -59,7 +59,8 @@ still the default release.
 - Added a hidden theme selector and About dialog on the title-bar context menu.
 - Added `run.log` with 2 MB rotation in the independent Beta config directory.
 - Added MobaXterm-style plain-output keyword highlighting with ANSI
-  foreground/background precedence, URL underlining and UTF-8-safe chunking.
+  foreground/background precedence, URL underlining, UTF-8-safe chunking and
+  keyword phrases split across stream chunks.
 - Ported the full ZMODEM engine: ZDLE subpackets, CRC16/32, offsets, file
   metadata, sender, receiver, resumable offsets/cancel handling, and a stream
   interceptor that automatically detects `rz`/`sz`.

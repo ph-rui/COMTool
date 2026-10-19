@@ -67,8 +67,23 @@ public sealed class MobaKeywordHighlighter
     private static readonly byte[] DefaultForeground = Sequence("39");
     private static readonly byte[] NoUnderline = Sequence("24");
 
+    private static readonly string[] PhraseStarters =
+    {
+        "last login:", "last failed login:", "launching", "checking", "loading",
+        "creating", "building", "important", "booting", "starting", "notice",
+        "informational", "information", "info", "note", "connected", "success",
+        "successful", "successfully", "succeeded", "accepted", "allowed",
+        "enabled", "error", "failed", "failure", "invalid", "unsupported",
+        "not supported", "not found", "not ok", "not implemented",
+        "not properly", "connection refused", "connection closed",
+        "connection terminated", "connection stopped", "disconnected",
+        "warning", "cannot", "could not", "unable to", "unknown",
+        "out of memory", "out of space", "localhost", "http://", "https://",
+    };
+
     private readonly Decoder _decoder = new UTF8Encoding(false).GetDecoder();
     private readonly List<byte> _escapeCarry = new();
+    private string _textCarry = "";
     private bool _foregroundDefault = true;
     private bool _backgroundDefault = true;
 
@@ -104,7 +119,7 @@ public sealed class MobaKeywordHighlighter
                 continue;
             }
 
-            FlushText(text, output);
+            FlushText(text, output, allowHold: false);
             if (index + 1 >= input.Length)
             {
                 _escapeCarry.Add(input[index]);
@@ -170,31 +185,84 @@ public sealed class MobaKeywordHighlighter
             index++;
         }
 
-        FlushText(text, output);
+        FlushText(text, output, allowHold: true);
         return output.ToArray();
     }
 
-    private void FlushText(List<byte> bytes, List<byte> output)
+    private void FlushText(List<byte> bytes, List<byte> output, bool allowHold)
     {
-        if (bytes.Count == 0)
+        if (bytes.Count == 0 && _textCarry.Length == 0)
         {
             return;
         }
 
-        var chars = new char[_decoder.GetCharCount(bytes.ToArray(), 0, bytes.Count, flush: false)];
-        _decoder.GetChars(bytes.ToArray(), 0, bytes.Count, chars, 0, flush: false);
+        var raw = bytes.ToArray();
         bytes.Clear();
+        var charCount = _decoder.GetCharCount(raw, 0, raw.Length, flush: false);
+        var chars = new char[charCount];
+        _decoder.GetChars(raw, 0, raw.Length, chars, 0, flush: false);
+
+        var text = _textCarry + new string(chars);
+        _textCarry = "";
+        var hold = allowHold ? FindHoldLength(text) : 0;
+        if (hold > 0)
+        {
+            _textCarry = text[^hold..];
+            text = text[..^hold];
+        }
+
+        if (text.Length == 0)
+        {
+            return;
+        }
 
         if (!_foregroundDefault || !_backgroundDefault)
         {
-            output.AddRange(Encoding.UTF8.GetBytes(chars));
+            output.AddRange(Encoding.UTF8.GetBytes(text));
             return;
         }
 
-        var colors = new string?[chars.Length];
+        EmitHighlighted(text, output);
+    }
+
+    private static int FindHoldLength(string text)
+    {
+        if (text.Length == 0 || text[^1] is '\r' or '\n')
+        {
+            return 0;
+        }
+
+        foreach (var phrase in PhraseStarters)
+        {
+            if (text.EndsWith(phrase, StringComparison.OrdinalIgnoreCase))
+            {
+                return 0;
+            }
+        }
+
+        var max = Math.Min(24, text.Length);
+        for (var length = max; length > 0; length--)
+        {
+            var tail = text[^length..];
+            foreach (var phrase in PhraseStarters)
+            {
+                if (tail.Length < phrase.Length
+                    && phrase.StartsWith(tail, StringComparison.OrdinalIgnoreCase))
+                {
+                    return length;
+                }
+            }
+        }
+
+        return 0;
+    }
+
+    private static void EmitHighlighted(string text, List<byte> output)
+    {
+        var colors = new string?[text.Length];
         foreach (var (pattern, color, group) in Rules)
         {
-            foreach (Match match in pattern.Matches(new string(chars)))
+            foreach (Match match in pattern.Matches(text))
             {
                 var captured = match.Groups[group];
                 for (var i = captured.Index;
@@ -212,7 +280,7 @@ public sealed class MobaKeywordHighlighter
             var color = colors[index];
             if (color is null)
             {
-                output.AddRange(Encoding.UTF8.GetBytes(chars[index].ToString()));
+                output.AddRange(Encoding.UTF8.GetBytes(text[index].ToString()));
                 index++;
                 continue;
             }
@@ -232,7 +300,7 @@ public sealed class MobaKeywordHighlighter
                 "brightmagenta" => Magenta,
                 _ => Cyan,
             });
-            output.AddRange(Encoding.UTF8.GetBytes(chars, index, end - index));
+            output.AddRange(Encoding.UTF8.GetBytes(text, index, end - index));
             output.AddRange(color == "underline" ? NoUnderline : DefaultForeground);
             index = end;
         }

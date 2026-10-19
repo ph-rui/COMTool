@@ -80,6 +80,36 @@ public sealed class MobaKeywordHighlighterTests
     }
 
     [Fact]
+    public void KeywordsSplitAcrossChunksAreStillHighlighted()
+    {
+        var highlighter = new MobaKeywordHighlighter();
+        var first = highlighter.Transform(Encoding.UTF8.GetBytes("not fo"));
+        var second = highlighter.Transform(Encoding.UTF8.GetBytes("und\n"));
+        var output = Encoding.UTF8.GetString(first.Concat(second).ToArray());
+        Assert.Contains(Yellow + "not found" + ResetForeground, output);
+    }
+
+    [Fact]
+    public void LastLoginAcrossChunksIsCyan()
+    {
+        const string cyan = "\u001b[38;2;102;224;255m";
+        var highlighter = new MobaKeywordHighlighter();
+        var first = highlighter.Transform(Encoding.UTF8.GetBytes("Last log"));
+        var second = highlighter.Transform(Encoding.UTF8.GetBytes("in:\n"));
+        var output = Encoding.UTF8.GetString(first.Concat(second).ToArray());
+        Assert.Contains(cyan + "Last login:" + ResetForeground, output);
+    }
+
+    [Fact]
+    public void CompleteKeywordDoesNotWaitForAnotherChunk()
+    {
+        var highlighter = new MobaKeywordHighlighter();
+        var output = Encoding.UTF8.GetString(
+            highlighter.Transform(Encoding.UTF8.GetBytes("connected")));
+        Assert.Contains(Green + "connected" + ResetForeground, output);
+    }
+
+    [Fact]
     public void Utf8TextSurvivesHighlighting()
     {
         var highlighter = new MobaKeywordHighlighter();
