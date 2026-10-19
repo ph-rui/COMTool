@@ -519,3 +519,42 @@ QListWidget::item:hover {
 .graphBtn {
     max-height: 120px;
 }
+
+/* MobaXterm-style remembered serial session sidebar */
+#sessionSidebar {
+    background-color: transparent;
+}
+#sessionSidebarTitle {
+    color: #d7dde3;
+    font-size: 14px;
+}
+#sessionSidebarIcon {
+    background-color: transparent;
+}
+#sessionList {
+    background-color: #1b1b1b;
+    border: 1px solid #3c4248;
+    border-radius: 3px;
+    padding: 2px;
+    outline: none;
+}
+#sessionList::item {
+    border: none;
+    padding: 0;
+}
+#sessionList::item:selected {
+    color: #1787e4;
+    background-color: #24384a;
+    border: none;
+}
+#sessionList::item:hover {
+    color: #1787e4;
+    background-color: #202b35;
+}
+#sessionSidebarMessage {
+    color: #9aa7b1;
+    padding: 2px 8px;
+}
+#sessionItem, #sessionItem QLabel {
+    background-color: transparent;
+}
