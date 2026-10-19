@@ -102,3 +102,16 @@ def test_empty_state(app):
     assert sidebar.listWidget.count() == 1
     assert "No saved sessions" in sidebar.listWidget.item(0).text()
     sidebar.deleteLater()
+
+
+def test_unchanged_sessions_do_not_rebuild_rows(app):
+    sidebar = SessionSidebar()
+    args = ([_serial()], {"COM7"}, "COM7", [_ssh()], set(), None)
+    sidebar.set_sessions(*args)
+    first = sidebar.listWidget.itemWidget(sidebar.listWidget.item(1))
+
+    sidebar.set_sessions(*args)
+    second = sidebar.listWidget.itemWidget(sidebar.listWidget.item(1))
+
+    assert second is first
+    sidebar.deleteLater()

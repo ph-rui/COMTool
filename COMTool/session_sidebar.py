@@ -147,6 +147,7 @@ class SessionSidebar(QWidget):
         self._messageTimer = QTimer(self)
         self._messageTimer.setSingleShot(True)
         self._messageTimer.timeout.connect(self._clearMessage)
+        self._sessions_signature = None
 
     def set_sessions(self, sessions, connected_ports=None, active_port=None,
                      ssh_sessions=None, connected_ssh=None, active_ssh=None):
@@ -156,6 +157,35 @@ class SessionSidebar(QWidget):
         active_ssh = str(active_ssh or "")
         sessions = sessions or []
         ssh_sessions = ssh_sessions or []
+
+        # The serial watcher refreshes every couple of seconds.  Rebuilding a
+        # QListWidget and a custom widget per row on every poll makes the UI
+        # visibly hitch, so leave everything untouched while the visible data
+        # is unchanged.
+        signature = (
+            tuple(
+                (session.get("port"), session.get("name"))
+                for session in sessions
+            ),
+            tuple(
+                (
+                    session.get("key"),
+                    session.get("alias"),
+                    session.get("host"),
+                    session.get("user"),
+                    session.get("port"),
+                )
+                for session in ssh_sessions
+            ),
+            tuple(sorted(connected)),
+            active,
+            tuple(sorted(connected_ssh)),
+            active_ssh,
+        )
+        if signature == self._sessions_signature:
+            return
+        self._sessions_signature = signature
+
         self.listWidget.clear()
 
         if not sessions and not ssh_sessions:
