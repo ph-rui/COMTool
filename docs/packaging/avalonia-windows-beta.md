@@ -101,9 +101,12 @@ sandbox install:
 The latest app binary (including borderless chrome, auto-hiding sidebar and
 the encoding-drop-down focus fix) was published over SSH and copied to:
 
-- `C:\Users\zhangrui\comtool-phase1-app.exe`
-- `D:\Users\zhangrui\Desktop\comtool-phase1-app.exe`
-- `D:\Users\zhangrui\Desktop\comtool-phase1-app-fixed.exe`
+- `C:\Users\zhangrui\comtool-phase1-app.exe` (working copy)
+- `D:\Users\zhangrui\Desktop\COMTool.exe` (formal desktop copy)
+
+The old Desktop `comtool-phase1-app.exe` and the temporary
+`comtool-phase1-app-fixed.exe` name were removed; the desktop now uses the
+formal `COMTool.exe` name.
 
 - size: 55,955,844 bytes;
 - SHA256: `cb0ebedb4137dd5c25df44dc77c0d838324e080c4653e00010d929333d334b20`;
