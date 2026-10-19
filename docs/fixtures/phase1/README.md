@@ -1,7 +1,8 @@
 # Phase 1 session/tab evidence
 
-Captured on Xvfb `:99` at 100% scaling, 850x500 client area. These are functional
-evidence images, not final pixel baselines.
+Captured on Xvfb `:99` at 100% scaling. The early images use an 850x500
+client area; the 1176x552 images are the Python reference geometry. These are
+functional evidence images, not final pixel baselines.
 
 | File | What it proves |
 | --- | --- |
@@ -15,6 +16,12 @@ evidence images, not final pixel baselines.
 | `remove-confirm-850x500.png` | Removing an SSH session asks for confirmation and names the exact session. |
 | `session-removed-850x500.png` | Confirming removal updates the sidebar and persists only the remaining session. |
 | `dark-theme-850x500.png` | `skin: "dark"` in the Beta config selects the dark resource set on startup. |
+| `main-light-1176x552.png` | Main window at the Python reference geometry: 36px tab bar, 9px terminal inset, 30px status bar, hidden native scrollbar. |
+| `connection-settings-serial-1176x552.png` | Serial settings panel with Python-matched field widths and editable baud rate. |
+| `connection-settings-ssh-1176x552.png` | SSH settings panel with key path, password and remember-password controls. |
+| `functional-panel-1176x552.png` | `Load config` / `Share config` functional panel opened from `arrow-right.png`. |
+| `titlebar-context-menu-1176x552.png` | Theme selector and About entry on the title-bar context menu. |
+| `dark-theme-menu-1176x552.png` | Live dark-theme switch; `skin` persists in the independent Beta config. |
 
 The tab title rule matches Python: serial tabs use the port name, SSH tabs use
 the alias when present and the host otherwise. Closing a tab only closes the

@@ -1,4 +1,6 @@
 using System.IO.Ports;
+using System.Runtime.InteropServices;
+using System.Text;
 using COMTool.Core.Config;
 
 namespace COMTool.Connections;
@@ -94,15 +96,30 @@ public static class SerialPortCatalog
     {
         try
         {
-            return new SerialPortScanResult(
-                true,
-                Normalize(SerialPort.GetPortNames().Select(name => new SerialPortInfo(name))));
+            var names = SerialPort.GetPortNames();
+            if (!OperatingSystem.IsWindows())
+            {
+                return new SerialPortScanResult(
+                    true,
+                    Normalize(names.Select(name => new SerialPortInfo(name))));
+            }
+
+            var descriptions = WindowsSerialPortDescriptions.Read();
+            var ports = names.Select(name =>
+            {
+                descriptions.TryGetValue(name, out var info);
+                return info ?? new SerialPortInfo(name);
+            });
+            return new SerialPortScanResult(true, Normalize(ports));
         }
         catch (Exception ex)
         {
             return SerialPortScanResult.Failed(ex.Message);
         }
     }
+
+    public static string? FindComPort(string? friendlyName) =>
+        WindowsSerialPortDescriptions.FindComPort(friendlyName);
 
     public static IReadOnlyList<SerialPortInfo> Normalize(IEnumerable<SerialPortInfo> ports)
     {
@@ -133,4 +150,184 @@ public static class SerialPortCatalog
             .ThenBy(port => port.DisplayLabel, NaturalStringComparer.Instance)
             .ToList();
     }
+}
+
+/// <summary>
+/// Reads the friendly names for present COM ports from the Windows SetupAPI.
+/// This is the equivalent of Python's serial.tools.list_ports descriptions and
+/// is deliberately best-effort: a failure only hides descriptions, it never
+/// makes the scan fail.
+/// </summary>
+internal static class WindowsSerialPortDescriptions
+{
+    private const uint DigcfPresent = 0x2;
+    private const uint SpdrpDeviceDesc = 0x0;
+    private const uint SpdrpManufacturer = 0xB;
+    private const uint SpdrpFriendlyName = 0xC;
+    private const uint SpdrpHardwareId = 0x1;
+
+    private static readonly Guid PortsClassGuid =
+        new("4d36e978-e325-11ce-bfc1-08002be10318");
+
+    public static Dictionary<string, SerialPortInfo> Read()
+    {
+        var result = new Dictionary<string, SerialPortInfo>(StringComparer.OrdinalIgnoreCase);
+        if (!OperatingSystem.IsWindows())
+        {
+            return result;
+        }
+
+        var deviceInfoSet = IntPtr.Zero;
+        try
+        {
+            var portsClassGuid = PortsClassGuid;
+            deviceInfoSet = SetupDiGetClassDevs(
+                ref portsClassGuid,
+                IntPtr.Zero,
+                IntPtr.Zero,
+                DigcfPresent);
+            if (deviceInfoSet == IntPtr.Zero || deviceInfoSet == new IntPtr(-1))
+            {
+                return result;
+            }
+
+            var data = new SpDevinfoData
+            {
+                Size = (uint)Marshal.SizeOf<SpDevinfoData>(),
+            };
+            for (uint index = 0; SetupDiEnumDeviceInfo(deviceInfoSet, index, ref data); index++)
+            {
+                var friendlyName = GetProperty(deviceInfoSet, ref data, SpdrpFriendlyName);
+                var device = FindComPort(friendlyName);
+                if (device is null || result.ContainsKey(device))
+                {
+                    continue;
+                }
+
+                result[device] = new SerialPortInfo(
+                    device,
+                    Description: friendlyName,
+                    Name: GetProperty(deviceInfoSet, ref data, SpdrpDeviceDesc),
+                    Manufacturer: GetProperty(deviceInfoSet, ref data, SpdrpManufacturer),
+                    Hwid: GetProperty(deviceInfoSet, ref data, SpdrpHardwareId));
+            }
+        }
+        catch
+        {
+            // Descriptions are optional; keep the port list usable.
+        }
+        finally
+        {
+            if (deviceInfoSet != IntPtr.Zero && deviceInfoSet != new IntPtr(-1))
+            {
+                SetupDiDestroyDeviceInfoList(deviceInfoSet);
+            }
+        }
+
+        return result;
+    }
+
+    internal static string? FindComPort(string? friendlyName)
+    {
+        if (string.IsNullOrWhiteSpace(friendlyName))
+        {
+            return null;
+        }
+
+        var start = friendlyName.LastIndexOf("(COM", StringComparison.OrdinalIgnoreCase);
+        if (start < 0)
+        {
+            start = friendlyName.LastIndexOf("COM", StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (start < 0)
+        {
+            return null;
+        }
+
+        if (friendlyName[start] == '(')
+        {
+            start++;
+        }
+
+        var end = start;
+        while (end < friendlyName.Length && char.IsLetterOrDigit(friendlyName[end]))
+        {
+            end++;
+        }
+
+        return end > start ? friendlyName[start..end].ToUpperInvariant() : null;
+    }
+
+    private static string GetProperty(
+        IntPtr deviceInfoSet,
+        ref SpDevinfoData data,
+        uint property)
+    {
+        uint propertyType;
+        uint required;
+        _ = SetupDiGetDeviceRegistryProperty(
+            deviceInfoSet,
+            ref data,
+            property,
+            out propertyType,
+            null,
+            0,
+            out required);
+        if (required == 0 || required > 16 * 1024)
+        {
+            return "";
+        }
+
+        var buffer = new byte[required];
+        if (!SetupDiGetDeviceRegistryProperty(
+                deviceInfoSet,
+                ref data,
+                property,
+                out propertyType,
+                buffer,
+                required,
+                out required))
+        {
+            return "";
+        }
+
+        return Encoding.Unicode.GetString(buffer, 0, (int)Math.Min(required, (uint)buffer.Length))
+            .TrimEnd('\0');
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct SpDevinfoData
+    {
+        public uint Size;
+        public Guid ClassGuid;
+        public uint DevInst;
+        public IntPtr Reserved;
+    }
+
+    [DllImport("setupapi.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr SetupDiGetClassDevs(
+        ref Guid classGuid,
+        IntPtr enumerator,
+        IntPtr hwndParent,
+        uint flags);
+
+    [DllImport("setupapi.dll", SetLastError = true)]
+    private static extern bool SetupDiEnumDeviceInfo(
+        IntPtr deviceInfoSet,
+        uint memberIndex,
+        ref SpDevinfoData deviceInfoData);
+
+    [DllImport("setupapi.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool SetupDiGetDeviceRegistryProperty(
+        IntPtr deviceInfoSet,
+        ref SpDevinfoData deviceInfoData,
+        uint property,
+        out uint propertyRegDataType,
+        byte[]? propertyBuffer,
+        uint propertyBufferSize,
+        out uint requiredSize);
+
+    [DllImport("setupapi.dll", SetLastError = true)]
+    private static extern bool SetupDiDestroyDeviceInfoList(IntPtr deviceInfoSet);
 }

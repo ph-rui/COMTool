@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using COMTool.Zmodem;
 using Porta.Pty;
 
 namespace COMTool.Connections;
@@ -11,6 +12,7 @@ public sealed class PtyStreamConnection : IPtyConnection, IDisposable
 {
     private readonly Stream _readerStream;
     private readonly Stream _writerStream;
+    private readonly object _writeGate = new();
     private readonly Action<int, int>? _resize;
     private readonly Action? _close;
     private readonly ManualResetEventSlim _exited = new(false);
@@ -22,14 +24,36 @@ public sealed class PtyStreamConnection : IPtyConnection, IDisposable
         Stream writerStream,
         Action<int, int>? resize = null,
         Action? close = null,
-        bool ownsStreams = true)
+        bool ownsStreams = true,
+        bool interceptZmodem = true)
     {
-        _readerStream = readerStream;
         _writerStream = writerStream;
         _resize = resize;
         _close = close;
         OwnsStreams = ownsStreams;
+        if (interceptZmodem)
+        {
+            Zmodem = new ZmodemStream(
+                readerStream,
+                data =>
+                {
+                    lock (_writeGate)
+                    {
+                        writerStream.Write(data, 0, data.Length);
+                        writerStream.Flush();
+                    }
+                },
+                ownsInner: true);
+            _readerStream = Zmodem;
+            _writerStream = new ZmodemWriterStream(Zmodem, writerStream);
+        }
+        else
+        {
+            _readerStream = readerStream;
+        }
     }
+
+    public ZmodemStream? Zmodem { get; }
 
     public bool OwnsStreams { get; }
 

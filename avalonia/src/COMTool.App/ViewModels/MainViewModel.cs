@@ -59,6 +59,15 @@ public sealed partial class TerminalTab : ObservableObject
     [ObservableProperty]
     private bool _isAlive = true;
 
+    [ObservableProperty]
+    private string _statusMessage = "";
+
+    [ObservableProperty]
+    private IBrush _statusBrush = new SolidColorBrush(Color.Parse("#008200"));
+
+    [ObservableProperty]
+    private bool _isFunctionalVisible;
+
     public bool IsSessionTab => Kind is SessionKind.Serial or SessionKind.Ssh;
 }
 

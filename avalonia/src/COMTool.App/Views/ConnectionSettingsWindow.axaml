@@ -1,0 +1,146 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:conn="using:COMTool.Connections"
+        x:Class="COMTool.App.Views.ConnectionSettingsWindow"
+        Width="380" Height="500"
+        MinWidth="360" MinHeight="440"
+        CanResize="True"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource WindowBackgroundBrush}"
+        FontSize="12"
+        Title="terminal - Connection settings">
+  <Grid RowDefinitions="*,Auto" Margin="12">
+    <ScrollViewer Grid.Row="0" HorizontalScrollBarVisibility="Disabled">
+      <StackPanel Spacing="10">
+        <GroupBox Header="Connection" Padding="8">
+          <StackPanel Spacing="8">
+            <ComboBox Name="ConnectionTypeCombo"
+                      Height="30">
+              <ComboBoxItem Content="Serial" />
+              <ComboBoxItem Content="SSH" />
+            </ComboBox>
+
+            <Grid Name="SerialPanel"
+                  ColumnDefinitions="86,*"
+                  RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                  RowSpacing="6">
+              <TextBlock Grid.Row="0" Grid.Column="0" Text="Port" VerticalAlignment="Center" />
+              <ComboBox Grid.Row="0" Grid.Column="1"
+                        Name="PortCombo"
+                        Width="155"
+                        Height="28"
+                        HorizontalAlignment="Left">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate x:DataType="conn:SerialPortInfo">
+                    <TextBlock Text="{Binding DisplayText}" />
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+
+              <TextBlock Grid.Row="1" Grid.Column="0" Text="Baudrate" VerticalAlignment="Center" />
+              <ComboBox Grid.Row="1" Grid.Column="1"
+                        Name="BaudrateCombo"
+                        Width="155"
+                        Height="28"
+                        IsEditable="True"
+                        HorizontalAlignment="Left" />
+
+              <TextBlock Grid.Row="2" Grid.Column="0" Text="DataBytes" VerticalAlignment="Center" />
+              <ComboBox Grid.Row="2" Grid.Column="1" Name="DataBytesCombo" Width="67" Height="28" HorizontalAlignment="Left" />
+
+              <TextBlock Grid.Row="3" Grid.Column="0" Text="Parity" VerticalAlignment="Center" />
+              <ComboBox Grid.Row="3" Grid.Column="1" Name="ParityCombo" Width="67" Height="28" HorizontalAlignment="Left" />
+
+              <TextBlock Grid.Row="4" Grid.Column="0" Text="Stopbits" VerticalAlignment="Center" />
+              <ComboBox Grid.Row="4" Grid.Column="1" Name="StopBitsCombo" Width="67" Height="28" HorizontalAlignment="Left" />
+
+              <TextBlock Grid.Row="5" Grid.Column="0" Text="Flow control" VerticalAlignment="Center" />
+              <ComboBox Grid.Row="5" Grid.Column="1" Name="FlowControlCombo" Width="155" Height="28" HorizontalAlignment="Left" />
+
+              <StackPanel Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="2"
+                          Orientation="Horizontal" Spacing="18">
+                <CheckBox Name="RtsCheck" Content="rts" />
+                <CheckBox Name="DtrCheck" Content="dtr" />
+              </StackPanel>
+
+              <Button Grid.Row="7" Grid.Column="0" Grid.ColumnSpan="2"
+                      Name="SerialOpenButton"
+                      Content="OPEN"
+                      Height="30"
+                      HorizontalAlignment="Stretch"
+                      HorizontalContentAlignment="Center"
+                      Background="#0f88eb"
+                      Foreground="White"
+                      BorderThickness="0"
+                      CornerRadius="4"
+                      Click="OnOpenClick" />
+            </Grid>
+
+            <Grid Name="SshPanel"
+                  ColumnDefinitions="86,*"
+                  RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                  RowSpacing="6"
+                  IsVisible="False">
+              <TextBlock Grid.Row="0" Grid.Column="0" Text="Host" VerticalAlignment="Center" />
+              <TextBox Grid.Row="0" Grid.Column="1" Name="HostBox" Width="155" Height="28" HorizontalAlignment="Left" />
+
+              <TextBlock Grid.Row="1" Grid.Column="0" Text="Port" VerticalAlignment="Center" />
+              <TextBox Grid.Row="1" Grid.Column="1" Name="SshPortBox" Width="155" Height="28" HorizontalAlignment="Left" Text="22" />
+
+              <TextBlock Grid.Row="2" Grid.Column="0" Text="User" VerticalAlignment="Center" />
+              <TextBox Grid.Row="2" Grid.Column="1" Name="UserBox" Width="155" Height="28" HorizontalAlignment="Left" />
+
+              <TextBlock Grid.Row="3" Grid.Column="0" Text="Alias" VerticalAlignment="Center" />
+              <TextBox Grid.Row="3" Grid.Column="1" Name="AliasBox" Width="155" Height="28" HorizontalAlignment="Left" />
+
+              <TextBlock Grid.Row="4" Grid.Column="0" Text="Key file" VerticalAlignment="Center" />
+              <Grid Grid.Row="4" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="4"
+                    Width="155" HorizontalAlignment="Left">
+                <TextBox Name="KeyFileBox" Height="28" />
+                <Button Grid.Column="1" Content="..." Width="30" Height="28"
+                        MinWidth="0" Padding="0" Click="OnBrowseKeyClick" />
+              </Grid>
+
+              <TextBlock Grid.Row="5" Grid.Column="0" Text="Password" VerticalAlignment="Center" />
+              <TextBox Grid.Row="5" Grid.Column="1"
+                       Name="PasswordBox"
+                       Width="155"
+                       Height="28"
+                       HorizontalAlignment="Left"
+                       PasswordChar="●" />
+
+              <CheckBox Grid.Row="6" Grid.Column="1"
+                        Name="RememberCheck"
+                        Content="Remember password"
+                        IsChecked="True" />
+
+              <Button Grid.Row="7" Grid.Column="0" Grid.ColumnSpan="2"
+                      Content="OPEN"
+                      Height="30"
+                      HorizontalAlignment="Stretch"
+                      HorizontalContentAlignment="Center"
+                      Background="#0f88eb"
+                      Foreground="White"
+                      BorderThickness="0"
+                      CornerRadius="4"
+                      Click="OnOpenClick" />
+            </Grid>
+          </StackPanel>
+        </GroupBox>
+      </StackPanel>
+    </ScrollViewer>
+
+    <Button Grid.Row="1"
+            Content="✕  Close"
+            Width="100" Height="30"
+            Margin="0,10,0,0"
+            HorizontalAlignment="Right"
+            HorizontalContentAlignment="Center"
+            Background="#0f88eb"
+            Foreground="White"
+            BorderThickness="0"
+            CornerRadius="4"
+            Click="OnCloseClick" />
+  </Grid>
+</Window>

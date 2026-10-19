@@ -104,6 +104,28 @@ public sealed class ConfigTests : IDisposable
     }
 
     [Fact]
+    public void SaveAndLoad_RoundTripsSessionSidebarAndTheme()
+    {
+        var path = Path.Combine(_directory, "config.json");
+        var config = new ComtoolConfig
+        {
+            Skin = "dark",
+            SessionSidebar = new SessionSidebarConfig
+            {
+                Visible = false,
+                Width = 287,
+            },
+        };
+
+        config.Save(path);
+        var loaded = ComtoolConfig.Load(path);
+
+        Assert.Equal("dark", loaded.Skin);
+        Assert.False(loaded.SessionSidebar.Visible);
+        Assert.Equal(287, loaded.SessionSidebar.Width);
+    }
+
+    [Fact]
     public void AvaloniaConfigDirectory_IsSeparateFromPython()
     {
         Assert.NotEqual(
