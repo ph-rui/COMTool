@@ -118,6 +118,9 @@ Validated live in the UI under Xvfb:
 - Double-clicked a tab to detach it; ran `echo DETACH-OK` in the detached
   window, then closed the window and reattached the live tab without a second
   SSH connection or duplicated terminal buffer.
+- Detached the local `--terminal` tab repeatedly: only one bash child existed,
+  the startup hint appeared once, and both pre-detach and post-detach commands
+  remained in the scrollback.
 - Fixed the duplicate buffer at its source: `TerminalControl` defaults
   `Process` to `bash`/`cmd.exe` and launches it on load. Every external
   serial/SSH tab now sets `Process = string.Empty`, so a local shell can no
