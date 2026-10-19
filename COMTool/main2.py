@@ -369,6 +369,12 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
                         )
                         break
                 item.widget.setWindowTitle(title + " - {}".format(_("Connected" if status == ConnectionStatus.CONNECTED else _("Connection lose") if status == ConnectionStatus.LOSE else _("Disconnected"))))
+                if (status == ConnectionStatus.CONNECTED
+                        and getattr(item, "settingsDetached", False)):
+                    dialog = getattr(item, "settingsDialog", None)
+                    if dialog is not None and dialog.isVisible():
+                        dialog.close()
+                        self.updateSettingsButton()
                 try:
                     if item.plugin.id == "terminal" and item.isSerialConnection():
                         port = item.getSerialPort()
@@ -468,7 +474,9 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
             loadID = text.split("-")[-1].strip()
             for pluginClass in self.pluginClasses:
                 if loadID == pluginClass.id:
-                    self.addItem(pluginClass, setCurrent = True)
+                    item = self.addItem(pluginClass, setCurrent = True)
+                    if item is not None and getattr(item, "settingsDetached", False):
+                        self.showSettings()
                     break
 
     def initWindow(self):
@@ -1150,12 +1158,15 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         self.move(qr.topLeft())
 
     def showHint(self, info_type: str, title: str, msg: str):
+        # A settings dialog can be the active tool window. Parent the message
+        # to it so connection failures are not hidden behind that window.
+        parent = QApplication.activeWindow() or self
         if info_type == "info":
-            QMessageBox.information(self, title, msg)
+            QMessageBox.information(parent, title, msg)
         elif info_type == "warning":
-            QMessageBox.warning(self, title, msg)
+            QMessageBox.warning(parent, title, msg)
         elif info_type == "error":
-            QMessageBox.critical(self, title, msg)
+            QMessageBox.critical(parent, title, msg)
 
     def closeEvent(self, event):
         if self.closeTimerId:
