@@ -36,6 +36,7 @@ class FakeCursor:
 
 @pytest.fixture
 def window(app, monkeypatch):
+    FakeCursor.point = QPoint(0, 0)
     monkeypatch.setattr(main2, "QCursor", FakeCursor)
     monkeypatch.setattr(main2.SerialPortWatcher, "start", lambda self: None)
 
