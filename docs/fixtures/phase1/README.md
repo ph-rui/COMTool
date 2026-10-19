@@ -37,6 +37,10 @@ functional evidence images, not final pixel baselines.
 | `terminal-key-mappings-850x500.png` | `cat -v` shows the expected sequences for arrows, Home/End, Insert/Delete and F1-F12, including both SS3 and CSI forms. |
 | `terminal-autofocus-ssh-1000x650.png` | Clicking an SSH session immediately focuses the new terminal; `echo PACKAGE_FOCUS` is accepted and executed without clicking the terminal area first. |
 | `terminal-single-char-echo-1000x650.png` | Typing a bare `i` over SSH echoes immediately even though `i` is a prefix of the highlight keywords `info`/`invalid`/`important`; the highlighter's pending prefix is flushed after 15 ms instead of waiting for Enter. |
+| `session-sidebar-expanded-on-launch-1000x650.png` | The sessions sidebar is expanded on startup even though the test config had `sessionSidebar.visible=false`; the saved width is still applied and auto-hide remains available. |
+| `ssh-multiple-connections-1000x650.png` | Clicking the same saved SSH session twice opens two independent `perf-local` tabs; both sidebar and tabs show live connections. |
+| `terminal-double-click-maximize-1280x800.png` | Double-clicking the black terminal pane (not the title bar) maximizes the window to 1280x800, and `echo FINAL_PACKAGE_OK` is accepted without refocusing the terminal. |
+| `terminal-double-click-restore-1000x650.png` | A second double-click on the terminal pane restores the previous 1000x650 window size and keeps the live shell. |
 | `connection-lose-850x500.png` | Killing the SSH child leaves the TCP socket silently closed; the status polling detects EOF and shows `Connection lose` with the sidebar dot disconnected. |
 | `ssh-reconnected-850x500.png` | Clicking the remembered session closes the dead tab and reconnects with the cached key, without a password prompt. |
 | `tab-detached-850x500.png` | Double-clicking a tab detaches the live terminal into an 850x500 `local-ssh` window; the shell still accepts `echo DETACH-OK` without reconnecting. |
@@ -51,4 +55,7 @@ functional evidence images, not final pixel baselines.
 
 The tab title rule matches Python: serial tabs use the port name, SSH tabs use
 the alias when present and the host otherwise. Closing a tab only closes the
-live terminal; the sidebar session remains and clicking it reconnects.
+live terminal; the sidebar session remains. Clicking a serial session reuses
+its one tab, while clicking an SSH session that already has a live connection
+opens another independent connection. With no live SSH connection, dead tabs
+are discarded and the saved session reconnects.

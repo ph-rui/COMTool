@@ -107,22 +107,28 @@ sandbox install:
   uninstall (no `-RemoveConfig`).
 
 The latest app binary (version `0.01`, borderless chrome, auto-hiding sidebar,
-non-focus-stealing chrome controls, centered tool-strip icons, remembered
-window size, encoding-dropdown focus return, automatic terminal focus after
-opening a session, immediate single-character echo, and the ReadyToRun release
-build) was published over SSH and copied to:
+sidebar expanded on every launch, multiple independent connections from one
+saved SSH session, non-focus-stealing chrome controls, centered tool-strip
+icons, remembered window size, encoding-dropdown focus return, automatic
+terminal focus after opening a session, immediate single-character echo,
+double-click terminal maximize/restore, and the ReadyToRun release build) was
+published over SSH and copied to:
 
 - `C:\Users\zhangrui\COMTool-Avalonia.exe` (working copy)
 - `D:\Users\zhangrui\Desktop\COMTool-Avalonia.exe` (desktop copy)
 
 - size: 175,554,992 bytes;
-- SHA256: `23eeccd59ac73ad15b11f6ae2a4676a4db109f16a71b5488bc9be9ff3a82bba1`;
+- SHA256: `8daa39bd01ffabbb2357769b8f4c87efd31476c54e3a3422205516f1fa981abe`;
 - both remote copies matched that hash via `Get-FileHash`.
 
-The release zip is 72,279,712 bytes and is validated with SHA256:
+The desktop copy was replaced while an older instance was still running; that
+instance keeps the old image until it is closed, so the desktop app must be
+restarted to exercise this build.
+
+The release zip is 72,275,546 bytes and is validated with SHA256:
 
 ```text
-f1a521b1275278890f87e376852ef54e2cb5701adf2f167766ddbeb4695170cc
+862adafa5e772629d4cbac8ab7bb25189dbd5d035cef5b66b1cb2ee47b49175d
 ```
 
 That hash is from the local packaging run and changes whenever the app is

@@ -280,6 +280,53 @@ Validated headlessly on the Windows test host over SSH (no RDP used):
   (69,556,475 bytes). Copied the new Windows executable to the C-drive and
   Desktop working copies and verified both hashes over SSH.
 
+## 2026-10-20 terminal double-click and session sidebar follow-up
+
+- Added terminal-pane double-click maximize/restore. The handler observes
+  `InputElement.DoubleTappedEvent` with `handledEventsToo: true`, so the
+  terminal library may still perform word selection without swallowing the
+  maximize gesture. It calls the same `ToggleMaximize()` path as the title bar
+  and does not change that path.
+- Verified on Xvfb `:99`: double-clicking the black terminal pane took the
+  window from 1000x650 to 1280x800; `echo FINAL_PACKAGE_OK` was accepted without
+  clicking the terminal again; a second double-click restored 1000x650. Evidence
+  is `terminal-double-click-maximize-1280x800.png` and
+  `terminal-double-click-restore-1000x650.png`.
+- At the user's request, the sessions sidebar now always starts expanded, even
+  if `sessionSidebar.visible` was persisted as `false`. The saved width is
+  still restored, auto-hide still works during use, and manual toggles still
+  persist. Verified with a config containing `"visible": false`; evidence is
+  `session-sidebar-expanded-on-launch-1000x650.png`.
+- At the user's request, clicking an SSH session that already has a live
+  connection now opens another independent connection instead of focusing the
+  existing tab. Serial sessions remain exclusive to one tab. With no live SSH
+  connection, dead main/detached tabs are discarded and the old reconnect
+  behavior is kept. Two clicks produced two tabs and two concurrent local
+  `sshd` children; evidence is `ssh-multiple-connections-1000x650.png`.
+- Re-ran the full test suite: 87 passed (Core 13, Connections 31, Terminal 11,
+  ZMODEM 32), with no warnings.
+- Kept the connection-settings "Open" action safe with parallel SSH tabs: it
+  now replaces only the tab whose settings were edited instead of closing the
+  first tab that happens to use the same saved session.
+- Rebuilt the ReadyToRun Windows and Linux packages with all of the above. New
+  Windows executable SHA256
+  `8daa39bd01ffabbb2357769b8f4c87efd31476c54e3a3422205516f1fa981abe`
+  (175,554,992 bytes); Windows zip SHA256
+  `862adafa5e772629d4cbac8ab7bb25189dbd5d035cef5b66b1cb2ee47b49175d`
+  (72,275,546 bytes); Linux executable SHA256
+  `1a1edac77ccf6ab629c7990bac02b0b15ab61d726cc3aab8fc5aaafdfbd55649`
+  (168,876,343 bytes); Linux tar SHA256
+  `bb6f6dd88b775d478c44d2a4bd761878ddd7f9928658f4ccfa1fe9b59c64756d`
+  (69,554,443 bytes).
+- Ran the packaged Linux executable from `publish/linux-x64` with the Xvfb test
+  config: sidebar expanded on launch, two SSH clicks opened two live tabs,
+  terminal double-click maximized to 1280x800, `echo FINAL_PACKAGE_OK` executed,
+  and a second double-click restored 1000x650.
+- Copied the final Windows executable to the C-drive and Desktop copies over
+  SSH; both `Get-FileHash` results match the hash above. An older running
+  instance still holds the previous image until it is closed, so the desktop
+  app needs one restart before the new behaviors are visible.
+
 ## Still open for Phase 1
 
 - Terminal byte transcoding for non-UTF-8 encodings; the selector currently
