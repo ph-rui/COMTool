@@ -139,15 +139,26 @@ class PluginItem:
             layout3.addWidget(pluginFuncWidget)
         layout3.addStretch()
         # add to frame
-        widget.addWidget(self.settingWidget)
-        widget.addWidget(self.mainWidget)
-        widget.addWidget(self.functionalWidget)
-        widget.setStretchFactor(0, 1)
-        widget.setStretchFactor(1, 2)
-        widget.setStretchFactor(2, 1)
-        self.functionalWidget.hide()
-        if getattr(self.plugin, "autoHideSettings", False):
+        # Terminal connections keep their settings in a separate dialog so the
+        # terminal gets the full tab width and does not become a second
+        # sidebar next to the session list.
+        self.settingsDetached = bool(
+            getattr(self.plugin, "autoHideSettings", False)
+        )
+        if self.settingsDetached:
             self.settingWidget.hide()
+            widget.addWidget(self.mainWidget)
+            widget.addWidget(self.functionalWidget)
+            widget.setStretchFactor(0, 1)
+            widget.setStretchFactor(1, 0)
+        else:
+            widget.addWidget(self.settingWidget)
+            widget.addWidget(self.mainWidget)
+            widget.addWidget(self.functionalWidget)
+            widget.setStretchFactor(0, 1)
+            widget.setStretchFactor(1, 2)
+            widget.setStretchFactor(2, 1)
+        self.functionalWidget.hide()
         # UI init done
         self.plugin.onUiInitDone()
         return wrapper
