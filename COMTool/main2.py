@@ -69,12 +69,12 @@ g_all_windows = []
 
 
 class SettingsHoverStrip(QWidget):
-    """Thin invisible hover area at the left edge of the tab content."""
+    """Thin invisible hover area at the left edge of a panel."""
     hovered = pyqtSignal()
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, width=6):
         super().__init__(parent)
-        self.setFixedWidth(6)
+        self.setFixedWidth(width)
         self.setCursor(Qt.PointingHandCursor)
 
     def enterEvent(self, event):
@@ -199,6 +199,15 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         self._settings_hover_timer = QTimer(self)
         self._settings_hover_timer.setInterval(250)
         self._settings_hover_timer.timeout.connect(self._checkSettingsAutoHide)
+        # hover-to-show remembered-session sidebar
+        self.sessionHoverStrip = None
+        self.sessionHandle = None
+        self._session_hover_seen = False
+        self._session_shown_at = 0.0
+        self._last_session_cursor_x = QCursor.pos().x()
+        self._session_hover_timer = QTimer(self)
+        self._session_hover_timer.setInterval(250)
+        self._session_hover_timer.timeout.connect(self._checkSessionSidebarAutoHide)
 
 
     def initSerialSessions(self):
@@ -588,6 +597,18 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         self.contentLayout.setContentsMargins(16, 0, 10, 10)
         self.contentLayout.addWidget(self.bodySplitter)
 
+        # Hover/click affordances for auto showing the remembered-session
+        # sidebar. The handle stays visible so it can also be used as a normal
+        # manual toggle when the sidebar is expanded.
+        self.sessionHoverStrip = SettingsHoverStrip(self.contentWidget, 10)
+        self.sessionHoverStrip.hovered.connect(self.onSessionHoverStripEntered)
+        self.sessionHoverStrip.hide()
+        self.sessionHandle = SettingsHandle(self.contentWidget)
+        self.sessionHandle.setToolTip(_("Show/hide sessions"))
+        self.sessionHandle.clicked.connect(self.onSessionHandleClicked)
+        self.sessionHandle.hovered.connect(self.onSessionHandleHovered)
+        self.sessionHandle.hide()
+
         # thin hover area for auto showing the settings panel
         self.settingsHoverStrip = SettingsHoverStrip(self.tabWidget)
         self.settingsHoverStrip.hovered.connect(self.onSettingsHoverStripEntered)
@@ -631,6 +652,9 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         else:
             self.bodySplitter.setSizes([0, total])
         self.positionSettingsHoverStrip()
+        self.positionSessionHoverStrip()
+        self._updateSessionHoverWidgets(bool(visible))
+        QTimer.singleShot(0, self.positionSessionHoverStrip)
 
     def toggleSessionsSidebar(self):
         visible = not self.sessionSidebar.isVisible()
@@ -673,6 +697,7 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self.positionSettingsHoverStrip()
+        self.positionSessionHoverStrip()
 
     def initEvent(self):
         # menu
@@ -899,6 +924,136 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         cfg["visible"] = bool(visible)
         width = cfg.get("width", 200)
         self.applySessionSidebarLayout(bool(visible), width)
+
+    def positionSessionHoverStrip(self):
+        if (self.sessionHoverStrip is None
+                or self.sessionHandle is None
+                or self.bodySplitter is None):
+            return
+        body = self.bodySplitter.geometry()
+        if body.height() <= 0:
+            return
+        strip_width = self.sessionHoverStrip.width()
+        strip_x = max(6, body.x() - strip_width)
+        self.sessionHoverStrip.setGeometry(
+            strip_x, body.y(), strip_width, body.height()
+        )
+        self.sessionHoverStrip.raise_()
+        handle_w = self.sessionHandle.width()
+        handle_h = self.sessionHandle.height()
+        handle_x = max(6, body.x() - handle_w)
+        handle_y = body.y() + max(0, (body.height() - handle_h) // 2)
+        self.sessionHandle.setGeometry(handle_x, handle_y, handle_w, handle_h)
+        self.sessionHandle.raise_()
+
+    def _updateSessionHoverWidgets(self, visible):
+        if self.sessionHoverStrip is None:
+            return
+        if visible:
+            self.sessionHoverStrip.hide()
+            self._session_hover_seen = False
+            self._last_session_cursor_x = QCursor.pos().x()
+            self._session_hover_timer.start()
+        else:
+            self._session_hover_timer.stop()
+            self._session_hover_seen = False
+            self.positionSessionHoverStrip()
+            self.sessionHoverStrip.show()
+            self.sessionHoverStrip.raise_()
+        if self.sessionHandle is not None:
+            # Keep the manual handle visible in both states, like the
+            # settings-panel handle.
+            self.sessionHandle.setExpanded(bool(visible))
+            self.sessionHandle.show()
+            self.sessionHandle.raise_()
+
+    def _sessionSidebarContains(self, cursor):
+        """Whether the cursor is inside the sidebar or its left-edge approach."""
+        if self.sessionSidebar is None or not self.sessionSidebar.isVisible():
+            return False
+        if self.sessionSidebar.rect().contains(
+                self.sessionSidebar.mapFromGlobal(cursor)):
+            return True
+        if self.sessionHandle is not None and self.sessionHandle.isVisible():
+            if self.sessionHandle.rect().contains(
+                    self.sessionHandle.mapFromGlobal(cursor)):
+                return True
+        # Include the small left margin after the sidebar opens, otherwise a
+        # pointer entering through the hover strip has to cross a 10 px gap
+        # before the panel counts as visited.
+        content_pos = self.contentWidget.mapFromGlobal(cursor)
+        body = self.bodySplitter.geometry()
+        return (0 <= content_pos.x() <= body.x()
+                and body.y() <= content_pos.y() < body.y() + body.height())
+
+    def _showSessionSidebarAuto(self):
+        if self.sessionSidebar.isVisible():
+            return
+        cfg = {}
+        try:
+            cfg = self.config["sessionSidebar"] or {}
+        except Exception:
+            pass
+        width = cfg.get("width", 200)
+        self.applySessionSidebarLayout(True, width)
+        self._session_shown_at = time.monotonic()
+        self._session_hover_seen = True
+
+    def onSessionHoverStripEntered(self):
+        if self.sessionSidebar is None or self.sessionSidebar.isVisible():
+            return
+        self._showSessionSidebarAuto()
+
+    def onSessionHandleHovered(self):
+        if self.sessionSidebar is None or self.sessionSidebar.isVisible():
+            return
+        self._showSessionSidebarAuto()
+
+    def onSessionHandleClicked(self):
+        if self.sessionSidebar is None:
+            return
+        if self.sessionSidebar.isVisible():
+            # Ignore the click immediately following hover-open.
+            if time.monotonic() - self._session_shown_at < 0.35:
+                return
+            self.setSessionsSidebarVisible(False)
+        else:
+            self.setSessionsSidebarVisible(True)
+            self._session_shown_at = time.monotonic()
+            self._session_hover_seen = True
+
+    def _checkSessionSidebarAutoHide(self):
+        if (self.sessionSidebar is None
+                or not self.sessionSidebar.isVisible()):
+            self._session_hover_timer.stop()
+            self._session_hover_seen = False
+            return
+        cursor = QCursor.pos()
+        dx = cursor.x() - self._last_session_cursor_x
+        self._last_session_cursor_x = cursor.x()
+        if self._sessionSidebarContains(cursor):
+            self._session_hover_seen = True
+            return
+        # Moving right while still outside the window's left edge is moving
+        # towards the panel, not away from it.
+        if self.contentWidget.mapFromGlobal(cursor).x() < 0:
+            return
+        # Keep the panel open while the user is dragging the splitter, a text
+        # selection, or a context menu.
+        if QApplication.mouseButtons() != Qt.NoButton:
+            return
+        if should_auto_hide_settings(
+                inside=False,
+                hover_seen=self._session_hover_seen,
+                dx=dx,
+                popup_active=QApplication.activePopupWidget() is not None,
+                editing=False):
+            cfg = {}
+            try:
+                cfg = self.config["sessionSidebar"] or {}
+            except Exception:
+                pass
+            self.applySessionSidebarLayout(False, cfg.get("width", 200))
 
     def positionSettingsHoverStrip(self):
         if self.settingsHoverStrip is None:
