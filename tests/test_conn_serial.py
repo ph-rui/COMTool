@@ -65,6 +65,25 @@ def test_scan_populates_and_selects_first(app, monkeypatch):
         serial_conn.onDel()
 
 
+def test_scan_keeps_missing_saved_port_instead_of_selecting_another(app, monkeypatch):
+    monkeypatch.setattr(
+        conn_serial,
+        "collect_ports",
+        lambda: [PortInfo(device="COM2", description="USB Serial")],
+    )
+    serial_conn = conn_serial.Serial()
+    serial_conn.onInit({"port": "COM99"})
+    serial_conn.onWidget()
+    serial_conn.onUiInitDone()
+    wait_for_scan(serial_conn, app)
+    try:
+        assert serial_conn.serialPortCombobox.currentIndex() == -1
+        assert serial_conn.config["port"] == "COM99"
+        assert serial_conn.com.port == "COM99"
+    finally:
+        serial_conn.onDel()
+
+
 def test_display_name_tracks_selected_port(app, monkeypatch):
     serial_conn = make_serial(
         app,
