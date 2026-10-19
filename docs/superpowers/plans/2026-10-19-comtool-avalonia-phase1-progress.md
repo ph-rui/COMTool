@@ -134,6 +134,8 @@ Validated live in the UI under Xvfb:
   dotnet process exited with no orphan process.
 - Pressed F11: the custom title bar hid, the window covered the 1280x800
   display, and a second F11 restored the 850x500 window and title bar.
+- Opened the About dialog from the title-bar menu; it shows the version,
+  config path, LGPL license and GitHub/Releases/Issues/Donate links.
 
 Validated headlessly on the Windows test host over SSH (no RDP used):
 
