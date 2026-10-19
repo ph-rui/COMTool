@@ -50,19 +50,46 @@ def test_plain_output_gets_mobaxterm_style_highlights(app):
     frontend = _frontend()
 
     ip_colors = frontend._highlight_line("inet 172.16.66.48 netmask 255.255.255.0")
-    assert ip_colors[5] == "brightmagenta"
-    assert ip_colors[16] == "brightmagenta"
+    assert ip_colors[5:17] == ["brightmagenta"] * 12
+    # MobaXterm's default profile deliberately excludes 255.x.x.x addresses.
+    assert all(color is None for color in ip_colors[26:39])
 
-    mac_colors = frontend._highlight_line("ether fe:fc:fe:ed:91:b7")
-    assert mac_colors[6] == "brown"
-
-    ipv6_colors = frontend._highlight_line("inet6 fe80::920f:2317:d1e8:9ba9/64")
-    assert ipv6_colors[6] == "brightmagenta"
+    # The default MobaXterm profile only highlights IPv4, not MAC or IPv6.
+    assert all(color is None for color in frontend._highlight_line(
+        "ether fe:fc:fe:ed:91:b7"
+    ))
+    assert all(color is None for color in frontend._highlight_line(
+        "inet6 fe80::920f:2317:d1e8:9ba9/64"
+    ))
 
     error_colors = frontend._highlight_line(
         "        RX errors 0 dropped 0 overruns 0 frame 0"
     )
-    assert error_colors[8] == "brightred"
-    assert error_colors[-1] == "brightred"
+    assert error_colors[11:17] == ["brightred"] * 6
+    assert all(
+        color is None for index, color in enumerate(error_colors)
+        if not 11 <= index < 17
+    )
+
+    warning_colors = frontend._highlight_line(
+        "Warning: Locale not supported by X"
+    )
+    assert warning_colors[0:7] == ["brightyellow"] * 7
+    assert warning_colors[16:29] == ["brightred"] * 13
+
+    status_colors = frontend._highlight_line(
+        "(II) AIGLX: enabled GLX_EXT_texture_from_pixmap"
+    )
+    assert status_colors[0:4] == ["brightcyan"] * 4
+    assert status_colors[12:19] == ["brightgreen"] * 7
+
+    assert frontend._highlight_line("last login: ok")[0:11] == ["brightcyan"] * 11
+    assert frontend._highlight_line(
+        "connect http://example.com/path?q=1 now"
+    )[8:35] == ["underline"] * 27
+    assert frontend._highlight_line('Variant = "none"')[11:15] == ["brightmagenta"] * 4
+
+    assert frontend._highlight_line("status=false")[7:12] == ["brightred"] * 5
+    assert frontend._highlight_line("status=true")[7:11] == ["brightgreen"] * 4
 
     frontend.deleteLater()
