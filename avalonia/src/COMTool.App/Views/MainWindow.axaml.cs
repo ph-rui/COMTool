@@ -761,19 +761,22 @@ public partial class MainWindow : Window
             StatusMessage = "Connected terminal",
             CloseAction = () => terminal.Kill(),
         };
+        var launched = false;
         terminal.AttachedToVisualTree += (_, _) =>
         {
-            if (!tab.IsAlive)
+            if (launched || !tab.IsAlive)
             {
                 return;
             }
 
+            launched = true;
             try
             {
                 terminal.LaunchProcess();
             }
             catch (Exception ex)
             {
+                launched = false;
                 tab.IsAlive = false;
                 _ = ShowErrorAsync($"Failed to start terminal: {ex.Message}");
             }
