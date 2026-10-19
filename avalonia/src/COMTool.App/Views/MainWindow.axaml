@@ -16,13 +16,16 @@
         FontSize="12"
         Icon="/Assets/logo.ico"
         Title="COMTool v3.4.1"
-        WindowDecorations="BorderOnly">
+        CanResize="True"
+        WindowDecorations="None">
 
   <Design.DataContext>
     <vm:MainViewModel />
   </Design.DataContext>
 
-  <Grid RowDefinitions="35,6,*" Background="{DynamicResource WindowBackgroundBrush}">
+  <Grid Name="RootGrid"
+        RowDefinitions="35,*"
+        Background="{DynamicResource WindowBackgroundBrush}">
     <!-- Custom title bar: logo, title, pin, session toggle, window buttons. -->
     <Border Grid.Row="0"
             Name="TitleBar"
@@ -75,9 +78,9 @@
                 Classes="TitleBarButton WindowMinButton"
                 ToolTip.Tip="Minimize"
                 Click="OnMinimizeClick">
-          <TextBlock Text="&#xf2d1;"
-                     FontFamily="{DynamicResource IconFontAwesome}"
-                     FontSize="14"
+          <TextBlock Text="&#xF1639;"
+                     FontFamily="{DynamicResource IconMaterialDesign}"
+                     FontSize="13"
                      Foreground="{DynamicResource TitleBarForegroundBrush}" />
         </Button>
         <Button Grid.Column="6"
@@ -86,8 +89,8 @@
                 ToolTip.Tip="Maximize"
                 Click="OnMaximizeClick">
           <TextBlock Name="MaximizeIcon"
-                     Text="&#xf2d0;"
-                     FontFamily="{DynamicResource IconFontAwesome}"
+                     Text="&#xF05AF;"
+                     FontFamily="{DynamicResource IconMaterialDesign}"
                      FontSize="13"
                      Foreground="{DynamicResource TitleBarForegroundBrush}" />
         </Button>
@@ -95,19 +98,21 @@
                 Classes="TitleBarButton WindowCloseButton"
                 ToolTip.Tip="Close"
                 Click="OnCloseClick">
-          <TextBlock Text="&#xf00d;"
-                     FontFamily="{DynamicResource IconFontAwesome}"
-                     FontSize="15"
+          <TextBlock Text="&#xF05AD;"
+                     FontFamily="{DynamicResource IconMaterialDesign}"
+                     FontSize="13"
                      Foreground="{DynamicResource TitleBarForegroundBrush}" />
         </Button>
       </Grid>
     </Border>
 
-    <Grid Grid.Row="2"
+    <Grid Grid.Row="1"
           Name="BodyGrid"
           Margin="16,0,10,10"
           ColumnDefinitions="220,3,*">
-      <views:SessionSidebar Grid.Column="0" Name="Sidebar" />
+      <views:SessionSidebar Grid.Column="0"
+                            Name="Sidebar"
+                            PointerEntered="OnSidebarPointerEntered" />
 
       <GridSplitter Grid.Column="1"
                     Name="SidebarSplitter"
@@ -353,14 +358,26 @@
       </Grid>
     </Grid>
 
-    <Button Grid.Row="2"
+    <Border Grid.Row="1"
+            Name="SessionHoverStrip"
+            ZIndex="9"
+            Width="10"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Stretch"
+            Margin="6,0,0,10"
+            Background="Transparent"
+            IsVisible="False"
+            PointerEntered="OnSessionHoverStripEntered" />
+
+    <Button Grid.Row="1"
             Name="SessionHandle"
             Classes="SessionHandle"
             ZIndex="10"
             HorizontalAlignment="Left"
             VerticalAlignment="Center"
-            Margin="6,0,0,0"
+            Margin="6,0,0,10"
             ToolTip.Tip="Show/hide sessions"
+            PointerEntered="OnSessionHandlePointerEntered"
             Click="OnSessionHandleClick">
       <TextBlock Name="SessionHandleIcon"
                  Text="&#xf053;"

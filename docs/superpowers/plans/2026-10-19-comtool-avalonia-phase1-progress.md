@@ -45,6 +45,21 @@ the hardware, soak, CI and two-week Beta gates are complete.
 - Added the Python-exact main-window slice: 36px tab bar, no-gap 32x32
   add button, 97x31 encoding selector, `arrow-right.png` functional button,
   9px terminal inset, 6px gap and 30px status row.
+- Removed the native `BorderOnly` window decoration that left a white strip
+  above the custom title bar. The window now uses `WindowDecorations=None`,
+  custom 5px edge/corner resize hit areas, and Python-style resize cursors.
+- Removed the leftover 6px spacer below the title bar so the body starts
+  immediately at the title bar, matching Python.
+- Ported the sidebar's 10px left hover strip, auto-show on hover, 250ms
+  dx-based auto-hide timer, 350ms hover-open click guard, and non-persisting
+  auto-hide. Manual title-bar/handle toggles still persist `sessionSidebar`.
+- Replaced the Font Awesome window-button glyphs with the bundled Material
+  Design Icons at 13px, including the restore glyph after maximizing.
+- F11 now collapses the title-bar grid row as well as hiding the bar, so the
+  full-screen body starts at the top edge. `RootGrid` restores the 35px row on
+  exit.
+- Rebuilt the Beta packages and re-ran the full suite: 84/84 tests pass
+  (Core 12, Connections 31, Terminal 11, ZMODEM 30), 0 warnings/0 errors.
 - Added the non-modal-equivalent connection settings window with serial and SSH
   fields, validated port/baud/parity/stop-bit/flow values, key-file browsing,
   password remember, session upsert and immediate open/reconnect.
@@ -142,8 +157,17 @@ Validated live in the UI under Xvfb:
   the session closed the dead detached window and reconnected.
 - Closed the main window while a tab was detached; both windows and the
   dotnet process exited with no orphan process.
-- Pressed F11: the custom title bar hid, the window covered the 1280x800
-  display, and a second F11 restored the 850x500 window and title bar.
+- Pressed F11: the custom title bar and its 35px grid row hid, the body started
+  at the top edge, the window covered the 1280x800 display, and a second F11
+  restored the 850x500 window with the title bar.
+- Verified the borderless window on Xvfb light and dark themes: no native white
+  strip, custom bottom-right resize changed 850x500 to 950x550, title-bar drag
+  still moved the window, and maximize/restore changed the icon between the MDI
+  maximize and restore glyphs.
+- Moved the pointer into the sidebar, then into the content area: it collapsed
+  after the next 250ms timer tick and the left handle remained. Hovering the
+  10px left strip re-opened it; moving out through the left edge kept it open.
+  Auto-hide did not change `sessionSidebar.visible`; manual toggles did.
 - Opened the About dialog from the title-bar menu; it shows the version,
   config path, LGPL license and GitHub/Releases/Issues/Donate links.
 - Stopped the local sshd and clicked `local-ssh`: the UI showed an `Error`

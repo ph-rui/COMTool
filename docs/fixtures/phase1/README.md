@@ -6,6 +6,8 @@ functional evidence images, not final pixel baselines.
 
 | File | What it proves |
 | --- | --- |
+| `ui-chrome-fixed-850x500.png` | Borderless custom window: no native white strip above the title bar, Material Design minimize/maximize/close icons, and no 6px gap below the title bar. |
+| `sidebar-auto-hide-850x500.png` | The sidebar auto-collapsed after the pointer moved into the content area; the left hover strip and manual handle remain available. |
 | `sessions-850x500.png` | Config-backed sidebar shows remembered SSH sessions and no tabs after restart. |
 | `two-tabs-850x500.png` | Multiple SSH tabs are open; `win-ssh` is selected, `local-ssh` is not. Sidebar status dots reflect open sessions. |
 | `switch-tab-850x500.png` | Clicking the `local-ssh` tab switches the terminal content back without reconnecting. |
@@ -33,7 +35,7 @@ functional evidence images, not final pixel baselines.
 | `tab-detached-850x500.png` | Double-clicking a tab detaches the live terminal into an 850x500 `local-ssh` window; the shell still accepts `echo DETACH-OK` without reconnecting. |
 | `tab-reattached-850x500.png` | Closing the detached window returns the same live tab and buffer to the main window; there is no duplicated MOTD, prompt, or second shell. |
 | `detached-loss-850x500.png` | The SSH child was killed while its tab was detached; the main window remains responsive and the dead detached session can be reopened from the sidebar. |
-| `f11-fullscreen-1280x800.png` | F11 toggles the Python-style full-screen mode: the custom title bar is hidden and the window covers the 1280x800 display; F11 restores the 850x500 window with the title bar. |
+| `f11-fullscreen-1280x800.png` | F11 toggles the Python-style full-screen mode: the title-bar row collapses, the custom title bar is hidden and the window covers the 1280x800 display; F11 restores the 850x500 window with the title bar. |
 | `about-dialog-850x500.png` | About dialog shows version, description, config path, LGPL license and working GitHub/Releases/Issues/Donate links. |
 | `connect-error-850x500.png` | Clicking a remembered SSH session while the server is down shows the Python-style `Error` dialog with `Connect Failed` and the underlying `Connection refused` detail. |
 | `dpi-150-1280x800.png` | At 150% X11 scaling (`Xft.dpi=144`) the sidebar, tabs, encoding selector, terminal prompt and status line remain unclipped and readable. |

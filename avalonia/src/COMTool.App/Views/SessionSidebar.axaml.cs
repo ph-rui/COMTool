@@ -24,6 +24,8 @@ public partial class SessionSidebar : UserControl
 
     public event EventHandler<SessionItem>? RemoveRequested;
 
+    public bool HasOpenContextMenu => _contextMenu?.IsOpen == true;
+
     private void OnSessionTapped(object? sender, TappedEventArgs e)
     {
         if (sender is Control { DataContext: SessionItem item })
