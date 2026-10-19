@@ -83,11 +83,71 @@ public sealed class MobaKeywordHighlighter
 
     private readonly Decoder _decoder = new UTF8Encoding(false).GetDecoder();
     private readonly List<byte> _escapeCarry = new();
+    private readonly object _sync = new();
     private string _textCarry = "";
     private bool _foregroundDefault = true;
     private bool _backgroundDefault = true;
 
+    /// <summary>
+    /// True while trailing text is held back because it may be the start of
+    /// a keyword that continues in the next chunk.
+    /// </summary>
+    public bool HasPendingText
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _textCarry.Length > 0;
+            }
+        }
+    }
+
     public byte[] Transform(ReadOnlySpan<byte> data)
+    {
+        lock (_sync)
+        {
+            return TransformCore(data);
+        }
+    }
+
+    /// <summary>
+    /// Emits text held back by the previous <see cref="Transform"/> call.
+    /// </summary>
+    /// <remarks>
+    /// Split-chunk highlighting needs a look-ahead, but interactive echo is
+    /// also delivered one character at a time. Holding a prefix indefinitely
+    /// makes a single <c>i</c> invisible until Enter arrives (it is the start
+    /// of <c>info</c>, <c>invalid</c>, and several other phrases). The stream
+    /// calls this after a short delay when no continuation arrives, so normal
+    /// typing is never left waiting for the next keystroke.
+    /// </remarks>
+    public byte[] FlushPending()
+    {
+        lock (_sync)
+        {
+            if (_textCarry.Length == 0)
+            {
+                return Array.Empty<byte>();
+            }
+
+            var text = _textCarry;
+            _textCarry = string.Empty;
+            var output = new List<byte>(text.Length + 16);
+            if (!_foregroundDefault || !_backgroundDefault)
+            {
+                output.AddRange(Encoding.UTF8.GetBytes(text));
+            }
+            else
+            {
+                EmitHighlighted(text, output);
+            }
+
+            return output.ToArray();
+        }
+    }
+
+    private byte[] TransformCore(ReadOnlySpan<byte> data)
     {
         if (data.Length == 0)
         {

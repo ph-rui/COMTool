@@ -30,8 +30,17 @@ public sealed class ZmodemStream : Stream
     private readonly List<byte> _terminal = new();
     private readonly ZmodemDetector _detector = new();
     private readonly MobaKeywordHighlighter _highlighter = new();
+    private readonly object _highlightGate = new();
+    private readonly Timer _highlightTimer;
     private readonly CancellationTokenSource _cancellation = new();
     private readonly Task _pump;
+
+    // Interactive echo arrives one character at a time. A trailing character
+    // can also be the start of a keyword split across chunks, so the
+    // highlighter keeps it briefly. Without this timer, an input such as "i"
+    // stayed invisible until the next character or Enter completed the chunk.
+    private static readonly TimeSpan HighlightFlushDelay =
+        TimeSpan.FromMilliseconds(15);
     private ZmodemIo? _sessionIo;
     private ZHeader? _pendingSendHeader;
     private byte[] _pendingSendRemainder = Array.Empty<byte>();
@@ -45,6 +54,11 @@ public sealed class ZmodemStream : Stream
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
         _write = write ?? throw new ArgumentNullException(nameof(write));
         _ownsInner = ownsInner;
+        _highlightTimer = new Timer(
+            _ => FlushHighlightCarry(),
+            state: null,
+            Timeout.InfiniteTimeSpan,
+            Timeout.InfiniteTimeSpan);
         _pump = Task.Factory.StartNew(
             Pump,
             CancellationToken.None,
@@ -253,6 +267,7 @@ public sealed class ZmodemStream : Stream
                 Monitor.PulseAll(_gate);
             }
 
+            _highlightTimer.Dispose();
             _cancellation.Cancel();
             if (cancelRemote)
             {
@@ -319,11 +334,19 @@ public sealed class ZmodemStream : Stream
         var result = _detector.Feed(data);
         if (result.TerminalData.Length > 0)
         {
-            var terminalData = _highlighter.Transform(result.TerminalData);
-            lock (_gate)
+            lock (_highlightGate)
             {
-                _terminal.AddRange(terminalData);
-                Monitor.PulseAll(_gate);
+                var terminalData = _highlighter.Transform(result.TerminalData);
+                if (terminalData.Length > 0)
+                {
+                    lock (_gate)
+                    {
+                        _terminal.AddRange(terminalData);
+                        Monitor.PulseAll(_gate);
+                    }
+                }
+
+                ScheduleHighlightFlush();
             }
         }
 
@@ -337,6 +360,57 @@ public sealed class ZmodemStream : Stream
             {
                 StartPendingSend(detection);
             }
+        }
+    }
+
+    private void ScheduleHighlightFlush()
+    {
+        try
+        {
+            _highlightTimer.Change(
+                _highlighter.HasPendingText
+                    ? HighlightFlushDelay
+                    : Timeout.InfiniteTimeSpan,
+                Timeout.InfiniteTimeSpan);
+        }
+        catch (ObjectDisposedException)
+        {
+            // The stream was disposed while the pump was finishing a chunk.
+        }
+    }
+
+    private void FlushHighlightCarry()
+    {
+        try
+        {
+            lock (_highlightGate)
+            {
+                if (Volatile.Read(ref _disposed))
+                {
+                    return;
+                }
+
+                var pending = _highlighter.FlushPending();
+                if (pending.Length == 0)
+                {
+                    return;
+                }
+
+                lock (_gate)
+                {
+                    if (_disposed)
+                    {
+                        return;
+                    }
+
+                    _terminal.AddRange(pending);
+                    Monitor.PulseAll(_gate);
+                }
+            }
+        }
+        catch
+        {
+            // A timer callback must never take the process down.
         }
     }
 

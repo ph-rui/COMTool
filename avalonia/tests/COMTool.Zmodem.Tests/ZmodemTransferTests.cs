@@ -1,3 +1,4 @@
+using System.Text;
 using COMTool.Zmodem;
 
 namespace COMTool.Zmodem.Tests;
@@ -196,6 +197,24 @@ public sealed class ZmodemTransferTests
         }
 
         Assert.True(stream.IsInputCompleted);
+    }
+
+    [Fact]
+    public async Task IncompleteKeywordPrefixIsFlushedWithoutMoreOutput()
+    {
+        using var input = new QueueReadStream();
+        using var stream = new ZmodemStream(input, _ => { });
+        input.Feed(Encoding.UTF8.GetBytes("i"));
+
+        var buffer = new byte[16];
+        var readTask = Task.Run(() => stream.Read(buffer, 0, buffer.Length));
+        var completed = await Task.WhenAny(
+            readTask,
+            Task.Delay(TimeSpan.FromSeconds(2)));
+
+        Assert.Same(readTask, completed);
+        var count = await readTask;
+        Assert.Equal("i", Encoding.UTF8.GetString(buffer, 0, count));
     }
 
     [Fact]

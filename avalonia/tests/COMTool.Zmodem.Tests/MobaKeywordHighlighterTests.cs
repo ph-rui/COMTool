@@ -110,6 +110,16 @@ public sealed class MobaKeywordHighlighterTests
     }
 
     [Fact]
+    public void PendingSingleCharacterCanBeFlushed()
+    {
+        var highlighter = new MobaKeywordHighlighter();
+        Assert.Empty(highlighter.Transform(Encoding.UTF8.GetBytes("i")));
+        Assert.True(highlighter.HasPendingText);
+        Assert.Equal("i", Encoding.UTF8.GetString(highlighter.FlushPending()));
+        Assert.False(highlighter.HasPendingText);
+    }
+
+    [Fact]
     public void NonUtf8BytesArePassedThroughUnchanged()
     {
         var highlighter = new MobaKeywordHighlighter();

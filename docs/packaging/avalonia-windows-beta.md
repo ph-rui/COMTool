@@ -109,20 +109,20 @@ sandbox install:
 The latest app binary (version `0.01`, borderless chrome, auto-hiding sidebar,
 non-focus-stealing chrome controls, centered tool-strip icons, remembered
 window size, encoding-dropdown focus return, automatic terminal focus after
-opening a session, and the ReadyToRun release build)
-was published over SSH and copied to:
+opening a session, immediate single-character echo, and the ReadyToRun release
+build) was published over SSH and copied to:
 
 - `C:\Users\zhangrui\COMTool-Avalonia.exe` (working copy)
 - `D:\Users\zhangrui\Desktop\COMTool-Avalonia.exe` (desktop copy)
 
-- size: 175,550,896 bytes;
-- SHA256: `0d76b2fb8fda7cb1c2cc3caa6af7fef5521a4771ee62505bf705b81d31011b2f`;
-- both remote copies matched that hash via `certutil`.
+- size: 175,554,992 bytes;
+- SHA256: `23eeccd59ac73ad15b11f6ae2a4676a4db109f16a71b5488bc9be9ff3a82bba1`;
+- both remote copies matched that hash via `Get-FileHash`.
 
-The release zip is 72,019,633 bytes and is validated with SHA256:
+The release zip is 72,279,712 bytes and is validated with SHA256:
 
 ```text
-6754c98d0454970527da4ff859ca6b67acdf3f074c11199c29f434bbb8139d19
+f1a521b1275278890f87e376852ef54e2cb5701adf2f167766ddbeb4695170cc
 ```
 
 That hash is from the local packaging run and changes whenever the app is
