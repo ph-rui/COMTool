@@ -78,12 +78,28 @@ jobs:
           -p:DebugType=None -p:DebugSymbols=false
           -o avalonia/publish/win-x64
 
-      - name: Remove debug symbols
+      - name: Validate installer scripts
         shell: pwsh
-        run: Get-ChildItem avalonia/publish/win-x64 -Filter *.pdb | Remove-Item
+        run: |
+          $failed = $false
+          Get-ChildItem avalonia/pack/windows/*.ps1 | ForEach-Object {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              $_.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count -gt 0) {
+              $failed = $true
+              Write-Error "$($_.Name): $($errors[0].Message)"
+            }
+          }
+          if ($failed) { exit 1 }
+
+      - name: Package release
+        shell: pwsh
+        run: ./avalonia/pack/windows/pack.ps1 -SkipPublish
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
-          name: comtool-avalonia-win-x64-phase0
-          path: avalonia/publish/win-x64/
+          name: comtool-avalonia-beta-win-x64
+          path: avalonia/publish/package/

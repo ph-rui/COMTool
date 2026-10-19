@@ -89,6 +89,14 @@ still the default release.
   final cursor position against the Python backend. Unit tests are 84 total
   (Core 12, Connections 31, Terminal 11, ZMODEM 30).
 - Made transport EOF a first-class liveness signal (`ZmodemStream.IsInputCompleted`, surfaced through `PtyStreamConnection`) and enabled SSH keepalives. Killing the SSH child now changes the live tab to `Connection lose` on the next poll; clicking the remembered session reconnects with its cached key and no password dialog.
+- Added a Windows per-user installer/uninstaller and release packaging under
+  `avalonia/pack/windows/`. It installs a separate `COMTool Avalonia Beta`
+  identity to LocalAppData, creates shortcuts and an HKCU uninstall entry,
+  performs a staged atomic upgrade, and keeps `%APPDATA%\COMTool-Avalonia`.
+  Verified install, repeated upgrade, registry values and uninstall on the
+  Windows host; `%APPDATA%\comtool` and the Python app were untouched.
+- Added a CI packaging step that validates the PowerShell scripts and uploads
+  the zip plus SHA256 checksum.
 
 ## Evidence
 
