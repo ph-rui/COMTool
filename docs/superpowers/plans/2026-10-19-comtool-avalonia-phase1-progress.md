@@ -70,8 +70,8 @@ still the default release.
   the Avalonia picker, suppresses terminal input during a session, and restores
   the shell prompt/trailing bytes afterward.
 - Added simulated end-to-end ZMODEM tests in both directions, subpacket/offset
-  round-trips, keyword highlighting tests, and 75 passing tests total (Core
-  12, Connections 29, Terminal 8, ZMODEM 26).
+  round-trips, keyword highlighting tests, and 76 passing tests total (Core
+  12, Connections 29, Terminal 8, ZMODEM 27).
 
 ## Evidence
 

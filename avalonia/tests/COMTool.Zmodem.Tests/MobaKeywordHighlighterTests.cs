@@ -110,6 +110,14 @@ public sealed class MobaKeywordHighlighterTests
     }
 
     [Fact]
+    public void NonUtf8BytesArePassedThroughUnchanged()
+    {
+        var highlighter = new MobaKeywordHighlighter();
+        var input = new byte[] { 0xB4, 0xED, 0xCE, 0xF3, 0x0A };
+        Assert.Equal(input, highlighter.Transform(input));
+    }
+
+    [Fact]
     public void Utf8TextSurvivesHighlighting()
     {
         var highlighter = new MobaKeywordHighlighter();
