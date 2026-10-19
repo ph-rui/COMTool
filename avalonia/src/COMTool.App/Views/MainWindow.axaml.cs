@@ -877,6 +877,17 @@ public partial class MainWindow : Window
             window.Closing += (_, _) => (tab.Content as TerminalControl)?.BeginReparent();
             window.Closed += (_, _) => OnDetachedTabClosed(tab, state);
             window.Show();
+            // Multiple detached windows otherwise land exactly on top of each
+            // other, hiding every window but the last one.
+            var cascade = Math.Max(0, _detachedTabs.Count - 1);
+            if (cascade > 0)
+            {
+                const int offset = 24;
+                window.Position = new PixelPoint(
+                    window.Position.X + (offset * cascade),
+                    window.Position.Y + (offset * cascade));
+            }
+
             (tab.Content as TerminalControl)?.EndReparent();
             tab.Content.Focus();
         }

@@ -121,6 +121,9 @@ Validated live in the UI under Xvfb:
 - Detached the local `--terminal` tab repeatedly: only one bash child existed,
   the startup hint appeared once, and both pre-detach and post-detach commands
   remained in the scrollback.
+- Detached two tabs at once; the second window cascaded 24px instead of hiding
+  the first, closing one reattached only its tab, and closing the main window
+  removed the remaining detached window and shell.
 - Fixed the duplicate buffer at its source: `TerminalControl` defaults
   `Process` to `bash`/`cmd.exe` and launches it on load. Every external
   serial/SSH tab now sets `Process = string.Empty`, so a local shell can no
