@@ -37,6 +37,7 @@ try:
     from serial_sessions import SerialSessionStore, session_name, normalize_port
     from session_sidebar import SessionSidebar
     from session_watcher import SerialPortWatcher
+    from connection_settings import ConnectionSettingsDialog
 except ImportError:
     from COMTool import helpAbout,autoUpdate, utils_ui
     from COMTool.Combobox import ComboBox
@@ -50,6 +51,7 @@ except ImportError:
     from COMTool.serial_sessions import SerialSessionStore, session_name, normalize_port
     from COMTool.session_sidebar import SessionSidebar
     from COMTool.session_watcher import SerialPortWatcher
+    from COMTool.connection_settings import ConnectionSettingsDialog
 
 from PyQt5.QtCore import pyqtSignal, Qt, QRect, QMargins, QCoreApplication, QTimer
 from PyQt5.QtWidgets import (QApplication, QWidget,QPushButton,QMessageBox,QDesktopWidget,QMainWindow,
@@ -167,7 +169,6 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         log.i("load serial sessions complete")
         self.initEvent()
         self.updateSettingsButton()
-        self.updateSettingsAutoHide(self.getCurrentItem())
         self.updateMainStack()
 
     def initVar(self):
@@ -190,15 +191,6 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         self._available_ports_known = False
         self._port_descriptions = {}
         self._suppressed_session_ports = set()
-        # hover-to-show settings panel (currently used by the terminal plugin)
-        self.settingsHoverStrip = None
-        self.settingsHandle = None
-        self._settings_hover_seen = False
-        self._settings_shown_at = 0.0
-        self._last_cursor_x = QCursor.pos().x()
-        self._settings_hover_timer = QTimer(self)
-        self._settings_hover_timer.setInterval(250)
-        self._settings_hover_timer.timeout.connect(self._checkSettingsAutoHide)
         # hover-to-show remembered-session sidebar
         self.sessionHoverStrip = None
         self.sessionHandle = None
@@ -484,6 +476,11 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         utils_ui.setSkin(self.config["skin"])
         # menu layout
         self.settingsButton = QPushButton()
+        self.settingsButton.setCheckable(True)
+        self.settingsButton.setFixedSize(27, 27)
+        self.settingsButton.setObjectName("connectionSettingsButton")
+        utils_ui.setButtonIcon(self.settingsButton, "fa.cog")
+        self.settingsButton.setToolTip(_("Settings"))
         self.skinButton = ButtonCombbox(icon=None, btnClass="menuItem", btnId="menuItem2")
         self.languageCombobox = ButtonCombbox(icon=None, btnClass="menuItem", btnId="menuItemLang")
         self.languages = i18n.get_languages()
@@ -497,10 +494,8 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         self.supportedEncoding = parameters.encodings
         for encoding in self.supportedEncoding:
             self.encodingCombobox.addItem(encoding)
-        self.settingsButton.setProperty("class", "menuItem")
         self.aboutButton.setProperty("class", "menuItem")
         self.functionalButton.setProperty("class", "menuItem")
-        self.settingsButton.setObjectName("menuItem1")
         self.aboutButton.setObjectName("menuItem3")
         self.functionalButton.setObjectName("menuItem4")
         # plugins slector
@@ -609,16 +604,6 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         self.sessionHandle.hovered.connect(self.onSessionHandleHovered)
         self.sessionHandle.hide()
 
-        # thin hover area for auto showing the settings panel
-        self.settingsHoverStrip = SettingsHoverStrip(self.tabWidget)
-        self.settingsHoverStrip.hovered.connect(self.onSettingsHoverStripEntered)
-        self.settingsHoverStrip.hide()
-        # visible chevron button in the left margin, click to show/hide the panel
-        self.settingsHandle = SettingsHandle(self.rightContent)
-        self.settingsHandle.clicked.connect(self.onSettingsHandleClicked)
-        self.settingsHandle.hovered.connect(self.onSettingsHandleHovered)
-        self.settingsHandle.hide()
-
         sidebar_cfg = {}
         try:
             sidebar_cfg = self.config["sessionSidebar"] or {}
@@ -651,7 +636,6 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
             self.bodySplitter.setSizes([max(160, width), max(1, total - max(160, width))])
         else:
             self.bodySplitter.setSizes([0, total])
-        self.positionSettingsHoverStrip()
         self.positionSessionHoverStrip()
         self._updateSessionHoverWidgets(bool(visible))
         QTimer.singleShot(0, self.positionSessionHoverStrip)
@@ -696,7 +680,6 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        self.positionSettingsHoverStrip()
         self.positionSessionHoverStrip()
 
     def initEvent(self):
@@ -769,8 +752,8 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         if item:
             self.config["currItem"] = item.name
             item.plugin.onActive()
+        self.closeOtherSettingsDialogs(item)
         self.updateSettingsButton()
-        self.updateSettingsAutoHide(item)
         self.refreshSessionSidebar()
         self.updateMainStack()
 
@@ -1052,118 +1035,6 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
                 pass
             self.applySessionSidebarLayout(False, cfg.get("width", 200))
 
-    def positionSettingsHoverStrip(self):
-        if self.settingsHoverStrip is None:
-            return
-        rect = self.tabWidget.contentsRect()
-        tabBar = self.tabWidget.tabBar()
-        top = tabBar.height() if tabBar is not None and tabBar.isVisible() else 0
-        y = rect.y() + top
-        height = rect.height() - top
-        if height < 0:
-            height = 0
-        self.settingsHoverStrip.setGeometry(rect.x(), y, 6, height)
-        self.settingsHoverStrip.raise_()
-        if self.settingsHandle is not None:
-            # Put the handle in the empty margin left of the tab content, so it
-            # never covers terminal text or the connection panel. Keep it at
-            # least EventFilter.Margins + 1 px from the window edge so the
-            # frameless-window resize border does not swallow its clicks.
-            tab_geo = self.tabWidget.geometry()
-            handle_w = self.settingsHandle.width()
-            handle_h = self.settingsHandle.height()
-            handle_x = max(6, tab_geo.x() - handle_w)
-            handle_y = tab_geo.y() + y + max(0, (height - handle_h) // 2)
-            self.settingsHandle.setGeometry(handle_x, handle_y, handle_w, handle_h)
-            self.settingsHandle.raise_()
-
-    def updateSettingsAutoHide(self, item):
-        enabled = bool(item and getattr(item.plugin, "autoHideSettings", False))
-        self._settings_hover_seen = False
-        self._settings_hover_timer.stop()
-        if self.settingsHoverStrip is None:
-            return
-        if self.settingsHandle is not None:
-            self.settingsHandle.setVisible(enabled)
-        if not enabled:
-            self.settingsHoverStrip.hide()
-            return
-        self.settingsHandle.setExpanded(item.settingWidget.isVisible())
-        self.positionSettingsHoverStrip()
-        if item.settingWidget.isVisible():
-            self.settingsHoverStrip.hide()
-            self._last_cursor_x = QCursor.pos().x()
-            self._settings_hover_timer.start()
-        else:
-            self.settingsHoverStrip.show()
-            self.settingsHoverStrip.raise_()
-
-    def onSettingsHoverStripEntered(self):
-        item = self.getCurrentItem()
-        if not item or not getattr(item.plugin, "autoHideSettings", False):
-            return
-        if not item.settingWidget.isVisible():
-            self.showSettings()
-            # The pointer is already at the edge, so auto-hide may run as soon
-            # as the pointer leaves instead of waiting for a panel visit.
-            self._settings_hover_seen = True
-
-    def onSettingsHandleHovered(self):
-        item = self.getCurrentItem()
-        if not item or not getattr(item.plugin, "autoHideSettings", False):
-            return
-        if not item.settingWidget.isVisible():
-            self.showSettings()
-        self._settings_hover_seen = True
-
-    def onSettingsHandleClicked(self):
-        item = self.getCurrentItem()
-        if not item or not getattr(item.plugin, "autoHideSettings", False):
-            return
-        if item.settingWidget.isVisible():
-            # Ignore the click that immediately follows hover-open, otherwise
-            # a normal click on the collapsed handle would open and close it.
-            if time.monotonic() - self._settings_shown_at < 0.35:
-                return
-            self.hideSettings()
-        else:
-            self.showSettings()
-            self._settings_hover_seen = True
-
-    def _checkSettingsAutoHide(self):
-        item = self.getCurrentItem()
-        if (not item
-                or not getattr(item.plugin, "autoHideSettings", False)
-                or not item.settingWidget.isVisible()):
-            self._settings_hover_timer.stop()
-            self._settings_hover_seen = False
-            return
-        panel = item.settingWidget
-        cursor = QCursor.pos()
-        cursor_pos = panel.mapFromGlobal(cursor)
-        inside = panel.rect().contains(cursor_pos)
-        if self.settingsHandle is not None and self.settingsHandle.isVisible():
-            handle_pos = self.settingsHandle.mapFromGlobal(cursor)
-            inside = inside or self.settingsHandle.rect().contains(handle_pos)
-        # Directional auto-hide: moving left (or staying put) keeps the
-        # panel open; only a rightward move after leaving it collapses.
-        dx = cursor.x() - self._last_cursor_x
-        self._last_cursor_x = cursor.x()
-        if inside:
-            self._settings_hover_seen = True
-            return
-        focus_widget = QApplication.focusWidget()
-        editing = (focus_widget is not None
-                   and panel.isAncestorOf(focus_widget)
-                   and isinstance(focus_widget, (QLineEdit, QAbstractSpinBox, QTextEdit)))
-        if should_auto_hide_settings(
-                inside=False,
-                hover_seen=self._settings_hover_seen,
-                dx=dx,
-                popup_active=QApplication.activePopupWidget() is not None,
-                editing=editing):
-            self.hideSettings()
-
     def closeTab(self, idx):
         item = None
         for _item in self.items:
@@ -1172,6 +1043,7 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
                 break
         if item is None:
             return
+        self.closeSettingsDialog(item, delete=True)
         self.recordSerialSession(item)
         self.tabWidget.removeTab(idx)
         config_entry = getattr(item, "configEntry", None)
@@ -1188,7 +1060,6 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         item.onDel()
         self.items.remove(item)
         self.updateSettingsButton()
-        self.updateSettingsAutoHide(self.getCurrentItem())
         self.refreshSessionSidebar()
         self.updateMainStack()
 
@@ -1367,6 +1238,13 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
         item = self.getCurrentItem()
         if item is None:
             return
+        if getattr(item, "settingsDetached", False):
+            dialog = getattr(item, "settingsDialog", None)
+            if dialog is not None and dialog.isVisible():
+                self.hideSettings()
+            else:
+                self.showSettings()
+            return
         widget = item.settingWidget
         if widget.isVisible():
             self.hideSettings()
@@ -1374,46 +1252,71 @@ class MainWindow(CustomTitleBarWindowMixin, QMainWindow):
             self.showSettings()
 
     def updateSettingsButton(self):
+        if getattr(self, "settingsButton", None) is None:
+            return
         item = self.getCurrentItem()
-        visible = bool(item and item.settingWidget and item.settingWidget.isVisible())
-        style = (parameters.strStyleShowHideButtonLeft if visible
-                 else parameters.strStyleShowHideButtonRight)
-        self.settingsButton.setStyleSheet(style.replace("$DataPath", self.DataPath))
+        if item is not None and getattr(item, "settingsDetached", False):
+            dialog = getattr(item, "settingsDialog", None)
+            visible = bool(dialog is not None and dialog.isVisible())
+        else:
+            visible = bool(
+                item and item.settingWidget and item.settingWidget.isVisible()
+            )
+        self.settingsButton.setChecked(visible)
+
+    def _settingsDialogTitle(self, item):
+        return "{} - {}".format(item.getDisplayName(), _("Serial settings"))
+
+    def closeSettingsDialog(self, item, delete=False):
+        dialog = getattr(item, "settingsDialog", None)
+        if dialog is None:
+            return
+        dialog.close()
+        if delete:
+            item.settingsDialog = None
+            dialog.deleteLater()
+
+    def closeOtherSettingsDialogs(self, keep_item):
+        for item in self.items:
+            if item is keep_item:
+                continue
+            self.closeSettingsDialog(item)
 
     def showSettings(self):
         item = self.getCurrentItem()
-        if not item:
+        if not item or item.settingWidget is None:
             return
-        item.settingWidget.show()
+        if not getattr(item, "settingsDetached", False):
+            item.settingWidget.show()
+            self.updateSettingsButton()
+            return
+        self.closeOtherSettingsDialogs(item)
+        dialog = getattr(item, "settingsDialog", None)
+        if dialog is None:
+            dialog = ConnectionSettingsDialog(
+                self, self._settingsDialogTitle(item), item.settingWidget
+            )
+            item.settingsDialog = dialog
+            dialog.finished.connect(
+                lambda _result=0, it=item: self.updateSettingsButton()
+            )
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
         self.updateSettingsButton()
-        if getattr(item.plugin, "autoHideSettings", False) and self.settingsHoverStrip is not None:
-            self._settings_shown_at = time.monotonic()
-            self.settingsHoverStrip.hide()
-            if self.settingsHandle is not None:
-                self.settingsHandle.show()
-                self.settingsHandle.setExpanded(True)
-                self.settingsHandle.raise_()
-            self._last_cursor_x = QCursor.pos().x()
-            self._settings_hover_seen = False
-            self._settings_hover_timer.start()
 
     def hideSettings(self):
         item = self.getCurrentItem()
         if not item:
             return
+        if getattr(item, "settingsDetached", False):
+            dialog = getattr(item, "settingsDialog", None)
+            if dialog is not None:
+                dialog.close()
+            self.updateSettingsButton()
+            return
         item.settingWidget.hide()
         self.updateSettingsButton()
-        self._settings_hover_timer.stop()
-        self._settings_hover_seen = False
-        if (getattr(item.plugin, "autoHideSettings", False)
-                and self.settingsHoverStrip is not None):
-            self.positionSettingsHoverStrip()
-            self.settingsHoverStrip.show()
-            self.settingsHoverStrip.raise_()
-            if self.settingsHandle is not None:
-                self.settingsHandle.show()
-                self.settingsHandle.setExpanded(False)
-                self.settingsHandle.raise_()
 
     def toggleFunctional(self):
         widget = self.getCurrentItem().functionalWidget
