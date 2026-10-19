@@ -19,12 +19,23 @@ namespace COMTool.App.Views;
 
 public partial class MainWindow : Window
 {
+    private static readonly Cursor WestEastCursor = new(StandardCursorType.SizeWestEast);
+    private static readonly Cursor NorthSouthCursor = new(StandardCursorType.SizeNorthSouth);
+    private static readonly Cursor NorthWestSouthEastCursor = new(StandardCursorType.TopLeftCorner);
+    private static readonly Cursor NorthEastSouthWestCursor = new(StandardCursorType.TopRightCorner);
     private bool _sidebarVisible = true;
     private double _sidebarWidth = 220;
     private bool _loaded;
     private bool _applyingEncoding;
     private AppConfigService? _config;
     private DispatcherTimer? _portTimer;
+    private readonly DispatcherTimer _sessionHoverTimer;
+    private bool _sessionHoverSeen;
+    private bool _windowPointerPressed;
+    private double _lastSessionPointerX;
+    private double _lastSessionPointerY;
+    private double _lastSessionTimerX;
+    private DateTime _sessionShownAt = DateTime.MinValue;
     private ConnectionSettingsWindow? _settingsWindow;
     private readonly Dictionary<TerminalTab, ZmodemTiming> _zmodemTimings = new();
     private readonly Dictionary<TerminalTab, ZmodemStream> _zmodemStreams = new();
@@ -42,10 +53,32 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         UpdateMaximizeIcon();
+        _sessionHoverTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(250),
+        };
+        _sessionHoverTimer.Tick += (_, _) => CheckSessionSidebarAutoHide();
         AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Tunnel);
+        AddHandler(PointerMovedEvent, OnWindowPointerMoved, RoutingStrategies.Tunnel, handledEventsToo: true);
+        AddHandler(PointerPressedEvent, OnWindowPointerPressed, RoutingStrategies.Tunnel);
+        AddHandler(PointerReleasedEvent, OnWindowPointerReleased, RoutingStrategies.Tunnel, handledEventsToo: true);
+        AddHandler(
+            PointerCaptureLostEvent,
+            OnWindowPointerCaptureLost,
+            RoutingStrategies.Tunnel,
+            handledEventsToo: true);
         Sidebar.SessionActivated += OnSessionActivated;
         Sidebar.RemoveRequested += OnSessionRemoveRequested;
         Opened += OnOpened;
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == WindowStateProperty)
+        {
+            UpdateMaximizeIcon();
+        }
     }
 
     private void OnOpened(object? sender, EventArgs e)
@@ -1197,6 +1230,7 @@ public partial class MainWindow : Window
         var fullScreen = WindowState == WindowState.FullScreen;
         WindowState = fullScreen ? WindowState.Normal : WindowState.FullScreen;
         TitleBar.IsVisible = fullScreen;
+        RootGrid.RowDefinitions[0].Height = new GridLength(fullScreen ? 35 : 0);
         e.Handled = true;
     }
 
@@ -1379,10 +1413,57 @@ public partial class MainWindow : Window
 
     private void OnSessionHandleClick(object? sender, RoutedEventArgs e)
     {
-        SetSidebarVisible(!_sidebarVisible);
+        if (_sidebarVisible)
+        {
+            // Ignore the click immediately following a hover-open.
+            if (DateTime.UtcNow - _sessionShownAt < TimeSpan.FromMilliseconds(350))
+            {
+                return;
+            }
+
+            SetSidebarVisible(false);
+            return;
+        }
+
+        SetSidebarVisible(true);
+        _sessionShownAt = DateTime.UtcNow;
+        _sessionHoverSeen = true;
     }
 
-    private void SetSidebarVisible(bool visible)
+    private void OnSessionHandlePointerEntered(object? sender, PointerEventArgs e)
+    {
+        if (!_sidebarVisible)
+        {
+            ShowSessionSidebarAuto();
+        }
+    }
+
+    private void OnSessionHoverStripEntered(object? sender, PointerEventArgs e)
+    {
+        if (!_sidebarVisible)
+        {
+            ShowSessionSidebarAuto();
+        }
+    }
+
+    private void OnSidebarPointerEntered(object? sender, PointerEventArgs e)
+    {
+        _sessionHoverSeen = true;
+    }
+
+    private void ShowSessionSidebarAuto()
+    {
+        if (_sidebarVisible)
+        {
+            return;
+        }
+
+        SetSidebarVisible(true, persist: false);
+        _sessionShownAt = DateTime.UtcNow;
+        _sessionHoverSeen = true;
+    }
+
+    private void SetSidebarVisible(bool visible, bool persist = true)
     {
         _sidebarVisible = visible;
         Sidebar.IsVisible = visible;
@@ -1392,7 +1473,154 @@ public partial class MainWindow : Window
             : new GridLength(0);
         BodyGrid.ColumnDefinitions[1].Width = visible ? new GridLength(3) : new GridLength(0);
         SessionHandleIcon.Text = visible ? "\uf053" : "\uf054";
-        PersistSidebarConfig();
+        SessionHoverStrip.IsVisible = !visible;
+
+        if (visible)
+        {
+            _sessionHoverSeen = false;
+            _lastSessionTimerX = _lastSessionPointerX;
+            _sessionHoverTimer.Start();
+        }
+        else
+        {
+            _sessionHoverTimer.Stop();
+            _sessionHoverSeen = false;
+        }
+
+        if (persist)
+        {
+            PersistSidebarConfig();
+        }
+    }
+
+    private void CheckSessionSidebarAutoHide()
+    {
+        if (!_sidebarVisible)
+        {
+            _sessionHoverTimer.Stop();
+            _sessionHoverSeen = false;
+            return;
+        }
+
+        var dx = _lastSessionPointerX - _lastSessionTimerX;
+        _lastSessionTimerX = _lastSessionPointerX;
+
+        var inside = Sidebar.IsPointerOver
+            || SessionHandle.IsPointerOver
+            || SessionHoverStrip.IsPointerOver
+            || IsInSessionSidebarApproach();
+        if (inside)
+        {
+            _sessionHoverSeen = true;
+            return;
+        }
+
+        // Moving right while outside the window's left edge approaches the panel.
+        if (_lastSessionPointerX < 0)
+        {
+            return;
+        }
+
+        // Do not collapse while dragging the splitter, selecting text, or using a
+        // context menu.
+        if (_windowPointerPressed || Sidebar.HasOpenContextMenu)
+        {
+            return;
+        }
+
+        if (_sessionHoverSeen && dx > 0)
+        {
+            SetSidebarVisible(false, persist: false);
+        }
+    }
+
+    private bool IsInSessionSidebarApproach()
+    {
+        var bodyOrigin = BodyGrid.TranslatePoint(new Point(0, 0), this) ?? new Point(16, 35);
+        var bodyBottom = bodyOrigin.Y + BodyGrid.Bounds.Height;
+        return _lastSessionPointerX >= 0
+            && _lastSessionPointerX <= bodyOrigin.X
+            && _lastSessionPointerY >= bodyOrigin.Y
+            && _lastSessionPointerY <= bodyBottom;
+    }
+
+    private void OnWindowPointerMoved(object? sender, PointerEventArgs e)
+    {
+        var position = e.GetPosition(this);
+        _lastSessionPointerX = position.X;
+        _lastSessionPointerY = position.Y;
+
+        if (e.Source is Control source
+            && source.FindAncestorOfType<Button>(includeSelf: true) is not null)
+        {
+            Cursor = null;
+            return;
+        }
+
+        Cursor = GetResizeEdge(position) switch
+        {
+            WindowEdge.North or WindowEdge.South => NorthSouthCursor,
+            WindowEdge.West or WindowEdge.East => WestEastCursor,
+            WindowEdge.NorthWest or WindowEdge.SouthEast => NorthWestSouthEastCursor,
+            WindowEdge.NorthEast or WindowEdge.SouthWest => NorthEastSouthWestCursor,
+            _ => null,
+        };
+    }
+
+    private void OnWindowPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        _windowPointerPressed = true;
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed
+            || WindowState != WindowState.Normal)
+        {
+            return;
+        }
+
+        // Window buttons at the very edge must still receive their click.
+        if (e.Source is Control source
+            && source.FindAncestorOfType<Button>(includeSelf: true) is not null)
+        {
+            return;
+        }
+
+        var edge = GetResizeEdge(e.GetPosition(this));
+        if (edge is not null)
+        {
+            BeginResizeDrag(edge.Value, e);
+            e.Handled = true;
+        }
+    }
+
+    private void OnWindowPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        _windowPointerPressed = false;
+    }
+
+    private void OnWindowPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
+    {
+        _windowPointerPressed = false;
+    }
+
+    private WindowEdge? GetResizeEdge(Point point)
+    {
+        const double margin = 5;
+        var left = point.X <= margin;
+        var right = point.X >= Bounds.Width - margin;
+        var top = point.Y <= margin;
+        var bottom = point.Y >= Bounds.Height - margin;
+
+        return (left, right, top, bottom) switch
+        {
+            (true, _, true, _) => WindowEdge.NorthWest,
+            (_, true, true, _) => WindowEdge.NorthEast,
+            (true, _, _, true) => WindowEdge.SouthWest,
+            (_, true, _, true) => WindowEdge.SouthEast,
+            (true, _, _, _) => WindowEdge.West,
+            (_, true, _, _) => WindowEdge.East,
+            (_, _, true, _) => WindowEdge.North,
+            (_, _, _, true) => WindowEdge.South,
+            _ => null,
+        };
     }
 
     private void ApplySidebarConfig()
@@ -1404,7 +1632,7 @@ public partial class MainWindow : Window
 
         var config = _config.Config.SessionSidebar;
         _sidebarWidth = ClampSidebarWidth(config.Width);
-        SetSidebarVisible(config.Visible);
+        SetSidebarVisible(config.Visible, persist: false);
     }
 
     private void OnSidebarSplitterDragCompleted(object? sender, VectorEventArgs e)
@@ -1459,7 +1687,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        MaximizeIcon.Text = WindowState == WindowState.Maximized ? "\uf2d2" : "\uf2d0";
+        MaximizeIcon.Text = WindowState == WindowState.Maximized ? "\U000F05B2" : "\U000F05AF";
         ToolTip.SetTip(MaximizeButton, WindowState == WindowState.Maximized ? "Restore" : "Maximize");
     }
 
