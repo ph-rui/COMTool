@@ -132,9 +132,9 @@ public static class GateChecker
             }
         }
 
-        var testIds = ReadTestList(options.TestListPath);
-        var e2eIds = ReadPassedIds(options.E2eLogPath);
-        var packageIds = ReadPassedIds(options.PackageLogPath);
+        var testIds = TestLog.ReadTests(options.TestListPath);
+        var e2eIds = TestLog.ReadPassed(options.E2eLogPath);
+        var packageIds = TestLog.ReadPassed(options.PackageLogPath);
 
         foreach (var (feature, status) in parity)
         {
@@ -276,46 +276,5 @@ public static class GateChecker
         }
 
         return false;
-    }
-
-    private static IReadOnlySet<string> ReadTestList(string path)
-    {
-        var ids = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var line in ReadLines(path))
-        {
-            ids.Add(line);
-        }
-
-        return ids;
-    }
-
-    private static IReadOnlySet<string> ReadPassedIds(string path)
-    {
-        var ids = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var line in ReadLines(path))
-        {
-            var parts = line.Split(
-                (char[]?)null,
-                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            if (parts.Length >= 2 && string.Equals(parts[0], "PASS", StringComparison.Ordinal))
-            {
-                ids.Add(parts[1].TrimEnd(':'));
-            }
-        }
-
-        return ids;
-    }
-
-    private static IReadOnlyList<string> ReadLines(string path)
-    {
-        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
-        {
-            return Array.Empty<string>();
-        }
-
-        return File.ReadAllLines(path)
-            .Select(static line => line.Trim())
-            .Where(static line => line.Length > 0)
-            .ToArray();
     }
 }
