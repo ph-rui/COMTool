@@ -46,7 +46,8 @@ $parityPath = Join-Path $repoRoot "docs/parity-matrix.md"
 $matrixPath = Join-Path $repoRoot "docs/testing/feature-test-matrix.md"
 $manualPath = Join-Path $repoRoot "docs/testing/manual-acceptance.md"
 $packageName = "COMTool-Avalonia-Beta-win-x64-$Version"
-$platform = "windows"
+$gatePlatform = "windows"
+$candidatePlatform = "windows-x64"
 $platformRid = "win-x64"
 
 function Get-Dotnet {
@@ -113,29 +114,44 @@ function Stop-StagedProcess {
 }
 
 $dotnet = Get-Dotnet
+$Source = [IO.Path]::GetFullPath($Source)
 $CandidateDir = [IO.Path]::GetFullPath($CandidateDir)
+
 $staging = $null
 $promoted = $false
 $backup = $null
 
 try {
+    $commitOutput = & git -C $repoRoot rev-parse HEAD 2>$null
+    $gitStatus = $LASTEXITCODE
+    if ($gitStatus -ne 0) {
+        throw "could not read the source commit (git exit code $gitStatus)."
+    }
+    if (-not $commitOutput) {
+        throw "could not read the source commit (git produced no output)."
+    }
+    $commit = ([string]($commitOutput | Select-Object -First 1)).Trim()
+    if (-not $commit) {
+        throw "could not read the source commit."
+    }
+
     if (-not (Test-Path -LiteralPath $verifyScript -PathType Leaf)) {
         throw "verification gate not found: $verifyScript"
     }
 
-    # Step 1: run verify in a child host. verify.ps1 ends with Exit, so calling
-    # it with & would terminate this pack process before packaging.
+    # Step 1: run verify in a child host. verify.ps1 ends with Exit, so call it
+    # through a child process. The call operator passes the path as a distinct
+    # argument, so repository paths containing spaces survive intact.
     Write-Host "[pack] Running unified verification gate..."
-    $hostExe = (Get-Process -Id $PID).Path
-    $verifyArguments = @(
-        "-NoProfile",
-        "-ExecutionPolicy", "Bypass",
-        "-File", $verifyScript
-    )
-    $verifyProcess = Start-Process -FilePath $hostExe -ArgumentList $verifyArguments `
-        -WorkingDirectory $repoRoot -NoNewWindow -Wait -PassThru
-    if ($verifyProcess.ExitCode -ne 0) {
-        throw "verification failed with exit code $($verifyProcess.ExitCode); no candidate package was created."
+    $hostName = if ($PSVersionTable.PSEdition -eq "Core") { "pwsh" } else { "powershell.exe" }
+    $hostExe = Join-Path $PSHOME $hostName
+    if (-not (Test-Path -LiteralPath $hostExe -PathType Leaf)) {
+        $hostExe = (Get-Process -Id $PID).Path
+    }
+    & $hostExe -NoProfile -ExecutionPolicy Bypass -File $verifyScript
+    $verifyStatus = $LASTEXITCODE
+    if ($verifyStatus -ne 0) {
+        throw "verification failed with exit code $verifyStatus; no candidate package was created."
     }
 
     $latestFile = Join-Path $resultsRoot "latest.txt"
@@ -177,7 +193,14 @@ try {
         if (-not (Test-Path -LiteralPath $Source -PathType Container)) {
             throw "-SkipPublish was used but the publish source does not exist: $Source"
         }
-        $Source = (Resolve-Path -LiteralPath $Source).Path
+        $markerPath = Join-Path $Source ".candidate-commit"
+        if (-not (Test-Path -LiteralPath $markerPath -PathType Leaf)) {
+            throw "-SkipPublish requires $markerPath; run a real publish on this commit first."
+        }
+        $markedCommit = (Get-Content -LiteralPath $markerPath -Raw).Trim()
+        if ($markedCommit -ne $commit) {
+            throw "publish source $Source was built from '$markedCommit', but current HEAD is '$commit'."
+        }
         New-Item -ItemType Directory -Path $publishSource -Force | Out-Null
         Copy-Item -Path (Join-Path $Source "*") -Destination $publishSource -Recurse -Force
     }
@@ -196,6 +219,8 @@ try {
         if ($LASTEXITCODE -ne 0) {
             throw "dotnet publish failed with exit code $LASTEXITCODE; no candidate package was created."
         }
+        Set-Content -LiteralPath (Join-Path $publishSource ".candidate-commit") `
+            -Value $commit -Encoding ASCII
     }
 
     $stagedExe = Join-Path $publishSource "COMTool.App.exe"
@@ -278,6 +303,9 @@ try {
         -Recurse -Force
     Get-ChildItem -Path (Join-Path $packageDir "app") -Filter "*.pdb" -File |
         Remove-Item -Force
+    # Build provenance belongs next to the publish source, not in the package.
+    Remove-Item -LiteralPath (Join-Path $packageDir "app/.candidate-commit") `
+        -Force -ErrorAction SilentlyContinue
 
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot "install.ps1") -Destination $packageDir -Force
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot "uninstall.ps1") -Destination $packageDir -Force
@@ -307,18 +335,14 @@ try {
         $skipped += $counters.Skipped
     }
 
-    $commit = (& git -C $repoRoot rev-parse HEAD 2>$null | Select-Object -First 1)
-    if ($LASTEXITCODE -ne 0 -or -not $commit) {
-        throw "could not read the source commit."
-    }
     $builtAt = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
 
     $candidate = [ordered]@{
         version    = $Version
-        platform   = $platformRid
+        platform   = $candidatePlatform
         sha256     = $archiveHash
         builtAt    = $builtAt
-        commit     = $commit.Trim()
+        commit     = $commit
         resultsDir = $resultsDir
         passed     = $passed
         failed     = $failed
@@ -326,9 +350,6 @@ try {
     }
     $candidate | ConvertTo-Json -Depth 3 |
         Set-Content -LiteralPath (Join-Path $staging "candidate.json") -Encoding UTF8
-
-    # The staging-only publish copy must not become part of the candidate.
-    Remove-Item -LiteralPath $publishSource -Recurse -Force
 
     # Step 5: enforce package-phase coverage rules before promotion.
     if (-not (Test-Path -LiteralPath $gateDll -PathType Leaf)) {
@@ -338,7 +359,7 @@ try {
     $gateLog = Join-Path $resultsDir "testgate-package.log"
     & $dotnet $gateDll `
         --phase package `
-        --platform $platform `
+        --platform $gatePlatform `
         --parity $parityPath `
         --matrix $matrixPath `
         --manual $manualPath `
@@ -350,9 +371,51 @@ try {
         throw "package-phase test gate failed with exit code $LASTEXITCODE; staging was removed and the previous candidate was kept."
     }
 
-    # Step 6: atomically replace the candidate only after every gate passed.
-    $candidateParent = Split-Path -Parent $CandidateDir
+    # Step 6: promotion preconditions. Directory replacement is only atomic on
+    # the same volume, so refuse before moving anything across filesystems.
+    $candidateParent = [IO.Path]::GetFullPath((Split-Path -Parent $CandidateDir))
     New-Item -ItemType Directory -Path $candidateParent -Force | Out-Null
+    $stagingVolume = [IO.Path]::GetPathRoot($staging)
+    $candidateVolume = [IO.Path]::GetPathRoot($candidateParent)
+    if (-not [string]::Equals($stagingVolume, $candidateVolume, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "refusing to promote: staging '$staging' and candidate directory '$candidateParent' are on different filesystems."
+    }
+
+    # A real publish also refreshes the reusable publish source, including its
+    # .candidate-commit marker. Only do this after the package gate so a failed
+    # run cannot make a later -SkipPublish look provenance-clean.
+    if ($SkipPublish) {
+        Remove-Item -LiteralPath $publishSource -Recurse -Force
+    }
+    else {
+        $sourceBackup = "$Source.previous-$stagingId"
+        if (Test-Path -LiteralPath $Source) {
+            Move-Item -LiteralPath $Source -Destination $sourceBackup -Force
+        }
+        try {
+            Move-Item -LiteralPath $publishSource -Destination $Source -Force
+        }
+        catch {
+            $syncError = $_.Exception.Message
+            if (Test-Path -LiteralPath $Source) {
+                Remove-Item -LiteralPath $Source -Recurse -Force -ErrorAction SilentlyContinue
+            }
+            if (Test-Path -LiteralPath $sourceBackup) {
+                try {
+                    Move-Item -LiteralPath $sourceBackup -Destination $Source -Force
+                }
+                catch {
+                    throw "could not update $Source ($syncError) and could not restore $sourceBackup; the candidate was not promoted."
+                }
+            }
+            throw "could not update the reusable publish source $Source ($syncError); the candidate was not promoted."
+        }
+        if (Test-Path -LiteralPath $sourceBackup) {
+            Remove-Item -LiteralPath $sourceBackup -Recurse -Force
+        }
+    }
+
+    # Step 7: atomically replace the candidate only after every gate passed.
     if (Test-Path -LiteralPath $CandidateDir) {
         $backup = "$CandidateDir.previous-$stagingId"
         Move-Item -LiteralPath $CandidateDir -Destination $backup -Force
@@ -362,10 +425,22 @@ try {
         Move-Item -LiteralPath $staging -Destination $CandidateDir -Force
     }
     catch {
-        if ($backup -and (Test-Path -LiteralPath $backup)) {
-            Move-Item -LiteralPath $backup -Destination $CandidateDir -Force
+        $moveError = $_.Exception.Message
+        if ($backup) {
+            # Remove any partial target, then verify the restore actually
+            # happened before claiming the previous candidate was kept.
+            if (Test-Path -LiteralPath $CandidateDir) {
+                Remove-Item -LiteralPath $CandidateDir -Recurse -Force -ErrorAction SilentlyContinue
+            }
+            try {
+                Move-Item -LiteralPath $backup -Destination $CandidateDir -Force
+            }
+            catch {
+                throw "candidate promotion failed ($moveError) and the previous candidate could not be restored from $backup : $($_.Exception.Message)"
+            }
+            throw "could not promote the staged candidate ($moveError); the previous candidate was restored."
         }
-        throw
+        throw "could not promote the staged candidate: $moveError"
     }
 
     $promoted = $true

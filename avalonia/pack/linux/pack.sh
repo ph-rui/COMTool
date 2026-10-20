@@ -115,6 +115,9 @@ fi
 [[ -f "$verify_script" ]] || fail "verification gate not found: $verify_script"
 [[ -f "$e2e_script" ]] || fail "Linux E2E entry point not found: $e2e_script"
 
+commit="$(git -C "$repo_root" rev-parse HEAD 2>/dev/null)" \
+    || fail "could not read the source commit"
+
 # Step 1: the unified gate always runs first. There is deliberately no skip
 # or force option. The results directory from verify is the only evidence
 # source used by the candidate metadata and the package-phase gate.
@@ -148,6 +151,12 @@ publish_source="$staging/.publish"
 
 if [[ "${SKIP_PUBLISH:-0}" == "1" ]]; then
     printf '[pack] Reusing published application from %s\n' "$source_dir"
+    marker="$source_dir/.candidate-commit"
+    [[ -f "$marker" ]] \
+        || fail "SKIP_PUBLISH=1 requires $marker; run a real publish on this commit first"
+    marked_commit="$(head -n 1 "$marker" | tr -d '\r')"
+    [[ "$marked_commit" == "$commit" ]] \
+        || fail "publish source $source_dir was built from '${marked_commit:-unknown}', but current HEAD is $commit"
     [[ -x "$source_dir/COMTool.App" ]] || fail "SKIP_PUBLISH=1 but $source_dir/COMTool.App is missing"
     mkdir -p "$publish_source"
     cp -a "$source_dir/." "$publish_source/"
@@ -166,6 +175,7 @@ else
         -o "$publish_source"; then
         fail "dotnet publish failed; no candidate package was created"
     fi
+    printf '%s\n' "$commit" >"$publish_source/.candidate-commit"
 fi
 
 staged_app="$publish_source/COMTool.App"
@@ -253,8 +263,6 @@ for trx in "${trx_files[@]}"; do
     skipped=$((skipped + $(trx_counter "$trx" notExecuted)))
 done
 
-commit="$(git -C "$repo_root" rev-parse HEAD 2>/dev/null)" \
-    || fail "could not read the source commit"
 built_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 cat >"$staging/candidate.json" <<EOF
@@ -270,9 +278,6 @@ cat >"$staging/candidate.json" <<EOF
   "skipped": $skipped
 }
 EOF
-
-# The staging-only publish copy must not become part of the candidate.
-rm -rf -- "$publish_source"
 
 # Step 5: enforce the package-phase coverage rules before promotion.
 [[ -f "$gate_dll" ]] || fail "TestGate build output not found: $gate_dll"
@@ -295,10 +300,50 @@ if ((gate_status != 0)); then
     fail "package-phase test gate failed; staging was removed and the previous candidate was kept"
 fi
 
-# Step 6: atomically replace the candidate only after every gate passed. The
-# staging directory and default candidate directory share the same filesystem.
+# Step 6: promotion preconditions. Directory replacement is only atomic on the
+# same filesystem, so refuse before moving anything when the candidate output
+# is on another volume.
 candidate_parent="$(dirname -- "$candidate_dir")"
 mkdir -p "$candidate_parent"
+staging_device="$(stat -c '%d' -- "$staging")" \
+    || fail "could not determine the filesystem of $staging"
+candidate_device="$(stat -c '%d' -- "$candidate_parent")" \
+    || fail "could not determine the filesystem of $candidate_parent"
+if [[ "$staging_device" != "$candidate_device" ]]; then
+    fail "refusing to promote: staging '$staging' and candidate directory '$candidate_parent' are on different filesystems"
+fi
+
+# A real publish also refreshes the reusable publish source, including its
+# .candidate-commit provenance marker. Doing this only after the package gate
+# keeps a later SKIP_PUBLISH=1 safe on the same commit.
+if [[ "${SKIP_PUBLISH:-0}" != "1" ]]; then
+    source_backup=""
+    if [[ -e "$source_dir" ]]; then
+        source_backup="${source_dir}.previous-$staging_id"
+        mv -- "$source_dir" "$source_backup" \
+            || fail "could not move the previous publish source aside"
+    fi
+
+    if ! mv -- "$publish_source" "$source_dir"; then
+        if [[ -e "$source_dir" ]]; then
+            rm -rf -- "$source_dir" || true
+        fi
+        if [[ -n "$source_backup" ]]; then
+            if ! mv -- "$source_backup" "$source_dir"; then
+                fail "could not update $source_dir and could not restore $source_backup; the candidate was not promoted"
+            fi
+        fi
+        fail "could not update the reusable publish source $source_dir; the candidate was not promoted"
+    fi
+
+    if [[ -n "$source_backup" && -e "$source_backup" ]]; then
+        rm -rf -- "$source_backup" || true
+    fi
+else
+    rm -rf -- "$publish_source"
+fi
+
+# Step 7: atomically replace the candidate only after every gate passed.
 backup=""
 if [[ -e "$candidate_dir" ]]; then
     backup="${candidate_dir}.previous-$staging_id"
@@ -306,8 +351,13 @@ if [[ -e "$candidate_dir" ]]; then
 fi
 
 if ! mv -- "$staging" "$candidate_dir"; then
-    if [[ -n "$backup" && -e "$backup" ]]; then
-        mv -- "$backup" "$candidate_dir" || true
+    if [[ -n "$backup" ]]; then
+        # Remove any partial target before restoring, and do not claim a
+        # restore that did not happen.
+        rm -rf -- "$candidate_dir" || true
+        if ! mv -- "$backup" "$candidate_dir"; then
+            fail "candidate promotion failed and the previous candidate could not be restored from $backup"
+        fi
     fi
     fail "could not promote the staged candidate; the previous candidate was restored"
 fi

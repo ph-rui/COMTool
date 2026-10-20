@@ -14,7 +14,7 @@ public sealed class CandidateInfoTests
             "2026-10-20T12:34:56Z",
             "deadbeefcafe",
             "/tmp/comtool/test-results/20261020T123456Z",
-            153,
+            154,
             0,
             0);
 
