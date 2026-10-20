@@ -214,7 +214,6 @@ start_xvfb() {
     "$XVFB_BIN" "$display" -screen 0 1280x800x24 -ac +extension RANDR -nolisten tcp \
         >>"$TMP_ROOT/xvfb.log" 2>&1 &
     XVFB_PID=$!
-    XVFB_STARTED=1
 
     for ((attempt = 0; attempt < 100; attempt++)); do
         if ! kill -0 "$XVFB_PID" 2>/dev/null; then
@@ -226,6 +225,7 @@ start_xvfb() {
         if timeout 2 xdpyinfo -display "$display" >/dev/null 2>&1; then
             DISPLAY_NUM="$display"
             export DISPLAY="$display"
+            XVFB_STARTED=1
             log "Xvfb ready on $display (pid $XVFB_PID)"
             return 0
         fi
