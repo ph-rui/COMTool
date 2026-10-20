@@ -133,21 +133,22 @@
                        Text="Select a session from the left"
                        VerticalAlignment="Center" />
             <TextBlock Grid.Row="3"
+                       Name="EmptyStateAddHint"
                        Classes="EmptyTitle"
-                       Text="or click + to add a plugin"
+                       Text="or click + to add a session"
                        VerticalAlignment="Center" />
             <Button Grid.Row="5"
+                    Name="EmptyAddSessionButton"
                     Classes="EmptyAddButton"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
-                    ToolTip.Tip="Load plugin from file">
+                    ToolTip.Tip="New session">
               <Button.Flyout>
                 <MenuFlyout Placement="BottomEdgeAlignedLeft">
-                  <MenuItem Header="Send Receive - dbg" Click="OnUnsupportedPluginClick" />
-                  <MenuItem Header="protocol - protocol" Click="OnUnsupportedPluginClick" />
-                  <MenuItem Header="terminal - terminal" Click="OnAddTerminalClick" />
-                  <MenuItem Header="Graph - graph" Click="OnUnsupportedPluginClick" />
-                  <MenuItem Header="Load plugin from file" IsEnabled="False" />
+                  <MenuItem Header="Serial" Tag="Serial" Click="OnNewSessionClick" />
+                  <MenuItem Header="SSH" Tag="SSH" Click="OnNewSessionClick" />
+                  <MenuItem Header="TCP" Tag="TCP" Click="OnNewSessionClick" />
+                  <MenuItem Header="Local terminal" Tag="Local" Click="OnNewSessionClick" />
                 </MenuFlyout>
               </Button.Flyout>
               <TextBlock Text="&#xf067;"
@@ -230,7 +231,8 @@
                           Spacing="0"
                           Margin="0,3,0,0"
                           VerticalAlignment="Top">
-                <Button Width="32" Height="32"
+                <Button Name="ToolbarAddSessionButton"
+                        Width="32" Height="32"
                         MinWidth="0" MinHeight="0"
                         Padding="0"
                         Background="{DynamicResource AccentBrush}"
@@ -239,14 +241,13 @@
                         Focusable="False"
                         HorizontalContentAlignment="Center"
                         VerticalContentAlignment="Center"
-                        ToolTip.Tip="Load plugin from file">
+                        ToolTip.Tip="New session">
                   <Button.Flyout>
                     <MenuFlyout Placement="BottomEdgeAlignedRight">
-                      <MenuItem Header="Send Receive - dbg" Click="OnUnsupportedPluginClick" />
-                      <MenuItem Header="protocol - protocol" Click="OnUnsupportedPluginClick" />
-                      <MenuItem Header="terminal - terminal" Click="OnAddTerminalClick" />
-                      <MenuItem Header="Graph - graph" Click="OnUnsupportedPluginClick" />
-                      <MenuItem Header="Load plugin from file" IsEnabled="False" />
+                      <MenuItem Header="Serial" Tag="Serial" Click="OnNewSessionClick" />
+                      <MenuItem Header="SSH" Tag="SSH" Click="OnNewSessionClick" />
+                      <MenuItem Header="TCP" Tag="TCP" Click="OnNewSessionClick" />
+                      <MenuItem Header="Local terminal" Tag="Local" Click="OnNewSessionClick" />
                     </MenuFlyout>
                   </Button.Flyout>
                   <TextBlock Text="&#xf067;"

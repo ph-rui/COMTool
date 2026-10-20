@@ -2614,9 +2614,23 @@ public partial class MainWindow : Window
         ToolTip.SetTip(MaximizeButton, WindowState == WindowState.Maximized ? "Restore" : "Maximize");
     }
 
-    private void OnAddTerminalClick(object? sender, RoutedEventArgs e)
+    private void OnNewSessionClick(object? sender, RoutedEventArgs e)
     {
-        ShowConnectionSettings(null);
+        var kind = (sender as MenuItem)?.Tag?.ToString() switch
+        {
+            "SSH" => SessionKind.Ssh,
+            "TCP" => SessionKind.Tcp,
+            "Local" => SessionKind.Local,
+            _ => SessionKind.Serial,
+        };
+
+        if (kind == SessionKind.Local)
+        {
+            AddLocalTerminal();
+            return;
+        }
+
+        ShowConnectionSettings(null, kind);
     }
 
     private async void OnSettingsClick(object? sender, RoutedEventArgs e)
@@ -2636,7 +2650,7 @@ public partial class MainWindow : Window
         ShowConnectionSettings(tab);
     }
 
-    private void ShowConnectionSettings(TerminalTab? tab)
+    private void ShowConnectionSettings(TerminalTab? tab, SessionKind initialKind = SessionKind.Serial)
     {
         if (_config is null)
         {
@@ -2655,7 +2669,8 @@ public partial class MainWindow : Window
             OpenSerialFromSettingsAsync,
             OpenSshFromSettingsAsync,
             OpenTcpFromSettingsAsync,
-            ShowErrorAsync);
+            ShowErrorAsync,
+            initialKind);
         _settingsWindow = window;
         window.Closed += (_, _) =>
         {
@@ -2906,12 +2921,6 @@ public partial class MainWindow : Window
         {
             await ShowErrorAsync(ex.Message);
         }
-    }
-
-    private async void OnUnsupportedPluginClick(object? sender, RoutedEventArgs e)
-    {
-        var name = sender is MenuItem item ? item.Header?.ToString() : "Plugin";
-        await ShowErrorAsync($"{name} is not available in this build.");
     }
 
     private async void OnTerminalPointerPressed(object? sender, PointerPressedEventArgs e)

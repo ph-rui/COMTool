@@ -32,6 +32,7 @@ public partial class ConnectionSettingsWindow : Window
 
     private readonly AppConfigService _config;
     private readonly TerminalTab? _currentTab;
+    private readonly SessionKind _initialKind;
     private readonly Func<string, TerminalTab?, Task> _openSerial;
     private readonly Func<string, TerminalTab?, Task> _openSsh;
     private readonly Func<string, TerminalTab?, Task> _openTcp;
@@ -54,10 +55,12 @@ public partial class ConnectionSettingsWindow : Window
         Func<string, TerminalTab?, Task> openSerial,
         Func<string, TerminalTab?, Task> openSsh,
         Func<string, TerminalTab?, Task> openTcp,
-        Func<string, Task> showError)
+        Func<string, Task> showError,
+        SessionKind initialKind = SessionKind.Serial)
     {
         _config = config;
         _currentTab = currentTab;
+        _initialKind = initialKind;
         _openSerial = openSerial;
         _openSsh = openSsh;
         _openTcp = openTcp;
@@ -118,7 +121,13 @@ public partial class ConnectionSettingsWindow : Window
     {
         if (_currentTab is null)
         {
-            ConnectionTypeCombo.SelectedIndex = 0;
+            ConnectionTypeCombo.SelectedIndex = _initialKind switch
+            {
+                SessionKind.Ssh => 1,
+                SessionKind.Tcp => 2,
+                _ => 0,
+            };
+            Title = "New session";
             UpdateConnectionPanels();
             return;
         }

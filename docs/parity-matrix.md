@@ -15,8 +15,8 @@
 | UI-03 | 串口/SSH 分组与状态图标 | P0 | 部分 | 连接状态原地更新；Windows `--ports` 已输出 COM97/99 等 SetupAPI 描述 |
 | UI-04 | 侧栏右键菜单 | P0 | 部分 | Open、Remove session、确认框、配置持久化已验证 |
 | UI-05 | 标签页与标题 | P0 | 完成 | 多标签新增/关闭/切换、标题规则、选中样式、状态圆点和双击分离/回接已完成；分离后命令可继续执行，关闭分离窗口无重复缓冲；切换标签前对旧终端调用 `BeginReparent`，避免内容宿主移除旧控件时清理 PTY 读取器，切换后直接输入即可继续执行，两个方向均已在打包版实测；见 `tab-switch-input-second-1000x650.png`、`tab-switch-input-first-1000x650.png` |
-| UI-06 | `+` 插件选择器 | P0 | 部分 | 列表顺序与 Python 一致：dbg、protocol、terminal、Graph、Load plugin from file；terminal 可用，其余显示未实现提示，外部插件加载按约定暂不启用 |
-| UI-07 | 空状态 | P0 | 部分 | 无标签时显示，文案与 `+` 入口已验证 |
+| UI-06 | `+` 新建会话类型选择器 | P0 | 完成（MobaXterm 方向） | 按用户要求移除 Python 插件占位项（Send Receive/protocol/Graph/Load plugin）；两个 `+` 入口统一为 Serial/SSH/TCP/Local terminal，选择后预选对应设置页或创建本地终端；后续按 MobaXterm 会话类型逐步扩展，未实现类型不显示 |
+| UI-07 | 空状态 | P0 | 完成 | 无标签时显示 `Select a session from the left` / `or click + to add a session`，两个 `+` 入口提示 `New session`；headless 测试覆盖 |
 | UI-08 | 设置按钮与设置面板 | P0 | 完成 | 串口/SSH 参数、密钥、记住密码、打开/关闭、侧栏同步已实现 |
 | UI-09 | 主题切换（浅色/深色） | P0 | 部分 | 标题栏右键菜单可切换浅/深色，`skin` 持久化并重启生效 |
 | UI-10 | 语言切换 | P1 | 未开始 | 英文/简中/繁中/日文，文案一致 |
@@ -138,7 +138,7 @@
 
 | ID | 项目 | 优先级 | 状态 | 验收要点 |
 |---|---|---|---|---|
-| TST-01 | 单元测试 | P0 | 完成 | 213 项通过（Core 42/Connections 39/Terminal 11/ZMODEM 32/TestGate 49/App 40） |
+| TST-01 | 单元测试 | P0 | 完成 | 217 项通过（Core 42/Connections 39/Terminal 11/ZMODEM 32/TestGate 49/App 44） |
 | TST-02 | 终端 golden 测试 | P0 | 完成 | 同一字节流与 Python pyte 0.8.2（60x20、LNM）屏幕行/光标快照一致 |
 | TST-03 | ZMODEM 集成测试 | P0 | 完成 | 模拟双向收发和真实 lrzsz 双向 64KB 二进制文件内容校验通过 |
 | TST-04 | SSH/串口集成测试 | P0 | 部分 | 本地 sshd、Windows 配置内 SSH/串口、Linux socat PTY 已测 |
