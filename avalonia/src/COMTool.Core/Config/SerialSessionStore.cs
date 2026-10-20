@@ -33,6 +33,37 @@ public static class SerialSessionRules
             Extra = session.Extra,
         };
     }
+
+    /// <summary>
+    /// Compact sidebar summary, e.g. "115200 8N1" or
+    /// "460800 8N1 · RTS/CTS". Flow control is omitted when it is None.
+    /// </summary>
+    public static string ConnectionSummary(SerialConnectionConfig? serial)
+    {
+        var baudrate = serial is { Baudrate: > 0 } ? serial.Baudrate : 115200;
+        var bytesize = serial is { Bytesize: >= 5 and <= 8 } ? serial.Bytesize : 8;
+        var parity = (serial?.Parity ?? "None").Trim().ToLowerInvariant() switch
+        {
+            "" or "none" => "N",
+            "even" => "E",
+            "odd" => "O",
+            "mark" => "M",
+            "space" => "S",
+            _ => "?",
+        };
+        var stopbits = (serial?.Stopbits ?? "").Trim();
+        if (stopbits.Length == 0)
+        {
+            stopbits = "1";
+        }
+
+        var summary = $"{baudrate} {bytesize}{parity}{stopbits}";
+        var flowcontrol = (serial?.Flowcontrol ?? "None").Trim();
+        return flowcontrol.Length == 0
+            || string.Equals(flowcontrol, "None", StringComparison.OrdinalIgnoreCase)
+            ? summary
+            : $"{summary} · {flowcontrol}";
+    }
 }
 
 public sealed class SerialSessionStore

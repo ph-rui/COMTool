@@ -21,6 +21,7 @@ public sealed partial class SessionItem : ObservableObject
     public required string SessionId { get; init; }
     public required SessionKind Kind { get; init; }
     public string? Detail { get; init; }
+    public string? SerialSettings { get; init; }
 
     [ObservableProperty]
     private bool _isConnected;
@@ -169,6 +170,7 @@ public partial class MainViewModel : ViewModelBase
             SessionId = "COM99",
             Kind = SessionKind.Serial,
             Detail = "USB-SERIAL CH340",
+            SerialSettings = "115200 8N1",
             IsConnected = true,
         });
         serial.Items.Add(new SessionItem
@@ -177,6 +179,7 @@ public partial class MainViewModel : ViewModelBase
             SessionId = "COM3",
             Kind = SessionKind.Serial,
             Detail = "Silicon Labs CP210x",
+            SerialSettings = "9600 8N1",
         });
 
         var ssh = new SidebarSection { Title = "SSH", ShowHeader = true };
@@ -246,6 +249,7 @@ public partial class MainViewModel : ViewModelBase
                 SessionId = session.Port,
                 Kind = SessionKind.Serial,
                 Detail = string.IsNullOrWhiteSpace(detail) ? null : detail,
+                SerialSettings = SerialSessionRules.ConnectionSummary(session.Serial),
                 IsConnected = connectedSerial.Contains(session.Port),
             });
         }
