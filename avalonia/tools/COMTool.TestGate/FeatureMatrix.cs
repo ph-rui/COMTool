@@ -56,6 +56,12 @@ public static class FeatureMatrix
     public static IReadOnlyList<FeatureRow> Load(string path)
     {
         var rows = MarkdownTable.Read(path);
+        if (rows.Count == 0)
+        {
+            throw new InvalidDataException(
+                $"Feature matrix '{path}' contains no data rows.");
+        }
+
         var features = new List<FeatureRow>(rows.Count);
 
         foreach (var row in rows)

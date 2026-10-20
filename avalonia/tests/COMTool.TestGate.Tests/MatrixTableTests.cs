@@ -38,6 +38,33 @@ public sealed class MatrixTableTests
     }
 
     [Fact]
+    public void MD05_ParsesMultipleTablesAndIgnoresProse()
+    {
+        var path = TempFile(
+            "# COMTool Avalonia 功能对齐清单\n" +
+            "\n" +
+            "Intro prose without a pipe.\n" +
+            "\n" +
+            "| ID | 状态 |\n" +
+            "|---|---|\n" +
+            "| UI-05 | 完成 |\n" +
+            "\n" +
+            "## 2. 终端\n" +
+            "More prose.\n" +
+            "\n" +
+            "| Feature | Phase |\n" +
+            "|---|---|\n" +
+            "| UI-06 | verify |\n");
+        var rows = MarkdownTable.Read(path);
+        Assert.Equal(2, rows.Count);
+        Assert.Equal("UI-05", rows[0]["ID"]);
+        Assert.Equal("完成", rows[0]["状态"]);
+        Assert.Equal("UI-06", rows[1]["Feature"]);
+        Assert.Equal("verify", rows[1]["Phase"]);
+        Assert.DoesNotContain("ID", rows[1].Keys);
+    }
+
+    [Fact]
     public void FM01_ParsesCommaSeparatedIdsAndDash()
     {
         var path = TempFile(
@@ -47,6 +74,28 @@ public sealed class MatrixTableTests
         var row = FeatureMatrix.Load(path).Single();
         Assert.Equal(new[] { "UI05_A", "UI05_B" }, row.Automated);
         Assert.Empty(row.Manual);
+    }
+
+    [Fact]
+    public void FM02_HeaderOnlyMatrixThrows()
+    {
+        var path = TempFile(
+            "| Feature | Status | Automated | Phase | Platform | Command | Manual | Evidence |\n" +
+            "|---|---|---|---|---|---|---|---|\n");
+        var exception = Assert.Throws<InvalidDataException>(() => FeatureMatrix.Load(path));
+        Assert.Contains(path, exception.Message);
+        Assert.Contains("no data rows", exception.Message);
+    }
+
+    [Fact]
+    public void FM03_MissingRequiredColumnThrows()
+    {
+        var path = TempFile(
+            "| Feature | Status | Automated | Phase | Platform | Command | Manual |\n" +
+            "|---|---|---|---|---|---|---|\n" +
+            "| UI-05 | 完成 | UI05 | verify | all | dotnet test | - |\n");
+        var exception = Assert.Throws<InvalidDataException>(() => FeatureMatrix.Load(path));
+        Assert.Contains("Evidence", exception.Message);
     }
 
     [Fact]
@@ -63,6 +112,32 @@ public sealed class MatrixTableTests
         Assert.Equal("完成", statuses["UI-15"]);
         Assert.Equal("部分", statuses["UI-14"]);
         Assert.False(statuses.ContainsKey("ID"));
+    }
+
+    [Fact]
+    public void PM02_IgnoresNonFeatureRows()
+    {
+        var path = TempFile(
+            "| ID | 功能 | 优先级 | 状态 | 验收要点 |\n" +
+            "|---|---|---|---|---|\n" +
+            "| - | 说明 | P0 | 完成 | x |\n" +
+            "| UI-05 | 标签页 | P0 | 完成 | x |\n");
+        var statuses = ParityMatrix.Load(path);
+        Assert.Single(statuses);
+        Assert.Equal("完成", statuses["UI-05"]);
+    }
+
+    [Fact]
+    public void PM03_DuplicateFeatureIdThrows()
+    {
+        var path = TempFile(
+            "| ID | 功能 | 优先级 | 状态 | 验收要点 |\n" +
+            "|---|---|---|---|---|\n" +
+            "| UI-05 | 标签页 | P0 | 完成 | x |\n" +
+            "| UI-05 | 重复 | P0 | 完成 | x |\n");
+        var exception = Assert.Throws<InvalidDataException>(() => ParityMatrix.Load(path));
+        Assert.Contains("UI-05", exception.Message);
+        Assert.Contains("duplicate", exception.Message);
     }
 
     private static string TempFile(string content)
