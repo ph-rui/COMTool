@@ -74,16 +74,16 @@
 
 **Interfaces:**
 - Consumes: clean `avalonia` branch at `60b9398`.
-- Produces: branch `avalonia/feature-test-gate`; baseline test count.
+- Produces: branch `feature/avalonia-test-gate`; baseline test count. (`avalonia/feature-*` cannot coexist with the existing `avalonia` branch because Git treats `avalonia` as a ref directory conflict.)
 
 - [ ] **Step 1: Create the feature branch**
 
 Run:
 ```bash
-git switch -c avalonia/feature-test-gate
+git switch -c feature/avalonia-test-gate
 git status --short --branch
 ```
-Expected: branch `avalonia/feature-test-gate`, clean worktree.
+Expected: branch `feature/avalonia-test-gate`, clean worktree.
 
 - [ ] **Step 2: Run the existing suite and record the baseline**
 
@@ -463,16 +463,9 @@ Test ID resolution:
 - fully-qualified suffix match (`.UI05_...`);
 - otherwise `Contains(id, StringComparison.Ordinal)` if the matrix value starts with `COMTool.` or contains `Tests.`.
 
-- [ ] **Step 4: Add parity parser test**
+- [ ] **Step 4: Confirm the parity parser test already exists**
 
-Add `PM01_ParsesParityStatusRows`:
-```csharp
-var statuses = ParityMatrix.Load(path);
-Assert.Equal("完成", statuses["UI-05"]);
-Assert.Equal("完成", statuses["UI-15"]);
-Assert.Equal("部分", statuses["UI-14"]);
-Assert.False(statuses.ContainsKey("ID"));
-```
+Task 1 already added `PM01_ParsesParityStatusRows` in `MatrixTableTests.cs`. Do not duplicate it. Add gate-specific `ParityMatrix` assertions here only if the Task 1 test is insufficient; otherwise proceed.
 
 - [ ] **Step 5: Run tests**
 
