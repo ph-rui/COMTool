@@ -19,11 +19,40 @@ XVFB_STARTED="${XVFB_STARTED:-0}"
 WM_PID="${WM_PID:-}"
 APP_PID="${APP_PID:-}"
 SSHD_PID="${SSHD_PID:-}"
+SSHD_BIN="${SSHD_BIN:-}"
+SSH_FIXTURE_DIR="${SSH_FIXTURE_DIR:-}"
+SSH_PORT="${SSH_PORT:-}"
+SSH_USER="${SSH_USER:-}"
+SSH_CLIENT_KEY="${SSH_CLIENT_KEY:-}"
+SSH_HOST_KEY="${SSH_HOST_KEY:-}"
 DISPLAY_NUM="${DISPLAY_NUM:-}"
 WINDOW_ID="${WINDOW_ID:-}"
 KEEP_TEMP="${KEEP_TEMP:-0}"
 DEFAULT_WINDOW_TIMEOUT="${DEFAULT_WINDOW_TIMEOUT:-20}"
 E2E_CAPTURED="${E2E_CAPTURED:-0}"
+
+# Window-relative coordinates for the 1000x650 E2E window (no decorations).
+# The sidebar starts at x=16 inside BodyGrid and is 220px wide. Its first SSH
+# row sits below the 24px sidebar header, 5px gap, 26px "SSH" section header
+# and 2px list padding, so the 40px row spans y=98..138.
+SIDEBAR_SESSION_X="${SIDEBAR_SESSION_X:-80}"
+SIDEBAR_SESSION_Y="${SIDEBAR_SESSION_Y:-118}"
+
+# The tab strip is the first 36px row of MainStack. UI05 collapses the sidebar
+# first: MainStack then starts at x=32 (16px body margin + 16px content
+# margin), the settings button is 27px, the tab list has a 10px left margin and
+# each tab is at least 112px wide with a 2px right margin. Keeping the sidebar
+# collapsed makes these coordinates stable; leaving it expanded lets auto-hide
+# shift every tab 223px left while the test is running.
+FIRST_TAB_X="${FIRST_TAB_X:-125}"
+SECOND_TAB_X="${SECOND_TAB_X:-239}"
+TAB_STRIP_Y="${TAB_STRIP_Y:-53}"
+SESSIONS_TOGGLE_X="${SESSIONS_TOGGLE_X:-201}"
+SESSIONS_TOGGLE_Y="${SESSIONS_TOGGLE_Y:-18}"
+# Calibration probe: this point is the white sidebar list when expanded and
+# the dark terminal background when collapsed.
+SIDEBAR_PROBE_X="${SIDEBAR_PROBE_X:-200}"
+SIDEBAR_PROBE_Y="${SIDEBAR_PROBE_Y:-300}"
 
 log() {
     local line
@@ -110,7 +139,7 @@ require_commands() {
         missing+=("openbox or mutter (or set WM_BIN)")
     fi
 
-    for command_name in xdotool xdpyinfo xprop timeout sshd ssh-keygen nc rz sz; do
+    for command_name in xdotool xdpyinfo xprop timeout sshd ssh-keygen nc ss pgrep rz sz; do
         if ! command -v "$command_name" >/dev/null 2>&1; then
             missing+=("$command_name")
         fi
@@ -118,6 +147,10 @@ require_commands() {
 
     if ! command -v import >/dev/null 2>&1 && ! command -v xwd >/dev/null 2>&1; then
         missing+=("import (ImageMagick) or xwd (x11-apps)")
+    fi
+
+    if ! command -v convert >/dev/null 2>&1; then
+        missing+=("convert (ImageMagick)")
     fi
 
     if ((${#missing[@]} > 0)); then
@@ -306,6 +339,172 @@ seed_empty_config() {
 JSON
 }
 
+# Pick an unprivileged, currently free TCP port. The 20000..60000 range keeps
+# the fixture well away from the user's existing sshd on 2222 and from
+# privileged ports. sshd startup is verified separately, so a race that grabs
+# the port between this probe and sshd's bind is reported as a fixture failure
+# rather than silently reusing another server.
+find_free_tcp_port() {
+    local attempt
+    local port
+
+    for ((attempt = 0; attempt < 100; attempt++)); do
+        port="$(shuf -i 20000-60000 -n 1 2>/dev/null || true)"
+        if [[ ! "$port" =~ ^[0-9]+$ ]]; then
+            port=$((20000 + RANDOM % 40000))
+        fi
+        if ((port < 1024 || port > 65535)); then
+            continue
+        fi
+        if ! timeout 1 nc -z 127.0.0.1 "$port" >/dev/null 2>&1; then
+            printf '%s\n' "$port"
+            return 0
+        fi
+    done
+
+    log "Could not find a free TCP port for the SSH fixture"
+    return 1
+}
+
+ssh_connection_count() {
+    local output
+
+    [[ -n "${SSH_PORT:-}" ]] || { printf '0\n'; return 0; }
+    output="$(ss -Htn state established "sport = :$SSH_PORT" 2>/dev/null || true)"
+    printf '%s\n' "$output" | sed '/^[[:space:]]*$/d' | wc -l
+}
+
+wait_for_ssh_connections() {
+    local expected="$1"
+    local timeout_s="${2:-20}"
+    local attempt
+    local iterations=$((timeout_s * 10))
+    local count=0
+
+    for ((attempt = 0; attempt < iterations; attempt++)); do
+        count="$(ssh_connection_count)"
+        if ((count >= expected)); then
+            return 0
+        fi
+        sleep 0.1
+    done
+
+    log "Expected at least $expected SSH connection(s) on port ${SSH_PORT:-?}, saw $count"
+    return 1
+}
+
+# Run one ephemeral sshd owned by the current Unix user. The fixture never
+# touches the user's 2222 server: it has its own port, keys, config, log and
+# PidFile under TMP_ROOT, and cleanup stops only the tracked listener PID (and
+# descendants it created for active sessions).
+start_sshd_fixture() {
+    local attempt
+    local resolved
+
+    [[ -n "${TMP_ROOT:-}" ]] || { log "TMP_ROOT is not set"; return 1; }
+    resolved="$(command -v sshd || true)"
+    [[ -n "$resolved" ]] || { log "sshd not found"; return 1; }
+    SSHD_BIN="$resolved"
+    SSH_USER="$(id -un)"
+    SSH_FIXTURE_DIR="$TMP_ROOT/sshd"
+    mkdir -p "$SSH_FIXTURE_DIR"
+    chmod 700 "$SSH_FIXTURE_DIR"
+
+    SSH_PORT="$(find_free_tcp_port)" || return 1
+    SSH_HOST_KEY="$SSH_FIXTURE_DIR/host_key"
+    SSH_CLIENT_KEY="$SSH_FIXTURE_DIR/client_key"
+
+    log "Creating SSH fixture keys under $SSH_FIXTURE_DIR"
+    ssh-keygen -q -t ed25519 -N '' -C comtool-e2e-host -f "$SSH_HOST_KEY" || return 1
+    ssh-keygen -q -t ed25519 -N '' -C comtool-e2e-client -f "$SSH_CLIENT_KEY" || return 1
+    cp -- "$SSH_CLIENT_KEY.pub" "$SSH_FIXTURE_DIR/authorized_keys"
+    chmod 600 "$SSH_FIXTURE_DIR/authorized_keys"
+    chmod 600 "$SSH_HOST_KEY" "$SSH_CLIENT_KEY"
+
+    cat >"$SSH_FIXTURE_DIR/sshd_config" <<EOF
+Port $SSH_PORT
+ListenAddress 127.0.0.1
+HostKey $SSH_HOST_KEY
+PidFile $SSH_FIXTURE_DIR/sshd.pid
+AuthorizedKeysFile $SSH_FIXTURE_DIR/authorized_keys
+PubkeyAuthentication yes
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+ChallengeResponseAuthentication no
+PermitRootLogin no
+UsePAM no
+StrictModes no
+LogLevel VERBOSE
+AllowUsers $SSH_USER
+PrintMotd no
+X11Forwarding no
+EOF
+
+    log "Starting SSH fixture on 127.0.0.1:$SSH_PORT as $SSH_USER"
+    : >"$SSH_FIXTURE_DIR/sshd.log"
+    "$SSHD_BIN" -D -f "$SSH_FIXTURE_DIR/sshd_config" -E "$SSH_FIXTURE_DIR/sshd.log" \
+        >>"$SSH_FIXTURE_DIR/sshd.stderr.log" 2>&1 &
+    SSHD_PID=$!
+
+    for ((attempt = 0; attempt < 100; attempt++)); do
+        if ! kill -0 "$SSHD_PID" 2>/dev/null; then
+            log "SSH fixture exited before accepting connections"
+            tail -n 50 "$SSH_FIXTURE_DIR/sshd.log" >&2 2>/dev/null || true
+            tail -n 50 "$SSH_FIXTURE_DIR/sshd.stderr.log" >&2 2>/dev/null || true
+            SSHD_PID=""
+            return 1
+        fi
+        if timeout 1 nc -z 127.0.0.1 "$SSH_PORT" >/dev/null 2>&1; then
+            log "SSH fixture ready on 127.0.0.1:$SSH_PORT (pid $SSHD_PID)"
+            return 0
+        fi
+        sleep 0.1
+    done
+
+    log "SSH fixture did not listen on 127.0.0.1:$SSH_PORT within 10s"
+    tail -n 50 "$SSH_FIXTURE_DIR/sshd.log" >&2 2>/dev/null || true
+    stop_pid "$SSHD_PID" "sshd fixture"
+    SSHD_PID=""
+    return 1
+}
+
+# Seed one SSH session for the fixture. The private key is referenced by its
+# absolute path; no plaintext password is written anywhere in the config.
+seed_ssh_config() {
+    local config_dir="$1"
+    local port="$2"
+    local key_file="$3"
+    local user="${SSH_USER:-$(id -un)}"
+    local key="${user}@127.0.0.1:${port}"
+
+    [[ -n "$config_dir" && -n "$port" && -n "$key_file" ]] || return 1
+    [[ -f "$key_file" ]] || { log "SSH client key not found: $key_file"; return 1; }
+
+    mkdir -p "$config_dir"
+    cat >"$config_dir/config.json" <<EOF
+{
+  "version": 3,
+  "skin": "light",
+  "encoding": "UTF-8",
+  "serialSessions": [],
+  "sshSessions": [
+    {
+      "key": "$key",
+      "host": "127.0.0.1",
+      "port": $port,
+      "user": "$user",
+      "alias": "e2e",
+      "ssh_key": "$key_file",
+      "passwd_enc": ""
+    }
+  ],
+  "sshSessionsMigrated": true,
+  "sessionSidebar": { "visible": false, "width": 220 },
+  "window": { "width": 1000, "height": 650 }
+}
+EOF
+}
+
 start_app() {
     local config_dir="$1"
     local app_dir
@@ -393,7 +592,11 @@ click_window() {
     local window="${3:-$WINDOW_ID}"
 
     [[ -n "$window" ]] || return 1
-    xdotool mousemove --window "$window" --sync "$x" "$y" click 1
+    # Do not use --sync: moving to the coordinates the pointer already occupies
+    # waits for a motion event that never arrives. X processes the ordered
+    # move and click requests in sequence.
+    xdotool mousemove --window "$window" "$x" "$y" || return 1
+    xdotool click 1
 }
 
 type_text() {
@@ -402,6 +605,208 @@ type_text() {
 
 press_enter() {
     xdotool key --clearmodifiers Return
+}
+
+clear_input_line() {
+    xdotool key --clearmodifiers ctrl+u >/dev/null 2>&1 || true
+}
+
+click_sidebar_session() {
+    click_window "$SIDEBAR_SESSION_X" "$SIDEBAR_SESSION_Y"
+}
+
+# Read one window-relative pixel. This is only used to choose the correct tab
+# coordinates: expanding and collapsing the sidebar shifts the tab strip by
+# 223px. Test PASS/FAIL decisions never use screenshots.
+window_pixel_is_dark() {
+    local rel_x="$1"
+    local rel_y="$2"
+    local geometry
+    local win_x
+    local win_y
+    local image="$TMP_ROOT/pixel-probe.png"
+    local pixel
+    local hex
+    local r
+    local g
+    local b
+
+    geometry="$(xdotool getwindowgeometry --shell "$WINDOW_ID" 2>/dev/null)" || return 2
+    win_x="$(printf '%s\n' "$geometry" | sed -n 's/^X=//p' | sed -n '1p')"
+    win_y="$(printf '%s\n' "$geometry" | sed -n 's/^Y=//p' | sed -n '1p')"
+    [[ "$win_x" =~ ^-?[0-9]+$ && "$win_y" =~ ^-?[0-9]+$ ]] || return 2
+
+    capture_screenshot "$image" || return 2
+    pixel="$(convert "$image" -crop "1x1+$((win_x + rel_x))+$((win_y + rel_y))" +repage txt:- 2>/dev/null \
+        | sed -n 's/.*#\([0-9A-Fa-f]\{6\}\).*/\1/p' | sed -n '1p')"
+    [[ "$pixel" =~ ^[0-9A-Fa-f]{6}$ ]] || return 2
+
+    r=$((16#${pixel:0:2}))
+    g=$((16#${pixel:2:2}))
+    b=$((16#${pixel:4:2}))
+    ((r + g + b < 300))
+}
+
+# The sidebar auto-hides as soon as the pointer moves right towards the tabs,
+# which shifts the whole tab strip 223px left mid-test. Collapse it explicitly
+# through the title-bar sessions button so tab coordinates are deterministic.
+# The probe tolerates the panel already being collapsed (auto-hide or a prior
+# run) and retries a missed button click.
+collapse_sidebar_for_tabs() {
+    local attempt
+    local probe_status
+
+    for ((attempt = 0; attempt < 4; attempt++)); do
+        if window_pixel_is_dark "$SIDEBAR_PROBE_X" "$SIDEBAR_PROBE_Y"; then
+            probe_status=0
+        else
+            probe_status=$?
+        fi
+        if ((probe_status == 0)); then
+            return 0
+        fi
+        if ((probe_status == 2)); then
+            log "Could not calibrate sidebar state from a screenshot"
+            return 1
+        fi
+        click_window "$SESSIONS_TOGGLE_X" "$SESSIONS_TOGGLE_Y" || return 1
+        sleep 0.3
+    done
+
+    window_pixel_is_dark "$SIDEBAR_PROBE_X" "$SIDEBAR_PROBE_Y"
+}
+
+click_first_tab() {
+    click_window "$FIRST_TAB_X" "$TAB_STRIP_Y"
+}
+
+click_second_tab() {
+    click_window "$SECOND_TAB_X" "$TAB_STRIP_Y"
+}
+
+# Type a command until its marker file appears. A fresh SSH tab may not have
+# attached/focused its terminal when the click returns, so a lost keystroke is
+# retried after clearing the line. The marker remains the assertion; a timeout
+# is always a failure. Commands used here are idempotent.
+run_command_until_marker() {
+    local command="$1"
+    local marker="$2"
+    local timeout_s="${3:-20}"
+    local attempt
+    local wait_attempt
+    local iterations=$((timeout_s * 2))
+
+    for ((attempt = 0; attempt < iterations; attempt++)); do
+        if [[ -e "$marker" ]]; then
+            return 0
+        fi
+        clear_input_line
+        type_text "$command" || true
+        press_enter || true
+        for ((wait_attempt = 0; wait_attempt < 5; wait_attempt++)); do
+            if [[ -e "$marker" ]]; then
+                return 0
+            fi
+            sleep 0.1
+        done
+    done
+
+    return 1
+}
+
+wait_for_file_content() {
+    local path="$1"
+    local expected="$2"
+    local timeout_s="${3:-20}"
+    local attempt
+    local iterations=$((timeout_s * 10))
+    local actual=""
+
+    for ((attempt = 0; attempt < iterations; attempt++)); do
+        if [[ -s "$path" ]]; then
+            actual="$(cat -- "$path" 2>/dev/null || true)"
+            if [[ "$actual" == "$expected" ]]; then
+                return 0
+            fi
+        fi
+        sleep 0.1
+    done
+    log "File $path did not contain '$expected' (last value: '${actual}')"
+    return 1
+}
+
+# After a tab click, prove keystrokes reach the expected shell. This also
+# warms the terminal focus before a relative-path assertion. It retries because
+# Avalonia posts terminal focus asynchronously after the content host swap.
+wait_for_shell_focus() {
+    local expected_pid="$1"
+    local tag="$2"
+    local timeout_s="${3:-15}"
+    local probe="$TMP_ROOT/${tag}.shell-pid"
+    local attempt
+    local wait_attempt
+    local iterations=$((timeout_s * 2))
+    local actual=""
+
+    for ((attempt = 0; attempt < iterations; attempt++)); do
+        rm -f -- "$probe"
+        clear_input_line
+        type_text "echo \$\$ > $probe" || true
+        press_enter || true
+        for ((wait_attempt = 0; wait_attempt < 5; wait_attempt++)); do
+            if [[ -s "$probe" ]]; then
+                actual="$(cat -- "$probe" 2>/dev/null || true)"
+                if [[ "$actual" == "$expected_pid" ]]; then
+                    return 0
+                fi
+                break
+            fi
+            sleep 0.1
+        done
+    done
+
+    log "Keystrokes reached shell '${actual:-<none>}', expected '$expected_pid'"
+    return 1
+}
+
+# Click the saved SSH row until the requested number of independent transport
+# connections is live. A row may not be populated the instant the window maps,
+# so a missed click is retried; this is still an assertion on the fixture's
+# established sockets, not a fixed sleep.
+ensure_ssh_connections() {
+    local expected="$1"
+    local timeout_s="${2:-20}"
+    local count
+    local click_attempt
+    local max_clicks=$((timeout_s * 2))
+
+    count="$(ssh_connection_count)"
+    if ((count >= expected)); then
+        return 0
+    fi
+    for ((click_attempt = 0; count < expected && click_attempt < max_clicks; click_attempt++)); do
+        click_sidebar_session || true
+        if wait_for_ssh_connections "$expected" 8; then
+            count="$(ssh_connection_count)"
+            if ((count >= expected)); then
+                return 0
+            fi
+        fi
+        count="$(ssh_connection_count)"
+    done
+
+    log "Could not open SSH connection $expected (current count: $count)"
+    return 1
+}
+
+descendant_pids() {
+    local parent="$1"
+    local child
+
+    for child in $(pgrep -P "$parent" 2>/dev/null || true); do
+        printf '%s\n' "$child"
+        descendant_pids "$child"
+    done
 }
 
 wait_for_file() {
@@ -551,7 +956,23 @@ stop_app() {
 }
 
 stop_sshd() {
-    stop_pid "${SSHD_PID:-}" "sshd"
+    local pid="${SSHD_PID:-}"
+    local children=""
+
+    if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+        # Collect this fixture's session children before the listener exits and
+        # they are reparented. Never search by name: the user's own sshd on
+        # 2222 is a different process tree.
+        children="$(descendant_pids "$pid" || true)"
+    fi
+
+    stop_pid "$pid" "sshd fixture"
+    if [[ -n "$children" ]]; then
+        while read -r child; do
+            [[ -n "$child" ]] || continue
+            stop_pid "$child" "sshd fixture session"
+        done <<<"$children"
+    fi
     SSHD_PID=""
 }
 
