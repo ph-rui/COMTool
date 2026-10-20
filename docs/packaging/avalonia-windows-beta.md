@@ -158,8 +158,8 @@ b1a301ceac491a5aa707103416c4861a43b86db22552558ab8a715815aafb436
 ```
 
 That hash is from the earlier packaging run and does not include the stopped
-SSH session or ZMODEM status-row changes; it changes whenever the app is
-rebuilt. Linux warm-start
+SSH session, terminal palette or ZMODEM status-row changes; it changes
+whenever the app is rebuilt. Linux warm-start
 measurements took the packaged app from 1.54 s to 0.66-0.70 s; Windows startup
 still needs confirmation on the target desktop.
 
