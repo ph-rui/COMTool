@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Headless;
+using Avalonia.Markup.Xaml.Styling;
 using COMTool.App;
 
 [assembly: AvaloniaTestApplication(typeof(COMTool.App.Tests.TestAppBuilder))]
@@ -9,6 +10,8 @@ namespace COMTool.App.Tests;
 
 public static class TestAppBuilder
 {
+    private static readonly Uri TerminalThemeUri =
+        new("avares://Iciclecreek.Avalonia.Terminal/Themes/Generic.axaml");
     private static int _failureRetained;
 
     static TestAppBuilder()
@@ -33,7 +36,24 @@ public static class TestAppBuilder
 
     public static AppBuilder BuildAvaloniaApp() =>
         AppBuilder.Configure<App>()
-            .UseHeadless(new AvaloniaHeadlessPlatformOptions());
+            .UseHeadless(new AvaloniaHeadlessPlatformOptions())
+            // TerminalControl inserts this theme once per process from a static
+            // flag. Headless creates a fresh Application for later tests, so the
+            // flag is already set and the style would be missing. Install it for
+            // every test application instead.
+            .AfterSetup(_ => EnsureTerminalTheme());
+
+    private static void EnsureTerminalTheme()
+    {
+        var styles = Application.Current?.Styles;
+        if (styles is null
+            || styles.OfType<StyleInclude>().Any(include => include.Source == TerminalThemeUri))
+        {
+            return;
+        }
+
+        styles.Insert(0, new StyleInclude(TerminalThemeUri) { Source = TerminalThemeUri });
+    }
 
     private static void CleanupSharedRoot()
     {
