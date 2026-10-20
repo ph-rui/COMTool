@@ -170,6 +170,9 @@ public sealed class SerialConnectionConfig
 
 public sealed class TcpSession
 {
+    [JsonPropertyName("protocol")]
+    public string Protocol { get; set; } = "tcp";
+
     [JsonPropertyName("key")]
     public string Key { get; set; } = "";
 
@@ -181,6 +184,12 @@ public sealed class TcpSession
 
     [JsonPropertyName("port")]
     public int Port { get; set; } = 2345;
+
+    [JsonPropertyName("auto_reconnect")]
+    public bool AutoReconnect { get; set; }
+
+    [JsonPropertyName("auto_reconnect_interval")]
+    public double ReconnectInterval { get; set; } = 1.0;
 
     [JsonPropertyName("updated")]
     public long Updated { get; set; }

@@ -68,7 +68,10 @@ public sealed record TcpTarget(string Host, int Port)
             port = DefaultPort;
         }
 
-        if (host.Length == 0 || host.Contains(':') || port is <= 0 or > 65535)
+        if (host.Length == 0
+            || host.Contains(':')
+            || host.Any(char.IsWhiteSpace)
+            || port is <= 0 or > 65535)
         {
             return false;
         }

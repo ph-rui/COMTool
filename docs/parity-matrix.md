@@ -81,9 +81,9 @@
 | ID | 功能 | 优先级 | 状态 | 验收要点 |
 |---|---|---|---|---|
 | NET-01 | TCP client/server | P1 | 完成 | 客户端连接/收发/断开、服务端监听/多客户端/选一个或全部发送/断开、标签关闭清理 |
-| NET-02 | UDP | P1 | 未开始 | 绑定、收发、目标地址 |
+| NET-02 | UDP | P1 | 完成 | 绑定本地端口、目标地址收发、断开清理、TCP/UDP 模式切换 |
 | NET-03 | 配置与会话 | P1 | 完成 | 模式/目标/端口字段、目标与端口错误提示、侧栏 TCP 会话、标签标题和连接状态 |
-| NET-04 | 自动重连 | P1 | 未开始 | 与 Python 一致 |
+| NET-04 | 自动重连 | P1 | 完成 | TCP 客户端断线后按间隔自动重连，状态提示和端子保持 |
 
 ## 6. ZMODEM
 
@@ -137,7 +137,7 @@
 
 | ID | 项目 | 优先级 | 状态 | 验收要点 |
 |---|---|---|---|---|
-| TST-01 | 单元测试 | P0 | 完成 | 190 项通过（Core 37/Connections 34/Terminal 11/ZMODEM 32/TestGate 49/App 27） |
+| TST-01 | 单元测试 | P0 | 完成 | 197 项通过（Core 41/Connections 37/Terminal 11/ZMODEM 32/TestGate 49/App 27） |
 | TST-02 | 终端 golden 测试 | P0 | 完成 | 同一字节流与 Python pyte 0.8.2（60x20、LNM）屏幕行/光标快照一致 |
 | TST-03 | ZMODEM 集成测试 | P0 | 完成 | 模拟双向收发和真实 lrzsz 双向 64KB 二进制文件内容校验通过 |
 | TST-04 | SSH/串口集成测试 | P0 | 部分 | 本地 sshd、Windows 配置内 SSH/串口、Linux socat PTY 已测 |

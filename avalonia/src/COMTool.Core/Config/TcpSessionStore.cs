@@ -5,13 +5,25 @@ public static class TcpSessionRules
     public const int DefaultPort = 2345;
     public const string ClientMode = "client";
     public const string ServerMode = "server";
+    public const string TcpProtocol = "tcp";
+    public const string UdpProtocol = "udp";
 
     public static string NormalizeMode(string? mode) =>
         string.Equals((mode ?? "").Trim(), ServerMode, StringComparison.OrdinalIgnoreCase)
             ? ServerMode
             : ClientMode;
 
+    public static string NormalizeProtocol(string? protocol) =>
+        string.Equals((protocol ?? "").Trim(), UdpProtocol, StringComparison.OrdinalIgnoreCase)
+            ? UdpProtocol
+            : TcpProtocol;
+
     public static bool IsValidPort(int port) => port is > 0 and <= 65535;
+
+    public static double NormalizeReconnectInterval(double interval) =>
+        double.IsFinite(interval) && interval > 0
+            ? Math.Clamp(interval, 0.1, 3600)
+            : 1.0;
 
     public static string ClientTarget(string target)
     {
@@ -23,31 +35,94 @@ public static class TcpSessionRules
         return $"{parsed.Host.ToLowerInvariant()}:{parsed.Port}";
     }
 
-    public static string Key(string mode, string target, int port)
+    public static string Key(string mode, string target, int port) =>
+        Key(TcpProtocol, mode, target, port);
+
+    public static string Key(string protocol, string mode, string target, int port)
     {
+        protocol = NormalizeProtocol(protocol);
         mode = NormalizeMode(mode);
+        if (!IsValidPort(port))
+        {
+            return "";
+        }
+
+        if (protocol == UdpProtocol)
+        {
+            var normalizedTarget = ClientTarget(target);
+            return normalizedTarget.Length == 0
+                ? ""
+                : $"udp:{mode}:{port}:{normalizedTarget}";
+        }
+
         if (mode == ServerMode)
         {
-            return IsValidPort(port) ? $"tcp:server:{port}" : "";
+            return $"tcp:server:{port}";
         }
 
         var normalized = ClientTarget(target);
         return normalized.Length == 0 ? "" : $"tcp:client:{normalized}";
     }
 
-    public static string DisplayName(TcpSession session) =>
-        NormalizeMode(session.Mode) == ServerMode
+    public static string DisplayName(TcpSession session)
+    {
+        var protocol = NormalizeProtocol(session.Protocol);
+        if (protocol == UdpProtocol)
+        {
+            return NormalizeMode(session.Mode) == ServerMode
+                ? $"UDP server :{session.Port}"
+                : $"UDP {session.Target}";
+        }
+
+        return NormalizeMode(session.Mode) == ServerMode
             ? $"TCP server :{session.Port}"
             : session.Target;
+    }
 
-    public static string Detail(TcpSession session) =>
-        NormalizeMode(session.Mode) == ServerMode
+    public static string Detail(TcpSession session)
+    {
+        var protocol = NormalizeProtocol(session.Protocol);
+        if (protocol == UdpProtocol)
+        {
+            return $"Local :{session.Port} -> {session.Target}";
+        }
+
+        return NormalizeMode(session.Mode) == ServerMode
             ? $"Listening on 0.0.0.0:{session.Port}"
             : "TCP client";
+    }
 
     public static TcpSession? Clean(TcpSession session)
     {
+        var protocol = NormalizeProtocol(session.Protocol);
         var mode = NormalizeMode(session.Mode);
+
+        if (protocol == UdpProtocol)
+        {
+            if (!IsValidPort(session.Port)
+                || !TcpTarget.TryParse(session.Target, out var udpTarget)
+                || udpTarget is null)
+            {
+                return null;
+            }
+
+            var normalizedUdpTarget = udpTarget.ToString();
+            return new TcpSession
+            {
+                Protocol = protocol,
+                Key = Key(protocol, mode, normalizedUdpTarget, session.Port),
+                Mode = mode,
+                Target = normalizedUdpTarget,
+                Port = session.Port,
+                AutoReconnect = protocol == TcpProtocol
+                    && mode == ClientMode
+                    && session.AutoReconnect,
+                ReconnectInterval = NormalizeReconnectInterval(session.ReconnectInterval),
+                Updated = session.Updated,
+                Extra = session.Extra,
+            };
+        }
+
         if (mode == ServerMode)
         {
             if (!IsValidPort(session.Port))
@@ -57,10 +132,15 @@ public static class TcpSessionRules
 
             return new TcpSession
             {
-                Key = Key(mode, "", session.Port),
+                Protocol = protocol,
+                Key = Key(protocol, mode, "", session.Port),
                 Mode = mode,
                 Target = "",
                 Port = session.Port,
+                AutoReconnect = protocol == TcpProtocol
+                    && mode == ClientMode
+                    && session.AutoReconnect,
+                ReconnectInterval = NormalizeReconnectInterval(session.ReconnectInterval),
                 Updated = session.Updated,
                 Extra = session.Extra,
             };
@@ -74,10 +154,15 @@ public static class TcpSessionRules
         var normalized = target.ToString();
         return new TcpSession
         {
-            Key = Key(mode, normalized, target.Port),
+            Protocol = protocol,
+            Key = Key(protocol, mode, normalized, target.Port),
             Mode = mode,
             Target = normalized,
             Port = target.Port,
+            AutoReconnect = protocol == TcpProtocol
+                && mode == ClientMode
+                && session.AutoReconnect,
+            ReconnectInterval = NormalizeReconnectInterval(session.ReconnectInterval),
             Updated = session.Updated,
             Extra = session.Extra,
         };
@@ -92,7 +177,7 @@ public sealed class TcpSessionStore
     {
         var byKey = new Dictionary<string, int>(StringComparer.Ordinal);
         var loaded = new List<TcpSession>();
-        foreach (var raw in config.TcpSessions)
+        foreach (var raw in config.TcpSessions ?? new List<TcpSession>())
         {
             if (raw is null)
             {
@@ -125,17 +210,43 @@ public sealed class TcpSessionStore
     public TcpSession? Get(string key) =>
         Sessions.FirstOrDefault(item => item.Key == key) is { } found ? Clone(found) : null;
 
-    public TcpSession? Upsert(string mode, string target, int port)
+    public TcpSession? Upsert(string mode, string target, int port) =>
+        Upsert(TcpSessionRules.TcpProtocol, mode, target, port);
+
+    public TcpSession? Upsert(
+        string protocol,
+        string mode,
+        string target,
+        int port,
+        bool autoReconnect = false,
+        double reconnectInterval = 1.0)
     {
+        protocol = TcpSessionRules.NormalizeProtocol(protocol);
         mode = TcpSessionRules.NormalizeMode(mode);
-        if (mode == TcpSessionRules.ServerMode)
+
+        string normalizedTarget;
+        int normalizedPort;
+        if (protocol == TcpSessionRules.UdpProtocol)
+        {
+            if (!TcpSessionRules.IsValidPort(port)
+                || !TcpTarget.TryParse(target, out var parsed)
+                || parsed is null)
+            {
+                return null;
+            }
+
+            normalizedTarget = parsed.ToString();
+            normalizedPort = port;
+        }
+        else if (mode == TcpSessionRules.ServerMode)
         {
             if (!TcpSessionRules.IsValidPort(port))
             {
                 return null;
             }
 
-            target = "";
+            normalizedTarget = "";
+            normalizedPort = port;
         }
         else
         {
@@ -144,11 +255,11 @@ public sealed class TcpSessionStore
                 return null;
             }
 
-            target = parsed.ToString();
-            port = parsed.Port;
+            normalizedTarget = parsed.ToString();
+            normalizedPort = parsed.Port;
         }
 
-        var key = TcpSessionRules.Key(mode, target, port);
+        var key = TcpSessionRules.Key(protocol, mode, normalizedTarget, normalizedPort);
         if (key.Length == 0)
         {
             return null;
@@ -156,10 +267,15 @@ public sealed class TcpSessionStore
 
         var session = new TcpSession
         {
+            Protocol = protocol,
             Key = key,
             Mode = mode,
-            Target = target,
-            Port = port,
+            Target = normalizedTarget,
+            Port = normalizedPort,
+            AutoReconnect = protocol == TcpSessionRules.TcpProtocol
+                && mode == TcpSessionRules.ClientMode
+                && autoReconnect,
+            ReconnectInterval = TcpSessionRules.NormalizeReconnectInterval(reconnectInterval),
             Updated = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
         };
 
@@ -200,10 +316,13 @@ public sealed class TcpSessionStore
 
     private static TcpSession Clone(TcpSession session) => new()
     {
+        Protocol = session.Protocol,
         Key = session.Key,
         Mode = session.Mode,
         Target = session.Target,
         Port = session.Port,
+        AutoReconnect = session.AutoReconnect,
+        ReconnectInterval = session.ReconnectInterval,
         Updated = session.Updated,
         Extra = session.Extra,
     };

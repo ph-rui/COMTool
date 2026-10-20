@@ -98,4 +98,92 @@ public sealed class TcpSessionCoreTests
         store.Sessions[0].Target = "changed:80";
         Assert.Equal("example.com:80", config.TcpSessions[0].Target);
     }
+
+    [Fact]
+    public void NET02_UdpStoreKeepsProtocolTargetAndLocalPort()
+    {
+        var store = new TcpSessionStore();
+
+        var session = store.Upsert(
+            TcpSessionRules.UdpProtocol,
+            TcpSessionRules.ClientMode,
+            "Example.COM:9000",
+            2345);
+
+        Assert.NotNull(session);
+        Assert.Equal("udp", session!.Protocol);
+        Assert.Equal("udp:client:2345:example.com:9000", session.Key);
+        Assert.Equal("Example.COM:9000", session.Target);
+        Assert.Equal(2345, session.Port);
+        Assert.Equal("UDP Example.COM:9000", TcpSessionRules.DisplayName(session));
+        Assert.Equal("Local :2345 -> Example.COM:9000", TcpSessionRules.Detail(session));
+    }
+
+    [Fact]
+    public void NET02_UdpStoreRejectsInvalidLocalPortOrTarget()
+    {
+        var store = new TcpSessionStore();
+
+        Assert.Null(store.Upsert(
+            TcpSessionRules.UdpProtocol,
+            TcpSessionRules.ClientMode,
+            "example.com:9000",
+            0));
+        Assert.Null(store.Upsert(
+            TcpSessionRules.UdpProtocol,
+            TcpSessionRules.ServerMode,
+            "not a target",
+            2345));
+        Assert.Empty(store.Sessions);
+    }
+
+    [Fact]
+    public void NET04_TcpStorePersistsAutoReconnectOnlyForTcpClient()
+    {
+        var store = new TcpSessionStore();
+
+        var client = store.Upsert(
+            TcpSessionRules.TcpProtocol,
+            TcpSessionRules.ClientMode,
+            "127.0.0.1:2345",
+            80,
+            autoReconnect: true,
+            reconnectInterval: 0.5);
+        var server = store.Upsert(
+            TcpSessionRules.TcpProtocol,
+            TcpSessionRules.ServerMode,
+            "",
+            2345,
+            autoReconnect: true,
+            reconnectInterval: 0.5);
+        var udp = store.Upsert(
+            TcpSessionRules.UdpProtocol,
+            TcpSessionRules.ClientMode,
+            "127.0.0.1:2345",
+            2346,
+            autoReconnect: true,
+            reconnectInterval: 0.5);
+
+        Assert.True(client!.AutoReconnect);
+        Assert.Equal(0.5, client.ReconnectInterval);
+        Assert.False(server!.AutoReconnect);
+        Assert.False(udp!.AutoReconnect);
+    }
+
+    [Fact]
+    public void NET02_LegacyTcpSessionDefaultsToTcpProtocol()
+    {
+        var store = new TcpSessionStore();
+        store.Load(new ComtoolConfig
+        {
+            TcpSessions =
+            {
+                new TcpSession { Mode = "client", Target = "127.0.0.1:2345", Protocol = "" },
+            },
+        });
+
+        var session = Assert.Single(store.Sessions);
+        Assert.Equal("tcp", session.Protocol);
+        Assert.Equal("tcp:client:127.0.0.1:2345", session.Key);
+    }
 }

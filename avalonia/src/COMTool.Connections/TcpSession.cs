@@ -4,10 +4,14 @@ namespace COMTool.Connections;
 
 public sealed record TcpClientInfo(string Endpoint);
 
+public sealed record TcpClientStatusEventArgs(string Message, bool IsConnected);
+
 public sealed record TcpClientOptions(
     string Host,
     int Port,
-    TimeSpan? Timeout = null);
+    TimeSpan? Timeout = null,
+    bool AutoReconnect = false,
+    TimeSpan? ReconnectInterval = null);
 
 public sealed record TcpServerOptions(
     int Port,
