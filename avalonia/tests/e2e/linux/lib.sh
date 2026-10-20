@@ -599,6 +599,73 @@ click_window() {
     xdotool click 1
 }
 
+double_click_window() {
+    local x="$1"
+    local y="$2"
+    local window="${3:-$WINDOW_ID}"
+
+    [[ -n "$window" ]] || return 1
+    xdotool mousemove --window "$window" "$x" "$y" || return 1
+    # Two presses inside the platform double-click interval (100ms apart).
+    xdotool click --repeat 2 --delay 100 1
+}
+
+# Print "<width> <height>" for a window, normalized without leading zeroes.
+read_window_dimensions() {
+    local window="${1:-$WINDOW_ID}"
+    local geometry
+    local width
+    local height
+
+    [[ -n "$window" ]] || return 1
+    geometry="$(xdotool getwindowgeometry --shell "$window" 2>/dev/null)" || return 1
+    width="$(printf '%s\n' "$geometry" | sed -n 's/^WIDTH=//p' | sed -n '1p')"
+    height="$(printf '%s\n' "$geometry" | sed -n 's/^HEIGHT=//p' | sed -n '1p')"
+    [[ "$width" =~ ^[0-9]+$ && "$height" =~ ^[0-9]+$ ]] || return 1
+    printf '%s %s\n' "$((10#$width))" "$((10#$height))"
+}
+
+# Bounded poll for a geometry change. Modes:
+#   grow <width> <height>   both dimensions strictly greater than the targets
+#   exact <width> <height>  both dimensions equal to the targets
+wait_for_window_size() {
+    local mode="$1"
+    local window="$2"
+    local target_width="$3"
+    local target_height="$4"
+    local timeout_s="${5:-5}"
+    local attempt
+    local iterations=$((timeout_s * 10))
+    local size
+    local width
+    local height
+
+    for ((attempt = 0; attempt < iterations; attempt++)); do
+        if size="$(read_window_dimensions "$window")"; then
+            read -r width height <<<"$size"
+            case "$mode" in
+                grow)
+                    if ((width > target_width && height > target_height)); then
+                        printf '%s\n' "$size"
+                        return 0
+                    fi
+                    ;;
+                exact)
+                    if ((width == target_width && height == target_height)); then
+                        printf '%s\n' "$size"
+                        return 0
+                    fi
+                    ;;
+                *)
+                    return 1
+                    ;;
+            esac
+        fi
+        sleep 0.1
+    done
+    return 1
+}
+
 type_text() {
     xdotool type --clearmodifiers --delay 20 "$1"
 }

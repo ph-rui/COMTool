@@ -23,12 +23,14 @@ E2E_TESTS=(
     E2E01_OpenSshSession
     SSH06_MultipleConnectionsE2E
     UI05_TabSwitchTypingBothDirections
+    TERM15_DoubleClickMaximizeE2E
 )
 SSH_TEST_IDS=(
     UI02_SidebarExpandsOnLaunchE2E
     E2E01_OpenSshSession
     SSH06_MultipleConnectionsE2E
     UI05_TabSwitchTypingBothDirections
+    TERM15_DoubleClickMaximizeE2E
 )
 
 usage() {
@@ -99,15 +101,21 @@ if [[ -z "$APP" ]]; then
     usage >&2
     exit 2
 fi
-if [[ ! -f "$APP" ]]; then
-    printf 'Application not found: %s\n' "$APP" >&2
-    exit 2
-fi
-if [[ ! -x "$APP" ]]; then
-    printf 'Application is not executable: %s\n' "$APP" >&2
-    exit 2
-fi
-APP="$(cd -- "$(dirname -- "$APP")" && pwd)/$(basename -- "$APP")"
+
+# Create the diagnostics root before validating the app path so that even a
+# launch-configuration failure leaves a run.log and a printed artifact path.
+TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/comtool-e2e.XXXXXX")"
+LOG_FILE="$TMP_ROOT/run.log"
+CONFIG_ROOT="$TMP_ROOT/config"
+E2E_RUNTIME_DIR="$TMP_ROOT/runtime"
+: >"$LOG_FILE"
+mkdir -p "$TMP_ROOT/home" "$E2E_RUNTIME_DIR" "$CONFIG_ROOT/avalonia" "$CONFIG_ROOT/python"
+chmod 700 "$E2E_RUNTIME_DIR" 2>/dev/null || true
+
+trap cleanup EXIT
+trap 'exit 130' INT TERM HUP
+
+log "Temporary E2E root: $TMP_ROOT"
 
 selected=0
 PRIMARY_TEST=""
@@ -131,22 +139,18 @@ if ((selected == 0)); then
     exit 1
 fi
 
+if [[ ! -f "$APP" ]]; then
+    fail "$PRIMARY_TEST" "Application not found: $APP"
+fi
+if [[ ! -x "$APP" ]]; then
+    fail "$PRIMARY_TEST" "Application is not executable: $APP"
+fi
+APP="$(cd -- "$(dirname -- "$APP")" && pwd)/$(basename -- "$APP")"
+
 if ! require_commands; then
-    exit 1
+    fail "$PRIMARY_TEST" "required Linux E2E dependencies are missing"
 fi
 
-TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/comtool-e2e.XXXXXX")"
-LOG_FILE="$TMP_ROOT/run.log"
-CONFIG_ROOT="$TMP_ROOT/config"
-E2E_RUNTIME_DIR="$TMP_ROOT/runtime"
-: >"$LOG_FILE"
-mkdir -p "$TMP_ROOT/home" "$E2E_RUNTIME_DIR" "$CONFIG_ROOT/avalonia" "$CONFIG_ROOT/python"
-chmod 700 "$E2E_RUNTIME_DIR" 2>/dev/null || true
-
-trap cleanup EXIT
-trap 'exit 130' INT TERM HUP
-
-log "Temporary E2E root: $TMP_ROOT"
 log "Application under test: $APP"
 
 DISPLAY_NUM="$(find_free_display)" || fail "$PRIMARY_TEST" "no free X display available"
@@ -460,6 +464,57 @@ run_ui05_tab_switch() {
     pass "$test_id"
 }
 
+run_term15_double_click_maximize() {
+    local test_id="TERM15_DoubleClickMaximizeE2E"
+    local before
+    local before_w
+    local before_h
+    local maximized
+    local max_w
+    local max_h
+    local restored
+    local restored_w
+    local restored_h
+    local actual
+
+    log "Running $test_id"
+    # Reuse the SSH fixture session. ensure_first_shell types into the current
+    # terminal, which proves a terminal tab is selected without clicking the
+    # sidebar or tab strip again.
+    ensure_first_shell "$test_id"
+
+    wait_for_shell_focus "$SHELL_A_PID" "term15-focus-a" 15 \
+        || fail "$test_id" "first tab did not receive keyboard focus before maximize"
+
+    if ! before="$(read_window_dimensions "$WINDOW_ID")"; then
+        fail "$test_id" "could not read window geometry before maximize"
+    fi
+    read -r before_w before_h <<<"$before"
+    log "$test_id: geometry before maximize: ${before_w}x${before_h}"
+
+    if ! double_click_window 600 300; then
+        fail "$test_id" "could not double-click the terminal center at (600,300)"
+    fi
+    if ! maximized="$(wait_for_window_size grow "$WINDOW_ID" "$before_w" "$before_h" 5)"; then
+        actual="$(read_window_dimensions "$WINDOW_ID" 2>/dev/null || printf 'unknown')"
+        fail "$test_id" "double-click did not maximize the window (before ${before_w}x${before_h}, now $actual)"
+    fi
+    read -r max_w max_h <<<"$maximized"
+    log "$test_id: geometry after maximize: ${max_w}x${max_h}"
+
+    if ! double_click_window 600 300; then
+        fail "$test_id" "could not double-click the terminal center again to restore"
+    fi
+    if ! restored="$(wait_for_window_size exact "$WINDOW_ID" "$before_w" "$before_h" 5)"; then
+        actual="$(read_window_dimensions "$WINDOW_ID" 2>/dev/null || printf 'unknown')"
+        fail "$test_id" "second double-click did not restore ${before_w}x${before_h} (now $actual)"
+    fi
+    read -r restored_w restored_h <<<"$restored"
+    log "$test_id: geometry after restore: ${restored_w}x${restored_h}"
+
+    pass "$test_id"
+}
+
 if matches_filter "APP01_SmokeLaunchE2E"; then
     seed_empty_config "$CONFIG_ROOT/avalonia"
     if ! start_app "$CONFIG_ROOT"; then
@@ -490,6 +545,9 @@ if [[ -n "$SSH_TEST_ID" ]]; then
     fi
     if matches_filter "UI05_TabSwitchTypingBothDirections"; then
         run_ui05_tab_switch
+    fi
+    if matches_filter "TERM15_DoubleClickMaximizeE2E"; then
+        run_term15_double_click_maximize
     fi
 
     close_app_window "$SSH_TEST_ID"
