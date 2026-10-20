@@ -1425,19 +1425,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (e.ClickCount == 2)
-        {
-            ToggleMaximize();
-            e.Handled = true;
-            return;
-        }
-
-        if (e.Source is Control source && source.FindAncestorOfType<Button>(includeSelf: true) is not null)
-        {
-            return;
-        }
-
-        if (e.Source is Control toggleSource && toggleSource.FindAncestorOfType<ToggleButton>(includeSelf: true) is not null)
+        if (IsTitleBarButtonSource(e.Source))
         {
             return;
         }
@@ -1447,8 +1435,19 @@ public partial class MainWindow : Window
 
     private void OnTitleBarDoubleTapped(object? sender, TappedEventArgs e)
     {
+        if (IsTitleBarButtonSource(e.Source))
+        {
+            return;
+        }
+
         ToggleMaximize();
+        e.Handled = true;
     }
+
+    private static bool IsTitleBarButtonSource(object? source) =>
+        source is Control control
+        && (control.FindAncestorOfType<Button>(includeSelf: true) is not null
+            || control.FindAncestorOfType<ToggleButton>(includeSelf: true) is not null);
 
     private void OnTerminalDoubleTapped(object? sender, TappedEventArgs e)
     {

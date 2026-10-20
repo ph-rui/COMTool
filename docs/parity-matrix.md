@@ -10,7 +10,7 @@
 
 | ID | 功能 | 优先级 | 状态 | 验收要点 |
 |---|---|---|---|---|
-| UI-01 | 自定义标题栏、Logo、窗口按钮 | P0 | 部分 | 无原生边框/白条，Material Design 最小化/最大化/还原/关闭图标，自定义 5px 边缘缩放与光标，拖拽/最小化/最大化/关闭，Xvfb 基准截图通过；Windows 白条实机确认待用户启动新 exe |
+| UI-01 | 自定义标题栏、Logo、窗口按钮 | P0 | 部分 | 无原生边框/白条，Material Design 最小化/最大化/还原/关闭图标，自定义 5px 边缘缩放与光标，拖拽/最小化/最大化/关闭，标题栏双击最大化/还原已自动化并由 Xvfb E2E 验证，Xvfb 基准截图通过；Windows 白条、拖拽和边缘缩放实机确认待用户启动新 exe |
 | UI-02 | 左侧 `User sessions` 侧栏 | P0 | 完成 | 展开/折叠、10px 左缘悬停自动展开、250ms 右移自动收起、350ms 点击保护、宽度、空状态；按用户要求，启动时始终自动展开（即使上次关闭前为折叠），宽度仍恢复；自动收起不改写 `sessionSidebar`，手动切换持久化但下次启动仍展开；见 `session-sidebar-expanded-on-launch-1000x650.png` |
 | UI-03 | 串口/SSH 分组与状态图标 | P0 | 部分 | 连接状态原地更新；Windows `--ports` 已输出 COM97/99 等 SetupAPI 描述 |
 | UI-04 | 侧栏右键菜单 | P0 | 部分 | Open、Remove session、确认框、配置持久化已验证 |
@@ -137,7 +137,7 @@
 
 | ID | 项目 | 优先级 | 状态 | 验收要点 |
 |---|---|---|---|---|
-| TST-01 | 单元测试 | P0 | 完成 | 198 项通过（Core 41/Connections 37/Terminal 11/ZMODEM 32/TestGate 49/App 28） |
+| TST-01 | 单元测试 | P0 | 完成 | 199 项通过（Core 41/Connections 37/Terminal 11/ZMODEM 32/TestGate 49/App 29） |
 | TST-02 | 终端 golden 测试 | P0 | 完成 | 同一字节流与 Python pyte 0.8.2（60x20、LNM）屏幕行/光标快照一致 |
 | TST-03 | ZMODEM 集成测试 | P0 | 完成 | 模拟双向收发和真实 lrzsz 双向 64KB 二进制文件内容校验通过 |
 | TST-04 | SSH/串口集成测试 | P0 | 部分 | 本地 sshd、Windows 配置内 SSH/串口、Linux socat PTY 已测 |

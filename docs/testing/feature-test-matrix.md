@@ -6,7 +6,7 @@
 
 | Feature | Status | Automated | Phase | Platform | Command | Manual | Evidence |
 |---|---|---|---|---|---|---|---|
-| UI-01 | 部分 | APP01_MainWindowShows,TERM15_DoubleClickUsesMaximizePath | verify | all | dotnet test | WIN-01 | 窗口和终端双击最大化路径已有自动化；标题栏无原生白条、最小化/最大化/还原/关闭按钮、拖拽与 5px 边缘缩放需 Windows 真实桌面确认（WIN-01）；视觉差异不能仅靠截图判定 |
+| UI-01 | 部分 | APP01_MainWindowShows,TERM15_DoubleClickUsesMaximizePath,TitleBarTests.UI01_TitleBarDoubleClickTogglesMaximizeOnce,UI01_TitleBarDoubleClickMaximizeE2E | verify | all | dotnet test | WIN-01 | 窗口、终端和标题栏双击最大化/还原路径已有自动化；标题栏无原生白条、最小化/最大化/还原/关闭按钮、拖拽与 5px 边缘缩放需 Windows 真实桌面确认（WIN-01）；视觉差异不能仅靠截图判定 |
 | UI-02 | 完成 | UI02_SidebarExpandsOnLaunch | verify | all | dotnet test | - | 侧栏启动自动展开、宽度恢复和空状态由 headless 测试覆盖；Linux Xvfb 还执行 UI02_SidebarExpandsOnLaunchE2E |
 | UI-03 | 部分 | - | manual | all | manual | WIN-20 | 串口/SSH 分组、连接状态圆点和原地状态更新需真实桌面视觉核对，无法自动化 |
 | UI-04 | 部分 | - | manual | all | manual | WIN-20 | 侧栏 Open/Remove session 菜单、确认框和配置持久化需真实桌面交互，无法自动化 |
@@ -88,7 +88,7 @@
 | PKG-04 | 部分 | - | manual | all | manual | WIN-08 | Windows/Linux 安装、升级、卸载和保留 Beta 配置需真实桌面安装环境，无法自动化 |
 | PKG-05 | 部分 | - | manual | all | manual | WIN-21 | 包体积和启动时间需真实 Windows/Linux 桌面测量并与性能基线对照，无法自动化 |
 | PKG-06 | 部分 | - | manual | all | manual | WIN-16 | CI 流水线需在托管 CI 实际运行并核对日志，本地门禁无法自动化 |
-| TST-01 | 完成 | CI01_SerializesCandidateInfo | verify | all | dotnet test | - | 完整套件 198 项通过（Core 41/Connections 37/Terminal 11/ZMODEM 32/TestGate 49/App 28）；CI01 覆盖 TestGate 候选元数据 |
+| TST-01 | 完成 | CI01_SerializesCandidateInfo | verify | all | dotnet test | - | 完整套件 199 项通过（Core 41/Connections 37/Terminal 11/ZMODEM 32/TestGate 49/App 29）；CI01 覆盖 TestGate 候选元数据 |
 | TST-02 | 完成 | TerminalEmulatorTests.MatchesPythonPyteGoldenScreen | verify | all | dotnet test | - | 同一字节流与 Python pyte 0.8.2 的 60x20 屏幕快照一致 |
 | TST-03 | 完成 | ZmodemTransferTests.SenderAndReceiverTransferFile,LrzszZmodemTests.RealSzFileIsReceived,LrzszZmodemTests.RealRzReceivesSentFile | verify | all | dotnet test | - | 模拟双向和真实 lrzsz 双向 64KB 二进制文件集成测试覆盖 |
 | TST-04 | 部分 | SshIntegrationTests.KeyAuthShellOutputResizeAndReconnect,SerialPtyIntegrationTests.SerialConnectionReadsAndWritesThroughPty | verify | linux | dotnet test | WIN-17 | Linux sshd/PTY 集成已自动化；Windows 实机 SSH/串口集成依赖真实硬件，无法自动化 |
