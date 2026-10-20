@@ -11,8 +11,8 @@
 | UI-03 | 部分 | - | manual | all | manual | WIN-20 | 串口/SSH 分组、连接状态圆点和原地状态更新需真实桌面视觉核对，无法自动化 |
 | UI-04 | 部分 | - | manual | all | manual | WIN-20 | 侧栏 Open/Remove session 菜单、确认框和配置持久化需真实桌面交互，无法自动化 |
 | UI-05 | 完成 | UI05_TabSwitchReparentOrder,UI05_TabSwitchFocusesIncomingTerminal,UI05_TabSwitchKeepsBothTerminalsLive,UI05_RapidSwitchFocus,UI05_CloseSelectedTabSelectsNeighbor,UI05_ClosingLastTabClearsSelection | verify | all | dotnet test | - | 多标签新增/关闭/切换、双向切换后立即可输入由 headless 测试覆盖；Linux Xvfb 执行 UI05_TabSwitchTypingBothDirections |
-| UI-06 | 部分 | - | manual | all | manual | WIN-20 | 插件选择器列表顺序、terminal 可用和未实现提示需真实桌面点击核对，无法自动化 |
-| UI-07 | 部分 | - | manual | all | manual | WIN-20 | 无标签空状态文案和 + 入口需真实桌面视觉核对，无法自动化 |
+| UI-06 | 完成 | NewSessionMenuTests.UI06_NewSessionMenuReplacesPluginEntries,NewSessionMenuTests.UI06_NewSessionSettingsPreselectsRequestedTransport,NewSessionMenuTests.UI06_LocalTerminalEntryAddsLocalTab | verify | all | dotnet test | - | 两个 `+` 菜单只包含 Serial/SSH/TCP/Local terminal，插件占位项已移除；三种连接类型预选和本地终端路由由 headless 测试覆盖 |
+| UI-07 | 完成 | NewSessionMenuTests.UI07_EmptyStatePointsToNewSession | verify | all | dotnet test | - | 空状态文案和两个 `+` 的 `New session` 提示由 headless 测试覆盖 |
 | UI-08 | 完成 | UI08_SettingsReplacesEditedTabOnly,UI08_DetachedEditedTabIsNotReplaced,UI08_WrongKindIsNotReplaced,UI08_SessionIdComparisonIsCaseInsensitive | verify | all | dotnet test | - | 连接设置替换/复用标签策略由 SettingsTabPolicyTests 覆盖 |
 | UI-09 | 部分 | ConfigTests.SaveAndLoad_RoundTripsSessionSidebarAndTheme | verify | all | dotnet test | WIN-20 | skin 持久化和配置往返已自动化；标题栏右键浅/深色切换和重启生效需真实桌面视觉核对 |
 | UI-10 | 未开始 | - | manual | all | manual | - | 未开始 |
@@ -89,7 +89,7 @@
 | PKG-04 | 部分 | - | manual | all | manual | WIN-08 | Windows/Linux 安装、升级、卸载和保留 Beta 配置需真实桌面安装环境，无法自动化 |
 | PKG-05 | 部分 | - | manual | all | manual | WIN-21 | 包体积和启动时间需真实 Windows/Linux 桌面测量并与性能基线对照，无法自动化 |
 | PKG-06 | 部分 | - | manual | all | manual | WIN-16 | CI 流水线需在托管 CI 实际运行并核对日志，本地门禁无法自动化 |
-| TST-01 | 完成 | CI01_SerializesCandidateInfo | verify | all | dotnet test | - | 完整套件 213 项通过（Core 42/Connections 39/Terminal 11/ZMODEM 32/TestGate 49/App 40）；CI01 覆盖 TestGate 候选元数据 |
+| TST-01 | 完成 | CI01_SerializesCandidateInfo | verify | all | dotnet test | - | 完整套件 217 项通过（Core 42/Connections 39/Terminal 11/ZMODEM 32/TestGate 49/App 44）；CI01 覆盖 TestGate 候选元数据 |
 | TST-02 | 完成 | TerminalEmulatorTests.MatchesPythonPyteGoldenScreen | verify | all | dotnet test | - | 同一字节流与 Python pyte 0.8.2 的 60x20 屏幕快照一致 |
 | TST-03 | 完成 | ZmodemTransferTests.SenderAndReceiverTransferFile,LrzszZmodemTests.RealSzFileIsReceived,LrzszZmodemTests.RealRzReceivesSentFile | verify | all | dotnet test | - | 模拟双向和真实 lrzsz 双向 64KB 二进制文件集成测试覆盖 |
 | TST-04 | 部分 | SshIntegrationTests.KeyAuthShellOutputResizeAndReconnect,SerialPtyIntegrationTests.SerialConnectionReadsAndWritesThroughPty,SerialOpenBufferTests.SER07_OpeningSerialSessionDiscardsQueuedStaleBytes | verify | linux | dotnet test | WIN-17 | Linux sshd/PTY 集成及串口打开清空残留缓冲区已自动化；Windows COM99 已实测打开并显示干净提示符；Windows 实机 SSH/串口回环集成依赖真实硬件，无法自动化 |
