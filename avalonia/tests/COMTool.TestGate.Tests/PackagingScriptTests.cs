@@ -50,6 +50,7 @@ public sealed class PackagingGateScriptTests
         Assert.Contains("$listProjects", text);
         Assert.Contains("$listLines.AddRange", text);
         Assert.Contains("Set-Content -LiteralPath $testList -Encoding UTF8", text);
+        Assert.Contains("checked by TestGate", text);
     }
 
     private static string FindRepositoryRoot()
