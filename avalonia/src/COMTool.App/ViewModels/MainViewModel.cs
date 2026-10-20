@@ -216,8 +216,16 @@ public partial class MainViewModel : ViewModelBase
         Sections.Clear();
 
         var serial = new SidebarSection { Title = "Serial", ShowHeader = true };
+        var availableSerial = config.PortScanSucceeded
+            ? config.PortMap.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase)
+            : null;
         foreach (var session in config.SerialSessions.SortedSessions())
         {
+            if (availableSerial is not null && !availableSerial.Contains(session.Port))
+            {
+                continue;
+            }
+
             var detail = session.Name;
             if (string.IsNullOrWhiteSpace(detail)
                 || string.Equals(detail, session.Port, StringComparison.OrdinalIgnoreCase))

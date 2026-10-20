@@ -38,14 +38,14 @@
 | TERM-15 | 完成 | TERM15_DoubleClickUsesMaximizePath,TERM15_DoubleClickDoesNotStealSelection | verify | all | dotnet test | - | 终端双击最大化/还原和选择保持由 headless 测试覆盖；Linux Xvfb 执行 TERM15_DoubleClickMaximizeE2E |
 | SER-01 | 完成 | SerialCatalogTests.DisplayLabelStripsDuplicateWindowsDevice,SerialPortCatalogTests.DisplayTextRemovesDuplicateDeviceSuffix,SerialPortCatalogTests.NormalizeSortsNaturallyAndDeduplicates | verify | all | dotnet test | - | 串口枚举、去重、稳定 key 和显示名测试覆盖 |
 | SER-02 | 完成 | SerialCatalogTests.NormalizeSortsCom2BeforeCom10,SerialCatalogTests.NormalizeSortsLinuxPortsNaturally,SerialCatalogTests.SessionStoreUsesNaturalPortOrder | verify | all | dotnet test | - | COM 和 Linux 端口自然排序测试覆盖 |
-| SER-03 | 部分 | - | manual | all | manual | WIN-03 | 串口热插拔依赖真实硬件设备，无法自动化 |
+| SER-03 | 部分 | SerialHotplugTests.SER03_MissingPortDoesNotDeleteRememberedSerialSession,SerialHotplugTests.SER03_RepluggedPortRestoresSidebarSession | verify | all | dotnet test | WIN-03 | 未连接会话保留、侧栏隐藏和重新插入恢复已由 headless 测试覆盖；真实串口硬件拔插需 WIN-03 实测 |
 | SER-04 | 完成 | SerialCatalogTests.SettingsMapToSystemIoPortsEnums | verify | all | dotnet test | - | 设置值到 System.IO.Ports 枚举映射测试覆盖 |
 | SER-05 | 部分 | SerialCatalogTests.SettingsMapToSystemIoPortsEnums | verify | all | dotnet test | WIN-11 | 枚举映射已自动化；真实 RTS/CTS、XON/XOFF、RTS/DTR 行为和 DSR/DTR 缺失提示依赖真实串口硬件和引脚接线，无法自动化 |
 | SER-06 | 部分 | - | manual | all | manual | WIN-04 | 端口占用需要真实串口硬件，无法自动化 |
 | SER-07 | 部分 | SerialPtyIntegrationTests.SerialConnectionReadsAndWritesThroughPty | verify | linux | dotnet test | WIN-05 | Linux PTY 读写已自动化；Windows 串口回环收发依赖真实硬件回路，无法自动化 |
 | SER-08 | 不适用 | - | manual | all | manual | - | 不适用 |
 | SER-09 | 部分 | SessionStoreTests.SerialStore_Upsert_NormalizesPortAndKeepsPosition | verify | all | dotnet test | WIN-12 | 保存和端口规范化已自动化；Windows 配置内串口会话保存、重启恢复及 UI 收发依赖真实串口硬件，无法自动化 |
-| SER-10 | 部分 | SessionStoreTests.SerialStore_Prune_OnlyRemovesAfterSuccessfulScan | verify | all | dotnet test | WIN-13 | 扫描成功后清理逻辑已自动化；真实设备运行中拔除后的标签、侧栏清理和提示依赖真实串口硬件，无法自动化 |
+| SER-10 | 部分 | SerialHotplugTests.SER03_MissingPortDoesNotDeleteRememberedSerialSession,SerialHotplugTests.SER03_RepluggedPortRestoresSidebarSession | verify | all | dotnet test | WIN-13 | 成功扫描后保留未连接会话、侧栏恢复和失败扫描不误删已自动化；真实设备运行中拔除后的标签状态需 WIN-13 实测 |
 | SSH-01 | 完成 | SessionStoreTests.SshStore_BuildsStableKeyAndKeepsPasswordWhenMetadataChanges,SessionStoreTests.SshStore_GetReturnsIndependentCopy | verify | all | dotnet test | - | SSH 会话稳定 key、元数据更新和独立副本测试覆盖 |
 | SSH-02 | 部分 | - | manual | all | manual | WIN-17 | Windows 密码提示、3 次重试和设置页密码认证需真实 SSH 环境，无法自动化 |
 | SSH-03 | 完成 | SshIntegrationTests.KeyAuthShellOutputResizeAndReconnect | verify | linux | dotnet test | WIN-17 | 密钥认证、shell 输出、resize 与重连由 Linux sshd 集成测试覆盖；Windows 实机见 WIN-17 |
@@ -88,7 +88,7 @@
 | PKG-04 | 部分 | - | manual | all | manual | WIN-08 | Windows/Linux 安装、升级、卸载和保留 Beta 配置需真实桌面安装环境，无法自动化 |
 | PKG-05 | 部分 | - | manual | all | manual | WIN-21 | 包体积和启动时间需真实 Windows/Linux 桌面测量并与性能基线对照，无法自动化 |
 | PKG-06 | 部分 | - | manual | all | manual | WIN-16 | CI 流水线需在托管 CI 实际运行并核对日志，本地门禁无法自动化 |
-| TST-01 | 完成 | CI01_SerializesCandidateInfo | verify | all | dotnet test | - | 完整套件 199 项通过（Core 41/Connections 37/Terminal 11/ZMODEM 32/TestGate 49/App 29）；CI01 覆盖 TestGate 候选元数据 |
+| TST-01 | 完成 | CI01_SerializesCandidateInfo | verify | all | dotnet test | - | 完整套件 201 项通过（Core 41/Connections 37/Terminal 11/ZMODEM 32/TestGate 49/App 31）；CI01 覆盖 TestGate 候选元数据 |
 | TST-02 | 完成 | TerminalEmulatorTests.MatchesPythonPyteGoldenScreen | verify | all | dotnet test | - | 同一字节流与 Python pyte 0.8.2 的 60x20 屏幕快照一致 |
 | TST-03 | 完成 | ZmodemTransferTests.SenderAndReceiverTransferFile,LrzszZmodemTests.RealSzFileIsReceived,LrzszZmodemTests.RealRzReceivesSentFile | verify | all | dotnet test | - | 模拟双向和真实 lrzsz 双向 64KB 二进制文件集成测试覆盖 |
 | TST-04 | 部分 | SshIntegrationTests.KeyAuthShellOutputResizeAndReconnect,SerialPtyIntegrationTests.SerialConnectionReadsAndWritesThroughPty | verify | linux | dotnet test | WIN-17 | Linux sshd/PTY 集成已自动化；Windows 实机 SSH/串口集成依赖真实硬件，无法自动化 |
