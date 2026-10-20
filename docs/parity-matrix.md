@@ -40,7 +40,7 @@
 | TERM-08 | 光标显示 | P0 | 完成 | 光标颜色/位置正常，隐藏/显示和宽字符推进已通过单元测试 |
 | TERM-09 | 字体/字号配置 | P1 | 部分 | Python 固定 15px；Avalonia 同样固定 15px，并改为平台等宽字体（Windows Consolas / macOS Menlo / Linux DejaVu Sans Mono），resize/分离渲染正常 |
 | TERM-10 | 终端输入映射 | P0 | 部分 | 文本、Enter、Ctrl+C/V、方向键、Home/End、Insert/Delete、F1-F12 已通过 `cat -v` 实测 |
-| TERM-11 | 断线/重连显示 | P0 | 完成 | SSH 通道 `Closed`/错误事件立即置为断开；主窗口和分离窗口均显示断线，侧栏圆点变灰；无存活连接时点击会话关闭死标签并用缓存凭据重连且不重复提示；已有存活连接时点击会话另开连接 |
+| TERM-11 | 断线/重连显示 | P0 | 完成 | SSH 通道 `Closed`/错误事件立即置为断开；主窗口和分离窗口均显示断线，侧栏圆点变灰；无存活连接时点击会话关闭死标签并用缓存凭据重连且不重复提示；已有存活连接时点击会话另开连接；shell 退出或标签关闭后终端布局再次 resize 不再访问已释放的 `ShellStream`，避免 UI 线程未处理异常导致软件退出 |
 | TERM-12 | ZMODEM 字节流接入 | P0 | 完成 | 自动检测、流路由、发送/接收引擎、保存对话框已接入 |
 | TERM-13 | 大流量性能 | P0 | 完成 | C# 解析 1MB 约 108ms、10MB 约 240ms；Python/pyte 同载荷约 616ms/5.0s；本地 SSH 10MB 端到端 C# 约 1.0-1.24s、Python 约 7.55-9.26s，见 `performance-2026-10-20.md` |
 | TERM-14 | 交互输入即时回显 | P0 | 完成 | Moba 关键字高亮不再无限期扣留可能是关键字前缀的尾字符；`i` 等单字符在 SSH 输入后立即显示，15ms 内无后续分片时释放，跨分片关键字仍可高亮；见 `terminal-single-char-echo-1000x650.png` |
@@ -137,7 +137,7 @@
 
 | ID | 项目 | 优先级 | 状态 | 验收要点 |
 |---|---|---|---|---|
-| TST-01 | 单元测试 | P0 | 完成 | 203 项通过（Core 41/Connections 37/Terminal 11/ZMODEM 32/TestGate 49/App 33） |
+| TST-01 | 单元测试 | P0 | 完成 | 204 项通过（Core 41/Connections 38/Terminal 11/ZMODEM 32/TestGate 49/App 33） |
 | TST-02 | 终端 golden 测试 | P0 | 完成 | 同一字节流与 Python pyte 0.8.2（60x20、LNM）屏幕行/光标快照一致 |
 | TST-03 | ZMODEM 集成测试 | P0 | 完成 | 模拟双向收发和真实 lrzsz 双向 64KB 二进制文件内容校验通过 |
 | TST-04 | SSH/串口集成测试 | P0 | 部分 | 本地 sshd、Windows 配置内 SSH/串口、Linux socat PTY 已测 |

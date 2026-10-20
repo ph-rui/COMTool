@@ -131,6 +131,16 @@ public sealed class SshIntegrationTests
                 Assert.False(connection.IsConnected);
             }
 
+            // A terminal layout pass can request a resize after the SSH tab
+            // has been closed and its shell stream disposed. This used to throw
+            // ObjectDisposedException from TerminalView.ArrangeOverride and
+            // crash the whole app.
+            using (var disposed = SshConnection.Connect(options))
+            {
+                disposed.Dispose();
+                disposed.Pty.Resize(120, 40);
+            }
+
             using (var reconnected = SshConnection.Connect(options))
             {
                 var marker = $"SSH-{Guid.NewGuid():N}";

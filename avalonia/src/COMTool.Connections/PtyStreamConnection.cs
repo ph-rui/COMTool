@@ -73,9 +73,22 @@ public sealed class PtyStreamConnection : IPtyConnection, IDisposable
 
     public void Resize(int columns, int rows)
     {
-        if (columns > 0 && rows > 0)
+        if (columns <= 0
+            || rows <= 0
+            || Volatile.Read(ref _closed) != 0
+            || _resize is null)
         {
-            _resize?.Invoke(columns, rows);
+            return;
+        }
+
+        try
+        {
+            _resize(columns, rows);
+        }
+        catch (ObjectDisposedException)
+        {
+            // The terminal can arrange once more after its tab closed. The
+            // transport is already gone, so there is nothing to resize.
         }
     }
 
