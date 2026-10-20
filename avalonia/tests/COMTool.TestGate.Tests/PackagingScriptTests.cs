@@ -41,14 +41,15 @@ public sealed class PackagingScriptTests
 public sealed class PackagingGateScriptTests
 {
     [Fact]
-    public void PK02_VerifyRetriesIntermittentTestListFailure()
+    public void PK02_VerifyListsEachProjectToAvoidVstestRace()
     {
         var root = FindRepositoryRoot();
         var path = Path.Combine(root, "avalonia", "pack", "verify.ps1");
         var text = File.ReadAllText(path);
 
-        Assert.Contains("$listAttempts", text);
-        Assert.Contains("retrying", text);
+        Assert.Contains("$listProjects", text);
+        Assert.Contains("Tee-Object -FilePath $testList -Append", text);
+        Assert.DoesNotContain("--list-tests 2>&1 |\n        Tee-Object -FilePath $testList | Out-Host", text);
     }
 
     private static string FindRepositoryRoot()
