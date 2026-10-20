@@ -56,6 +56,7 @@ public sealed class TcpSessionAppTests
                     open,
                     open,
                     open,
+                    open,
                     _ => Task.CompletedTask);
                 window.Show();
                 Dispatcher.UIThread.RunJobs();
@@ -64,7 +65,7 @@ public sealed class TcpSessionAppTests
                 var tcpPanel = window.FindControl<Grid>("TcpPanel")!;
                 Assert.False(tcpPanel.IsVisible);
 
-                type.SelectedIndex = 2;
+                type.SelectedIndex = 3;
                 Dispatcher.UIThread.RunJobs();
                 Assert.True(tcpPanel.IsVisible);
 
@@ -116,6 +117,7 @@ public sealed class TcpSessionAppTests
                     null,
                     open,
                     open,
+                    open,
                     (key, _) =>
                     {
                         openedKey = key;
@@ -125,7 +127,7 @@ public sealed class TcpSessionAppTests
                 window.Show();
                 Dispatcher.UIThread.RunJobs();
 
-                window.FindControl<ComboBox>("ConnectionTypeCombo")!.SelectedIndex = 2;
+                window.FindControl<ComboBox>("ConnectionTypeCombo")!.SelectedIndex = 3;
                 window.FindControl<ComboBox>("TcpProtocolCombo")!.SelectedIndex = 0;
                 window.FindControl<ComboBox>("TcpModeCombo")!.SelectedIndex = 0;
                 window.FindControl<TextBox>("TcpTargetBox")!.Text = "127.0.0.1:2345";

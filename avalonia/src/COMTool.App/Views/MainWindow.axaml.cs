@@ -221,11 +221,13 @@ public partial class MainWindow : Window
 
     internal void StopPortTimerForTests() => _portTimer?.Stop();
 
-    private (HashSet<string> Serial, HashSet<string> Ssh, HashSet<string> Tcp) ConnectedSessions()
+    private (HashSet<string> Serial, HashSet<string> Ssh, HashSet<string> Telnet, HashSet<string> Tcp)
+        ConnectedSessions()
     {
         if (DataContext is not MainViewModel viewModel)
         {
             return (new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase),
                 new HashSet<string>(StringComparer.OrdinalIgnoreCase),
                 new HashSet<string>(StringComparer.OrdinalIgnoreCase));
         }
@@ -238,11 +240,15 @@ public partial class MainWindow : Window
             .Where(tab => tab.Kind == SessionKind.Ssh && IsTabConnected(tab))
             .Select(tab => tab.SessionId)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var telnet = AllTabs()
+            .Where(tab => tab.Kind == SessionKind.Telnet && IsTabConnected(tab))
+            .Select(tab => tab.SessionId)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var tcp = AllTabs()
             .Where(tab => tab.Kind == SessionKind.Tcp && IsTabConnected(tab))
             .Select(tab => tab.SessionId)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        return (serial, ssh, tcp);
+        return (serial, ssh, telnet, tcp);
     }
 
     private void UpdateConnectionStates()
@@ -277,8 +283,8 @@ public partial class MainWindow : Window
             }
         }
 
-        var (serial, ssh, tcp) = ConnectedSessions();
-        viewModel.UpdateConnectionStates(serial, ssh, tcp);
+        var (serial, ssh, telnet, tcp) = ConnectedSessions();
+        viewModel.UpdateConnectionStates(serial, ssh, tcp, telnet);
     }
 
     private void RefreshSidebar()
@@ -288,8 +294,8 @@ public partial class MainWindow : Window
             return;
         }
 
-        var (serial, ssh, tcp) = ConnectedSessions();
-        viewModel.LoadSessions(_config, serial, ssh, tcp);
+        var (serial, ssh, telnet, tcp) = ConnectedSessions();
+        viewModel.LoadSessions(_config, serial, ssh, tcp, telnet);
     }
 
     private async void OnSessionActivated(object? sender, SessionItem item)
@@ -299,10 +305,10 @@ public partial class MainWindow : Window
             return;
         }
 
-        // SSH sessions and TCP clients are saved endpoints, not a single
+        // SSH, Telnet and TCP clients are saved endpoints, not a single
         // connection. If one is already live, every click opens another
         // independent connection so the same endpoint can be used in parallel.
-        var opensNewConnection = item.Kind == SessionKind.Ssh
+        var opensNewConnection = item.Kind is SessionKind.Ssh or SessionKind.Telnet
             || (item.Kind == SessionKind.Tcp && !IsTcpServerSession(item.SessionId));
         if (opensNewConnection)
         {
@@ -312,9 +318,7 @@ public partial class MainWindow : Window
                 foreach (var dead in SessionActivationPolicy.DeadSessionTabsToClose(
                     tabs,
                     item.SessionId,
-                    opensNewConnection && item.Kind == SessionKind.Tcp
-                        ? SessionKind.Tcp
-                        : SessionKind.Ssh,
+                    item.Kind,
                     IsTabConnected))
                 {
                     if (_detachedTabs.TryGetValue(dead, out var state))
@@ -370,6 +374,10 @@ public partial class MainWindow : Window
             {
                 await OpenSshSessionAsync(item.SessionId);
             }
+            else if (item.Kind == SessionKind.Telnet)
+            {
+                await OpenTelnetSessionAsync(item.SessionId);
+            }
             else if (item.Kind == SessionKind.Tcp)
             {
                 await OpenTcpSessionAsync(item.SessionId);
@@ -402,6 +410,14 @@ public partial class MainWindow : Window
                 : $"{SshSessionRules.DisplayName(session)} ({SshSessionRules.Detail(session)})";
             kind = "SSH";
         }
+        else if (item.Kind == SessionKind.Telnet)
+        {
+            var session = _config.TelnetSessions.Get(item.SessionId);
+            label = session is null
+                ? item.SessionId
+                : $"{TelnetSessionRules.DisplayName(session)} ({TelnetSessionRules.Detail(session)})";
+            kind = "Telnet";
+        }
         else if (item.Kind == SessionKind.Tcp)
         {
             var session = _config.TcpSessions.Get(item.SessionId);
@@ -427,6 +443,11 @@ public partial class MainWindow : Window
         if (item.Kind == SessionKind.Ssh)
         {
             _config.SshSessions.Remove(item.SessionId);
+            _config.PasswordCache.Remove(item.SessionId);
+        }
+        else if (item.Kind == SessionKind.Telnet)
+        {
+            _config.TelnetSessions.Remove(item.SessionId);
             _config.PasswordCache.Remove(item.SessionId);
         }
         else if (item.Kind == SessionKind.Tcp)
@@ -1007,6 +1028,90 @@ public partial class MainWindow : Window
         return session is not null
             && (TcpSessionRules.NormalizeProtocol(session.Protocol) == TcpSessionRules.UdpProtocol
                 || TcpSessionRules.NormalizeMode(session.Mode) == TcpSessionRules.ServerMode);
+    }
+
+    private async Task OpenTelnetSessionAsync(string key)
+    {
+        if (_config is null || DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        var session = _config.TelnetSessions.Get(key);
+        if (session is null)
+        {
+            throw new InvalidOperationException($"Telnet session {key} was not found.");
+        }
+
+        var password = _config.PasswordCache.Get(session.Key);
+        if (string.IsNullOrEmpty(password))
+        {
+            password = SecretProtector.Unprotect(session.EncryptedPassword);
+        }
+
+        var connection = await TelnetConnection.ConnectAsync(
+            new TelnetConnectionOptions(
+                session.Host,
+                session.Port,
+                session.User,
+                password));
+        if (!string.IsNullOrEmpty(password))
+        {
+            _config.PasswordCache.Set(session.Key, password);
+        }
+
+        var terminal = CreateTerminal();
+        var tab = new TerminalTab
+        {
+            Title = TelnetSessionRules.DisplayName(session),
+            SessionId = session.Key,
+            Kind = SessionKind.Telnet,
+            Content = terminal,
+            Connection = connection,
+            StatusMessage = $"Connected {TelnetSessionRules.Detail(session)}",
+            IsTransportOpen = () => connection.IsConnected,
+            CloseAction = () =>
+            {
+                try
+                {
+                    terminal.DetachConnection();
+                }
+                catch
+                {
+                    // The template may not have been applied if opening failed.
+                }
+
+                connection.Dispose();
+            },
+        };
+
+        SubscribeZmodem(tab, connection.Pty.Zmodem);
+        var terminalAttached = false;
+        terminal.AttachedToVisualTree += (_, _) =>
+            Dispatcher.UIThread.Post(
+                () =>
+                {
+                    if (terminalAttached)
+                    {
+                        return;
+                    }
+
+                    terminalAttached = true;
+                    AttachTerminal(tab, terminal, connection.Pty);
+                    FocusTerminalWhenSelected(tab, terminal);
+                },
+                DispatcherPriority.Loaded);
+        connection.Pty.ProcessExited += (_, _) => Dispatcher.UIThread.Post(() =>
+        {
+            tab.IsAlive = false;
+            tab.StatusMessage = "Connection lose";
+            tab.StatusBrush = StatusWarningBrush;
+            tab.TabDotBrush = StatusWarningBrush;
+            UpdateConnectionStates();
+        });
+
+        viewModel.AddTab(tab);
+        UpdateConnectionStates();
     }
 
     private async Task OpenTcpSessionAsync(string key)
@@ -2619,6 +2724,7 @@ public partial class MainWindow : Window
         var kind = (sender as MenuItem)?.Tag?.ToString() switch
         {
             "SSH" => SessionKind.Ssh,
+            "Telnet" => SessionKind.Telnet,
             "TCP" => SessionKind.Tcp,
             "Local" => SessionKind.Local,
             _ => SessionKind.Serial,
@@ -2668,6 +2774,7 @@ public partial class MainWindow : Window
             tab,
             OpenSerialFromSettingsAsync,
             OpenSshFromSettingsAsync,
+            OpenTelnetFromSettingsAsync,
             OpenTcpFromSettingsAsync,
             ShowErrorAsync,
             initialKind);
@@ -2719,6 +2826,22 @@ public partial class MainWindow : Window
         }
 
         await OpenSshSessionAsync(key);
+        RefreshSidebar();
+    }
+
+    private async Task OpenTelnetFromSettingsAsync(string key, TerminalTab? currentTab)
+    {
+        if (DataContext is MainViewModel viewModel
+            && SettingsTabPolicy.TabToReplace(
+                viewModel.Tabs,
+                currentTab,
+                key,
+                SessionKind.Telnet) is { } currentTelnet)
+        {
+            CloseTab(currentTelnet);
+        }
+
+        await OpenTelnetSessionAsync(key);
         RefreshSidebar();
     }
 
@@ -2814,6 +2937,16 @@ public partial class MainWindow : Window
 
                 suggestedName = "comtool.ssh.json";
             }
+            else if (tab.Kind == SessionKind.Telnet)
+            {
+                var session = _config.TelnetSessions.Get(tab.SessionId);
+                if (session is not null)
+                {
+                    payload = TelnetSessionRules.ForShare(session);
+                }
+
+                suggestedName = "comtool.telnet.json";
+            }
             else if (tab.Kind == SessionKind.Tcp)
             {
                 payload = _config.TcpSessions.Get(tab.SessionId);
@@ -2871,7 +3004,29 @@ public partial class MainWindow : Window
             await using var stream = await files[0].OpenReadAsync();
             using var document = await JsonDocument.ParseAsync(stream);
             var root = document.RootElement;
-            if (root.TryGetProperty("serial", out _))
+            if (root.TryGetProperty("transport", out var transport)
+                && string.Equals(
+                    transport.GetString(),
+                    TelnetSessionRules.Transport,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                var session = root.Deserialize<TelnetSession>()
+                    ?? throw new InvalidOperationException("Invalid Telnet session config.");
+                if (session.Host.Trim().Length == 0)
+                {
+                    throw new InvalidOperationException("Telnet config has no host.");
+                }
+
+                if (_config.TelnetSessions.Upsert(
+                        session.Host,
+                        session.Port,
+                        session.User,
+                        session.Alias) is null)
+                {
+                    throw new InvalidOperationException("Telnet config has an invalid host or port.");
+                }
+            }
+            else if (root.TryGetProperty("serial", out _))
             {
                 var session = root.Deserialize<SerialSession>()
                     ?? throw new InvalidOperationException("Invalid serial session config.");

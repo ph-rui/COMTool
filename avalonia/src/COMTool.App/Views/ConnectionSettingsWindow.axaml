@@ -19,6 +19,7 @@
                       Height="30">
               <ComboBoxItem Content="Serial" />
               <ComboBoxItem Content="SSH" />
+              <ComboBoxItem Content="Telnet" />
               <ComboBoxItem Content="TCP" />
             </ComboBox>
 
@@ -117,6 +118,55 @@
                         IsChecked="True" />
 
               <Button Grid.Row="7" Grid.Column="0" Grid.ColumnSpan="2"
+                      Content="OPEN"
+                      Height="30"
+                      HorizontalAlignment="Stretch"
+                      HorizontalContentAlignment="Center"
+                      Background="#0f88eb"
+                      Foreground="White"
+                      BorderThickness="0"
+                      CornerRadius="4"
+                      Click="OnOpenClick" />
+            </Grid>
+
+            <Grid Name="TelnetPanel"
+                  ColumnDefinitions="86,*"
+                  RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                  RowSpacing="6"
+                  IsVisible="False">
+              <TextBlock Grid.Row="0" Grid.Column="0" Text="Host" VerticalAlignment="Center" />
+              <TextBox Grid.Row="0" Grid.Column="1" Name="TelnetHostBox" Width="155" Height="28" HorizontalAlignment="Left" />
+
+              <TextBlock Grid.Row="1" Grid.Column="0" Text="Port" VerticalAlignment="Center" />
+              <TextBox Grid.Row="1" Grid.Column="1" Name="TelnetPortBox" Width="155" Height="28" HorizontalAlignment="Left" Text="23" />
+
+              <TextBlock Grid.Row="2" Grid.Column="0" Text="User" VerticalAlignment="Center" />
+              <TextBox Grid.Row="2" Grid.Column="1" Name="TelnetUserBox" Width="155" Height="28" HorizontalAlignment="Left" />
+
+              <TextBlock Grid.Row="3" Grid.Column="0" Text="Alias" VerticalAlignment="Center" />
+              <TextBox Grid.Row="3" Grid.Column="1" Name="TelnetAliasBox" Width="155" Height="28" HorizontalAlignment="Left" />
+
+              <TextBlock Grid.Row="4" Grid.Column="0" Text="Password" VerticalAlignment="Center" />
+              <TextBox Grid.Row="4" Grid.Column="1"
+                       Name="TelnetPasswordBox"
+                       Width="155"
+                       Height="28"
+                       HorizontalAlignment="Left"
+                       PasswordChar="●" />
+
+              <CheckBox Grid.Row="5" Grid.Column="1"
+                        Name="TelnetRememberCheck"
+                        Content="Remember password"
+                        IsChecked="True" />
+
+              <TextBlock Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="2"
+                         Text="Auto-login sends credentials only when a login prompt appears."
+                         FontSize="10"
+                         TextWrapping="Wrap"
+                         Opacity="0.7" />
+
+              <Button Grid.Row="7" Grid.Column="0" Grid.ColumnSpan="2"
+                      Name="TelnetOpenButton"
                       Content="OPEN"
                       Height="30"
                       HorizontalAlignment="Stretch"

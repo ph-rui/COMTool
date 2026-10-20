@@ -147,6 +147,7 @@
                 <MenuFlyout Placement="BottomEdgeAlignedLeft">
                   <MenuItem Header="Serial" Tag="Serial" Click="OnNewSessionClick" />
                   <MenuItem Header="SSH" Tag="SSH" Click="OnNewSessionClick" />
+                  <MenuItem Header="Telnet" Tag="Telnet" Click="OnNewSessionClick" />
                   <MenuItem Header="TCP" Tag="TCP" Click="OnNewSessionClick" />
                   <MenuItem Header="Local terminal" Tag="Local" Click="OnNewSessionClick" />
                 </MenuFlyout>
@@ -246,6 +247,7 @@
                     <MenuFlyout Placement="BottomEdgeAlignedRight">
                       <MenuItem Header="Serial" Tag="Serial" Click="OnNewSessionClick" />
                       <MenuItem Header="SSH" Tag="SSH" Click="OnNewSessionClick" />
+                      <MenuItem Header="Telnet" Tag="Telnet" Click="OnNewSessionClick" />
                       <MenuItem Header="TCP" Tag="TCP" Click="OnNewSessionClick" />
                       <MenuItem Header="Local terminal" Tag="Local" Click="OnNewSessionClick" />
                     </MenuFlyout>
