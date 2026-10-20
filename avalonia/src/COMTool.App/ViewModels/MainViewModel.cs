@@ -55,15 +55,18 @@ public sealed partial class TerminalTab : ObservableObject
     public required string SessionId { get; init; }
     public required SessionKind Kind { get; init; }
     public required Control Content { get; init; }
-    public IDisposable? Connection { get; init; }
-    public Action? CloseAction { get; init; }
-    public Func<bool>? IsTransportOpen { get; init; }
+    public IDisposable? Connection { get; set; }
+    public Action? CloseAction { get; set; }
+    public Func<bool>? IsTransportOpen { get; set; }
 
     [ObservableProperty]
     private bool _isSelected;
 
     [ObservableProperty]
     private bool _isAlive = true;
+
+    [ObservableProperty]
+    private bool _isSessionStopped;
 
     [ObservableProperty]
     private string _statusMessage = "";

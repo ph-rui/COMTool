@@ -75,6 +75,7 @@
 | SSH-08 | PTY 尺寸 | P0 | 完成 | Linux `stty size` = 40x100 验证通过 |
 | SSH-09 | Shell 输出与终端 | P0 | 完成 | SSH shell 已接入多标签终端并通过 UI 验证 |
 | SSH-10 | 连接速度 | P0 | 部分 | 首次 187-446ms，重连 33ms |
+| SSH-11 | 停止会话界面 | P1 | 完成 | Shell 退出后显示 MobaXterm 风格 “Session stopped”；Enter 关闭标签、R 在同一标签内重连、S 保存完整回滚输出；TCP/串口保持原退出提示；由 headless 测试和 Linux Xvfb `SSH11_RestartStoppedSessionE2E` 覆盖 |
 
 ## 5. TCP/UDP
 
@@ -137,7 +138,7 @@
 
 | ID | 项目 | 优先级 | 状态 | 验收要点 |
 |---|---|---|---|---|
-| TST-01 | 单元测试 | P0 | 完成 | 204 项通过（Core 41/Connections 38/Terminal 11/ZMODEM 32/TestGate 49/App 33） |
+| TST-01 | 单元测试 | P0 | 完成 | 208 项通过（Core 41/Connections 38/Terminal 11/ZMODEM 32/TestGate 49/App 37） |
 | TST-02 | 终端 golden 测试 | P0 | 完成 | 同一字节流与 Python pyte 0.8.2（60x20、LNM）屏幕行/光标快照一致 |
 | TST-03 | ZMODEM 集成测试 | P0 | 完成 | 模拟双向收发和真实 lrzsz 双向 64KB 二进制文件内容校验通过 |
 | TST-04 | SSH/串口集成测试 | P0 | 部分 | 本地 sshd、Windows 配置内 SSH/串口、Linux socat PTY 已测 |
