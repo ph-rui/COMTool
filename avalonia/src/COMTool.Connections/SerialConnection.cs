@@ -4,10 +4,21 @@ using COMTool.Core.Config;
 namespace COMTool.Connections;
 
 /// <summary>
+/// A serial transport that can be replaced when a USB serial device is
+/// unplugged and later reinserted under the same port name.
+/// </summary>
+public interface ISerialConnection : IDisposable
+{
+    PtyStreamConnection Pty { get; }
+    string PortName { get; }
+    bool IsOpen { get; }
+}
+
+/// <summary>
 /// Opens a serial port with the same settings used by the Python serial
 /// connection and exposes it as an IPtyConnection for the terminal control.
 /// </summary>
-public sealed class SerialConnection : IDisposable
+public sealed class SerialConnection : ISerialConnection
 {
     private readonly SerialPort _port;
     private int _disposed;

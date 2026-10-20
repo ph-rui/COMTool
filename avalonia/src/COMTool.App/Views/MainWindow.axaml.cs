@@ -40,6 +40,10 @@ public partial class MainWindow : Window
     private readonly Dictionary<TerminalTab, ZmodemTiming> _zmodemTimings = new();
     private readonly Dictionary<TerminalTab, ZmodemStream> _zmodemStreams = new();
     private readonly Dictionary<TerminalTab, DetachedTabState> _detachedTabs = new();
+    private readonly Dictionary<TerminalTab, SerialTabState> _serialTabs = new();
+
+    internal Func<SerialConnectionConfig, ISerialConnection> SerialConnectionFactory { get; set; } =
+        config => SerialConnection.Open(config);
     private static readonly IBrush StatusInfoBrush =
         new SolidColorBrush(Color.Parse("#008200"));
     private static readonly IBrush StatusWarningBrush =
@@ -140,7 +144,27 @@ public partial class MainWindow : Window
         var previous = _config.Ports
             .Select(port => port.Device)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var scan = _config.RefreshPorts();
+        ApplyPortScan(previous, _config.RefreshPorts());
+    }
+
+    internal void ApplyPortScanForTests(SerialPortScanResult scan)
+    {
+        if (_config is null)
+        {
+            return;
+        }
+
+        var previous = _config.Ports
+            .Select(port => port.Device)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        _config.RefreshPorts(scan);
+        ApplyPortScan(previous, scan);
+    }
+
+    private void ApplyPortScan(
+        IReadOnlySet<string> previous,
+        SerialPortScanResult scan)
+    {
         if (!scan.Success)
         {
             // A failed scan means "do not prune remembered sessions", not
@@ -153,6 +177,34 @@ public partial class MainWindow : Window
         var current = scan.Ports
             .Select(port => port.Device)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var missing = previous
+            .Except(current, StringComparer.OrdinalIgnoreCase)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var serialState in _serialTabs.Values.ToList())
+        {
+            if (!serialState.Closed && missing.Contains(serialState.Port))
+            {
+                MarkSerialDisconnected(serialState);
+            }
+        }
+
+        // Also retry when the device disappeared and returned between two
+        // scans, or when the transport failed while the port stayed present.
+        var now = DateTime.UtcNow;
+        foreach (var serialState in _serialTabs.Values.ToList())
+        {
+            if (serialState.Closed
+                || !serialState.AwaitingReconnect
+                || !current.Contains(serialState.Port)
+                || now < serialState.NextReconnectAt)
+            {
+                continue;
+            }
+
+            TryReconnectSerial(serialState);
+        }
+
         if (!previous.SetEquals(current))
         {
             RefreshSidebar();
@@ -162,6 +214,10 @@ public partial class MainWindow : Window
             UpdateConnectionStates();
         }
     }
+
+    internal void OpenSerialSessionForTests(string port) => OpenSerialSession(port);
+
+    internal void StopPortTimerForTests() => _portTimer?.Stop();
 
     private (HashSet<string> Serial, HashSet<string> Ssh, HashSet<string> Tcp) ConnectedSessions()
     {
@@ -397,8 +453,14 @@ public partial class MainWindow : Window
             throw new InvalidOperationException($"Serial session {port} was not found.");
         }
 
-        var connection = SerialConnection.Open(session.Serial);
+        var connection = SerialConnectionFactory(session.Serial);
         var terminal = CreateTerminal();
+        var state = new SerialTabState
+        {
+            Port = session.Port,
+            Config = session.Serial,
+            Terminal = terminal,
+        };
         var tab = new TerminalTab
         {
             Title = session.Port,
@@ -407,22 +469,12 @@ public partial class MainWindow : Window
             Content = terminal,
             Connection = connection,
             StatusMessage = $"Connected {session.Port}",
-            IsTransportOpen = () => connection.IsOpen && !connection.Pty.IsInputCompleted,
-            CloseAction = () =>
-            {
-                try
-                {
-                    terminal.DetachConnection();
-                }
-                catch
-                {
-                    // The template may not have been applied if opening failed.
-                }
-
-                connection.Dispose();
-            },
+            IsTransportOpen = () => state.IsTransportOpen,
+            CloseAction = () => CloseSerialState(state),
         };
-        SubscribeZmodem(tab, connection.Pty.Zmodem);
+        state.Tab = tab;
+        _serialTabs[tab] = state;
+        AttachSerialTransport(state, connection);
 
         var terminalAttached = false;
         terminal.AttachedToVisualTree += (_, _) =>
@@ -435,21 +487,160 @@ public partial class MainWindow : Window
                     }
 
                     terminalAttached = true;
-                    AttachTerminal(tab, terminal, connection.Pty);
+                    state.TerminalAttached = true;
+                    if (state.Connection is not { } current)
+                    {
+                        return;
+                    }
+
+                    AttachTerminal(tab, terminal, current.Pty);
                     FocusTerminalWhenSelected(tab, terminal);
                 },
                 DispatcherPriority.Loaded);
-        connection.Pty.ProcessExited += (_, _) => Dispatcher.UIThread.Post(() =>
-        {
-            tab.IsAlive = false;
-            tab.StatusMessage = "Connection lose";
-            tab.StatusBrush = StatusWarningBrush;
-            tab.TabDotBrush = StatusWarningBrush;
-            UpdateConnectionStates();
-        });
 
         viewModel.AddTab(tab);
         UpdateConnectionStates();
+    }
+
+    private void AttachSerialTransport(SerialTabState state, ISerialConnection connection)
+    {
+        state.Connection = connection;
+        if (state.Tab is { } tab)
+        {
+            SubscribeZmodem(tab, connection.Pty.Zmodem);
+        }
+
+        connection.Pty.ProcessExited += (_, _) => Dispatcher.UIThread.Post(() =>
+        {
+            // Dispose can synchronously raise ProcessExited for the old
+            // transport after a reconnect has already installed a new one.
+            if (state.Closed || !ReferenceEquals(state.Connection, connection))
+            {
+                return;
+            }
+
+            MarkSerialDisconnected(state);
+            UpdateConnectionStates();
+        });
+    }
+
+    private void MarkSerialDisconnected(SerialTabState state)
+    {
+        if (state.Closed)
+        {
+            return;
+        }
+
+        state.AwaitingReconnect = true;
+        state.NextReconnectAt = DateTime.MinValue;
+        state.LastReconnectError = null;
+        ReleaseSerialConnection(state);
+
+        if (state.Tab is not { } tab)
+        {
+            return;
+        }
+
+        _zmodemTimings.Remove(tab);
+        _zmodemStreams.Remove(tab);
+        tab.IsAlive = false;
+        tab.IsZmodemActive = false;
+        tab.StatusMessage = "Connection lose";
+        tab.StatusBrush = StatusWarningBrush;
+        tab.TabDotBrush = StatusWarningBrush;
+    }
+
+    private void TryReconnectSerial(SerialTabState state)
+    {
+        if (state.Closed || state.Tab is not { } tab)
+        {
+            return;
+        }
+
+        ISerialConnection connection;
+        try
+        {
+            connection = SerialConnectionFactory(state.Config);
+        }
+        catch (Exception ex)
+        {
+            state.NextReconnectAt = DateTime.UtcNow.AddSeconds(2);
+            tab.IsAlive = false;
+            tab.StatusMessage = $"Reconnecting {state.Port}...";
+            tab.StatusBrush = StatusWarningBrush;
+            tab.TabDotBrush = StatusWarningBrush;
+            if (!string.Equals(state.LastReconnectError, ex.Message, StringComparison.Ordinal))
+            {
+                state.LastReconnectError = ex.Message;
+                AppLog.Info($"Serial reconnect {state.Port} failed: {ex.Message}");
+            }
+
+            return;
+        }
+
+        state.AwaitingReconnect = false;
+        state.NextReconnectAt = DateTime.MinValue;
+        state.LastReconnectError = null;
+        AttachSerialTransport(state, connection);
+
+        tab.IsAlive = true;
+        tab.StatusMessage = $"Connected {state.Port}";
+        tab.StatusBrush = StatusInfoBrush;
+        tab.TabDotBrush = StatusInfoBrush;
+
+        if (state.TerminalAttached)
+        {
+            AttachTerminal(tab, state.Terminal, connection.Pty);
+        }
+
+        if (tab.IsSelected)
+        {
+            FocusTerminalWhenSelected(tab, state.Terminal);
+        }
+
+        AppLog.Info($"Serial session {state.Port} reconnected");
+    }
+
+    private static void ReleaseSerialConnection(SerialTabState state)
+    {
+        var connection = state.Connection;
+        state.Connection = null;
+        try
+        {
+            connection?.Dispose();
+        }
+        catch
+        {
+            // The device may already be gone.
+        }
+    }
+
+    private void CloseSerialState(SerialTabState state)
+    {
+        if (state.Closed)
+        {
+            return;
+        }
+
+        state.Closed = true;
+        state.AwaitingReconnect = false;
+        try
+        {
+            state.Terminal.DetachConnection();
+        }
+        catch
+        {
+            // The template may not have been applied if opening failed.
+        }
+
+        ReleaseSerialConnection(state);
+        if (state.Tab is { } tab)
+        {
+            _serialTabs.Remove(tab);
+            _zmodemTimings.Remove(tab);
+            _zmodemStreams.Remove(tab);
+            tab.IsZmodemActive = false;
+        }
     }
 
     private async Task OpenSshSessionAsync(string key)
@@ -2464,6 +2655,23 @@ public partial class MainWindow : Window
     }
 
     private sealed record ZmodemTiming(string Name, DateTime StartedAt, long StartBytes);
+
+    private sealed class SerialTabState
+    {
+        public required string Port { get; init; }
+        public required SerialConnectionConfig Config { get; init; }
+        public required TerminalControl Terminal { get; init; }
+        public TerminalTab? Tab { get; set; }
+        public ISerialConnection? Connection { get; set; }
+        public bool TerminalAttached { get; set; }
+        public bool AwaitingReconnect { get; set; }
+        public bool Closed { get; set; }
+        public DateTime NextReconnectAt { get; set; }
+        public string? LastReconnectError { get; set; }
+
+        public bool IsTransportOpen =>
+            Connection is { IsOpen: true } && !Connection.Pty.IsInputCompleted;
+    }
 
     private sealed record DetachedTabState(Window Window, int Index)
     {
