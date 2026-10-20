@@ -25,6 +25,11 @@ SSH_PORT="${SSH_PORT:-}"
 SSH_USER="${SSH_USER:-}"
 SSH_CLIENT_KEY="${SSH_CLIENT_KEY:-}"
 SSH_HOST_KEY="${SSH_HOST_KEY:-}"
+TELNET_PID="${TELNET_PID:-}"
+TELNET_PORT="${TELNET_PORT:-}"
+TELNET_FIXTURE_DIR="${TELNET_FIXTURE_DIR:-}"
+TELNET_LOGIN_MARKER="${TELNET_LOGIN_MARKER:-}"
+TELNET_INPUT_MARKER="${TELNET_INPUT_MARKER:-}"
 DISPLAY_NUM="${DISPLAY_NUM:-}"
 WINDOW_ID="${WINDOW_ID:-}"
 KEEP_TEMP="${KEEP_TEMP:-0}"
@@ -111,19 +116,19 @@ install_hint() {
 
     case " $os_release " in
         *debian*|*ubuntu*)
-            printf '%s\n' "sudo apt-get update && sudo apt-get install -y xvfb xdotool openbox openssh-server lrzsz netcat-openbsd x11-utils imagemagick"
+            printf '%s\n' "sudo apt-get update && sudo apt-get install -y xvfb xdotool openbox openssh-server lrzsz netcat-openbsd x11-utils imagemagick python3"
             ;;
         *fedora*|*rhel*|*centos*)
-            printf '%s\n' "sudo dnf install -y xorg-x11-server-Xvfb xdotool openbox openssh-server lrzsz nmap-ncat xorg-x11-utils ImageMagick"
+            printf '%s\n' "sudo dnf install -y xorg-x11-server-Xvfb xdotool openbox openssh-server lrzsz nmap-ncat xorg-x11-utils ImageMagick python3"
             ;;
         *arch*)
-            printf '%s\n' "sudo pacman -S --needed xorg-server-xvfb xdotool openbox openssh lrzsz gnu-netcat xorg-xdpyinfo xorg-xprop imagemagick"
+            printf '%s\n' "sudo pacman -S --needed xorg-server-xvfb xdotool openbox openssh lrzsz gnu-netcat xorg-xdpyinfo xorg-xprop imagemagick python"
             ;;
         *suse*)
-            printf '%s\n' "sudo zypper install -y xvfb xdotool openbox openssh lrzsz netcat-openbsd xdpyinfo xprop ImageMagick"
+            printf '%s\n' "sudo zypper install -y xvfb xdotool openbox openssh lrzsz netcat-openbsd xdpyinfo xprop ImageMagick python3"
             ;;
         *)
-            printf '%s\n' "Install Xvfb, xdotool, openbox (or mutter), OpenSSH server/client, lrzsz, netcat, xdpyinfo, xprop, and ImageMagick or xwd."
+            printf '%s\n' "Install Xvfb, xdotool, openbox (or mutter), OpenSSH server/client, lrzsz, netcat, xdpyinfo, xprop, ImageMagick or xwd, and Python 3."
             ;;
     esac
 }
@@ -139,7 +144,7 @@ require_commands() {
         missing+=("openbox or mutter (or set WM_BIN)")
     fi
 
-    for command_name in xdotool xdpyinfo xprop timeout sshd ssh-keygen nc ss pgrep rz sz; do
+    for command_name in xdotool xdpyinfo xprop timeout sshd ssh-keygen nc ss pgrep rz sz python3; do
         if ! command -v "$command_name" >/dev/null 2>&1; then
             missing+=("$command_name")
         fi
@@ -362,7 +367,7 @@ find_free_tcp_port() {
         fi
     done
 
-    log "Could not find a free TCP port for the SSH fixture"
+    log "Could not find a free TCP port for the E2E fixture"
     return 1
 }
 
@@ -466,6 +471,126 @@ EOF
     stop_pid "$SSHD_PID" "sshd fixture"
     SSHD_PID=""
     return 1
+}
+
+# Start a local Telnet fixture. It deliberately does not use sshd or port
+# 2222: the Python server prompts for a user name, records the auto-login,
+# then records a PING sent through the terminal.
+start_telnet_fixture() {
+    local attempt
+
+    [[ -n "${TMP_ROOT:-}" ]] || { log "TMP_ROOT is not set"; return 1; }
+    command -v python3 >/dev/null 2>&1 || { log "python3 not found"; return 1; }
+    TELNET_FIXTURE_DIR="$TMP_ROOT/telnet"
+    mkdir -p "$TELNET_FIXTURE_DIR"
+    TELNET_PORT="$(find_free_tcp_port)" || return 1
+    TELNET_LOGIN_MARKER="$TMP_ROOT/telnet-login.ready"
+    TELNET_INPUT_MARKER="$TMP_ROOT/telnet-input.ready"
+    rm -f -- "$TELNET_LOGIN_MARKER" "$TELNET_INPUT_MARKER"
+
+    cat >"$TELNET_FIXTURE_DIR/server.py" <<'PY'
+import pathlib
+import socket
+import sys
+
+port = int(sys.argv[1])
+login_marker = pathlib.Path(sys.argv[2])
+input_marker = pathlib.Path(sys.argv[3])
+
+def serve(conn):
+    conn.settimeout(60)
+    conn.sendall(b"Welcome to COMTool Telnet E2E\r\nlogin: ")
+    buffer = b""
+    logged_in = False
+    while True:
+        data = conn.recv(4096)
+        if not data:
+            return
+        buffer += data
+        while b"\n" in buffer:
+            line, buffer = buffer.split(b"\n", 1)
+            if not logged_in and b"e2e" in line:
+                login_marker.write_text("TELNET_E2E_READY")
+                conn.sendall(b"\r\nTELNET_E2E_READY\r\n$ ")
+                logged_in = True
+            elif logged_in and b"PING" in line:
+                input_marker.write_text("TELNET_INPUT_READY")
+                conn.sendall(b"PONG\r\n$ ")
+
+server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+server.bind(("127.0.0.1", port))
+server.listen(5)
+while True:
+    conn, _ = server.accept()
+    try:
+        serve(conn)
+    except Exception:
+        pass
+    finally:
+        conn.close()
+PY
+
+    : >"$TELNET_FIXTURE_DIR/server.log"
+    python3 "$TELNET_FIXTURE_DIR/server.py" "$TELNET_PORT" \
+        "$TELNET_LOGIN_MARKER" "$TELNET_INPUT_MARKER" \
+        >>"$TELNET_FIXTURE_DIR/server.log" 2>&1 &
+    TELNET_PID=$!
+
+    for ((attempt = 0; attempt < 100; attempt++)); do
+        if ! kill -0 "$TELNET_PID" 2>/dev/null; then
+            log "Telnet fixture exited before becoming ready"
+            tail -n 50 "$TELNET_FIXTURE_DIR/server.log" >&2 2>/dev/null || true
+            TELNET_PID=""
+            return 1
+        fi
+        # A TCP connect probe is fine: the server ignores connections that
+        # close before sending a line and keeps accepting.
+        if timeout 1 nc -z 127.0.0.1 "$TELNET_PORT" >/dev/null 2>&1; then
+            log "Telnet fixture ready on 127.0.0.1:$TELNET_PORT (pid $TELNET_PID)"
+            return 0
+        fi
+        sleep 0.1
+    done
+
+    log "Telnet fixture did not listen on 127.0.0.1:$TELNET_PORT within 10s"
+    tail -n 50 "$TELNET_FIXTURE_DIR/server.log" >&2 2>/dev/null || true
+    stop_pid "$TELNET_PID" "telnet fixture"
+    TELNET_PID=""
+    return 1
+}
+
+# Seed one Telnet session with a user name but no plaintext password. The
+# auto-login marker proves the app sent the user name after the prompt.
+seed_telnet_config() {
+    local config_dir="$1"
+    local port="$2"
+    local key="telnet:e2e@127.0.0.1:${port}"
+
+    [[ -n "$config_dir" && -n "$port" ]] || return 1
+    mkdir -p "$config_dir"
+    cat >"$config_dir/config.json" <<EOF
+{
+  "version": 3,
+  "skin": "light",
+  "encoding": "UTF-8",
+  "serialSessions": [],
+  "sshSessions": [],
+  "telnetSessions": [
+    {
+      "transport": "telnet",
+      "key": "$key",
+      "host": "127.0.0.1",
+      "port": $port,
+      "user": "e2e",
+      "alias": "telnet-e2e",
+      "passwd_enc": ""
+    }
+  ],
+  "sessionSidebar": { "visible": true, "width": 220 },
+  "window": { "width": 1000, "height": 650 }
+}
+EOF
 }
 
 # Seed one SSH session for the fixture. The private key is referenced by its
@@ -1065,6 +1190,11 @@ stop_app() {
     APP_PID=""
 }
 
+stop_telnet_fixture() {
+    stop_pid "${TELNET_PID:-}" "telnet fixture"
+    TELNET_PID=""
+}
+
 stop_sshd() {
     local pid="${SSHD_PID:-}"
     local children=""
@@ -1122,6 +1252,7 @@ cleanup() {
     fi
 
     stop_app || true
+    stop_telnet_fixture || true
     stop_sshd || true
     stop_wm || true
     stop_xvfb || true

@@ -27,6 +27,7 @@ E2E_TESTS=(
     SSH06_MultipleConnectionsE2E
     UI05_TabSwitchTypingBothDirections
     TERM15_DoubleClickMaximizeE2E
+    TELNET01_AutoLoginE2E
 )
 SSH_TEST_IDS=(
     UI01_TitleBarDoubleClickMaximizeE2E
@@ -37,6 +38,9 @@ SSH_TEST_IDS=(
     SSH06_MultipleConnectionsE2E
     UI05_TabSwitchTypingBothDirections
     TERM15_DoubleClickMaximizeE2E
+)
+TELNET_TEST_IDS=(
+    TELNET01_AutoLoginE2E
 )
 
 usage() {
@@ -126,6 +130,7 @@ log "Temporary E2E root: $TMP_ROOT"
 selected=0
 PRIMARY_TEST=""
 SSH_TEST_ID=""
+TELNET_TEST_ID=""
 for test_id in "${E2E_TESTS[@]}"; do
     if matches_filter "$test_id"; then
         selected=$((selected + 1))
@@ -137,6 +142,12 @@ done
 for test_id in "${SSH_TEST_IDS[@]}"; do
     if matches_filter "$test_id"; then
         SSH_TEST_ID="$test_id"
+        break
+    fi
+done
+for test_id in "${TELNET_TEST_IDS[@]}"; do
+    if matches_filter "$test_id"; then
+        TELNET_TEST_ID="$test_id"
         break
     fi
 done
@@ -437,6 +448,34 @@ run_e2e01_open_ssh() {
     pass "$test_id"
 }
 
+run_telnet01_auto_login() {
+    local test_id="TELNET01_AutoLoginE2E"
+    local login_marker="$TELNET_LOGIN_MARKER"
+    local input_marker="$TELNET_INPUT_MARKER"
+
+    log "Running $test_id"
+    click_sidebar_session \
+        || fail "$test_id" "could not click the saved Telnet row"
+
+    if ! wait_for_file_content "$login_marker" "TELNET_E2E_READY" 20; then
+        fail "$test_id" "Telnet auto-login did not send the user name after login:"
+    fi
+    log "Telnet auto-login marker: $login_marker"
+
+    # Click the terminal to focus it, then prove terminal input reaches the
+    # Telnet transport. The server only writes this marker after receiving
+    # PING through the terminal.
+    click_window 600 300 || fail "$test_id" "could not focus the Telnet terminal"
+    type_text "PING" || fail "$test_id" "could not type into the Telnet terminal"
+    press_enter || fail "$test_id" "could not submit the Telnet terminal input"
+    if ! wait_for_file_content "$input_marker" "TELNET_INPUT_READY" 15; then
+        fail "$test_id" "Telnet terminal input did not reach the server"
+    fi
+    log "Telnet input marker: $input_marker"
+
+    pass "$test_id"
+}
+
 run_ssh11_restart_stopped_session() {
     local test_id="SSH11_RestartStoppedSessionE2E"
     local old_pid
@@ -719,6 +758,24 @@ if [[ -n "$SSH_TEST_ID" ]]; then
     fi
 
     close_app_window "$SSH_TEST_ID"
+fi
+
+if [[ -n "$TELNET_TEST_ID" ]]; then
+    if ! start_telnet_fixture; then
+        fail "$TELNET_TEST_ID" "ephemeral Telnet fixture failed to start"
+    fi
+
+    seed_telnet_config "$CONFIG_ROOT/avalonia" "$TELNET_PORT"
+    if ! start_app "$CONFIG_ROOT"; then
+        fail "$TELNET_TEST_ID" "application failed to launch with the Telnet fixture config"
+    fi
+    wait_for_comtool_window "$TELNET_TEST_ID"
+
+    if matches_filter "TELNET01_AutoLoginE2E"; then
+        run_telnet01_auto_login
+    fi
+
+    close_app_window "$TELNET_TEST_ID"
 fi
 
 exit 0
