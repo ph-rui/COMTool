@@ -1510,9 +1510,8 @@ public partial class MainWindow : Window
         // for the selected terminal to enter the visual tree.
         void FocusIfStillSelected()
         {
-            if (tab.IsAlive
-                && DataContext is MainViewModel viewModel
-                && ReferenceEquals(viewModel.SelectedTab, tab))
+            if (DataContext is MainViewModel viewModel
+                && TerminalFocusPolicy.ShouldFocus(viewModel, tab))
             {
                 terminal.EndReparent();
                 terminal.Focus();
