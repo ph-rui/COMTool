@@ -19,6 +19,16 @@ KEEP_TEMP=0
 WINDOW_TITLE="COMTool v0.01"
 E2E_TESTS=(
     APP01_SmokeLaunchE2E
+    UI02_SidebarExpandsOnLaunchE2E
+    E2E01_OpenSshSession
+    SSH06_MultipleConnectionsE2E
+    UI05_TabSwitchTypingBothDirections
+)
+SSH_TEST_IDS=(
+    UI02_SidebarExpandsOnLaunchE2E
+    E2E01_OpenSshSession
+    SSH06_MultipleConnectionsE2E
+    UI05_TabSwitchTypingBothDirections
 )
 
 usage() {
@@ -100,9 +110,20 @@ fi
 APP="$(cd -- "$(dirname -- "$APP")" && pwd)/$(basename -- "$APP")"
 
 selected=0
+PRIMARY_TEST=""
+SSH_TEST_ID=""
 for test_id in "${E2E_TESTS[@]}"; do
     if matches_filter "$test_id"; then
         selected=$((selected + 1))
+        if [[ -z "$PRIMARY_TEST" ]]; then
+            PRIMARY_TEST="$test_id"
+        fi
+    fi
+done
+for test_id in "${SSH_TEST_IDS[@]}"; do
+    if matches_filter "$test_id"; then
+        SSH_TEST_ID="$test_id"
+        break
     fi
 done
 if ((selected == 0)); then
@@ -128,31 +149,27 @@ trap 'exit 130' INT TERM HUP
 log "Temporary E2E root: $TMP_ROOT"
 log "Application under test: $APP"
 
-DISPLAY_NUM="$(find_free_display)" || fail "APP01_SmokeLaunchE2E" "no free X display available"
+DISPLAY_NUM="$(find_free_display)" || fail "$PRIMARY_TEST" "no free X display available"
 log "Selected free display $DISPLAY_NUM"
 
 if ! start_xvfb "$DISPLAY_NUM"; then
-    fail "APP01_SmokeLaunchE2E" "Xvfb failed to start on $DISPLAY_NUM (see $TMP_ROOT/xvfb.log)"
+    fail "$PRIMARY_TEST" "Xvfb failed to start on $DISPLAY_NUM (see $TMP_ROOT/xvfb.log)"
 fi
 
 if ! start_wm "$DISPLAY_NUM"; then
-    fail "APP01_SmokeLaunchE2E" "window manager failed to start on $DISPLAY_NUM (see $TMP_ROOT/wm.log)"
+    fail "$PRIMARY_TEST" "window manager failed to start on $DISPLAY_NUM (see $TMP_ROOT/wm.log)"
 fi
 
-seed_empty_config "$CONFIG_ROOT/avalonia"
+SHELL_A_PID_FILE="$TMP_ROOT/shell-a.pid"
+SHELL_B_PID_FILE="$TMP_ROOT/shell-b.pid"
+SHELL_A_PID=""
+SHELL_B_PID=""
+DIR_A="$TMP_ROOT/dir-a"
+DIR_B="$TMP_ROOT/dir-b"
 
-if ! start_app "$CONFIG_ROOT"; then
-    fail "APP01_SmokeLaunchE2E" "application failed to launch"
-fi
+wait_for_comtool_window() {
+    local test_id="$1"
 
-run_app01_smoke() {
-    local test_id="APP01_SmokeLaunchE2E"
-    local geometry
-    local width
-    local height
-    local close_x
-
-    log "Running $test_id"
     if ! WINDOW_ID="$(wait_for_window "$WINDOW_TITLE" 20)"; then
         fail "$test_id" "window '$WINDOW_TITLE' did not appear within 20s"
     fi
@@ -164,6 +181,53 @@ run_app01_smoke() {
     if ! activate_window "$WINDOW_ID"; then
         fail "$test_id" "could not activate window $WINDOW_ID"
     fi
+}
+
+close_app_window() {
+    local test_id="$1"
+    local geometry
+    local width
+    local close_x
+
+    [[ -n "${WINDOW_ID:-}" ]] || { stop_app; return 0; }
+    if ! geometry="$(xdotool getwindowgeometry --shell "$WINDOW_ID" 2>/dev/null)"; then
+        log "$test_id: could not read geometry before close; terminating the app"
+        stop_app
+        return 0
+    fi
+    width="$(printf '%s\n' "$geometry" | sed -n 's/^WIDTH=//p' | sed -n '1p')"
+    if [[ ! "$width" =~ ^[0-9]+$ ]]; then
+        log "$test_id: invalid width before close; terminating the app"
+        stop_app
+        return 0
+    fi
+    width=$((10#$width))
+    close_x=$((width - 17))
+    if ! click_window "$close_x" 17; then
+        log "$test_id: could not click the close button; terminating the app"
+        stop_app
+        return 0
+    fi
+
+    if wait_for_app_exit 10; then
+        wait "$APP_PID" 2>/dev/null || true
+        APP_PID=""
+        log "Application exited cleanly after the close click"
+    else
+        log "$test_id: application did not exit after the close click; terminating it"
+        stop_app
+    fi
+}
+
+run_app01_smoke() {
+    local test_id="APP01_SmokeLaunchE2E"
+    local geometry
+    local width
+    local height
+    local close_x
+
+    log "Running $test_id"
+    wait_for_comtool_window "$test_id"
 
     if ! capture_screenshot "$TMP_ROOT/smoke.png"; then
         fail "$test_id" "could not capture the smoke screenshot"
@@ -202,8 +266,233 @@ run_app01_smoke() {
     pass "$test_id"
 }
 
+read_pid_file() {
+    local path="$1"
+    [[ -s "$path" ]] || return 1
+    cat -- "$path"
+}
+
+ensure_first_shell() {
+    local test_id="$1"
+
+    if ! ensure_ssh_connections 1 20; then
+        fail "$test_id" "clicking the sidebar SSH row did not open a connection"
+    fi
+
+    if [[ -s "$SHELL_A_PID_FILE" ]]; then
+        SHELL_A_PID="$(read_pid_file "$SHELL_A_PID_FILE")"
+        [[ -n "$SHELL_A_PID" ]] && return 0
+    fi
+
+    if ! run_command_until_marker \
+        "echo \$\$ > $SHELL_A_PID_FILE && touch $SHELL_A_PID_FILE.ready" \
+        "$SHELL_A_PID_FILE.ready" 20; then
+        fail "$test_id" "first SSH shell did not accept the PID marker command"
+    fi
+    SHELL_A_PID="$(read_pid_file "$SHELL_A_PID_FILE")" \
+        || fail "$test_id" "first SSH shell PID marker is empty"
+    [[ -n "$SHELL_A_PID" ]] || fail "$test_id" "first SSH shell PID marker is empty"
+}
+
+ensure_second_shell() {
+    local test_id="$1"
+    local attempt
+    local candidate
+
+    if ! ensure_ssh_connections 2 20; then
+        fail "$test_id" "clicking the SSH row a second time did not open a second connection"
+    fi
+
+    for ((attempt = 0; attempt < 40; attempt++)); do
+        if [[ -s "$SHELL_B_PID_FILE" ]]; then
+            candidate="$(read_pid_file "$SHELL_B_PID_FILE")"
+            if [[ -n "$candidate" && "$candidate" != "$SHELL_A_PID" ]]; then
+                SHELL_B_PID="$candidate"
+                return 0
+            fi
+        fi
+        rm -f -- "$SHELL_B_PID_FILE" "$SHELL_B_PID_FILE.ready"
+        run_command_until_marker \
+            "echo \$\$ > $SHELL_B_PID_FILE && touch $SHELL_B_PID_FILE.ready" \
+            "$SHELL_B_PID_FILE.ready" 2 || true
+        if [[ -s "$SHELL_B_PID_FILE" ]]; then
+            candidate="$(read_pid_file "$SHELL_B_PID_FILE")"
+            if [[ -n "$candidate" && "$candidate" != "$SHELL_A_PID" ]]; then
+                SHELL_B_PID="$candidate"
+                return 0
+            fi
+        fi
+    done
+
+    fail "$test_id" "second SSH shell did not get an independent shell PID (first: ${SHELL_A_PID:-unknown})"
+}
+
+run_ui02_sidebar_expands() {
+    local test_id="UI02_SidebarExpandsOnLaunchE2E"
+    local config="$CONFIG_ROOT/avalonia/config.json"
+
+    log "Running $test_id"
+    if ! grep -q '"visible": false' "$config" 2>/dev/null; then
+        fail "$test_id" "seeded config did not request a collapsed sidebar"
+    fi
+
+    ensure_first_shell "$test_id"
+
+    if ! run_command_until_marker \
+        "printf UI02_READY > $TMP_ROOT/ui02-ready" \
+        "$TMP_ROOT/ui02-ready" 20; then
+        fail "$test_id" "the first SSH tab did not accept keyboard input"
+    fi
+    if ! wait_for_file_content "$TMP_ROOT/ui02-ready" "UI02_READY" 5; then
+        fail "$test_id" "first SSH tab readiness marker had the wrong contents"
+    fi
+
+    pass "$test_id"
+}
+
+run_e2e01_open_ssh() {
+    local test_id="E2E01_OpenSshSession"
+    local marker="$TMP_ROOT/e2e01"
+
+    log "Running $test_id"
+    ensure_first_shell "$test_id"
+
+    if ! run_command_until_marker \
+        "printf E2E01_READY > $marker" \
+        "$marker" 20; then
+        fail "$test_id" "SSH shell did not create $marker"
+    fi
+    if ! wait_for_file_content "$marker" "E2E01_READY" 5; then
+        fail "$test_id" "marker $marker did not contain E2E01_READY"
+    fi
+
+    pass "$test_id"
+}
+
+run_ssh06_multiple_connections() {
+    local test_id="SSH06_MultipleConnectionsE2E"
+    local shell_a
+    local shell_b
+
+    log "Running $test_id"
+    ensure_first_shell "$test_id"
+    ensure_second_shell "$test_id"
+
+    [[ -s "$SHELL_A_PID_FILE" ]] || fail "$test_id" "$SHELL_A_PID_FILE is missing"
+    [[ -s "$SHELL_B_PID_FILE" ]] || fail "$test_id" "$SHELL_B_PID_FILE is missing"
+    shell_a="$(read_pid_file "$SHELL_A_PID_FILE")"
+    shell_b="$(read_pid_file "$SHELL_B_PID_FILE")"
+    [[ -n "$shell_a" ]] || fail "$test_id" "first shell PID is empty"
+    [[ -n "$shell_b" ]] || fail "$test_id" "second shell PID is empty"
+    [[ "$shell_a" != "$shell_b" ]] \
+        || fail "$test_id" "both sidebar clicks reused shell PID $shell_a"
+
+    pass "$test_id"
+}
+
+run_ui05_tab_switch() {
+    local test_id="UI05_TabSwitchTypingBothDirections"
+    local shell_pid
+
+    log "Running $test_id"
+    ensure_first_shell "$test_id"
+    ensure_second_shell "$test_id"
+
+    mkdir -p "$DIR_A" "$DIR_B"
+    rm -f -- "$DIR_A"/* "$DIR_B"/* 2>/dev/null || true
+    collapse_sidebar_for_tabs \
+        || fail "$test_id" "could not collapse the sidebar before tab switching"
+
+    click_first_tab || fail "$test_id" "could not click the first tab"
+    wait_for_shell_focus "$SHELL_A_PID" "ui05-focus-a" 15 \
+        || fail "$test_id" "first tab did not receive keyboard focus (expected shell $SHELL_A_PID)"
+    if ! run_command_until_marker \
+        "cd $DIR_A && echo \$\$ > $DIR_A/shell.pid && touch $DIR_A/setup.ready" \
+        "$DIR_A/setup.ready" 15; then
+        fail "$test_id" "first tab did not accept the working-directory setup"
+    fi
+    shell_pid="$(read_pid_file "$DIR_A/shell.pid")"
+    [[ "$shell_pid" == "$SHELL_A_PID" ]] \
+        || fail "$test_id" "first tab setup ran in shell ${shell_pid:-unknown}, expected $SHELL_A_PID"
+
+    click_second_tab || fail "$test_id" "could not click the second tab"
+    wait_for_shell_focus "$SHELL_B_PID" "ui05-focus-b" 15 \
+        || fail "$test_id" "second tab did not receive keyboard focus (expected shell $SHELL_B_PID)"
+    if ! run_command_until_marker \
+        "cd $DIR_B && echo \$\$ > $DIR_B/shell.pid && touch $DIR_B/setup.ready" \
+        "$DIR_B/setup.ready" 15; then
+        fail "$test_id" "second tab did not accept the working-directory setup"
+    fi
+    shell_pid="$(read_pid_file "$DIR_B/shell.pid")"
+    [[ "$shell_pid" == "$SHELL_B_PID" ]] \
+        || fail "$test_id" "second tab setup ran in shell ${shell_pid:-unknown}, expected $SHELL_B_PID"
+
+    # Do not click inside the terminal: after each tab click the app must
+    # restore terminal focus itself. Relative marker names prove the keystroke
+    # reached the shell whose working directory matches that tab.
+    click_first_tab || fail "$test_id" "could not click the first tab"
+    wait_for_shell_focus "$SHELL_A_PID" "ui05-switch-a1" 15 \
+        || fail "$test_id" "switch to first tab lost terminal focus"
+    if ! run_command_until_marker "touch after-switch-1" "$DIR_A/after-switch-1" 15; then
+        fail "$test_id" "touch after-switch-1 did not create $DIR_A/after-switch-1"
+    fi
+    [[ ! -e "$DIR_B/after-switch-1" ]] \
+        || fail "$test_id" "after-switch-1 appeared in the second tab's directory"
+
+    click_second_tab || fail "$test_id" "could not click the second tab"
+    wait_for_shell_focus "$SHELL_B_PID" "ui05-switch-b2" 15 \
+        || fail "$test_id" "switch to second tab lost terminal focus"
+    if ! run_command_until_marker "touch after-switch-2" "$DIR_B/after-switch-2" 15; then
+        fail "$test_id" "touch after-switch-2 did not create $DIR_B/after-switch-2"
+    fi
+    [[ ! -e "$DIR_A/after-switch-2" ]] \
+        || fail "$test_id" "after-switch-2 appeared in the first tab's directory"
+
+    click_first_tab || fail "$test_id" "could not click the first tab"
+    wait_for_shell_focus "$SHELL_A_PID" "ui05-switch-a3" 15 \
+        || fail "$test_id" "second switch to first tab lost terminal focus"
+    if ! run_command_until_marker "touch after-switch-3" "$DIR_A/after-switch-3" 15; then
+        fail "$test_id" "touch after-switch-3 did not create $DIR_A/after-switch-3"
+    fi
+    [[ ! -e "$DIR_B/after-switch-3" ]] \
+        || fail "$test_id" "after-switch-3 appeared in the second tab's directory"
+
+    pass "$test_id"
+}
+
 if matches_filter "APP01_SmokeLaunchE2E"; then
+    seed_empty_config "$CONFIG_ROOT/avalonia"
+    if ! start_app "$CONFIG_ROOT"; then
+        fail "APP01_SmokeLaunchE2E" "application failed to launch"
+    fi
     run_app01_smoke
+fi
+
+if [[ -n "$SSH_TEST_ID" ]]; then
+    if ! start_sshd_fixture; then
+        fail "$SSH_TEST_ID" "ephemeral SSH fixture failed to start"
+    fi
+
+    seed_ssh_config "$CONFIG_ROOT/avalonia" "$SSH_PORT" "$SSH_CLIENT_KEY"
+    if ! start_app "$CONFIG_ROOT"; then
+        fail "$SSH_TEST_ID" "application failed to launch with the SSH fixture config"
+    fi
+    wait_for_comtool_window "$SSH_TEST_ID"
+
+    if matches_filter "UI02_SidebarExpandsOnLaunchE2E"; then
+        run_ui02_sidebar_expands
+    fi
+    if matches_filter "E2E01_OpenSshSession"; then
+        run_e2e01_open_ssh
+    fi
+    if matches_filter "SSH06_MultipleConnectionsE2E"; then
+        run_ssh06_multiple_connections
+    fi
+    if matches_filter "UI05_TabSwitchTypingBothDirections"; then
+        run_ui05_tab_switch
+    fi
+
+    close_app_window "$SSH_TEST_ID"
 fi
 
 exit 0
