@@ -370,6 +370,27 @@ Validated headlessly on the Windows test host over SSH (no RDP used):
   `COMTool-Avalonia` process was running to lock the files. The Windows desktop
   app still needs to be launched for visual/DPI confirmation.
 
+## 2026-10-20 test-gate coverage audit
+
+- Filled all 89 rows in `docs/testing/feature-test-matrix.md` and made each
+  status match `docs/parity-matrix.md`.
+- Completed rows now reference real xUnit or package-phase test IDs; rows with
+  only real-hardware, visual, long-soak or desktop-install evidence were
+  downgraded to `部分` and linked to `WIN-*` manual items (`WIN-01`,
+  `WIN-02`, `WIN-04` ... `WIN-21`).
+- Added `WIN-20` for Windows sidebar/UI/terminal font/keyboard interaction and
+  `WIN-21` for package size/startup measurements. Added the required manual
+  links for `WIN-01` (UI-01), `WIN-06` (SSH-04/CFG-06), `WIN-07`
+  (ZM-02/ZM-03/ZM-06), `WIN-08` (PKG-04) and `WIN-09` (TST-06).
+- The gate passes `--phase verify` and `--phase package` using the current
+  `test-list.txt`, six E2E PASS lines and `PKG01_CandidateSmoke`; Windows and
+  macOS structural checks also pass with Linux-only rows skipped.
+- Suite total is now 164: Core 20, Connections 31, Terminal 11, ZMODEM 32,
+  TestGate 46, App 24.
+- The package hashes above are historical. Production `ConfigPaths` changed
+  after those builds, so a new gated candidate must be built and signed before
+  any formal package is promoted.
+
 ## Still open for Phase 1
 
 - Terminal byte transcoding for non-UTF-8 encodings; the selector currently
