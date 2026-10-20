@@ -5,7 +5,7 @@
 #   verify.sh [--app <app-executable>] [--results <directory>]
 #
 # Order:
-#   restore -> build -> solution tests -> App tests -> test list -> Linux E2E
+#   restore -> build -> per-project tests -> App tests -> test list -> Linux E2E
 #   -> TestGate matrix check -> summary.txt
 #
 # Every step is logged under the results directory. A failing step does not
@@ -97,6 +97,16 @@ gate_dll="$repo_root/avalonia/tools/COMTool.TestGate/bin/Release/net10.0/COMTool
 e2e_script="$repo_root/avalonia/tests/e2e/linux/run-ui-e2e.sh"
 results_root="$repo_root/avalonia/publish/test-results"
 
+# Unit tests are executed one project at a time so every project keeps its own
+# TRX. App.Tests is deliberately excluded here and keeps app-tests.trx.
+unit_projects=(
+    "COMTool.Core.Tests:$repo_root/avalonia/tests/COMTool.Core.Tests/COMTool.Core.Tests.csproj"
+    "COMTool.Terminal.Tests:$repo_root/avalonia/tests/COMTool.Terminal.Tests/COMTool.Terminal.Tests.csproj"
+    "COMTool.Connections.Tests:$repo_root/avalonia/tests/COMTool.Connections.Tests/COMTool.Connections.Tests.csproj"
+    "COMTool.Zmodem.Tests:$repo_root/avalonia/tests/COMTool.Zmodem.Tests/COMTool.Zmodem.Tests.csproj"
+    "COMTool.TestGate.Tests:$repo_root/avalonia/tests/COMTool.TestGate.Tests/COMTool.TestGate.Tests.csproj"
+)
+
 mkdir -p "$results_root"
 if [[ -n "$results_arg" ]]; then
     if [[ "$results_arg" == /* ]]; then
@@ -118,6 +128,21 @@ else
 fi
 printf '%s\n' "$results" >"$results_root/latest.txt"
 
+# A reused --results directory must not retain evidence from an earlier run.
+rm -f -- \
+    "$results/restore.log" \
+    "$results/build.log" \
+    "$results/unit-tests.trx" \
+    "$results/unit-tests.log" \
+    "$results/app-tests.trx" \
+    "$results/app-tests.log" \
+    "$results/test-list.txt" \
+    "$results/e2e.log" \
+    "$results/testgate.log" \
+    "$results/summary.txt"
+rm -f -- "$results"/unit-tests-*.trx "$results"/unit-tests-*.log
+rm -rf -- "$results/e2e-tmp"
+
 platform="$(uname -s | tr '[:upper:]' '[:lower:]')"
 case "$platform" in
     linux*) platform="linux" ;;
@@ -127,11 +152,21 @@ esac
 
 step_names=()
 step_statuses=()
+unit_evidence=()
+unit_total=0
+app_total=0
 failures=0
 
 record_step() {
     step_names+=("$1")
     step_statuses+=("$2")
+}
+
+count_trx_results() {
+    local file="$1"
+    {
+        grep -o '<UnitTestResult ' "$file" 2>/dev/null || true
+    } | wc -l | tr -d '[:space:]'
 }
 
 # Run one native command, writing its combined output to <log>. The native
@@ -183,19 +218,41 @@ else
 fi
 
 if ((build_ok)); then
-    if run_step unit-tests "$results/unit-tests.log" \
-        "$dotnet" test "$sln" -c Release --no-build \
-        --results-directory "$results" \
-        --logger "trx;LogFileName=unit-tests.trx"; then
-        if [[ -s "$results/unit-tests.trx" ]]; then
-            record_step unit-tests "PASS"
+    unit_failed=0
+    for entry in "${unit_projects[@]}"; do
+        project_name="${entry%%:*}"
+        project_path="${entry#*:}"
+        trx_name="unit-tests-${project_name}.trx"
+        log_name="unit-tests-${project_name}.log"
+
+        if run_step "unit-tests-${project_name}" "$results/$log_name" \
+            "$dotnet" test "$project_path" -c Release --no-build \
+            --results-directory "$results" \
+            --logger "trx;LogFileName=${trx_name}"; then
+            if [[ -s "$results/$trx_name" ]]; then
+                count="$(count_trx_results "$results/$trx_name")"
+                if ((count > 0)); then
+                    unit_total=$((unit_total + count))
+                    unit_evidence+=("$trx_name: $count results")
+                else
+                    unit_failed=1
+                    unit_evidence+=("$trx_name: FAIL (0 results)")
+                fi
+            else
+                unit_failed=1
+                unit_evidence+=("$trx_name: FAIL (missing or empty)")
+            fi
         else
-            record_step unit-tests "FAIL (missing unit-tests.trx)"
-            failures=$((failures + 1))
+            status=$?
+            unit_failed=1
+            unit_evidence+=("$trx_name: FAIL (test exit $status)")
         fi
+    done
+
+    if ((unit_failed == 0)); then
+        record_step unit-tests "PASS ($unit_total results across ${#unit_projects[@]} projects)"
     else
-        status=$?
-        record_step unit-tests "FAIL (exit $status)"
+        record_step unit-tests "FAIL (see unit-tests-*.log)"
         failures=$((failures + 1))
     fi
 
@@ -203,10 +260,15 @@ if ((build_ok)); then
         "$dotnet" test "$app_tests_project" -c Release --no-build \
         --results-directory "$results" \
         --logger "trx;LogFileName=app-tests.trx"; then
+        app_count=0
         if [[ -s "$results/app-tests.trx" ]]; then
-            record_step app-tests "PASS"
+            app_count="$(count_trx_results "$results/app-tests.trx")"
+        fi
+        if ((app_count > 0)); then
+            app_total=$app_count
+            record_step app-tests "PASS ($app_count results)"
         else
-            record_step app-tests "FAIL (missing app-tests.trx)"
+            record_step app-tests "FAIL (missing, empty, or no results in app-tests.trx)"
             failures=$((failures + 1))
         fi
     else
@@ -225,78 +287,101 @@ fi
 
 # Produce the test list consumed by TestGate. This remains solution-wide so
 # headless App tests are included alongside core/terminal/connections tests.
+# Stale build outputs must never be listed after a failed build.
 test_list="$results/test-list.txt"
-printf '[verify] test-list\n'
-set +e
-"$dotnet" test "$sln" -c Release --no-build --list-tests >"$test_list" 2>&1
-list_status=$?
-set -e
-app_test_count=0
-if [[ -s "$test_list" ]]; then
-    app_test_count="$(grep -cE '^[[:space:]]+COMTool\.App\.Tests\.' "$test_list" || true)"
-fi
-if ((list_status != 0)); then
-    record_step test-list "FAIL (exit $list_status)"
-    failures=$((failures + 1))
-elif ((app_test_count == 0)); then
-    record_step test-list "FAIL (no COMTool.App.Tests entries)"
-    failures=$((failures + 1))
+if ((build_ok)); then
+    printf '[verify] test-list\n'
+    set +e
+    "$dotnet" test "$sln" -c Release --no-build --list-tests >"$test_list" 2>&1
+    list_status=$?
+    set -e
+    app_test_count=0
+    if [[ -s "$test_list" ]]; then
+        app_test_count="$(grep -cE '^[[:space:]]+COMTool\.App\.Tests\.' "$test_list" || true)"
+    fi
+    if ((list_status != 0)); then
+        record_step test-list "FAIL (exit $list_status)"
+        failures=$((failures + 1))
+    elif ((app_test_count == 0)); then
+        record_step test-list "FAIL (no COMTool.App.Tests entries)"
+        failures=$((failures + 1))
+    else
+        record_step test-list "PASS ($app_test_count App tests listed)"
+    fi
 else
-    record_step test-list "PASS ($app_test_count App tests listed)"
+    printf '# skipped: build failed\n' >"$test_list"
+    record_step test-list "SKIP (build failed)"
 fi
 
 # E2E only exists on Linux. Other platforms record an explicit skip line so
-# TestGate sees a truthful log rather than a stale or empty file.
-if [[ "$platform" == "linux" ]]; then
-    if [[ -n "$app_arg" ]]; then
-        if [[ "$app_arg" == /* ]]; then
-            app_path="$app_arg"
+# TestGate sees a truthful log rather than a stale or empty file. A failed
+# build also skips E2E so a stale binary is never exercised.
+if ((build_ok)); then
+    if [[ "$platform" == "linux" ]]; then
+        if [[ -n "$app_arg" ]]; then
+            if [[ "$app_arg" == /* ]]; then
+                app_path="$app_arg"
+            else
+                app_path="$PWD/$app_arg"
+            fi
         else
-            app_path="$PWD/$app_arg"
+            app_path="$built_app"
+        fi
+
+        if [[ ! -x "$app_path" ]]; then
+            printf 'FAIL E2E: application not found or not executable: %s\n' "$app_path" \
+                >"$results/e2e.log"
+            record_step e2e "FAIL (app not found: $app_path)"
+            failures=$((failures + 1))
+        else
+            mkdir -p "$results/e2e-tmp"
+            if run_step e2e "$results/e2e.log" \
+                env TMPDIR="$results/e2e-tmp" \
+                bash "$e2e_script" --app "$app_path"; then
+                record_step e2e "PASS"
+            else
+                status=$?
+                record_step e2e "FAIL (exit $status)"
+                failures=$((failures + 1))
+            fi
         fi
     else
-        app_path="$built_app"
-    fi
-
-    if [[ ! -x "$app_path" ]]; then
-        printf 'FAIL E2E: application not found or not executable: %s\n' "$app_path" \
-            >"$results/e2e.log"
-        record_step e2e "FAIL (app not found: $app_path)"
-        failures=$((failures + 1))
-    elif run_step e2e "$results/e2e.log" bash "$e2e_script" --app "$app_path"; then
-        record_step e2e "PASS"
-    else
-        status=$?
-        record_step e2e "FAIL (exit $status)"
-        failures=$((failures + 1))
+        printf 'E2E not applicable on %s\n' "$platform" >"$results/e2e.log"
+        record_step e2e "SKIP (E2E not applicable on $platform)"
     fi
 else
-    printf 'E2E not applicable on %s\n' "$platform" >"$results/e2e.log"
-    record_step e2e "SKIP (E2E not applicable on $platform)"
+    printf '# skipped: build failed\n' >"$results/e2e.log"
+    record_step e2e "SKIP (build failed)"
 fi
 
-# The gate is always executed, even when earlier steps failed, so the summary
-# records the matrix verdict for this run instead of hiding it behind an abort.
-if [[ -f "$gate_dll" ]]; then
-    if run_step testgate "$results/testgate.log" \
-        "$dotnet" "$gate_dll" \
-        --phase verify \
-        --platform "$platform" \
-        --parity "$repo_root/docs/parity-matrix.md" \
-        --matrix "$repo_root/docs/testing/feature-test-matrix.md" \
-        --manual "$repo_root/docs/testing/manual-acceptance.md" \
-        --tests "$test_list" \
-        --e2e "$results/e2e.log"; then
-        record_step testgate "PASS"
+# The gate is always executed after a successful build, even when an earlier
+# test step failed, so the summary records the matrix verdict for this run. A
+# failed build must not run a stale TestGate binary.
+if ((build_ok)); then
+    if [[ -f "$gate_dll" ]]; then
+        if run_step testgate "$results/testgate.log" \
+            "$dotnet" "$gate_dll" \
+            --phase verify \
+            --platform "$platform" \
+            --parity "$repo_root/docs/parity-matrix.md" \
+            --matrix "$repo_root/docs/testing/feature-test-matrix.md" \
+            --manual "$repo_root/docs/testing/manual-acceptance.md" \
+            --tests "$test_list" \
+            --e2e "$results/e2e.log"; then
+            record_step testgate "PASS"
+        else
+            status=$?
+            record_step testgate "FAIL (exit $status)"
+            failures=$((failures + 1))
+        fi
     else
-        status=$?
-        record_step testgate "FAIL (exit $status)"
+        printf 'TestGate build output not found: %s\n' "$gate_dll" >"$results/testgate.log"
+        record_step testgate "FAIL (missing TestGate)"
         failures=$((failures + 1))
     fi
 else
-    printf 'TestGate build output not found: %s\n' "$gate_dll" >"$results/testgate.log"
-    record_step testgate "FAIL (missing TestGate)"
-    failures=$((failures + 1))
+    printf '# skipped: build failed\n' >"$results/testgate.log"
+    record_step testgate "SKIP (build failed)"
 fi
 
 summary="$results/summary.txt"
@@ -311,12 +396,29 @@ summary="$results/summary.txt"
     for index in "${!step_names[@]}"; do
         printf '  %-12s %s\n' "${step_names[$index]}" "${step_statuses[$index]}"
     done
+    if ((build_ok)); then
+        printf '\nTest evidence:\n'
+        if ((${#unit_evidence[@]} > 0)); then
+            for evidence in "${unit_evidence[@]}"; do
+                printf '  %s\n' "$evidence"
+            done
+        fi
+        if ((app_total > 0)); then
+            printf '  app-tests.trx: %d results\n' "$app_total"
+        fi
+        printf '  total: %d results\n' "$((unit_total + app_total))"
+    fi
     printf '\nTestGate output:\n'
     printf -- '----------------\n'
     if [[ -f "$results/testgate.log" ]]; then
         tail -n +2 "$results/testgate.log" || true
     else
         printf 'testgate.log is missing\n'
+    fi
+    if ((failures == 0)); then
+        printf '\nRESULT: PASS\n'
+    else
+        printf '\nRESULT: FAIL (%d)\n' "$failures"
     fi
 } >"$summary"
 

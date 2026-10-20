@@ -1,20 +1,23 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-Runs the unified COMTool Avalonia verification gate on Windows.
+Runs the unified COMTool Avalonia verification gate on Windows only.
 
 .DESCRIPTION
-Order: restore -> build -> solution tests -> App tests -> test list -> E2E
-(non-Windows platforms only) -> TestGate matrix check -> summary.txt.
+Order: restore -> build -> per-project tests -> App tests -> test list -> E2E
+(not run on Windows) -> TestGate matrix check -> summary.txt.
+
+This script is Windows-only. Windows never runs the Linux Xvfb E2E suite, so
+e2e.log records an explicit "E2E not applicable on windows" line. On Linux or
+macOS run avalonia/pack/verify.sh instead; this script exits with code 2 there.
 
 Every step is logged under the results directory. A failing step does not stop
 summary.txt or latest.txt from being written, but the script exits non-zero if
-any step fails. Windows records an explicit "E2E not applicable" line because
-the Linux Xvfb E2E suite is not run here.
+any step fails.
 
 .PARAMETER App
-Application executable for E2E. The default is the just-built
-avalonia/src/COMTool.App/bin/Release/net10.0/COMTool.App.exe.
+Windows application executable for a future E2E step. The default is the
+just-built avalonia/src/COMTool.App/bin/Release/net10.0/COMTool.App.exe.
 
 .PARAMETER Results
 Results directory. The default is
@@ -32,6 +35,18 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+# This script gates Windows. Refuse to run on other platforms instead of
+# silently skipping the Linux Xvfb E2E suite.
+$onWindows = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
+    [System.Runtime.InteropServices.OSPlatform]::Windows)
+if (-not $onWindows) {
+    $osName = if ([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
+            [System.Runtime.InteropServices.OSPlatform]::OSX)) { "macOS" } else { "Linux" }
+    [Console]::Error.WriteLine(
+        "error: verify.ps1 is Windows-only. Run avalonia/pack/verify.sh on $osName instead.")
+    exit 2
+}
+
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "../.."))
 $sln = Join-Path $repoRoot "avalonia/COMTool.Avalonia.sln"
 $appTestsProject = Join-Path $repoRoot "avalonia/tests/COMTool.App.Tests/COMTool.App.Tests.csproj"
@@ -39,13 +54,39 @@ $builtApp = Join-Path $repoRoot "avalonia/src/COMTool.App/bin/Release/net10.0/CO
 $gateDll = Join-Path $repoRoot "avalonia/tools/COMTool.TestGate/bin/Release/net10.0/COMTool.TestGate.dll"
 $resultsRoot = Join-Path $repoRoot "avalonia/publish/test-results"
 
+# Unit tests run one project at a time so every project keeps its own TRX.
+# App.Tests is deliberately excluded here and keeps app-tests.trx.
+$unitProjects = @(
+    [pscustomobject]@{
+        Name = "COMTool.Core.Tests"
+        Path = Join-Path $repoRoot "avalonia/tests/COMTool.Core.Tests/COMTool.Core.Tests.csproj"
+    },
+    [pscustomobject]@{
+        Name = "COMTool.Terminal.Tests"
+        Path = Join-Path $repoRoot "avalonia/tests/COMTool.Terminal.Tests/COMTool.Terminal.Tests.csproj"
+    },
+    [pscustomobject]@{
+        Name = "COMTool.Connections.Tests"
+        Path = Join-Path $repoRoot "avalonia/tests/COMTool.Connections.Tests/COMTool.Connections.Tests.csproj"
+    },
+    [pscustomobject]@{
+        Name = "COMTool.Zmodem.Tests"
+        Path = Join-Path $repoRoot "avalonia/tests/COMTool.Zmodem.Tests/COMTool.Zmodem.Tests.csproj"
+    },
+    [pscustomobject]@{
+        Name = "COMTool.TestGate.Tests"
+        Path = Join-Path $repoRoot "avalonia/tests/COMTool.TestGate.Tests/COMTool.TestGate.Tests.csproj"
+    }
+)
+
 # Resolve dotnet before creating results so a missing tool fails clearly.
 $dotnetInput = if ($env:DOTNET) { $env:DOTNET } else { "dotnet" }
 if ($dotnetInput -match '[\\/]') {
     $resolvedDotnet = Resolve-Path -LiteralPath $dotnetInput -ErrorAction SilentlyContinue
     if (-not $resolvedDotnet -or
         -not (Test-Path -LiteralPath $resolvedDotnet.Path -PathType Leaf)) {
-        Write-Error "dotnet executable not found: $dotnetInput. Set DOTNET or add dotnet to PATH."
+        [Console]::Error.WriteLine(
+            "error: dotnet executable not found: $dotnetInput. Set DOTNET or add dotnet to PATH.")
         exit 2
     }
     $dotnet = $resolvedDotnet.Path
@@ -54,7 +95,8 @@ else {
     $dotnetCommand = Get-Command -Name $dotnetInput -CommandType Application `
         -ErrorAction SilentlyContinue | Select-Object -First 1
     if (-not $dotnetCommand) {
-        Write-Error "dotnet executable not found: $dotnetInput. Set DOTNET or add dotnet to PATH."
+        [Console]::Error.WriteLine(
+            "error: dotnet executable not found: $dotnetInput. Set DOTNET or add dotnet to PATH.")
         exit 2
     }
     $dotnet = $dotnetCommand.Source
@@ -83,18 +125,30 @@ else {
 }
 Set-Content -LiteralPath (Join-Path $resultsRoot "latest.txt") -Value $resultsDir
 
-$currentPlatform = if ([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
-        [System.Runtime.InteropServices.OSPlatform]::Windows)) {
-    "windows"
+# A reused -Results directory must not retain evidence from an earlier run.
+$staleNames = @(
+    "restore.log",
+    "build.log",
+    "unit-tests.trx",
+    "unit-tests.log",
+    "app-tests.trx",
+    "app-tests.log",
+    "test-list.txt",
+    "e2e.log",
+    "testgate.log",
+    "summary.txt"
+)
+foreach ($staleName in $staleNames) {
+    Remove-Item -LiteralPath (Join-Path $resultsDir $staleName) `
+        -Force -ErrorAction SilentlyContinue
 }
-elseif ([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(
-        [System.Runtime.InteropServices.OSPlatform]::OSX)) {
-    "macos"
-}
-else {
-    "linux"
-}
+Get-ChildItem -Path (Join-Path $resultsDir "unit-tests-*") -File `
+    -ErrorAction SilentlyContinue |
+    Remove-Item -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath (Join-Path $resultsDir "e2e-tmp") `
+    -Recurse -Force -ErrorAction SilentlyContinue
 
+$currentPlatform = "windows"
 $e2eApp = if ($App) {
     [IO.Path]::GetFullPath($App)
 }
@@ -104,6 +158,9 @@ else {
 
 $stepNames = New-Object System.Collections.Generic.List[string]
 $stepStatuses = New-Object System.Collections.Generic.List[string]
+$trxEvidence = New-Object System.Collections.Generic.List[string]
+$unitTotal = 0
+$appTotal = 0
 $failures = 0
 
 function Add-StepResult {
@@ -113,6 +170,19 @@ function Add-StepResult {
     )
     $stepNames.Add($Name)
     $stepStatuses.Add($Status)
+}
+
+function Get-TrxResultCount {
+    param([string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return 0
+    }
+    $raw = Get-Content -LiteralPath $Path -Raw
+    if (-not $raw) {
+        return 0
+    }
+    return ([regex]::Matches($raw, '<UnitTestResult ')).Count
 }
 
 # Runs one native command, writing combined output to $LogPath. Returns the
@@ -166,25 +236,43 @@ else {
 }
 
 if ($buildOk) {
-    $unitStatus = Invoke-Logged -Name "unit-tests" `
-        -LogPath (Join-Path $resultsDir "unit-tests.log") `
-        -Action {
-            & $dotnet test $sln -c Release --no-build `
-                --results-directory $resultsDir `
-                --logger "trx;LogFileName=unit-tests.trx"
+    $unitFailed = $false
+    foreach ($project in $unitProjects) {
+        $trxName = "unit-tests-$($project.Name).trx"
+        $logName = "unit-tests-$($project.Name).log"
+        $trxPath = Join-Path $resultsDir $trxName
+        $status = Invoke-Logged -Name "unit-tests-$($project.Name)" `
+            -LogPath (Join-Path $resultsDir $logName) `
+            -Action {
+                & $dotnet test $project.Path -c Release --no-build `
+                    --results-directory $resultsDir `
+                    --logger "trx;LogFileName=$trxName"
+            }
+
+        if ($status -ne 0) {
+            $unitFailed = $true
+            $trxEvidence.Add("${trxName}: FAIL (test exit $status)")
         }
-    $unitTrx = Join-Path $resultsDir "unit-tests.trx"
-    if ($unitStatus -ne 0) {
-        Add-StepResult "unit-tests" "FAIL (exit $unitStatus)"
-        $failures++
+        else {
+            $count = Get-TrxResultCount -Path $trxPath
+            if ($count -gt 0) {
+                $unitTotal += $count
+                $trxEvidence.Add("${trxName}: $count results")
+            }
+            else {
+                $unitFailed = $true
+                $trxEvidence.Add("${trxName}: FAIL (missing, empty, or no results)")
+            }
+        }
     }
-    elseif (-not (Test-Path -LiteralPath $unitTrx -PathType Leaf) -or
-        (Get-Item -LiteralPath $unitTrx).Length -eq 0) {
-        Add-StepResult "unit-tests" "FAIL (missing unit-tests.trx)"
+
+    if ($unitFailed) {
+        Add-StepResult "unit-tests" "FAIL (see unit-tests-*.log)"
         $failures++
     }
     else {
-        Add-StepResult "unit-tests" "PASS"
+        Add-StepResult "unit-tests" `
+            "PASS ($unitTotal results across $($unitProjects.Count) projects)"
     }
 
     $appStatus = Invoke-Logged -Name "app-tests" `
@@ -199,13 +287,17 @@ if ($buildOk) {
         Add-StepResult "app-tests" "FAIL (exit $appStatus)"
         $failures++
     }
-    elseif (-not (Test-Path -LiteralPath $appTrx -PathType Leaf) -or
-        (Get-Item -LiteralPath $appTrx).Length -eq 0) {
-        Add-StepResult "app-tests" "FAIL (missing app-tests.trx)"
-        $failures++
-    }
     else {
-        Add-StepResult "app-tests" "PASS"
+        $appCount = Get-TrxResultCount -Path $appTrx
+        if ($appCount -gt 0) {
+            $appTotal = $appCount
+            Add-StepResult "app-tests" "PASS ($appCount results)"
+        }
+        else {
+            Add-StepResult "app-tests" `
+                "FAIL (missing, empty, or no results in app-tests.trx)"
+            $failures++
+        }
     }
 }
 else {
@@ -218,69 +310,83 @@ else {
 }
 
 # The list stays solution-wide so TestGate sees the headless App tests too.
-Write-Host "[verify] test-list"
+# Never list stale build outputs after a failed build.
 $testList = Join-Path $resultsDir "test-list.txt"
-& $dotnet test $sln -c Release --no-build --list-tests 2>&1 |
-    Tee-Object -FilePath $testList | Out-Host
-$listStatus = $LASTEXITCODE
+if ($buildOk) {
+    Write-Host "[verify] test-list"
+    & $dotnet test $sln -c Release --no-build --list-tests 2>&1 |
+        Tee-Object -FilePath $testList | Out-Host
+    $listStatus = $LASTEXITCODE
 
-$appTestCount = 0
-if (Test-Path -LiteralPath $testList -PathType Leaf) {
-    $appTestCount = @(
-        Get-Content -LiteralPath $testList |
-            Select-String -Pattern '^\s+COMTool\.App\.Tests\.'
-    ).Count
-}
-if ($listStatus -ne 0) {
-    Add-StepResult "test-list" "FAIL (exit $listStatus)"
-    $failures++
-}
-elseif ($appTestCount -eq 0) {
-    Add-StepResult "test-list" "FAIL (no COMTool.App.Tests entries)"
-    $failures++
+    $appTestCount = 0
+    if (Test-Path -LiteralPath $testList -PathType Leaf) {
+        $appTestCount = @(
+            Get-Content -LiteralPath $testList |
+                Select-String -Pattern '^\s+COMTool\.App\.Tests\.'
+        ).Count
+    }
+    if ($listStatus -ne 0) {
+        Add-StepResult "test-list" "FAIL (exit $listStatus)"
+        $failures++
+    }
+    elseif ($appTestCount -eq 0) {
+        Add-StepResult "test-list" "FAIL (no COMTool.App.Tests entries)"
+        $failures++
+    }
+    else {
+        Add-StepResult "test-list" "PASS ($appTestCount App tests listed)"
+    }
 }
 else {
-    Add-StepResult "test-list" "PASS ($appTestCount App tests listed)"
+    Set-Content -LiteralPath $testList -Value "# skipped: build failed"
+    Add-StepResult "test-list" "SKIP (build failed)"
 }
 
 # Windows does not run the Linux Xvfb E2E suite. The log line is explicit so
-# TestGate never mistakes a missing file for a silently skipped gate.
+# TestGate never mistakes a missing file for a silently skipped gate. A failed
+# build also skips E2E so a stale binary is never exercised.
 $e2eLog = Join-Path $resultsDir "e2e.log"
-if ($currentPlatform -eq "windows") {
+if ($buildOk) {
     Set-Content -LiteralPath $e2eLog -Value "E2E not applicable on windows"
     Add-StepResult "e2e" "SKIP (E2E not applicable on windows)"
 }
 else {
-    Set-Content -LiteralPath $e2eLog -Value "E2E not applicable on $currentPlatform"
-    Add-StepResult "e2e" "SKIP (E2E not applicable on $currentPlatform)"
+    Set-Content -LiteralPath $e2eLog -Value "# skipped: build failed"
+    Add-StepResult "e2e" "SKIP (build failed)"
 }
 
-# Always execute the gate, even after an earlier failure, so summary.txt
-# records the matrix verdict for this run.
+# Always execute the gate after a successful build, even after an earlier test
+# failure, so summary.txt records the matrix verdict for this run.
 $gateLog = Join-Path $resultsDir "testgate.log"
-if (Test-Path -LiteralPath $gateDll -PathType Leaf) {
-    $gateStatus = Invoke-Logged -Name "testgate" -LogPath $gateLog -Action {
-        & $dotnet $gateDll `
-            --phase verify `
-            --platform $currentPlatform `
-            --parity (Join-Path $repoRoot "docs/parity-matrix.md") `
-            --matrix (Join-Path $repoRoot "docs/testing/feature-test-matrix.md") `
-            --manual (Join-Path $repoRoot "docs/testing/manual-acceptance.md") `
-            --tests $testList `
-            --e2e $e2eLog
-    }
-    if ($gateStatus -eq 0) {
-        Add-StepResult "testgate" "PASS"
+if ($buildOk) {
+    if (Test-Path -LiteralPath $gateDll -PathType Leaf) {
+        $gateStatus = Invoke-Logged -Name "testgate" -LogPath $gateLog -Action {
+            & $dotnet $gateDll `
+                --phase verify `
+                --platform $currentPlatform `
+                --parity (Join-Path $repoRoot "docs/parity-matrix.md") `
+                --matrix (Join-Path $repoRoot "docs/testing/feature-test-matrix.md") `
+                --manual (Join-Path $repoRoot "docs/testing/manual-acceptance.md") `
+                --tests $testList `
+                --e2e $e2eLog
+        }
+        if ($gateStatus -eq 0) {
+            Add-StepResult "testgate" "PASS"
+        }
+        else {
+            Add-StepResult "testgate" "FAIL (exit $gateStatus)"
+            $failures++
+        }
     }
     else {
-        Add-StepResult "testgate" "FAIL (exit $gateStatus)"
+        Set-Content -LiteralPath $gateLog -Value "TestGate build output not found: $gateDll"
+        Add-StepResult "testgate" "FAIL (missing TestGate)"
         $failures++
     }
 }
 else {
-    Set-Content -LiteralPath $gateLog -Value "TestGate build output not found: $gateDll"
-    Add-StepResult "testgate" "FAIL (missing TestGate)"
-    $failures++
+    Set-Content -LiteralPath $gateLog -Value "# skipped: build failed"
+    Add-StepResult "testgate" "SKIP (build failed)"
 }
 
 $summaryLines = New-Object System.Collections.Generic.List[string]
@@ -296,6 +402,17 @@ $summaryLines.Add("Steps:")
 for ($index = 0; $index -lt $stepNames.Count; $index++) {
     $summaryLines.Add(("  {0,-12} {1}" -f $stepNames[$index], $stepStatuses[$index]))
 }
+if ($buildOk) {
+    $summaryLines.Add("")
+    $summaryLines.Add("Test evidence:")
+    foreach ($evidence in $trxEvidence) {
+        $summaryLines.Add("  $evidence")
+    }
+    if ($appTotal -gt 0) {
+        $summaryLines.Add("  app-tests.trx: $appTotal results")
+    }
+    $summaryLines.Add("  total: $($unitTotal + $appTotal) results")
+}
 $summaryLines.Add("")
 $summaryLines.Add("TestGate output:")
 $summaryLines.Add("----------------")
@@ -306,6 +423,13 @@ if (Test-Path -LiteralPath $gateLog -PathType Leaf) {
 }
 else {
     $summaryLines.Add("testgate.log is missing")
+}
+$summaryLines.Add("")
+if ($failures -eq 0) {
+    $summaryLines.Add("RESULT: PASS")
+}
+else {
+    $summaryLines.Add("RESULT: FAIL ($failures)")
 }
 Set-Content -LiteralPath (Join-Path $resultsDir "summary.txt") -Value $summaryLines -Encoding UTF8
 
