@@ -314,21 +314,18 @@ else {
 $testList = Join-Path $resultsDir "test-list.txt"
 if ($buildOk) {
     Write-Host "[verify] test-list"
-    # vstest.console can occasionally return 1 on Windows after a successful
-    # discovery run (notably when the Terminal test assembly was just used).
-    # Retry once; the list file is replaced on each attempt and still has to
-    # contain App tests before the step passes.
-    $listStatus = 1
-    $listAttempts = 0
-    for ($listAttempts = 1; $listAttempts -le 2; $listAttempts++) {
-        & $dotnet test $sln -c Release --no-build --list-tests 2>&1 |
-            Tee-Object -FilePath $testList | Out-Host
-        $listStatus = $LASTEXITCODE
-        if ($listStatus -eq 0) {
-            break
+    # Listing a whole solution can race between vstest projects on Windows and
+    # return 1 even though every test was listed. Listing each project keeps
+    # discovery deterministic while still producing one solution-wide file.
+    Set-Content -LiteralPath $testList -Value ""
+    $listStatus = 0
+    $listProjects = @($unitProjects | ForEach-Object { $_.Path }) + $appTestsProject
+    foreach ($listProject in $listProjects) {
+        & $dotnet test $listProject -c Release --no-build --list-tests 2>&1 |
+            Tee-Object -FilePath $testList -Append | Out-Host
+        if ($LASTEXITCODE -ne 0) {
+            $listStatus = $LASTEXITCODE
         }
-        Write-Host "[verify] test-list attempt $listAttempts failed (exit $listStatus); retrying"
-        Start-Sleep -Seconds 1
     }
 
     $appTestCount = 0
