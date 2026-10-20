@@ -1152,9 +1152,11 @@ git commit -m "Extract and test session activation policies"
 
 **Files:**
 - Create: `avalonia/tests/COMTool.App.Tests/InMemoryPty.cs`
-- Create: `avalonia/tests/COMTool.App.Tests/TestTab.cs`
+- Modify: `avalonia/tests/COMTool.App.Tests/TestTab.cs` (created in Task 7; preserve `connected`)
 - Create: `avalonia/tests/COMTool.App.Tests/MainWindowHeadlessTests.cs`
-- Modify: `avalonia/tests/COMTool.App.Tests/TestEnvironment.cs`
+- Create: `avalonia/src/COMTool.App/Services/TerminalFocusPolicy.cs`
+- Create: `avalonia/tests/COMTool.App.Tests/TerminalFocusPolicyTests.cs`
+- Modify: `avalonia/tests/COMTool.App.Tests/TestAppBuilder.cs` (install TerminalControl theme once per test Application)
 
 **Interfaces:**
 - Consumes: `MainWindow`, `MainViewModel`, `TerminalTab`, `PtyStreamConnection`.
@@ -1211,7 +1213,7 @@ public void UI02_SidebarExpandsOnLaunch()
 
     var sidebar = window.FindControl<SessionSidebar>("Sidebar")!;
     Assert.True(sidebar.IsVisible);
-    Assert.True(sidebar.Bounds.Width >= 200);
+    Assert.Equal(240, sidebar.Bounds.Width, precision: 1);
     window.Close();
 }
 ```
@@ -1233,9 +1235,14 @@ Test `UI05_TabSwitchFocusesIncomingTerminal`:
 - assert A's `WriterText` contains `"A"` and B's does not.
 
 Test `UI05_RapidSwitchFocus`:
-- click B then immediately click A before running dispatcher jobs;
-- run jobs;
+- raise real `PointerPressedEventArgs` directly on B's and A's tab borders in one dispatcher turn, because Avalonia.Headless `MouseDown`/`MouseUp` pump jobs;
+- assert B and then A are selected before any `RunJobs`;
+- run jobs once;
 - assert A is selected and focused, and `"R"` typed afterward reaches A only.
+
+Add `UI05_TabSwitchKeepsBothTerminalsLive`: type a distinct character into A, switch to B and type a different character, assert each PTY got only its own input and neither PTY closed.
+
+Extract the focus guard into `TerminalFocusPolicy.ShouldFocus(viewModel, tab)` (`tab.IsAlive && ReferenceEquals(viewModel.SelectedTab, tab)`) and add `UI05_FocusPolicy*` tests so removing the stale-selection guard fails a test.
 
 Use the actual tab `Border` controls found by `Tag` and click their center with `window.MouseDown`/`MouseUp`; do not call private handlers.
 
