@@ -43,7 +43,7 @@
                     <ItemsControl ItemsSource="{Binding Items}">
                       <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:SessionItem">
-                          <Grid Height="40"
+                          <Grid MinHeight="40"
                                 ColumnDefinitions="16,*,Auto"
                                 Background="Transparent"
                                 Cursor="Hand"
@@ -63,6 +63,9 @@
                               <TextBlock Classes="SessionDetail"
                                          Text="{Binding Detail}"
                                          IsVisible="{Binding Detail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                              <TextBlock Classes="SessionDetail"
+                                         Text="{Binding SerialSettings}"
+                                         IsVisible="{Binding SerialSettings, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                             </StackPanel>
                           </Grid>
                         </DataTemplate>

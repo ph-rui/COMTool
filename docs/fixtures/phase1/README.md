@@ -43,6 +43,7 @@ geometry. These are functional evidence images, not final pixel baselines.
 | `terminal-autofocus-ssh-1000x650.png` | Clicking an SSH session immediately focuses the new terminal; `echo PACKAGE_FOCUS` is accepted and executed without clicking the terminal area first. |
 | `terminal-single-char-echo-1000x650.png` | Typing a bare `i` over SSH echoes immediately even though `i` is a prefix of the highlight keywords `info`/`invalid`/`important`; the highlighter's pending prefix is flushed after 15 ms instead of waiting for Enter. |
 | `session-sidebar-expanded-on-launch-1000x650.png` | The sessions sidebar is expanded on startup even though the test config had `sessionSidebar.visible=false`; the saved width is still applied and auto-hide remains available. |
+| `serial-sidebar-summary-1000x650.png` | Serial entries keep the device description and add a third line with the saved connection summary (`115200 8N1`); the row grows only when the summary is present. |
 | `ssh-multiple-connections-1000x650.png` | Clicking the same saved SSH session twice opens two independent `perf-local` tabs; both sidebar and tabs show live connections. |
 | `terminal-double-click-maximize-1280x800.png` | Double-clicking the black terminal pane (not the title bar) maximizes the window to 1280x800, and `echo FINAL_PACKAGE_OK` is accepted without refocusing the terminal. |
 | `terminal-double-click-restore-1000x650.png` | A second double-click on the terminal pane restores the previous 1000x650 window size and keeps the live shell. |
@@ -62,10 +63,11 @@ geometry. These are functional evidence images, not final pixel baselines.
 
 `docs/testing/feature-test-matrix.md` now maps all 90 parity rows. The gate
 passes in `verify` and `package` phases on Linux, and the structure also passes
-for Windows/macOS. The suite is 210 tests:
+for Windows/macOS. The suite is 212 tests:
 
-- Core 41, Connections 38, Terminal 11, ZMODEM 32, TestGate 49, App 39.
+- Core 42, Connections 38, Terminal 11, ZMODEM 32, TestGate 49, App 40.
 - Linux Xvfb E2E: `APP01_SmokeLaunchE2E`,
+  `UI01_TitleBarDoubleClickMaximizeE2E`,
   `UI02_SidebarExpandsOnLaunchE2E`, `UI02_SidebarAutoHideE2E`,
   `E2E01_OpenSshSession`, `SSH11_RestartStoppedSessionE2E`,
   `SSH06_MultipleConnectionsE2E`, `UI05_TabSwitchTypingBothDirections`,
