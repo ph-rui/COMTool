@@ -21,6 +21,7 @@ E2E_TESTS=(
     APP01_SmokeLaunchE2E
     UI01_TitleBarDoubleClickMaximizeE2E
     UI02_SidebarExpandsOnLaunchE2E
+    UI02_SidebarAutoHideE2E
     E2E01_OpenSshSession
     SSH06_MultipleConnectionsE2E
     UI05_TabSwitchTypingBothDirections
@@ -29,6 +30,7 @@ E2E_TESTS=(
 SSH_TEST_IDS=(
     UI01_TitleBarDoubleClickMaximizeE2E
     UI02_SidebarExpandsOnLaunchE2E
+    UI02_SidebarAutoHideE2E
     E2E01_OpenSshSession
     SSH06_MultipleConnectionsE2E
     UI05_TabSwitchTypingBothDirections
@@ -356,6 +358,39 @@ run_ui02_sidebar_expands() {
     pass "$test_id"
 }
 
+
+run_ui02_sidebar_auto_hide() {
+    local test_id="UI02_SidebarAutoHideE2E"
+    local config="$CONFIG_ROOT/avalonia/config.json"
+
+    log "Running $test_id"
+    ensure_first_shell "$test_id"
+
+    if ! wait_for_sidebar_visible 5; then
+        fail "$test_id" "sidebar did not start expanded"
+    fi
+
+    # Moving into the content area must retract the panel even when this is
+    # the first pointer move after launch (no prior sidebar hover required).
+    xdotool mousemove --window "$WINDOW_ID" 700 300 || fail "$test_id" "could not move pointer into content"
+    if ! wait_for_sidebar_hidden 5; then
+        fail "$test_id" "sidebar did not auto-hide after moving into content"
+    fi
+    if ! window_pixel_is_dark "$SIDEBAR_PROBE_X" "$SIDEBAR_PROBE_Y"; then
+        fail "$test_id" "content did not expand into the collapsed sidebar area"
+    fi
+    grep -q '"visible": false' "$config" 2>/dev/null \
+        || fail "$test_id" "auto-hide rewrote the saved sidebar preference"
+
+    # Entering the left-edge hover strip must reopen the panel and let the
+    # content shrink back to the saved sidebar width.
+    xdotool mousemove --window "$WINDOW_ID" 10 300 || fail "$test_id" "could not move pointer to the left edge"
+    if ! wait_for_sidebar_visible 5; then
+        fail "$test_id" "sidebar did not reopen from the left-edge hover strip"
+    fi
+    pass "$test_id"
+}
+
 run_e2e01_open_ssh() {
     local test_id="E2E01_OpenSshSession"
     local marker="$TMP_ROOT/e2e01"
@@ -581,6 +616,9 @@ if [[ -n "$SSH_TEST_ID" ]]; then
     fi
     if matches_filter "UI02_SidebarExpandsOnLaunchE2E"; then
         run_ui02_sidebar_expands
+    fi
+    if matches_filter "UI02_SidebarAutoHideE2E"; then
+        run_ui02_sidebar_auto_hide
     fi
     if matches_filter "E2E01_OpenSshSession"; then
         run_e2e01_open_ssh

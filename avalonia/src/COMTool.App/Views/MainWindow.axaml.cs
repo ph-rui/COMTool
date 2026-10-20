@@ -30,7 +30,6 @@ public partial class MainWindow : Window
     private AppConfigService? _config;
     private DispatcherTimer? _portTimer;
     private readonly DispatcherTimer _sessionHoverTimer;
-    private bool _sessionHoverSeen;
     private bool _windowPointerPressed;
     private double _lastSessionPointerX;
     private double _lastSessionPointerY;
@@ -1921,7 +1920,6 @@ public partial class MainWindow : Window
 
         SetSidebarVisible(true);
         _sessionShownAt = DateTime.UtcNow;
-        _sessionHoverSeen = true;
     }
 
     private void OnSessionHandlePointerEntered(object? sender, PointerEventArgs e)
@@ -1940,11 +1938,6 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnSidebarPointerEntered(object? sender, PointerEventArgs e)
-    {
-        _sessionHoverSeen = true;
-    }
-
     private void ShowSessionSidebarAuto()
     {
         if (_sidebarVisible)
@@ -1954,7 +1947,6 @@ public partial class MainWindow : Window
 
         SetSidebarVisible(true, persist: false);
         _sessionShownAt = DateTime.UtcNow;
-        _sessionHoverSeen = true;
     }
 
     private void SetSidebarVisible(bool visible, bool persist = true)
@@ -1971,14 +1963,12 @@ public partial class MainWindow : Window
 
         if (visible)
         {
-            _sessionHoverSeen = false;
             _lastSessionTimerX = _lastSessionPointerX;
             _sessionHoverTimer.Start();
         }
         else
         {
             _sessionHoverTimer.Stop();
-            _sessionHoverSeen = false;
         }
 
         if (persist)
@@ -1987,12 +1977,17 @@ public partial class MainWindow : Window
         }
     }
 
+    internal void CheckSidebarAutoHideForTests() => CheckSessionSidebarAutoHide();
+
+    internal void ShowSidebarFromHoverForTests() => ShowSessionSidebarAuto();
+
+    internal void StopSidebarHoverTimerForTests() => _sessionHoverTimer.Stop();
+
     private void CheckSessionSidebarAutoHide()
     {
         if (!_sidebarVisible)
         {
             _sessionHoverTimer.Stop();
-            _sessionHoverSeen = false;
             return;
         }
 
@@ -2005,12 +2000,19 @@ public partial class MainWindow : Window
             || IsInSessionSidebarApproach();
         if (inside)
         {
-            _sessionHoverSeen = true;
             return;
         }
 
         // Moving right while outside the window's left edge approaches the panel.
         if (_lastSessionPointerX < 0)
+        {
+            return;
+        }
+
+        // Pointer movement in the title bar is unrelated to the session panel;
+        // only the body area should trigger auto-hide.
+        var bodyOrigin = BodyGrid.TranslatePoint(new Point(0, 0), this) ?? new Point(16, 35);
+        if (_lastSessionPointerY < bodyOrigin.Y)
         {
             return;
         }
@@ -2022,7 +2024,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (_sessionHoverSeen && dx > 0)
+        if (dx > 0)
         {
             SetSidebarVisible(false, persist: false);
         }
