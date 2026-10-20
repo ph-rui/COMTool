@@ -242,13 +242,13 @@ public partial class MainWindow : Window
         // old reconnect behavior is kept: dead tabs are discarded first.
         if (item.Kind == SessionKind.Ssh)
         {
-            var matching = AllTabs()
-                .Where(tab => tab.Kind == SessionKind.Ssh
-                    && string.Equals(tab.SessionId, item.SessionId, StringComparison.OrdinalIgnoreCase))
-                .ToList();
-            if (!matching.Any(IsTabConnected))
+            var tabs = AllTabs().ToList();
+            if (SessionActivationPolicy.ShouldOpenNewSsh(tabs, item.SessionId, IsTabConnected))
             {
-                foreach (var dead in matching)
+                foreach (var dead in SessionActivationPolicy.DeadSshTabsToClose(
+                    tabs,
+                    item.SessionId,
+                    IsTabConnected))
                 {
                     if (_detachedTabs.TryGetValue(dead, out var state))
                     {
@@ -2003,9 +2003,11 @@ public partial class MainWindow : Window
     private async Task OpenSshFromSettingsAsync(string key, TerminalTab? currentTab)
     {
         if (DataContext is MainViewModel viewModel
-            && currentTab is { Kind: SessionKind.Ssh } currentSsh
-            && string.Equals(currentSsh.SessionId, key, StringComparison.OrdinalIgnoreCase)
-            && viewModel.Tabs.Contains(currentSsh))
+            && SettingsTabPolicy.TabToReplace(
+                viewModel.Tabs,
+                currentTab,
+                key,
+                SessionKind.Ssh) is { } currentSsh)
         {
             // Replace only the tab whose settings were edited; other parallel
             // connections to the same saved session must stay open.
