@@ -57,12 +57,27 @@ public sealed class SidebarHoverTests
 
                 // Entering the left-edge hover strip reopens the panel and the
                 // content column expands back to the saved width.
+                window.MouseMove(new Point(10, 300));
                 window.ShowSidebarFromHoverForTests();
                 RunJobs(window);
 
                 Assert.True(sidebar.IsVisible);
                 Assert.False(hoverStrip.IsVisible);
                 Assert.Equal(220, body.ColumnDefinitions[0].ActualWidth, precision: 1);
+
+                // Moving from the hover strip into the sidebar's inner gap must
+                // not count as leaving the panel; otherwise the sidebar hides
+                // before the pointer reaches the session list.
+                window.MouseMove(new Point(30, 300));
+                window.CheckSidebarAutoHideForTests();
+                RunJobs(window);
+                Assert.True(sidebar.IsVisible);
+                Assert.Equal(220, body.ColumnDefinitions[0].ActualWidth, precision: 1);
+
+                window.MouseMove(new Point(100, 300));
+                window.CheckSidebarAutoHideForTests();
+                RunJobs(window);
+                Assert.True(sidebar.IsVisible);
             });
         }
         finally

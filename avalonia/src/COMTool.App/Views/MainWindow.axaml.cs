@@ -1994,7 +1994,7 @@ public partial class MainWindow : Window
         var dx = _lastSessionPointerX - _lastSessionTimerX;
         _lastSessionTimerX = _lastSessionPointerX;
 
-        var inside = Sidebar.IsPointerOver
+        var inside = IsInSessionSidebarArea()
             || SessionHandle.IsPointerOver
             || SessionHoverStrip.IsPointerOver
             || IsInSessionSidebarApproach();
@@ -2028,6 +2028,26 @@ public partial class MainWindow : Window
         {
             SetSidebarVisible(false, persist: false);
         }
+    }
+
+    private bool IsInSessionSidebarArea()
+    {
+        if (!_sidebarVisible)
+        {
+            return false;
+        }
+
+        var bodyOrigin = BodyGrid.TranslatePoint(new Point(0, 0), this) ?? new Point(16, 35);
+        var width = BodyGrid.ColumnDefinitions[0].ActualWidth;
+        if (width <= 0)
+        {
+            width = ClampSidebarWidth(_sidebarWidth);
+        }
+
+        return _lastSessionPointerX >= bodyOrigin.X
+            && _lastSessionPointerX <= bodyOrigin.X + width
+            && _lastSessionPointerY >= bodyOrigin.Y
+            && _lastSessionPointerY <= bodyOrigin.Y + BodyGrid.Bounds.Height;
     }
 
     private bool IsInSessionSidebarApproach()

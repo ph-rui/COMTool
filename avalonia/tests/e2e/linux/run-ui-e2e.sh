@@ -388,6 +388,18 @@ run_ui02_sidebar_auto_hide() {
     if ! wait_for_sidebar_visible 5; then
         fail "$test_id" "sidebar did not reopen from the left-edge hover strip"
     fi
+
+    # The whole expanded panel, including the padding to the left of the
+    # session list, is inside the hover area. Moving onto that padding must not
+    # immediately retract it again before the pointer reaches a session row.
+    xdotool mousemove --window "$WINDOW_ID" 30 300 || fail "$test_id" "could not move pointer into sidebar padding"
+    if ! wait_for_sidebar_visible 2; then
+        fail "$test_id" "sidebar retracted while pointer was inside its padding"
+    fi
+    xdotool mousemove --window "$WINDOW_ID" 100 300 || fail "$test_id" "could not move pointer into the session list"
+    if ! wait_for_sidebar_visible 2; then
+        fail "$test_id" "sidebar retracted while pointer was over the session list"
+    fi
     pass "$test_id"
 }
 
