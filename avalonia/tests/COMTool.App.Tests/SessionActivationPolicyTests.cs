@@ -58,4 +58,25 @@ public sealed class SessionActivationPolicyTests
         var serial = TestTab.Create(sessionId: "ssh", kind: SessionKind.Serial, connected: false);
         Assert.Empty(SessionActivationPolicy.DeadSshTabsToClose(new[] { otherSession, serial }, "ssh", _ => false));
     }
+
+    [Fact]
+    public void NET01_TcpClientDeadTabsAreCleanedUp()
+    {
+        var dead = TestTab.Create(
+            sessionId: "tcp:client:127.0.0.1:2345",
+            kind: SessionKind.Tcp,
+            connected: false);
+        var serial = TestTab.Create(
+            sessionId: "tcp:client:127.0.0.1:2345",
+            kind: SessionKind.Serial,
+            connected: false);
+
+        var deadTabs = SessionActivationPolicy.DeadSessionTabsToClose(
+            new[] { dead, serial },
+            "tcp:client:127.0.0.1:2345",
+            SessionKind.Tcp,
+            _ => false);
+
+        Assert.Equal(new[] { dead }, deadTabs);
+    }
 }

@@ -12,6 +12,7 @@ public sealed class AppConfigService
 {
     private readonly SerialSessionStore _serialSessions = new();
     private readonly SshSessionStore _sshSessions = new();
+    private readonly TcpSessionStore _tcpSessions = new();
 
     public static WindowConfig? TryReadWindowConfig()
     {
@@ -38,6 +39,7 @@ public sealed class AppConfigService
         ConfigPath = configPath;
         _serialSessions.Load(config);
         _sshSessions.Load(config);
+        _tcpSessions.Load(config);
     }
 
     public ComtoolConfig Config { get; }
@@ -47,6 +49,8 @@ public sealed class AppConfigService
     public SerialSessionStore SerialSessions => _serialSessions;
 
     public SshSessionStore SshSessions => _sshSessions;
+
+    public TcpSessionStore TcpSessions => _tcpSessions;
 
     public SshPasswordCache PasswordCache { get; } = new();
 
@@ -98,6 +102,7 @@ public sealed class AppConfigService
     {
         _serialSessions.Save(Config);
         _sshSessions.Save(Config);
+        _tcpSessions.Save(Config);
         Config.Save(ConfigPath);
     }
 

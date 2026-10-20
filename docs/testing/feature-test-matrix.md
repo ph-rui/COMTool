@@ -56,9 +56,9 @@
 | SSH-08 | 完成 | SshIntegrationTests.KeyAuthShellOutputResizeAndReconnect | verify | linux | dotnet test | WIN-17 | SSH resize 与 ptmx 行为由 Linux 集成测试覆盖；Windows 实机见 WIN-17 |
 | SSH-09 | 完成 | SshIntegrationTests.KeyAuthShellOutputResizeAndReconnect | verify | linux | dotnet test | WIN-17 | SSH shell 输出、重连与命令执行由 Linux 集成测试覆盖；Linux Xvfb 执行 E2E01_OpenSshSession |
 | SSH-10 | 部分 | - | manual | all | manual | WIN-17 | 首次/重连延迟需真实 Windows 主机和网络测量，无法自动化 |
-| NET-01 | 未开始 | - | manual | all | manual | - | 未开始 |
+| NET-01 | 完成 | TcpSessionTests.NET01_TcpClientLoopbackSendsAndReceives,TcpSessionTests.NET01_TcpServerRoutesClientsAndSupportsSelectionAndDisconnect,TcpSessionTests.NET01_TcpServerCloseEndsTerminalRead,SessionActivationPolicyTests.NET01_TcpClientDeadTabsAreCleanedUp | verify | all | dotnet test | - | TCP 客户端回环收发/断开、服务端多客户端路由/选中发送/断开/关闭，以及 TCP client 独立连接策略由自动化测试覆盖 |
 | NET-02 | 未开始 | - | manual | all | manual | - | 未开始 |
-| NET-03 | 未开始 | - | manual | all | manual | - | 未开始 |
+| NET-03 | 完成 | TcpSessionCoreTests.NET03_TcpStoreUpsertsClientAndServerSessions,TcpSessionCoreTests.NET03_TcpStoreDeduplicatesAndRemovesByKey,TcpSessionCoreTests.NET03_TcpStoreRejectsInvalidModeData,TcpSessionAppTests.NET03_LoadSessionsAddsTcpSectionAndMarksConnected,TcpSessionAppTests.NET03_TcpConnectionSettingsPanelIsAvailable | verify | all | dotnet test | - | 目标解析（含省略端口、全角冒号、URL 前缀和非法输入）、端口校验、会话存储/去重/删除、侧栏 TCP 分组、连接状态和设置窗口 TCP 面板由自动化测试覆盖 |
 | NET-04 | 未开始 | - | manual | all | manual | - | 未开始 |
 | ZM-01 | 完成 | ZmodemDetectorTests.BinaryHeaderIsDetected,ZmodemDetectorTests.DetectsHeaderSplitAcrossChunks,ZmodemDetectorTests.InvalidCrcFallsBackToTerminal | verify | all | dotnet test | - | ZMODEM 头检测、跨 chunk 和 CRC 回退测试覆盖 |
 | ZM-02 | 完成 | LrzszZmodemTests.RealSzFileIsReceived,ZmodemTransferTests.SenderAndReceiverTransferFile,ZmodemTransferTests.StreamDetectsAndReceivesZmodemSession | verify | all | dotnet test | WIN-07 | 原生对话框接收和真实 sz 接收已覆盖；Windows 对话框见 WIN-07 |
@@ -88,7 +88,7 @@
 | PKG-04 | 部分 | - | manual | all | manual | WIN-08 | Windows/Linux 安装、升级、卸载和保留 Beta 配置需真实桌面安装环境，无法自动化 |
 | PKG-05 | 部分 | - | manual | all | manual | WIN-21 | 包体积和启动时间需真实 Windows/Linux 桌面测量并与性能基线对照，无法自动化 |
 | PKG-06 | 部分 | - | manual | all | manual | WIN-16 | CI 流水线需在托管 CI 实际运行并核对日志，本地门禁无法自动化 |
-| TST-01 | 完成 | CI01_SerializesCandidateInfo | verify | all | dotnet test | - | 完整套件 167 项通过（Core 20/Connections 31/Terminal 11/ZMODEM 32/TestGate 49/App 24）；CI01 覆盖 TestGate 候选元数据 |
+| TST-01 | 完成 | CI01_SerializesCandidateInfo | verify | all | dotnet test | - | 完整套件 190 项通过（Core 37/Connections 34/Terminal 11/ZMODEM 32/TestGate 49/App 27）；CI01 覆盖 TestGate 候选元数据 |
 | TST-02 | 完成 | TerminalEmulatorTests.MatchesPythonPyteGoldenScreen | verify | all | dotnet test | - | 同一字节流与 Python pyte 0.8.2 的 60x20 屏幕快照一致 |
 | TST-03 | 完成 | ZmodemTransferTests.SenderAndReceiverTransferFile,LrzszZmodemTests.RealSzFileIsReceived,LrzszZmodemTests.RealRzReceivesSentFile | verify | all | dotnet test | - | 模拟双向和真实 lrzsz 双向 64KB 二进制文件集成测试覆盖 |
 | TST-04 | 部分 | SshIntegrationTests.KeyAuthShellOutputResizeAndReconnect,SerialPtyIntegrationTests.SerialConnectionReadsAndWritesThroughPty | verify | linux | dotnet test | WIN-17 | Linux sshd/PTY 集成已自动化；Windows 实机 SSH/串口集成依赖真实硬件，无法自动化 |
