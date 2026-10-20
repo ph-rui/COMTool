@@ -60,6 +60,11 @@ public sealed class SerialConnection : ISerialConnection
         try
         {
             port.Open();
+            // Match Python: drop bytes a previous session or the driver left
+            // queued. Otherwise stale ZMODEM payload can appear in the
+            // terminal (or be sent back) when a saved session is reopened.
+            port.DiscardInBuffer();
+            port.DiscardOutBuffer();
             var pty = new PtyStreamConnection(
                 new TimeoutRetryStream(port.BaseStream),
                 port.BaseStream,
