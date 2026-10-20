@@ -35,6 +35,7 @@ geometry. These are functional evidence images, not final pixel baselines.
 | `moba-keyword-highlighting-1176x552.png` | Error red, success green, warning yellow, IP magenta, and URL underline on a live SSH session; ANSI colors take precedence. |
 | `sidebar-hidden-1176x552.png` | Sessions sidebar hidden with its floating reopen handle; `sessionSidebar.visible=false` is persisted. |
 | `zmodem-active-850x500.png` | Real `sz` receive over SSH shows the Python-style transfer label, 150px progress bar and 90px Cancel button in the status row. |
+| `zmodem-active-windows-1280x800.png` | Windows 10 RDP, real `sz` receive: the 150px progress bar stays in its slot, `22%` is readable inside the bar and the filename is no longer covered. |
 | `zmodem-cancelled-850x500.png` | Cancel writes ZCAN, restores the panel and reports `File transfer cancelled`. |
 | `zmodem-cancel-input-850x500.png` | Terminal input and the remote shell prompt work again after cancelling a ZMODEM transfer. |
 | `terminal-key-mappings-850x500.png` | `cat -v` shows the expected sequences for arrows, Home/End, Insert/Delete and F1-F12, including both SS3 and CSI forms. |

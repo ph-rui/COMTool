@@ -17,7 +17,7 @@
 | UI-09 | 部分 | ConfigTests.SaveAndLoad_RoundTripsSessionSidebarAndTheme | verify | all | dotnet test | WIN-20 | skin 持久化和配置往返已自动化；标题栏右键浅/深色切换和重启生效需真实桌面视觉核对 |
 | UI-10 | 未开始 | - | manual | all | manual | - | 未开始 |
 | UI-11 | 部分 | - | manual | all | manual | WIN-10 | Windows 真实桌面 About/帮助入口与插件帮助、更新提示的视觉和交互核对；插件帮助和更新检测尚未实现，不能自动化 |
-| UI-12 | 部分 | ZmodemStatusLayoutTests.UI12_ZmodemProgressTextAndLayoutStayReadable | verify | all | dotnet test | WIN-20 | ZMODEM 进度条被 Fluent 默认 MinWidth 撑出 150px 槽位并覆盖文件名、百分比文字被硬编码白色导致不可读的回归由 headless 布局测试覆盖；状态栏连接/断线/取消/成功/错误颜色和超时提示仍需真实桌面视觉核对 |
+| UI-12 | 部分 | ZmodemStatusLayoutTests.UI12_ZmodemProgressTextAndLayoutStayReadable | verify | all | dotnet test | WIN-20 | ZMODEM 进度条被 Fluent 默认 MinWidth 撑出 150px 槽位并覆盖文件名、百分比文字被硬编码白色导致不可读的回归由 headless 布局测试覆盖；2026-10-20 Windows RDP 真实 `sz` 22% 截图为 `docs/fixtures/phase1/zmodem-active-windows-1280x800.png`；状态栏连接/断线/取消/成功/错误颜色和超时提示仍需真实桌面视觉核对 |
 | UI-13 | 部分 | UI05_RapidSwitchFocus,TERM15_DoubleClickUsesMaximizePath | verify | all | dotnet test | WIN-20 | 终端焦点与双击最大化自动化覆盖；Ctrl+V、方向键/F1-F12、F11、右键复制粘贴等快捷键需真实桌面逐项核对 |
 | UI-14 | 部分 | - | manual | all | manual | WIN-02 | Windows 150%/200% DPI 需要真实桌面和显示器，裁切属于视觉判断，无法自动化 |
 | UI-15 | 完成 | ConfigTests.SaveAndLoad_RoundTripsWindowSize | verify | all | dotnet test | - | 窗口正常尺寸保存/恢复由 ConfigTests 覆盖 |
