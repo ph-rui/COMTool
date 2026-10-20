@@ -240,8 +240,8 @@ public static class GateChecker
     {
         var phase = row.Phase.Trim();
 
-        // Manual rows are structurally checked here; actually resolving their
-        // automated IDs belongs to the manual sign-off process.
+        // Manual rows are structural only and must not declare automated IDs;
+        // their manual evidence is checked by the sign-off validator.
         if (string.Equals(phase, ManualPhase, StringComparison.OrdinalIgnoreCase))
         {
             return false;
