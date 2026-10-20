@@ -1091,7 +1091,9 @@ public partial class MainWindow : Window
             Dispatcher.UIThread.Post(
                 () =>
                 {
-                    if (terminalAttached)
+                    if (terminalAttached
+                        || !IsTabOpen(tab)
+                        || !ReferenceEquals(tab.Connection, connection))
                     {
                         return;
                     }
@@ -1230,7 +1232,9 @@ public partial class MainWindow : Window
             Dispatcher.UIThread.Post(
                 () =>
                 {
-                    if (terminalAttached)
+                    if (terminalAttached
+                        || !IsTabOpen(tab)
+                        || !ReferenceEquals(tab.Connection, connection))
                     {
                         return;
                     }

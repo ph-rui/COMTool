@@ -73,6 +73,7 @@ public sealed class TelnetConnection : IDisposable
             : TimeSpan.FromSeconds(10);
         var client = new TcpClient { NoDelay = true };
         NetworkStream? stream = null;
+        TelnetConnection? connection = null;
         using var timeoutSource =
             CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutSource.CancelAfter(timeout);
@@ -93,13 +94,14 @@ public sealed class TelnetConnection : IDisposable
                     user,
                     options.Password,
                     text => telnet.WriteData(Encoding.UTF8.GetBytes(text)));
-            var connection = new TelnetConnection(client, stream, telnet, autoLogin);
+            connection = new TelnetConnection(client, stream, telnet, autoLogin);
             telnet.Start();
             _ = Task.Run(connection.ReceiveLoopAsync, CancellationToken.None);
             return connection;
         }
         catch
         {
+            connection?.Dispose();
             try
             {
                 stream?.Dispose();

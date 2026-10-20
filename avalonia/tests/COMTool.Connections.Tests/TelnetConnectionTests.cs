@@ -148,8 +148,11 @@ public sealed class TelnetConnectionTests
             var user = await ReadUntilAsync(stream, new byte[] { (byte)'\r', (byte)'\n' }, 5);
             Assert.Contains("alice", Encoding.ASCII.GetString(user));
 
-            // ANSI escapes must not prevent a password prompt match.
-            await stream.WriteAsync(Encoding.ASCII.GetBytes("\u001b[32mPassword:\u001b[0m "));
+            // ANSI CSI and OSC sequences must not prevent a password prompt
+            // match. The OSC title follows the prompt text to prove the whole
+            // sequence is removed rather than leaving its payload behind.
+            await stream.WriteAsync(Encoding.ASCII.GetBytes(
+                "\u001b[32mPassword:\u001b]0;telnet-e2e\u0007\u001b[0m "));
             var password = await ReadUntilAsync(stream, new byte[] { (byte)'\r', (byte)'\n' }, 5);
             Assert.Contains("secret", Encoding.ASCII.GetString(password));
 
