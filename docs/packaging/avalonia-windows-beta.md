@@ -106,24 +106,27 @@ sandbox install:
 - `%APPDATA%\COMTool-Avalonia` and `%APPDATA%\comtool` both still existed after
   uninstall (no `-RemoveConfig`).
 
-The latest app binary (version `0.01`, borderless chrome, auto-hiding sidebar,
-sidebar expanded on every launch, multiple independent connections from one
-saved SSH session, PTY-preserving tab switching with immediate terminal input,
-non-focus-stealing chrome controls, centered tool-strip icons, remembered
-window size, encoding-dropdown focus return, automatic terminal focus after
-opening a session, immediate single-character echo, double-click terminal
+The latest app binary (version `0.01`, borderless chrome, sidebar auto-hide on
+the first pointer move into the content area, sidebar expanded on every launch,
+serial sessions retained across unplug/replug with open serial tabs reopened
+automatically, multiple independent connections from one saved SSH session,
+PTY-preserving tab switching with immediate terminal input, non-focus-stealing
+chrome controls, centered tool-strip icons, remembered window size,
+encoding-dropdown focus return, automatic terminal focus after opening a
+session, immediate single-character echo, double-click terminal
 maximize/restore, and the ReadyToRun release build) was published over SSH and
 copied to:
 
 - `C:\Users\zhangrui\COMTool-Avalonia.exe` (working copy)
 - `D:\Users\zhangrui\Desktop\COMTool-Avalonia.exe` (desktop copy)
 
-- size: 175,559,088 bytes;
-- SHA256: `919dff9ddd6dd490e44184f3d6d27b6fbe17cba35cbbd25aa0057d1c3f2eb62c`;
+- size: 175,781,701 bytes;
+- SHA256: `79F06E8EF5D58508E605BDBFB0C615C599F5BE1EA88F56C4CEA6CAB8019B090C`;
 - both remote copies matched that hash via `Get-FileHash`.
 
 No old `COMTool-Avalonia` process was running when the copies were replaced.
-The desktop app must be launched again to exercise this build.
+No `COMTool-Avalonia.exe.bak-*` files were created or retained. The desktop app
+must be launched again to exercise this build.
 
 The release zip is 74,795,557 bytes and is validated with SHA256:
 
