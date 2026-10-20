@@ -99,14 +99,14 @@
 - 只有人工验收、没有自动化测试的功能不能标为 `完成`；如果确实无法自动化，状态必须保持 `部分`，直到人工签收完成。
 - 新增功能时，未更新矩阵视为门禁失败。
 
-测试命名统一使用功能 ID 前缀：
+新测试统一使用功能 ID 前缀：
 
 - `UI05_TabSwitchKeepsBothTerminalsLive`
 - `TERM15_DoubleClickUsesMaximizePath`
 - `SSH06_SecondClickOpensIndependentConnection`
 - `SER07_SerialLoopbackReceivesBytes`
 
-这样矩阵、测试报告和失败日志可以直接关联。
+已有测试可以保留原名称，在矩阵中填写完整测试名（例如 `COMTool.Core.Tests.ConfigTests...`）。新测试使用前缀，便于矩阵、测试报告和失败日志直接关联。
 
 ### 5.2 矩阵完整性检查器
 
