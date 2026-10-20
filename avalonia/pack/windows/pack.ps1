@@ -26,14 +26,24 @@ and the package gate still run.
 #>
 [CmdletBinding()]
 param(
-    [string]$Source = (Join-Path $PSScriptRoot "../../publish/win-x64"),
-    [string]$CandidateDir = (Join-Path $PSScriptRoot "../../publish/candidate"),
+    [string]$Source = "",
+    [string]$CandidateDir = "",
     [string]$Version = "0.01",
     [switch]$SkipPublish
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+# Defaults are resolved in the script body. PowerShell evaluates parameter
+# defaults in the caller's scope, where $PSScriptRoot is empty when the script
+# is started with `powershell.exe -File`.
+if (-not $Source) {
+    $Source = Join-Path $PSScriptRoot "../../publish/win-x64"
+}
+if (-not $CandidateDir) {
+    $CandidateDir = Join-Path $PSScriptRoot "../../publish/candidate"
+}
 
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "../../.."))
 $project = Join-Path $repoRoot "avalonia/src/COMTool.App/COMTool.App.csproj"
