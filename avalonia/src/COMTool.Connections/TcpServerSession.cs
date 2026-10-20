@@ -12,7 +12,6 @@ public sealed class TcpServerSession : ITcpSession
         new(StringComparer.Ordinal);
     private readonly ByteQueueStream _incoming = new();
     private readonly object _selectionGate = new();
-    private readonly Task _acceptTask;
     private string? _selected;
     private int _closed;
     private int _disposed;
@@ -32,7 +31,7 @@ public sealed class TcpServerSession : ITcpSession
             new BroadcastWriteStream(this),
             close: CloseTransport,
             ownsStreams: false);
-        _acceptTask = Task.Run(AcceptLoopAsync);
+        _ = Task.Run(AcceptLoopAsync);
     }
 
     public PtyStreamConnection Pty { get; }
