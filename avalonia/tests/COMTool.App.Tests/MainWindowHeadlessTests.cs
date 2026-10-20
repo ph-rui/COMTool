@@ -34,7 +34,7 @@ public sealed class MainWindowHeadlessTests
 
                 var sidebar = window.FindControl<SessionSidebar>("Sidebar")!;
                 Assert.True(sidebar.IsVisible);
-                Assert.True(sidebar.Bounds.Width >= 200);
+                Assert.Equal(240, sidebar.Bounds.Width, precision: 1);
             });
         }
         finally
@@ -129,6 +129,56 @@ public sealed class MainWindowHeadlessTests
     }
 
     [AvaloniaFact]
+    public void UI05_TabSwitchKeepsBothTerminalsLive()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        TestTerminal? a = null;
+        TestTerminal? b = null;
+        try
+        {
+            env.Run(() =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                window = CreateWindow();
+                var viewModel = (MainViewModel)window.DataContext!;
+                a = OpenTab(window, "a");
+                b = OpenTab(window, "b");
+
+                ClickTab(window, a.Tab);
+                RunJobs(window);
+                Assert.Same(a.Tab, viewModel.SelectedTab);
+                Assert.True(a.Terminal.IsKeyboardFocusWithin);
+
+                window.KeyTextInput("A");
+                RunJobs(window);
+
+                ClickTab(window, b.Tab);
+                RunJobs(window);
+                Assert.Same(b.Tab, viewModel.SelectedTab);
+                Assert.True(b.Terminal.IsKeyboardFocusWithin);
+
+                window.KeyTextInput("B");
+                RunJobs(window);
+
+                Assert.Contains("A", a.Pty.WriterText, StringComparison.Ordinal);
+                Assert.DoesNotContain("B", a.Pty.WriterText, StringComparison.Ordinal);
+                Assert.Contains("B", b.Pty.WriterText, StringComparison.Ordinal);
+                Assert.DoesNotContain("A", b.Pty.WriterText, StringComparison.Ordinal);
+                Assert.False(a.Pty.IsClosed);
+                Assert.False(b.Pty.IsClosed);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+            a?.Dispose();
+            b?.Dispose();
+        }
+    }
+
+    [AvaloniaFact]
     public void UI05_RapidSwitchFocus()
     {
         using var env = new TestEnvironment();
@@ -145,8 +195,18 @@ public sealed class MainWindowHeadlessTests
                 a = OpenTab(window, "a");
                 b = OpenTab(window, "b");
 
-                ClickTab(window, b.Tab);
                 ClickTab(window, a.Tab);
+                RunJobs(window);
+                Assert.Same(a.Tab, viewModel.SelectedTab);
+
+                // MouseDown/MouseUp pump dispatcher jobs, so they cannot model a
+                // rapid switch. Raise both tab pointer presses in one dispatcher
+                // turn and verify each selection lands before RunJobs is called.
+                PressTab(window, b.Tab);
+                Assert.Same(b.Tab, viewModel.SelectedTab);
+                PressTab(window, a.Tab);
+                Assert.Same(a.Tab, viewModel.SelectedTab);
+
                 RunJobs(window);
 
                 Assert.Same(a.Tab, viewModel.SelectedTab);
@@ -193,9 +253,7 @@ public sealed class MainWindowHeadlessTests
 
     private static void ClickTab(MainWindow window, TerminalTab tab)
     {
-        var border = window.GetVisualDescendants()
-            .OfType<Border>()
-            .Single(border => ReferenceEquals(border.Tag, tab));
+        var border = FindTabBorder(window, tab);
         var center = border.TranslatePoint(
             new Point(5, border.Bounds.Height / 2),
             window);
@@ -204,6 +262,32 @@ public sealed class MainWindowHeadlessTests
         window.MouseDown(center.Value, MouseButton.Left);
         window.MouseUp(center.Value, MouseButton.Left);
     }
+
+    private static void PressTab(MainWindow window, TerminalTab tab)
+    {
+        var border = FindTabBorder(window, tab);
+        var position = border.TranslatePoint(
+            new Point(5, border.Bounds.Height / 2),
+            window);
+        Assert.NotNull(position);
+
+        border.RaiseEvent(new PointerPressedEventArgs(
+            border,
+            new Pointer(0, PointerType.Mouse, isPrimary: true),
+            window,
+            position.Value,
+            0,
+            new PointerPointProperties(
+                RawInputModifiers.None,
+                PointerUpdateKind.LeftButtonPressed),
+            KeyModifiers.None,
+            clickCount: 1));
+    }
+
+    private static Border FindTabBorder(MainWindow window, TerminalTab tab) =>
+        window.GetVisualDescendants()
+            .OfType<Border>()
+            .Single(border => ReferenceEquals(border.Tag, tab));
 
     private static void RunJobs(MainWindow window)
     {
