@@ -53,7 +53,7 @@
 | SSH-05 | 完成 | ConfigPhase0Tests.SshPasswordCacheKeepsOnlyInMemoryAndCanBeCleared,SshIntegrationTests.KeyAuthShellOutputResizeAndReconnect | verify | all | dotnet test | - | 内存密码缓存、清理和重连测试覆盖 |
 | SSH-06 | 完成 | SSH06_ActivationPolicy,SSH06_ConnectingTabIsNotTreatedAsLive,SSH06_LiveConnectionKeepsDeadTabsOpen,SSH06_LiveConnectionOpensAnotherTab,SSH06_NoLiveConnectionClosesDeadTabs,SSH06_OnlyMatchingSshTabsAreConsidered | verify | all | dotnet test | - | SSH 标签激活策略由 policy 测试覆盖；Linux Xvfb 执行 SSH06_MultipleConnectionsE2E |
 | SSH-07 | 不适用 | - | manual | all | manual | - | 不适用 |
-| SSH-08 | 完成 | SshIntegrationTests.KeyAuthShellOutputResizeAndReconnect | verify | linux | dotnet test | WIN-17 | SSH resize 与 ptmx 行为由 Linux 集成测试覆盖；Windows 实机见 WIN-17 |
+| SSH-08 | 完成 | SshIntegrationTests.KeyAuthShellOutputResizeAndReconnect,PtyStreamConnectionTests.PTY01_ResizeAfterCloseDoesNotReachDisposedTransport | verify | linux | dotnet test | WIN-17 | SSH resize、ptmx 行为及 shell 退出/标签关闭后布局再次 resize 不再访问已释放 ShellStream 的回归由 Linux 测试覆盖；Windows 实机见 WIN-17 |
 | SSH-09 | 完成 | SshIntegrationTests.KeyAuthShellOutputResizeAndReconnect | verify | linux | dotnet test | WIN-17 | SSH shell 输出、重连与命令执行由 Linux 集成测试覆盖；Linux Xvfb 执行 E2E01_OpenSshSession |
 | SSH-10 | 部分 | - | manual | all | manual | WIN-17 | 首次/重连延迟需真实 Windows 主机和网络测量，无法自动化 |
 | NET-01 | 完成 | TcpSessionTests.NET01_TcpClientLoopbackSendsAndReceives,TcpSessionTests.NET01_TcpServerRoutesClientsAndSupportsSelectionAndDisconnect,TcpSessionTests.NET01_TcpServerCloseEndsTerminalRead,SessionActivationPolicyTests.NET01_TcpClientDeadTabsAreCleanedUp | verify | all | dotnet test | - | TCP 客户端回环收发/断开、服务端多客户端路由/选中发送/断开/关闭，以及 TCP client 独立连接策略由自动化测试覆盖 |
@@ -88,7 +88,7 @@
 | PKG-04 | 部分 | - | manual | all | manual | WIN-08 | Windows/Linux 安装、升级、卸载和保留 Beta 配置需真实桌面安装环境，无法自动化 |
 | PKG-05 | 部分 | - | manual | all | manual | WIN-21 | 包体积和启动时间需真实 Windows/Linux 桌面测量并与性能基线对照，无法自动化 |
 | PKG-06 | 部分 | - | manual | all | manual | WIN-16 | CI 流水线需在托管 CI 实际运行并核对日志，本地门禁无法自动化 |
-| TST-01 | 完成 | CI01_SerializesCandidateInfo | verify | all | dotnet test | - | 完整套件 203 项通过（Core 41/Connections 37/Terminal 11/ZMODEM 32/TestGate 49/App 33）；CI01 覆盖 TestGate 候选元数据 |
+| TST-01 | 完成 | CI01_SerializesCandidateInfo | verify | all | dotnet test | - | 完整套件 204 项通过（Core 41/Connections 38/Terminal 11/ZMODEM 32/TestGate 49/App 33）；CI01 覆盖 TestGate 候选元数据 |
 | TST-02 | 完成 | TerminalEmulatorTests.MatchesPythonPyteGoldenScreen | verify | all | dotnet test | - | 同一字节流与 Python pyte 0.8.2 的 60x20 屏幕快照一致 |
 | TST-03 | 完成 | ZmodemTransferTests.SenderAndReceiverTransferFile,LrzszZmodemTests.RealSzFileIsReceived,LrzszZmodemTests.RealRzReceivesSentFile | verify | all | dotnet test | - | 模拟双向和真实 lrzsz 双向 64KB 二进制文件集成测试覆盖 |
 | TST-04 | 部分 | SshIntegrationTests.KeyAuthShellOutputResizeAndReconnect,SerialPtyIntegrationTests.SerialConnectionReadsAndWritesThroughPty | verify | linux | dotnet test | WIN-17 | Linux sshd/PTY 集成已自动化；Windows 实机 SSH/串口集成依赖真实硬件，无法自动化 |

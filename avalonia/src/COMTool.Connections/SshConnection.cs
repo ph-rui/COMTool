@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Renci.SshNet;
+using Renci.SshNet.Common;
 
 namespace COMTool.Connections;
 
@@ -114,16 +115,39 @@ public sealed class SshConnection : IDisposable
                 width: 0,
                 height: 0,
                 bufferSize: 4096);
+            var transportClosed = 0;
             var pty = new PtyStreamConnection(
                 shell,
                 shell,
-                resize: (columns, rows) => shell.ChangeWindowSize(
-                    (uint)columns,
-                    (uint)rows,
-                    width: 0,
-                    height: 0),
+                resize: (columns, rows) =>
+                {
+                    if (Volatile.Read(ref transportClosed) != 0)
+                    {
+                        return;
+                    }
+
+                    try
+                    {
+                        shell.ChangeWindowSize(
+                            (uint)columns,
+                            (uint)rows,
+                            width: 0,
+                            height: 0);
+                    }
+                    catch (Exception ex) when (
+                        ex is ObjectDisposedException
+                            or InvalidOperationException
+                            or SshConnectionException
+                            or IOException)
+                    {
+                        // The tab may close while Avalonia is still arranging
+                        // the terminal. A best-effort resize must never escape
+                        // into the UI layout pass.
+                    }
+                },
                 close: () =>
                 {
+                    Interlocked.Exchange(ref transportClosed, 1);
                     try
                     {
                         shell.Dispose();
