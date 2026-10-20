@@ -83,6 +83,7 @@
 | `Status` | `完成`、`部分`、`未开始`、`不适用` |
 | `Automated` | 自动化测试 ID，多个用逗号分隔；没有则写 `-` |
 | `Phase` | `verify`、`package` 或 `manual` |
+| `Platform` | `all`、`linux`、`windows` 或 `macos` |
 | `Command` | 运行该测试的项目或脚本 |
 | `Manual` | 人工验收项 ID；没有则写 `-` |
 | `Evidence` | 截图、日志或测试报告路径 |
