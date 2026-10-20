@@ -125,7 +125,7 @@ public sealed class GateCheckerTests
     {
         var result = Check(
             Parity("SER-03", "部分"),
-            Row("SER-03", "部分", manual: "WIN-99", evidence: "硬件原因无法自动化"));
+            Row("SER-03", "部分", phase: "package", manual: "WIN-99", evidence: "硬件原因无法自动化"));
         Assert.Contains(result.Errors, e => e.Contains("WIN-99"));
     }
 
@@ -160,7 +160,10 @@ public sealed class GateCheckerTests
     [Fact]
     public void GC13_UnknownStatusFails()
     {
-        var result = Check(Parity("UI-05", "进行中"), Row("UI-05", "完成", "UI05_X"), testList: "UI05_X");
+        var result = Check(
+            Parity("UI-05", "进行中"),
+            Row("UI-05", "完成", "UI05_X", phase: "package"),
+            testList: "UI05_X");
         Assert.Contains(result.Errors, e => e.Contains("进行中"));
     }
 
@@ -198,5 +201,36 @@ public sealed class GateCheckerTests
             Row("UI-05", "完成", "COMTool.App.Tests.UI05"),
             testList: "COMTool.App.Tests.UI05_Extra");
         Assert.Contains(result.Errors, e => e.Contains("COMTool.App.Tests.UI05"));
+    }
+
+    [Fact]
+    public void GC18_ManualRowWithAutomatedIdFails()
+    {
+        var result = Check(
+            Parity("UI-05", "完成"),
+            Row("UI-05", "完成", "UI05_DoesNotExist", phase: "manual", manual: "WIN-03"));
+        Assert.Contains(result.Errors, e => e.Contains("manual") || e.Contains("Automated"));
+    }
+
+    [Fact]
+    public void GC19_InvalidOptionPhaseFails()
+    {
+        var result = Check(
+            Parity("UI-05", "完成"),
+            Row("UI-05", "完成", "UI05_X"),
+            testList: "UI05_X",
+            phase: "verfiy");
+        Assert.Contains(result.Errors, e => e.Contains("verfiy"));
+    }
+
+    [Fact]
+    public void GC20_InvalidOptionPlatformFails()
+    {
+        var result = Check(
+            Parity("UI-05", "完成"),
+            Row("UI-05", "完成", "UI05_X"),
+            testList: "UI05_X",
+            platform: "all");
+        Assert.Contains(result.Errors, e => e.Contains("all"));
     }
 }
