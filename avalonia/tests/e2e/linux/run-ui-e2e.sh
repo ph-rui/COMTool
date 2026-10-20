@@ -19,6 +19,7 @@ KEEP_TEMP=0
 WINDOW_TITLE="COMTool v0.01"
 E2E_TESTS=(
     APP01_SmokeLaunchE2E
+    UI01_TitleBarDoubleClickMaximizeE2E
     UI02_SidebarExpandsOnLaunchE2E
     E2E01_OpenSshSession
     SSH06_MultipleConnectionsE2E
@@ -26,6 +27,7 @@ E2E_TESTS=(
     TERM15_DoubleClickMaximizeE2E
 )
 SSH_TEST_IDS=(
+    UI01_TitleBarDoubleClickMaximizeE2E
     UI02_SidebarExpandsOnLaunchE2E
     E2E01_OpenSshSession
     SSH06_MultipleConnectionsE2E
@@ -464,6 +466,46 @@ run_ui05_tab_switch() {
     pass "$test_id"
 }
 
+run_ui01_title_bar_double_click_maximize() {
+    local test_id="UI01_TitleBarDoubleClickMaximizeE2E"
+    local before
+    local before_w
+    local before_h
+    local maximized
+    local max_w
+    local max_h
+    local restored
+    local actual
+
+    log "Running $test_id"
+    if ! before="$(read_window_dimensions "$WINDOW_ID")"; then
+        fail "$test_id" "could not read window geometry before maximize"
+    fi
+    read -r before_w before_h <<<"$before"
+    log "$test_id: geometry before maximize: ${before_w}x${before_h}"
+
+    if ! double_click_window 600 17; then
+        fail "$test_id" "could not double-click the title bar"
+    fi
+    if ! maximized="$(wait_for_window_size grow "$WINDOW_ID" "$before_w" "$before_h" 5)"; then
+        actual="$(read_window_dimensions "$WINDOW_ID" 2>/dev/null || printf 'unknown')"
+        fail "$test_id" "title-bar double-click did not maximize (before ${before_w}x${before_h}, now $actual)"
+    fi
+    read -r max_w max_h <<<"$maximized"
+    log "$test_id: geometry after maximize: ${max_w}x${max_h}"
+
+    if ! double_click_window 600 17; then
+        fail "$test_id" "could not double-click the title bar again to restore"
+    fi
+    if ! restored="$(wait_for_window_size exact "$WINDOW_ID" "$before_w" "$before_h" 5)"; then
+        actual="$(read_window_dimensions "$WINDOW_ID" 2>/dev/null || printf 'unknown')"
+        fail "$test_id" "second title-bar double-click did not restore ${before_w}x${before_h} (now $actual)"
+    fi
+    log "$test_id: geometry after restore: ${restored}"
+
+    pass "$test_id"
+}
+
 run_term15_double_click_maximize() {
     local test_id="TERM15_DoubleClickMaximizeE2E"
     local before
@@ -534,6 +576,9 @@ if [[ -n "$SSH_TEST_ID" ]]; then
     fi
     wait_for_comtool_window "$SSH_TEST_ID"
 
+    if matches_filter "UI01_TitleBarDoubleClickMaximizeE2E"; then
+        run_ui01_title_bar_double_click_maximize
+    fi
     if matches_filter "UI02_SidebarExpandsOnLaunchE2E"; then
         run_ui02_sidebar_expands
     fi
