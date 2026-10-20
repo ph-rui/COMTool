@@ -1,2 +1,2 @@
-// Task 1 only establishes matrix parsing; the gate command-line entry point is added in Task 2.
+// The gate command-line entry point is added in Task 3.
 return 0;

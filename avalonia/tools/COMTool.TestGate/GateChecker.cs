@@ -16,19 +16,28 @@ public static class GateChecker
     private const string Partial = "部分";
     private const string NotStarted = "未开始";
     private const string NotApplicable = "不适用";
-    private const string ManualPhase = "manual";
-    private const string PackagePhase = "package";
 
-    private static readonly string[] ManualReasonWords =
+    private const string VerifyPhase = "verify";
+    private const string PackagePhase = "package";
+    private const string ManualPhase = "manual";
+    private const string AllPlatform = "all";
+
+    private static readonly HashSet<string> KnownStatuses =
+        new(StringComparer.Ordinal) { Completed, Partial, NotStarted, NotApplicable };
+
+    private static readonly HashSet<string> KnownPhases =
+        new(StringComparer.OrdinalIgnoreCase) { VerifyPhase, PackagePhase, ManualPhase };
+
+    private static readonly HashSet<string> KnownPlatforms =
+        new(StringComparer.OrdinalIgnoreCase) { AllPlatform, "linux", "windows", "macos" };
+
+    private static readonly string[] ManualReasonPhrases =
     {
         "不能自动化",
         "无法自动化",
-        "不能",
-        "无法",
         "硬件",
         "视觉",
         "真实桌面",
-        "真实",
     };
 
     public static GateResult Check(GateOptions options)
@@ -39,6 +48,14 @@ public static class GateChecker
         var parity = ParityMatrix.Load(options.ParityPath);
         var matrix = FeatureMatrix.Load(options.MatrixPath);
         var manualIds = ManualAcceptance.Load(options.ManualPath);
+
+        foreach (var (feature, status) in parity)
+        {
+            if (!KnownStatuses.Contains(status))
+            {
+                errors.Add($"功能 '{feature}' 的状态 '{status}' 无法识别。");
+            }
+        }
 
         var rowsByFeature = new Dictionary<string, FeatureRow>(StringComparer.Ordinal);
         foreach (var row in matrix)
@@ -59,17 +76,19 @@ public static class GateChecker
                 errors.Add(
                     $"功能测试矩阵引用了 parity 矩阵中不存在的 Feature ID '{row.Feature}'。");
             }
-        }
 
-        var testIds = ReadTestList(options.TestListPath);
-        var e2eIds = ReadPassedIds(options.E2eLogPath);
-        var packageIds = ReadPassedIds(options.PackageLogPath);
-
-        foreach (var row in matrix)
-        {
-            if (!ShouldEnforce(row, options))
+            // Phase and platform are validated before any filtering so an
+            // invalid row cannot silently escape enforcement.
+            if (!KnownPhases.Contains(row.Phase.Trim()))
             {
-                continue;
+                errors.Add(
+                    $"功能 '{row.Feature}' 的功能测试矩阵 Phase '{row.Phase}' 无效。");
+            }
+
+            if (!KnownPlatforms.Contains(row.Platform.Trim()))
+            {
+                errors.Add(
+                    $"功能 '{row.Feature}' 的功能测试矩阵 Platform '{row.Platform}' 无效。");
             }
 
             foreach (var manualId in row.Manual)
@@ -83,109 +102,81 @@ public static class GateChecker
             }
         }
 
+        var testIds = ReadTestList(options.TestListPath);
+        var e2eIds = ReadPassedIds(options.E2eLogPath);
+        var packageIds = ReadPassedIds(options.PackageLogPath);
+
         foreach (var (feature, status) in parity)
         {
-            if (status is NotStarted or NotApplicable)
-            {
-                continue;
-            }
-
             if (!rowsByFeature.TryGetValue(feature, out var row))
             {
-                if (status is Completed or Partial)
-                {
-                    errors.Add(
-                        $"功能 '{feature}' 状态为 {status}，但功能测试矩阵缺少该条目。");
-                }
-                else
-                {
-                    errors.Add($"功能 '{feature}' 的状态 '{status}' 无法识别。");
-                }
-
+                errors.Add(
+                    $"功能 '{feature}' 状态为 {status}，但功能测试矩阵缺少该条目。");
                 continue;
             }
 
-            if (!ShouldEnforce(row, options))
+            if (!KnownStatuses.Contains(status))
             {
                 continue;
             }
 
-            switch (status)
+            EnforceStructure(feature, status, row, errors);
+
+            if (row.Automated.Count > 0 && ShouldResolve(row, options))
             {
-                case Completed:
-                    EnforceCompleted(feature, row, options, testIds, e2eIds, packageIds, errors);
-                    break;
-                case Partial:
-                    EnforcePartial(feature, row, options, testIds, e2eIds, packageIds, errors);
-                    break;
-                default:
-                    errors.Add($"功能 '{feature}' 的状态 '{status}' 无法识别。");
-                    break;
+                EnforceAutomatedIds(
+                    feature, row, testIds, e2eIds, packageIds, errors);
             }
         }
 
         return new GateResult(errors);
     }
 
-    private static void EnforceCompleted(
+    private static void EnforceStructure(
         string feature,
+        string status,
         FeatureRow row,
-        GateOptions options,
-        IReadOnlySet<string> testIds,
-        IReadOnlySet<string> e2eIds,
-        IReadOnlySet<string> packageIds,
         List<string> errors)
     {
-        if (row.Automated.Count == 0)
+        switch (status)
         {
-            errors.Add($"功能 '{feature}' 状态为 完成，但没有自动化测试（无自动化测试）。");
-            return;
-        }
+            case Completed:
+                if (row.Automated.Count == 0)
+                {
+                    errors.Add(
+                        $"功能 '{feature}' 状态为 完成，但没有自动化测试（无自动化测试）；" +
+                        "人工验收或 Phase=manual 不能替代自动化测试。");
+                }
 
-        EnforceAutomatedIds(feature, row, options, testIds, e2eIds, packageIds, errors);
-    }
+                break;
 
-    private static void EnforcePartial(
-        string feature,
-        FeatureRow row,
-        GateOptions options,
-        IReadOnlySet<string> testIds,
-        IReadOnlySet<string> e2eIds,
-        IReadOnlySet<string> packageIds,
-        List<string> errors)
-    {
-        if (row.Automated.Count == 0 && row.Manual.Count == 0)
-        {
-            errors.Add(
-                $"功能 '{feature}' 状态为 部分，但既没有自动化测试也没有人工验收项。");
-            return;
-        }
+            case Partial:
+                if (row.Automated.Count == 0 && row.Manual.Count == 0)
+                {
+                    errors.Add(
+                        $"功能 '{feature}' 状态为 部分，但既没有自动化测试也没有人工验收项。");
+                }
+                else if (row.Automated.Count == 0 && !HasManualReason(row.Evidence))
+                {
+                    errors.Add(
+                        $"功能 '{feature}' 仅有人工验收项 {string.Join(", ", row.Manual)}，" +
+                        "但 Evidence 未说明不能自动化的原因（需包含 " +
+                        $"{string.Join("、", ManualReasonPhrases)} 之一）。");
+                }
 
-        if (row.Automated.Count > 0)
-        {
-            EnforceAutomatedIds(feature, row, options, testIds, e2eIds, packageIds, errors);
-            return;
-        }
-
-        if (!HasManualReason(row.Evidence))
-        {
-            errors.Add(
-                $"功能 '{feature}' 仅有人工验收项 {string.Join(", ", row.Manual)}，" +
-                "但 Evidence 未说明不能自动化的原因（需包含 " +
-                $"{string.Join("、", ManualReasonWords)} 之一）。");
+                break;
         }
     }
 
     private static void EnforceAutomatedIds(
         string feature,
         FeatureRow row,
-        GateOptions options,
         IReadOnlySet<string> testIds,
         IReadOnlySet<string> e2eIds,
         IReadOnlySet<string> packageIds,
         List<string> errors)
     {
-        var available = RowPhase(row) == PackagePhase
+        var available = IsPackageRow(row)
             ? testIds.Concat(packageIds)
             : testIds.Concat(e2eIds);
 
@@ -198,8 +189,8 @@ public static class GateChecker
             }
 
             errors.Add(
-                $"功能 '{feature}' 引用的自动化测试 '{testId}' 不存在于测试列表或 " +
-                $"{RowPhase(row)} 阶段日志中。");
+                $"功能 '{feature}' 引用的自动化测试 '{testId}' " +
+                "不存在于测试列表或对应阶段日志中。");
         }
     }
 
@@ -211,33 +202,33 @@ public static class GateChecker
             return false;
         }
 
-        return ManualReasonWords.Any(word => value.Contains(word, StringComparison.Ordinal));
+        return ManualReasonPhrases.Any(
+            phrase => value.Contains(phrase, StringComparison.Ordinal));
     }
 
-    private static bool ShouldEnforce(FeatureRow row, GateOptions options)
+    private static bool ShouldResolve(FeatureRow row, GateOptions options)
     {
         var phase = row.Phase.Trim();
-        var optionPhase = options.Phase.Trim();
 
-        // Phase=manual entries are only checked during manual sign-off; the
-        // automated verify/package gate never requires them to be automated.
+        // Manual rows are structurally checked here; actually resolving their
+        // automated IDs belongs to the manual sign-off process.
         if (string.Equals(phase, ManualPhase, StringComparison.OrdinalIgnoreCase))
         {
-            return string.Equals(optionPhase, ManualPhase, StringComparison.OrdinalIgnoreCase);
+            return false;
         }
 
-        if (!string.Equals(phase, optionPhase, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(phase, options.Phase.Trim(), StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
 
         var platform = row.Platform.Trim();
-        return string.Equals(platform, "all", StringComparison.OrdinalIgnoreCase) ||
+        return string.Equals(platform, AllPlatform, StringComparison.OrdinalIgnoreCase) ||
                string.Equals(platform, options.Platform.Trim(), StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string RowPhase(FeatureRow row) =>
-        row.Phase.Trim().ToLowerInvariant();
+    private static bool IsPackageRow(FeatureRow row) =>
+        string.Equals(row.Phase.Trim(), PackagePhase, StringComparison.OrdinalIgnoreCase);
 
     private static bool Resolves(string id, IReadOnlyList<string> available)
     {
@@ -249,13 +240,6 @@ public static class GateChecker
             }
 
             if (name.EndsWith($".{id}", StringComparison.Ordinal))
-            {
-                return true;
-            }
-
-            if ((id.StartsWith("COMTool.", StringComparison.Ordinal) ||
-                 id.Contains("Tests.", StringComparison.Ordinal)) &&
-                name.Contains(id, StringComparison.Ordinal))
             {
                 return true;
             }
