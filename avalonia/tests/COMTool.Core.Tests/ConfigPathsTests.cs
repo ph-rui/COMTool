@@ -13,45 +13,58 @@ public sealed class ConfigPathsTests
     [Fact]
     public void CP01_AvaloniaOverrideWins()
     {
-        using var env = new EnvScope("COMTOOL_AVALONIA_CONFIG_DIR", "/tmp/comtool-test-av");
-        Assert.Equal("/tmp/comtool-test-av", Normalize(ConfigPaths.AvaloniaConfigDirectory()));
-        Assert.NotEqual("/tmp/comtool-test-av", Normalize(ConfigPaths.PythonConfigDirectory()));
+        var expected = Path.Combine(Path.GetTempPath(), "comtool-test-av");
+        using var env = new EnvScope("COMTOOL_AVALONIA_CONFIG_DIR", expected);
+        Assert.Equal(Normalize(expected), Normalize(ConfigPaths.AvaloniaConfigDirectory()));
+        Assert.NotEqual(Normalize(expected), Normalize(ConfigPaths.PythonConfigDirectory()));
     }
 
     [Fact]
     public void CP02_PythonOverrideWins()
     {
-        using var env = new EnvScope("COMTOOL_PYTHON_CONFIG_DIR", "/tmp/comtool-test-py");
-        Assert.Equal("/tmp/comtool-test-py", Normalize(ConfigPaths.PythonConfigDirectory()));
+        var expected = Path.Combine(Path.GetTempPath(), "comtool-test-py");
+        using var env = new EnvScope("COMTOOL_PYTHON_CONFIG_DIR", expected);
+        Assert.Equal(Normalize(expected), Normalize(ConfigPaths.PythonConfigDirectory()));
     }
 
     [Fact]
     public void CP03_EmptyOverrideFallsBack()
     {
         using var env = new EnvScope("COMTOOL_AVALONIA_CONFIG_DIR", "   ");
-        Assert.EndsWith("comtool-avalonia", Normalize(ConfigPaths.AvaloniaConfigDirectory()));
+        Assert.EndsWith(
+            "comtool-avalonia",
+            Normalize(ConfigPaths.AvaloniaConfigDirectory()),
+            StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
     public void CP04_RelativeOverrideIsAbsolute()
     {
         using var env = new EnvScope("COMTOOL_AVALONIA_CONFIG_DIR", "relative-config");
-        Assert.True(Path.IsPathRooted(ConfigPaths.AvaloniaConfigDirectory()));
+        Assert.Equal(
+            Normalize(Path.GetFullPath("relative-config")),
+            Normalize(ConfigPaths.AvaloniaConfigDirectory()));
     }
 
     [Fact]
     public void CP05_DefaultDirectoriesStaySeparate()
     {
+        using var avaloniaEnv = new EnvScope("COMTOOL_AVALONIA_CONFIG_DIR", null);
+        using var pythonEnv = new EnvScope("COMTOOL_PYTHON_CONFIG_DIR", null);
+
         Assert.NotEqual(
             Normalize(ConfigPaths.AvaloniaConfigDirectory()),
             Normalize(ConfigPaths.PythonConfigDirectory()));
     }
 
-    [Fact]
-    public void CP06_OverrideWithSpacesIsPreserved()
+    [Theory]
+    [InlineData("comtool test config")]
+    [InlineData("comtool 测试 配置")]
+    public void CP06_OverrideWithSpacesAndUnicodeIsPreserved(string directoryName)
     {
-        using var env = new EnvScope("COMTOOL_AVALONIA_CONFIG_DIR", "/tmp/comtool test config");
-        Assert.Equal("/tmp/comtool test config", Normalize(ConfigPaths.AvaloniaConfigDirectory()));
+        var expected = Path.Combine(Path.GetTempPath(), directoryName);
+        using var env = new EnvScope("COMTOOL_AVALONIA_CONFIG_DIR", expected);
+        Assert.Equal(Normalize(expected), Normalize(ConfigPaths.AvaloniaConfigDirectory()));
     }
 
     private static string Normalize(string path) =>
