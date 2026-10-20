@@ -111,7 +111,9 @@ the first pointer move into the content area, sidebar reopens when the pointer
 moves left of the session-list frame's red edge and retracts only after
 crossing its green edge, with both trigger points following sidebar resize,
 SSH shell exit/tab close followed by a terminal layout resize no longer
-accessing the disposed shell stream, sidebar expanded on every launch, serial
+accessing the disposed shell stream, MobaXterm-style stopped SSH sessions with
+Enter to close, R to restart in place and S to save the full scrollback, sidebar
+expanded on every launch, serial
 sessions retained across
 unplug/replug with open serial tabs reopened automatically, multiple
 independent connections from one saved SSH session, PTY-preserving tab
@@ -124,8 +126,8 @@ ReadyToRun release build) was published over SSH and copied to:
 - `C:\Users\zhangrui\COMTool-Avalonia.exe` (working copy)
 - `D:\Users\zhangrui\Desktop\COMTool-Avalonia.exe` (desktop copy)
 
-- size: 175,784,368 bytes;
-- SHA256: `BD0033CA005999FCB35FB80B6D446480FF169C1D69B8C492F4A181AD909E4046`;
+- size: 175,849,904 bytes;
+- SHA256: `3F76716D55ED76314C77E0583AA1CF0138FB7C9B5224D35CEEDCB900CE9F79BD`;
 - both remote copies matched that hash via `Get-FileHash`.
 
 The old `COMTool-Avalonia` process was stopped before the copies were replaced.
@@ -133,15 +135,20 @@ No `COMTool-Avalonia.exe.bak-*` files were created or retained. The working
 copy was launched again after deployment and remained alive/responding; the
 desktop app must be launched again to exercise this build interactively.
 
-The release zip is 74,795,557 bytes and is validated with SHA256:
+This was a direct executable deployment over the existing working and desktop
+copies, not a formal packaged release. No new candidate zip was created or
+signed off for this build.
+
+The previously packaged release zip is 74,795,557 bytes with SHA256:
 
 ```text
 b1a301ceac491a5aa707103416c4861a43b86db22552558ab8a715815aafb436
 ```
 
-That hash is from the local packaging run and changes whenever the app is
-rebuilt. Linux warm-start measurements took the packaged app from 1.54 s to
-0.66-0.70 s; Windows startup still needs confirmation on the target desktop.
+That hash is from the earlier packaging run and does not include the stopped
+SSH session change; it changes whenever the app is rebuilt. Linux warm-start
+measurements took the packaged app from 1.54 s to 0.66-0.70 s; Windows startup
+still needs confirmation on the target desktop.
 
 ## Signing
 

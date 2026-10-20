@@ -23,6 +23,7 @@ E2E_TESTS=(
     UI02_SidebarExpandsOnLaunchE2E
     UI02_SidebarAutoHideE2E
     E2E01_OpenSshSession
+    SSH11_RestartStoppedSessionE2E
     SSH06_MultipleConnectionsE2E
     UI05_TabSwitchTypingBothDirections
     TERM15_DoubleClickMaximizeE2E
@@ -32,6 +33,7 @@ SSH_TEST_IDS=(
     UI02_SidebarExpandsOnLaunchE2E
     UI02_SidebarAutoHideE2E
     E2E01_OpenSshSession
+    SSH11_RestartStoppedSessionE2E
     SSH06_MultipleConnectionsE2E
     UI05_TabSwitchTypingBothDirections
     TERM15_DoubleClickMaximizeE2E
@@ -435,6 +437,61 @@ run_e2e01_open_ssh() {
     pass "$test_id"
 }
 
+run_ssh11_restart_stopped_session() {
+    local test_id="SSH11_RestartStoppedSessionE2E"
+    local old_pid
+    local new_pid
+    local marker="$TMP_ROOT/ssh11-restarted"
+    local attempt
+
+    log "Running $test_id"
+    ensure_first_shell "$test_id"
+    old_pid="$SHELL_A_PID"
+    [[ -n "$old_pid" ]] || fail "$test_id" "first shell PID is empty"
+
+    # End the remote shell exactly as a user would. The tab must stay open
+    # with the MobaXterm-style stopped screen instead of exiting the app.
+    type_text "exit" || fail "$test_id" "could not type exit"
+    press_enter || fail "$test_id" "could not submit exit"
+
+    for ((attempt = 0; attempt < 100; attempt++)); do
+        if ! kill -0 "$old_pid" 2>/dev/null; then
+            break
+        fi
+        sleep 0.1
+    done
+    if kill -0 "$old_pid" 2>/dev/null; then
+        fail "$test_id" "shell $old_pid did not exit after exit"
+    fi
+
+    # Click the terminal to guarantee focus, then press R without Enter. If
+    # the stopped-screen handler is missing this is delivered to the dead PTY
+    # and no new shell appears.
+    click_window 600 300 || fail "$test_id" "could not focus the stopped terminal"
+    type_text "r" || fail "$test_id" "could not press R"
+
+    rm -f -- "$marker"
+    if ! run_command_until_marker \
+        "echo \$\$ > $SHELL_A_PID_FILE && touch $marker" \
+        "$marker" 20; then
+        fail "$test_id" "R did not restart the stopped SSH session"
+    fi
+
+    new_pid="$(read_pid_file "$SHELL_A_PID_FILE")"
+    [[ -n "$new_pid" ]] || fail "$test_id" "restarted shell PID is empty"
+    [[ "$new_pid" != "$old_pid" ]] \
+        || fail "$test_id" "restart reused the stopped shell PID $old_pid"
+    SHELL_A_PID="$new_pid"
+
+    # Focusing the terminal moved the pointer into the content area and
+    # auto-hid the sidebar. Reopen it for the shared-app tests that follow.
+    xdotool mousemove --window "$WINDOW_ID" 25 300 >/dev/null 2>&1 || true
+    wait_for_sidebar_visible 5 \
+        || fail "$test_id" "sidebar did not reopen after the restart test"
+
+    pass "$test_id"
+}
+
 run_ssh06_multiple_connections() {
     local test_id="SSH06_MultipleConnectionsE2E"
     local shell_a
@@ -647,6 +704,9 @@ if [[ -n "$SSH_TEST_ID" ]]; then
     fi
     if matches_filter "E2E01_OpenSshSession"; then
         run_e2e01_open_ssh
+    fi
+    if matches_filter "SSH11_RestartStoppedSessionE2E"; then
+        run_ssh11_restart_stopped_session
     fi
     if matches_filter "SSH06_MultipleConnectionsE2E"; then
         run_ssh06_multiple_connections

@@ -58,14 +58,14 @@ geometry. These are functional evidence images, not final pixel baselines.
 
 ## Automated test-gate coverage (2026-10-20)
 
-`docs/testing/feature-test-matrix.md` now maps all 89 parity rows. The gate
+`docs/testing/feature-test-matrix.md` now maps all 90 parity rows. The gate
 passes in `verify` and `package` phases on Linux, and the structure also passes
-for Windows/macOS. The suite is 204 tests:
+for Windows/macOS. The suite is 208 tests:
 
-- Core 41, Connections 37, Terminal 11, ZMODEM 32, TestGate 49, App 33.
+- Core 41, Connections 38, Terminal 11, ZMODEM 32, TestGate 49, App 37.
 - Linux Xvfb E2E: `APP01_SmokeLaunchE2E`,
   `UI02_SidebarExpandsOnLaunchE2E`, `UI02_SidebarAutoHideE2E`,
-  `E2E01_OpenSshSession`,
+  `E2E01_OpenSshSession`, `SSH11_RestartStoppedSessionE2E`,
   `SSH06_MultipleConnectionsE2E`, `UI05_TabSwitchTypingBothDirections`,
   `TERM15_DoubleClickMaximizeE2E`.
 - Candidate package smoke: `PKG01_CandidateSmoke`.

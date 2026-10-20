@@ -41,6 +41,7 @@ public partial class MainWindow : Window
     private readonly Dictionary<TerminalTab, ZmodemStream> _zmodemStreams = new();
     private readonly Dictionary<TerminalTab, DetachedTabState> _detachedTabs = new();
     private readonly Dictionary<TerminalTab, SerialTabState> _serialTabs = new();
+    private readonly HashSet<TerminalTab> _sshRestarts = new();
 
     internal Func<SerialConnectionConfig, ISerialConnection> SerialConnectionFactory { get; set; } =
         config => SerialConnection.Open(config);
@@ -656,58 +657,10 @@ public partial class MainWindow : Window
             throw new InvalidOperationException($"SSH session {key} was not found.");
         }
 
-        string? password = null;
-        var remember = false;
-        if (string.IsNullOrWhiteSpace(session.SshKey))
+        var connection = await ConnectSshSessionAsync(session, this);
+        if (connection is null)
         {
-            password = _config.PasswordCache.Get(session.Key);
-            if (string.IsNullOrEmpty(password))
-            {
-                password = SecretProtector.Unprotect(session.EncryptedPassword);
-            }
-        }
-
-        SshConnection connection;
-        for (var attempt = 0; ; attempt++)
-        {
-            if (string.IsNullOrWhiteSpace(session.SshKey) && string.IsNullOrEmpty(password))
-            {
-                var dialog = new SshPasswordDialog(SshSessionRules.Detail(session));
-                var accepted = await dialog.ShowDialog<bool>(this);
-                if (!accepted)
-                {
-                    return;
-                }
-
-                password = dialog.Password;
-                remember = dialog.Remember;
-            }
-
-            try
-            {
-                connection = SshConnection.Connect(new SshConnectionOptions(
-                    session.Host,
-                    session.Port,
-                    session.User,
-                    Password: password,
-                    KeyFile: session.SshKey,
-                    Columns: 100,
-                    Rows: 30));
-                break;
-            }
-            catch (Renci.SshNet.Common.SshAuthenticationException)
-                when (string.IsNullOrWhiteSpace(session.SshKey) && attempt < 2)
-            {
-                _config.PasswordCache.Remove(session.Key);
-                password = null;
-                remember = false;
-            }
-        }
-
-        _config.PasswordCache.Set(session.Key, password);
-        if (remember && !string.IsNullOrEmpty(password))
-        {
-            _config.RememberSshPassword(session, password, remember: true);
+            return;
         }
 
         var terminal = CreateTerminal();
@@ -717,25 +670,18 @@ public partial class MainWindow : Window
             SessionId = session.Key,
             Kind = SessionKind.Ssh,
             Content = terminal,
-            Connection = connection,
             StatusMessage = $"Connected {SshSessionRules.Detail(session)}",
-            IsTransportOpen = () => connection.IsConnected,
-            CloseAction = () =>
-            {
-                try
-                {
-                    terminal.DetachConnection();
-                }
-                catch
-                {
-                    // The template may not have been applied if opening failed.
-                }
-
-                connection.Dispose();
-            },
         };
+        AttachSshTransport(tab, terminal, connection);
 
-        SubscribeZmodem(tab, connection.Pty.Zmodem);
+        var stoppedBehavior = new SessionStoppedBehavior(
+            terminal,
+            tab,
+            () => CloseTab(tab),
+            () => RestartSshSessionAsync(tab),
+            () => SaveStoppedTerminalOutputAsync(tab));
+        stoppedBehavior.Attach();
+
         var terminalAttached = false;
         terminal.AttachedToVisualTree += (_, _) =>
             Dispatcher.UIThread.Post(
@@ -747,21 +693,308 @@ public partial class MainWindow : Window
                     }
 
                     terminalAttached = true;
+                    if (!ReferenceEquals(tab.Connection, connection))
+                    {
+                        return;
+                    }
+
                     AttachTerminal(tab, terminal, connection.Pty);
                     FocusTerminalWhenSelected(tab, terminal);
                 },
                 DispatcherPriority.Loaded);
+
+        viewModel.AddTab(tab);
+        UpdateConnectionStates();
+    }
+
+    private async Task<SshConnection?> ConnectSshSessionAsync(
+        SshSession session,
+        Window owner)
+    {
+        if (_config is null)
+        {
+            return null;
+        }
+
+        string? password = null;
+        var remember = false;
+        if (string.IsNullOrWhiteSpace(session.SshKey))
+        {
+            password = _config.PasswordCache.Get(session.Key);
+            if (string.IsNullOrEmpty(password))
+            {
+                password = SecretProtector.Unprotect(session.EncryptedPassword);
+            }
+        }
+
+        for (var attempt = 0; ; attempt++)
+        {
+            if (string.IsNullOrWhiteSpace(session.SshKey) && string.IsNullOrEmpty(password))
+            {
+                var dialog = new SshPasswordDialog(SshSessionRules.Detail(session));
+                var accepted = await dialog.ShowDialog<bool>(owner);
+                if (!accepted)
+                {
+                    return null;
+                }
+
+                password = dialog.Password;
+                remember = dialog.Remember;
+            }
+
+            try
+            {
+                var connection = SshConnection.Connect(new SshConnectionOptions(
+                    session.Host,
+                    session.Port,
+                    session.User,
+                    Password: password,
+                    KeyFile: session.SshKey,
+                    Columns: 100,
+                    Rows: 30));
+                _config.PasswordCache.Set(session.Key, password);
+                if (remember && !string.IsNullOrEmpty(password))
+                {
+                    _config.RememberSshPassword(session, password, remember: true);
+                }
+
+                return connection;
+            }
+            catch (Renci.SshNet.Common.SshAuthenticationException)
+                when (string.IsNullOrWhiteSpace(session.SshKey) && attempt < 2)
+            {
+                _config.PasswordCache.Remove(session.Key);
+                password = null;
+                remember = false;
+            }
+        }
+    }
+
+    private void AttachSshTransport(
+        TerminalTab tab,
+        TerminalControl terminal,
+        SshConnection connection)
+    {
+        tab.Connection = connection;
+        tab.IsTransportOpen = () => connection.IsConnected;
+        tab.CloseAction = () =>
+        {
+            try
+            {
+                terminal.DetachConnection();
+            }
+            catch
+            {
+                // The template may not have been applied if opening failed.
+            }
+
+            connection.Dispose();
+        };
+
+        SubscribeZmodem(tab, connection.Pty.Zmodem);
         connection.Pty.ProcessExited += (_, _) => Dispatcher.UIThread.Post(() =>
         {
+            if (!ReferenceEquals(tab.Connection, connection))
+            {
+                return;
+            }
+
             tab.IsAlive = false;
-            tab.StatusMessage = "Connection lose";
+            tab.IsSessionStopped = true;
+            tab.StatusMessage = "Session stopped";
             tab.StatusBrush = StatusWarningBrush;
             tab.TabDotBrush = StatusWarningBrush;
             UpdateConnectionStates();
         });
+    }
 
-        viewModel.AddTab(tab);
-        UpdateConnectionStates();
+    private async Task RestartSshSessionAsync(TerminalTab tab)
+    {
+        if (_config is null
+            || tab.Kind != SessionKind.Ssh
+            || !_sshRestarts.Add(tab))
+        {
+            return;
+        }
+
+        var terminal = tab.Content as TerminalControl;
+        SshConnection? connection = null;
+        try
+        {
+            if (!IsTabOpen(tab))
+            {
+                return;
+            }
+
+            var session = _config.SshSessions.Get(tab.SessionId);
+            if (session is null)
+            {
+                tab.StatusMessage = "SSH session not found";
+                tab.StatusBrush = StatusErrorBrush;
+                return;
+            }
+
+            tab.StatusMessage = $"Restarting {SshSessionRules.Detail(session)}...";
+            tab.StatusBrush = StatusProgressBrush;
+
+            connection = await ConnectSshSessionAsync(session, OwnerFor(tab));
+            if (connection is null)
+            {
+                tab.StatusMessage = "Session stopped";
+                tab.StatusBrush = StatusWarningBrush;
+                if (terminal is not null)
+                {
+                    RestoreStoppedTerminalFocus(tab, terminal);
+                }
+
+                return;
+            }
+
+            if (!_sshRestarts.Contains(tab) || !IsTabOpen(tab) || terminal is null)
+            {
+                connection.Dispose();
+                return;
+            }
+
+            var previousClose = tab.CloseAction;
+            AttachSshTransport(tab, terminal, connection);
+            try
+            {
+                terminal.DetachConnection();
+            }
+            catch
+            {
+                // The old shell may already have torn down its view.
+            }
+
+            try
+            {
+                previousClose?.Invoke();
+            }
+            catch
+            {
+                // The old transport is already gone.
+            }
+
+            terminal.ClearScreen();
+            terminal.AttachConnection(connection.Pty);
+            tab.IsAlive = true;
+            tab.IsSessionStopped = false;
+            tab.StatusMessage = $"Connected {SshSessionRules.Detail(session)}";
+            tab.StatusBrush = StatusInfoBrush;
+            tab.TabDotBrush = StatusInfoBrush;
+            UpdateConnectionStates();
+            RestoreStoppedTerminalFocus(tab, terminal);
+        }
+        catch (Exception ex)
+        {
+            if (connection is not null && ReferenceEquals(tab.Connection, connection))
+            {
+                try
+                {
+                    terminal?.DetachConnection();
+                }
+                catch
+                {
+                    // The new shell may already have failed during attach.
+                }
+
+                connection.Dispose();
+                tab.Connection = null;
+                tab.CloseAction = null;
+                tab.IsTransportOpen = null;
+            }
+
+            tab.IsAlive = false;
+            tab.IsSessionStopped = true;
+            tab.StatusMessage = $"Restart failed: {ex.Message}";
+            tab.StatusBrush = StatusErrorBrush;
+            tab.TabDotBrush = StatusWarningBrush;
+            AppLog.Error($"SSH restart failed for {tab.SessionId}", ex);
+            if (terminal is not null)
+            {
+                RestoreStoppedTerminalFocus(tab, terminal);
+            }
+        }
+        finally
+        {
+            _sshRestarts.Remove(tab);
+        }
+    }
+
+    private async Task SaveStoppedTerminalOutputAsync(TerminalTab tab)
+    {
+        if (tab.Content is not TerminalControl terminal)
+        {
+            return;
+        }
+
+        var owner = OwnerFor(tab);
+        try
+        {
+            var file = await owner.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = "Save terminal output",
+                SuggestedFileName = $"{SafeFileName(tab.Title)}-{DateTime.Now:yyyyMMdd-HHmmss}.txt",
+                DefaultExtension = "txt",
+            });
+            if (file is null)
+            {
+                return;
+            }
+
+            await using var stream = await file.OpenWriteAsync();
+            if (stream.CanSeek)
+            {
+                stream.SetLength(0);
+            }
+
+            await TerminalTranscript.SaveAsync(terminal, stream);
+            tab.StatusMessage = $"Saved terminal output: {file.Name}";
+            tab.StatusBrush = StatusInfoBrush;
+        }
+        catch (Exception ex)
+        {
+            tab.StatusMessage = $"Save failed: {ex.Message}";
+            tab.StatusBrush = StatusErrorBrush;
+            AppLog.Error("Failed to save terminal output", ex);
+        }
+        finally
+        {
+            RestoreStoppedTerminalFocus(tab, terminal);
+        }
+    }
+
+    private bool IsTabOpen(TerminalTab tab) =>
+        (DataContext is MainViewModel viewModel && viewModel.Tabs.Contains(tab))
+        || _detachedTabs.ContainsKey(tab);
+
+    private Window OwnerFor(TerminalTab tab) =>
+        _detachedTabs.TryGetValue(tab, out var state) ? state.Window : this;
+
+    private void RestoreStoppedTerminalFocus(TerminalTab tab, TerminalControl terminal)
+    {
+        if (!IsTabOpen(tab))
+        {
+            return;
+        }
+
+        if (_detachedTabs.ContainsKey(tab))
+        {
+            terminal.Focus();
+            return;
+        }
+
+        FocusTerminalWhenSelected(tab, terminal);
+    }
+
+    private static string SafeFileName(string name)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        var sanitized = new string(name.Select(character =>
+            invalid.Contains(character) ? '_' : character).ToArray());
+        sanitized = sanitized.Trim();
+        return string.IsNullOrEmpty(sanitized) ? "terminal-output" : sanitized;
     }
 
     private static bool IsTabConnected(TerminalTab tab) =>
@@ -1407,6 +1640,7 @@ public partial class MainWindow : Window
             // The transport may already be gone with its detached window.
         }
 
+        _sshRestarts.Remove(tab);
         tab.IsAlive = false;
         tab.IsZmodemActive = false;
         _zmodemTimings.Remove(tab);
@@ -1459,6 +1693,7 @@ public partial class MainWindow : Window
             // Closing a half-open transport must not keep the tab alive.
         }
 
+        _sshRestarts.Remove(tab);
         tab.IsAlive = false;
         tab.IsZmodemActive = false;
         _zmodemTimings.Remove(tab);
