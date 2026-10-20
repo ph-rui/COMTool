@@ -130,11 +130,22 @@
 
             <Grid Name="TcpPanel"
                   ColumnDefinitions="86,*"
-                  RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                  RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
                   RowSpacing="6"
                   IsVisible="False">
-              <TextBlock Grid.Row="0" Grid.Column="0" Text="Mode" VerticalAlignment="Center" />
+              <TextBlock Grid.Row="0" Grid.Column="0" Text="Protocol" VerticalAlignment="Center" />
               <ComboBox Grid.Row="0" Grid.Column="1"
+                        Name="TcpProtocolCombo"
+                        Width="155"
+                        Height="28"
+                        HorizontalAlignment="Left"
+                        SelectionChanged="OnTcpProtocolChanged">
+                <ComboBoxItem Content="TCP" />
+                <ComboBoxItem Content="UDP" />
+              </ComboBox>
+
+              <TextBlock Grid.Row="1" Grid.Column="0" Text="Mode" VerticalAlignment="Center" />
+              <ComboBox Grid.Row="1" Grid.Column="1"
                         Name="TcpModeCombo"
                         Width="155"
                         Height="28"
@@ -144,23 +155,23 @@
                 <ComboBoxItem Content="Server" />
               </ComboBox>
 
-              <TextBlock Grid.Row="1" Grid.Column="0"
+              <TextBlock Grid.Row="2" Grid.Column="0"
                          Name="TcpTargetLabel"
                          Text="Target"
                          VerticalAlignment="Center" />
-              <TextBox Grid.Row="1" Grid.Column="1"
+              <TextBox Grid.Row="2" Grid.Column="1"
                        Name="TcpTargetBox"
                        Width="155"
                        Height="28"
                        HorizontalAlignment="Left"
                        Text="127.0.0.1:2345" />
 
-              <TextBlock Grid.Row="2" Grid.Column="0"
+              <TextBlock Grid.Row="3" Grid.Column="0"
                          Name="TcpPortLabel"
                          Text="Port"
                          VerticalAlignment="Center"
                          IsVisible="False" />
-              <TextBox Grid.Row="2" Grid.Column="1"
+              <TextBox Grid.Row="3" Grid.Column="1"
                        Name="TcpPortBox"
                        Width="155"
                        Height="28"
@@ -168,23 +179,47 @@
                        Text="2345"
                        IsVisible="False" />
 
-              <TextBlock Grid.Row="3" Grid.Column="0"
+              <TextBlock Grid.Row="4" Grid.Column="0"
                          Name="TcpLocalLabel"
                          Text="Local"
                          VerticalAlignment="Center" />
-              <TextBox Grid.Row="3" Grid.Column="1"
+              <TextBox Grid.Row="4" Grid.Column="1"
                        Name="TcpLocalBox"
                        Width="155"
                        Height="28"
                        HorizontalAlignment="Left"
                        IsReadOnly="True" />
 
-              <TextBlock Grid.Row="4" Grid.Column="0"
+              <TextBlock Grid.Row="5" Grid.Column="0"
+                         Name="TcpAutoReconnectLabel"
+                         Text="Auto reconnect"
+                         VerticalAlignment="Center"
+                         IsVisible="False" />
+              <CheckBox Grid.Row="5" Grid.Column="1"
+                        Name="TcpAutoReconnectCheck"
+                        Content="Enable"
+                        HorizontalAlignment="Left"
+                        IsVisible="False" />
+
+              <TextBlock Grid.Row="6" Grid.Column="0"
+                         Name="TcpReconnectIntervalLabel"
+                         Text="Interval (s)"
+                         VerticalAlignment="Center"
+                         IsVisible="False" />
+              <TextBox Grid.Row="6" Grid.Column="1"
+                       Name="TcpReconnectIntervalBox"
+                       Width="155"
+                       Height="28"
+                       HorizontalAlignment="Left"
+                       Text="1.0"
+                       IsVisible="False" />
+
+              <TextBlock Grid.Row="7" Grid.Column="0"
                          Name="TcpClientsLabel"
                          Text="Clients"
                          VerticalAlignment="Center"
                          IsVisible="False" />
-              <ComboBox Grid.Row="4" Grid.Column="1"
+              <ComboBox Grid.Row="7" Grid.Column="1"
                         Name="TcpClientsCombo"
                         Width="155"
                         Height="28"
@@ -192,7 +227,7 @@
                         IsVisible="False"
                         SelectionChanged="OnTcpClientSelectionChanged" />
 
-              <Button Grid.Row="5" Grid.Column="1"
+              <Button Grid.Row="8" Grid.Column="1"
                       Name="TcpDisconnectButton"
                       Content="Disconnect"
                       Width="155"
@@ -201,7 +236,7 @@
                       IsVisible="False"
                       Click="OnTcpDisconnectClick" />
 
-              <Button Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="2"
+              <Button Grid.Row="9" Grid.Column="0" Grid.ColumnSpan="2"
                       Content="OPEN"
                       Height="30"
                       HorizontalAlignment="Stretch"

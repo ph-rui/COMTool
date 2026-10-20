@@ -101,10 +101,13 @@ public partial class ConnectionSettingsWindow : Window
 
     private void PopulateTcpDefaults()
     {
+        TcpProtocolCombo.SelectedIndex = 0;
         TcpModeCombo.SelectedIndex = 0;
         TcpTargetBox.Text = $"127.0.0.1:{TcpSessionRules.DefaultPort}";
         TcpPortBox.Text = TcpSessionRules.DefaultPort.ToString();
         TcpLocalBox.Text = "";
+        TcpAutoReconnectCheck.IsChecked = false;
+        TcpReconnectIntervalBox.Text = "1.0";
         TcpClientsCombo.ItemsSource = new[] { AllTcpClients };
         TcpClientsCombo.SelectedIndex = 0;
         TcpDisconnectButton.IsEnabled = false;
@@ -172,12 +175,18 @@ public partial class ConnectionSettingsWindow : Window
             var session = _config.TcpSessions.Get(_currentTab.SessionId);
             if (session is not null)
             {
+                TcpProtocolCombo.SelectedIndex =
+                    TcpSessionRules.NormalizeProtocol(session.Protocol) == TcpSessionRules.UdpProtocol
+                        ? 1
+                        : 0;
                 TcpModeCombo.SelectedIndex =
                     TcpSessionRules.NormalizeMode(session.Mode) == TcpSessionRules.ServerMode
                         ? 1
                         : 0;
                 TcpTargetBox.Text = session.Target;
                 TcpPortBox.Text = session.Port.ToString();
+                TcpAutoReconnectCheck.IsChecked = session.AutoReconnect;
+                TcpReconnectIntervalBox.Text = session.ReconnectInterval.ToString("0.###");
             }
 
             if (_currentTab.Connection is ITcpSession tcp)
@@ -208,17 +217,26 @@ public partial class ConnectionSettingsWindow : Window
 
     private void UpdateTcpFields()
     {
+        var isUdp = TcpProtocolCombo.SelectedIndex == 1;
         var isServer = TcpModeCombo.SelectedIndex == 1;
         TcpTargetLabel.IsVisible = !isServer;
         TcpTargetBox.IsVisible = !isServer;
         TcpPortLabel.IsVisible = isServer;
         TcpPortBox.IsVisible = isServer;
-        TcpLocalLabel.IsVisible = !isServer;
-        TcpLocalBox.IsVisible = !isServer;
-        TcpClientsLabel.IsVisible = isServer;
-        TcpClientsCombo.IsVisible = isServer;
-        TcpDisconnectButton.IsVisible = isServer;
+        TcpPortLabel.Text = isUdp ? "Local port" : "Port";
+        TcpLocalLabel.IsVisible = !isUdp && !isServer;
+        TcpLocalBox.IsVisible = !isUdp && !isServer;
+        TcpClientsLabel.IsVisible = !isUdp && isServer;
+        TcpClientsCombo.IsVisible = !isUdp && isServer;
+        TcpDisconnectButton.IsVisible = !isUdp && isServer;
+        TcpAutoReconnectLabel.IsVisible = !isUdp && !isServer;
+        TcpAutoReconnectCheck.IsVisible = !isUdp && !isServer;
+        TcpReconnectIntervalLabel.IsVisible = !isUdp && !isServer;
+        TcpReconnectIntervalBox.IsVisible = !isUdp && !isServer;
     }
+
+    private void OnTcpProtocolChanged(object? sender, SelectionChangedEventArgs e) =>
+        UpdateTcpFields();
 
     private async void OnBrowseKeyClick(object? sender, RoutedEventArgs e)
     {
@@ -255,7 +273,9 @@ public partial class ConnectionSettingsWindow : Window
             var action = ConnectionTypeCombo.SelectedIndex switch
             {
                 1 => "Connect Failed",
-                2 => TcpModeCombo.SelectedIndex == 1 ? "Open Failed" : "Connect Failed",
+                2 => TcpProtocolCombo.SelectedIndex == 1 || TcpModeCombo.SelectedIndex == 1
+                    ? "Open Failed"
+                    : "Connect Failed",
                 _ => "Open Failed",
             };
             await _showError($"{action}\n{ex.Message}");
@@ -342,12 +362,29 @@ public partial class ConnectionSettingsWindow : Window
 
     private async Task OpenTcpAsync()
     {
+        var isUdp = TcpProtocolCombo.SelectedIndex == 1;
         var isServer = TcpModeCombo.SelectedIndex == 1;
+        var protocol = isUdp ? TcpSessionRules.UdpProtocol : TcpSessionRules.TcpProtocol;
         var mode = isServer ? TcpSessionRules.ServerMode : TcpSessionRules.ClientMode;
         var target = "";
         int port;
 
-        if (isServer)
+        if (isUdp)
+        {
+            if (!TcpTarget.TryParse(TcpTargetBox.Text, out var parsed) || parsed is null)
+            {
+                throw new InvalidOperationException("Target must be host[:port].");
+            }
+
+            if (!int.TryParse(TcpPortBox.Text?.Trim(), out port)
+                || !TcpSessionRules.IsValidPort(port))
+            {
+                throw new InvalidOperationException("Local port must be between 1 and 65535.");
+            }
+
+            target = parsed.ToString();
+        }
+        else if (isServer)
         {
             if (!int.TryParse(TcpPortBox.Text?.Trim(), out port)
                 || !TcpSessionRules.IsValidPort(port))
@@ -366,7 +403,25 @@ public partial class ConnectionSettingsWindow : Window
             port = parsed.Port;
         }
 
-        var session = _config.TcpSessions.Upsert(mode, target, port);
+        var autoReconnect = false;
+        var reconnectInterval = 1.0;
+        if (!isUdp && !isServer)
+        {
+            autoReconnect = TcpAutoReconnectCheck.IsChecked == true;
+            if (!double.TryParse(TcpReconnectIntervalBox.Text?.Trim(), out reconnectInterval)
+                || reconnectInterval <= 0)
+            {
+                throw new InvalidOperationException("Reconnect interval must be a positive number of seconds.");
+            }
+        }
+
+        var session = _config.TcpSessions.Upsert(
+            protocol,
+            mode,
+            target,
+            port,
+            autoReconnect,
+            reconnectInterval);
         if (session is null)
         {
             throw new InvalidOperationException("Could not save the TCP session.");

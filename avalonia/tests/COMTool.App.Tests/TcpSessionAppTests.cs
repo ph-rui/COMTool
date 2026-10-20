@@ -66,6 +66,28 @@ public sealed class TcpSessionAppTests
                 type.SelectedIndex = 2;
                 Dispatcher.UIThread.RunJobs();
                 Assert.True(tcpPanel.IsVisible);
+
+                var protocol = window.FindControl<ComboBox>("TcpProtocolCombo")!;
+                var port = window.FindControl<TextBox>("TcpPortBox")!;
+                var clients = window.FindControl<ComboBox>("TcpClientsCombo")!;
+                var autoReconnect = window.FindControl<CheckBox>("TcpAutoReconnectCheck")!;
+                protocol.SelectedIndex = 1;
+                Dispatcher.UIThread.RunJobs();
+                Assert.False(port.IsVisible);
+                Assert.False(clients.IsVisible);
+                Assert.False(autoReconnect.IsVisible);
+
+                protocol.SelectedIndex = 0;
+                var mode = window.FindControl<ComboBox>("TcpModeCombo")!;
+                mode.SelectedIndex = 1;
+                Dispatcher.UIThread.RunJobs();
+                Assert.True(port.IsVisible);
+                Assert.True(clients.IsVisible);
+                Assert.False(autoReconnect.IsVisible);
+
+                mode.SelectedIndex = 0;
+                Dispatcher.UIThread.RunJobs();
+                Assert.True(autoReconnect.IsVisible);
             });
         }
         finally

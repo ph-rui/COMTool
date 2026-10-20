@@ -576,8 +576,13 @@ public partial class MainWindow : Window
     private static bool IsTabConnected(TerminalTab tab) =>
         tab.IsAlive && (tab.IsTransportOpen?.Invoke() ?? true);
 
-    private bool IsTcpServerSession(string key) =>
-        _config?.TcpSessions.Get(key)?.Mode == TcpSessionRules.ServerMode;
+    private bool IsTcpServerSession(string key)
+    {
+        var session = _config?.TcpSessions.Get(key);
+        return session is not null
+            && (TcpSessionRules.NormalizeProtocol(session.Protocol) == TcpSessionRules.UdpProtocol
+                || TcpSessionRules.NormalizeMode(session.Mode) == TcpSessionRules.ServerMode);
+    }
 
     private async Task OpenTcpSessionAsync(string key)
     {
@@ -594,7 +599,19 @@ public partial class MainWindow : Window
 
         ITcpSession connection;
         string status;
-        if (TcpSessionRules.NormalizeMode(session.Mode) == TcpSessionRules.ServerMode)
+        var protocol = TcpSessionRules.NormalizeProtocol(session.Protocol);
+        if (protocol == TcpSessionRules.UdpProtocol)
+        {
+            if (!TcpTarget.TryParse(session.Target, out var target) || target is null)
+            {
+                throw new InvalidOperationException("UDP target must be host[:port].");
+            }
+
+            connection = await UdpSession.CreateAsync(
+                new UdpSessionOptions(target.Host, target.Port, session.Port));
+            status = $"UDP local :{session.Port} -> {target}";
+        }
+        else if (TcpSessionRules.NormalizeMode(session.Mode) == TcpSessionRules.ServerMode)
         {
             connection = new TcpServerSession(new TcpServerOptions(session.Port));
             status = $"Listening on 0.0.0.0:{session.Port}";
@@ -607,7 +624,12 @@ public partial class MainWindow : Window
             }
 
             connection = await TcpClientSession.ConnectAsync(
-                new TcpClientOptions(target.Host, target.Port));
+                new TcpClientOptions(
+                    target.Host,
+                    target.Port,
+                    AutoReconnect: session.AutoReconnect,
+                    ReconnectInterval: TimeSpan.FromSeconds(
+                        TcpSessionRules.NormalizeReconnectInterval(session.ReconnectInterval))));
             status = $"Connected {target}";
         }
 
@@ -637,6 +659,23 @@ public partial class MainWindow : Window
         };
 
         SubscribeZmodem(tab, connection.Pty.Zmodem);
+        if (connection is TcpClientSession client)
+        {
+            client.StatusChanged += (_, args) => Dispatcher.UIThread.Post(() =>
+            {
+                if (!tab.IsAlive)
+                {
+                    return;
+                }
+
+                tab.StatusMessage = args.Message;
+                var brush = args.IsConnected ? StatusInfoBrush : StatusWarningBrush;
+                tab.StatusBrush = brush;
+                tab.TabDotBrush = brush;
+                UpdateConnectionStates();
+            });
+        }
+
         if (connection is TcpServerSession server)
         {
             server.ClientsChanged += (_, _) => Dispatcher.UIThread.Post(() =>
@@ -2317,7 +2356,13 @@ public partial class MainWindow : Window
             {
                 var session = root.Deserialize<TcpSession>()
                     ?? throw new InvalidOperationException("Invalid TCP session config.");
-                if (_config.TcpSessions.Upsert(session.Mode, session.Target, session.Port) is null)
+                if (_config.TcpSessions.Upsert(
+                        session.Protocol,
+                        session.Mode,
+                        session.Target,
+                        session.Port,
+                        session.AutoReconnect,
+                        session.ReconnectInterval) is null)
                 {
                     throw new InvalidOperationException("TCP config has an invalid target or port.");
                 }

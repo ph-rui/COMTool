@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
@@ -108,6 +109,57 @@ public sealed class TcpSessionTests
             .AsTask()
             .WaitAsync(TimeSpan.FromSeconds(5));
         Assert.Equal(0, result);
+    }
+
+    [Fact]
+    public async Task NET04_TcpClientAutoReconnectsAfterPeerClose()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+        try
+        {
+            var firstAccept = listener.AcceptTcpClientAsync();
+            using var session = await TcpClientSession.ConnectAsync(
+                new TcpClientOptions(
+                    "127.0.0.1",
+                    port,
+                    TimeSpan.FromSeconds(5),
+                    AutoReconnect: true,
+                    ReconnectInterval: TimeSpan.FromMilliseconds(100)));
+            using var first = await firstAccept.WaitAsync(TimeSpan.FromSeconds(5));
+
+            var statuses = new ConcurrentQueue<string>();
+            var reconnected = new TaskCompletionSource<bool>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            session.StatusChanged += (_, args) =>
+            {
+                statuses.Enqueue(args.Message);
+                if (args.Message == "Reconnected")
+                {
+                    reconnected.TrySetResult(true);
+                }
+            };
+
+            first.Close();
+            using var second = await listener.AcceptTcpClientAsync()
+                .WaitAsync(TimeSpan.FromSeconds(10));
+            await reconnected.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Contains("Connection lose", statuses);
+            Assert.True(session.IsConnected);
+
+            var secondStream = second.GetStream();
+            await secondStream.WriteAsync(Encoding.UTF8.GetBytes("back"));
+            var received = await ReadExactlyAsync(
+                session.Pty.ReaderStream,
+                4,
+                TimeSpan.FromSeconds(5));
+            Assert.Equal("back", Encoding.UTF8.GetString(received));
+        }
+        finally
+        {
+            listener.Stop();
+        }
     }
 
     private static void WaitUntil(Func<bool> condition, TimeSpan timeout)
