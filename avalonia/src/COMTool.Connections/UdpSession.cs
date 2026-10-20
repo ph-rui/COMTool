@@ -20,7 +20,6 @@ public sealed class UdpSession : ITcpSession
     private readonly IPEndPoint _target;
     private readonly ByteQueueStream _incoming = new();
     private readonly CancellationTokenSource _cancellation = new();
-    private readonly Task _receiveTask;
     private int _closed;
     private int _disposed;
 
@@ -33,7 +32,7 @@ public sealed class UdpSession : ITcpSession
             new UdpWriteStream(this),
             close: CloseTransport,
             ownsStreams: false);
-        _receiveTask = Task.Run(ReceiveLoopAsync);
+        _ = Task.Run(ReceiveLoopAsync);
     }
 
     public PtyStreamConnection Pty { get; }
