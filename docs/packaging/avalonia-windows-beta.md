@@ -107,26 +107,28 @@ sandbox install:
   uninstall (no `-RemoveConfig`).
 
 The latest app binary (version `0.01`, borderless chrome, sidebar auto-hide on
-the first pointer move into the content area, sidebar expanded on every launch,
-serial sessions retained across unplug/replug with open serial tabs reopened
-automatically, multiple independent connections from one saved SSH session,
-PTY-preserving tab switching with immediate terminal input, non-focus-stealing
-chrome controls, centered tool-strip icons, remembered window size,
-encoding-dropdown focus return, automatic terminal focus after opening a
-session, immediate single-character echo, double-click terminal
-maximize/restore, and the ReadyToRun release build) was published over SSH and
-copied to:
+the first pointer move into the content area, sidebar remains open while the
+pointer is anywhere inside its full area including the inner padding and
+session list, sidebar expanded on every launch, serial sessions retained across
+unplug/replug with open serial tabs reopened automatically, multiple
+independent connections from one saved SSH session, PTY-preserving tab
+switching with immediate terminal input, non-focus-stealing chrome controls,
+centered tool-strip icons, remembered window size, encoding-dropdown focus
+return, automatic terminal focus after opening a session, immediate
+single-character echo, double-click terminal maximize/restore, and the
+ReadyToRun release build) was published over SSH and copied to:
 
 - `C:\Users\zhangrui\COMTool-Avalonia.exe` (working copy)
 - `D:\Users\zhangrui\Desktop\COMTool-Avalonia.exe` (desktop copy)
 
-- size: 175,781,701 bytes;
-- SHA256: `79F06E8EF5D58508E605BDBFB0C615C599F5BE1EA88F56C4CEA6CAB8019B090C`;
+- size: 175,780,272 bytes;
+- SHA256: `A008CCDD7A5BFD7C08CAFA6829D42A1145C17CA809233496E995082EB0D03999`;
 - both remote copies matched that hash via `Get-FileHash`.
 
-No old `COMTool-Avalonia` process was running when the copies were replaced.
-No `COMTool-Avalonia.exe.bak-*` files were created or retained. The desktop app
-must be launched again to exercise this build.
+The old `COMTool-Avalonia` process was stopped before the copies were replaced.
+No `COMTool-Avalonia.exe.bak-*` files were created or retained. The working
+copy was launched again after deployment and remained alive/responding; the
+desktop app must be launched again to exercise this build interactively.
 
 The release zip is 74,795,557 bytes and is validated with SHA256:
 
