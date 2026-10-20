@@ -7,6 +7,11 @@
 
 ## 1. 背景
 
+> 后续更新（2026-10-21）：Telnet 已作为第二阶段单独设计并实现，见
+> `docs/superpowers/specs/2026-10-21-comtool-telnet-session-design.md`。本文中
+> “不实现 Telnet”等描述仅代表第一阶段范围。
+
+
 当前 Avalonia 版的两个 `+` 入口照搬 Python 的插件列表：
 
 - `Send Receive - dbg`
@@ -44,10 +49,11 @@
 
 1. `Serial`
 2. `SSH`
-3. `TCP`
-4. `Local terminal`
+3. `Telnet`
+4. `TCP`
+5. `Local terminal`
 
-- `Serial`/`SSH`/`TCP` 复用 `ConnectionSettingsWindow`，通过新增的初始类型参数预选 `ConnectionTypeCombo`。
+- `Serial`/`SSH`/`Telnet`/`TCP` 复用 `ConnectionSettingsWindow`，通过新增的初始类型参数预选 `ConnectionTypeCombo`。
 - `Local terminal` 调用现有 `AddLocalTerminal()`。
 - 后续 MobaXterm 类型在对应传输真正可用后再加入菜单，不使用长期禁用的占位项。
 
@@ -68,8 +74,8 @@
 
 自动化测试位于 `avalonia/tests/COMTool.App.Tests/NewSessionMenuTests.cs`：
 
-- `UI06_NewSessionMenuReplacesPluginEntries`：断言两个 `+` 菜单都只有四项、顺序和标签正确，且不再包含插件项。
-- `UI06_NewSessionSettingsPreselectsRequestedTransport`：断言 Serial/SSH/TCP 初始类型预选到对应设置页，标题为 `New session`。
+- `UI06_NewSessionMenuReplacesPluginEntries`：断言两个 `+` 菜单都只有五项、顺序和标签正确，且不再包含插件项。
+- `UI06_NewSessionSettingsPreselectsRequestedTransport`：断言 Serial/SSH/Telnet/TCP 初始类型预选到对应设置页，标题为 `New session`。
 - `UI06_LocalTerminalEntryAddsLocalTab`：断言本地终端菜单项路由到本地标签，而不是连接设置。
 - `UI07_EmptyStatePointsToNewSession`：断言空状态文案和两个入口的工具提示。
 
@@ -78,7 +84,7 @@
 按“先能用、再扩展”的原则，候选阶段如下；每阶段开始前单独确认，不在本设计内实现：
 
 1. 完成本阶段的会话类型选择器。
-2. 评估 Telnet（可复用 TCP 基础）。
+2. Telnet：已接入 `Serial`/`SSH`/`Telnet`/`TCP`/`Local terminal` 菜单、独立会话存储和自动登录；设计见 `docs/superpowers/specs/2026-10-21-comtool-telnet-session-design.md`。
 3. 评估 SFTP/FTP 文件会话。
 4. 评估本地 Shell/WSL 会话。
 5. 评估 RDP/VNC 等图形会话。
