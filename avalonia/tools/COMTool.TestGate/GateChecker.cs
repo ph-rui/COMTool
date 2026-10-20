@@ -31,6 +31,12 @@ public static class GateChecker
     private static readonly HashSet<string> KnownPlatforms =
         new(StringComparer.OrdinalIgnoreCase) { AllPlatform, "linux", "windows", "macos" };
 
+    private static readonly HashSet<string> OptionPhases =
+        new(StringComparer.OrdinalIgnoreCase) { VerifyPhase, PackagePhase };
+
+    private static readonly HashSet<string> OptionPlatforms =
+        new(StringComparer.OrdinalIgnoreCase) { "linux", "windows", "macos" };
+
     private static readonly string[] ManualReasonPhrases =
     {
         "不能自动化",
@@ -45,6 +51,22 @@ public static class GateChecker
         ArgumentNullException.ThrowIfNull(options);
 
         var errors = new List<string>();
+        var optionPhase = (options.Phase ?? string.Empty).Trim();
+        var optionPlatform = (options.Platform ?? string.Empty).Trim();
+
+        // Validate the selected gate stage before any file or row filtering.
+        if (!OptionPhases.Contains(optionPhase))
+        {
+            errors.Add(
+                $"--phase '{options.Phase}' 无效；允许值为 verify、package。");
+        }
+
+        if (!OptionPlatforms.Contains(optionPlatform))
+        {
+            errors.Add(
+                $"--platform '{options.Platform}' 无效；允许值为 linux、windows、macos。");
+        }
+
         var parity = ParityMatrix.Load(options.ParityPath);
         var matrix = FeatureMatrix.Load(options.MatrixPath);
         var manualIds = ManualAcceptance.Load(options.ManualPath);
@@ -91,6 +113,14 @@ public static class GateChecker
                     $"功能 '{row.Feature}' 的功能测试矩阵 Platform '{row.Platform}' 无效。");
             }
 
+            if (string.Equals(row.Phase.Trim(), ManualPhase, StringComparison.OrdinalIgnoreCase) &&
+                row.Automated.Count > 0)
+            {
+                errors.Add(
+                    $"功能 '{row.Feature}' 的 Phase=manual 行不能声明 Automated 测试" +
+                    $"（{string.Join(", ", row.Automated)}）。");
+            }
+
             foreach (var manualId in row.Manual)
             {
                 if (!manualIds.Contains(manualId))
@@ -122,7 +152,7 @@ public static class GateChecker
 
             EnforceStructure(feature, status, row, errors);
 
-            if (row.Automated.Count > 0 && ShouldResolve(row, options))
+            if (row.Automated.Count > 0 && ShouldResolve(row, optionPhase, optionPlatform))
             {
                 EnforceAutomatedIds(
                     feature, row, testIds, e2eIds, packageIds, errors);
@@ -206,7 +236,7 @@ public static class GateChecker
             phrase => value.Contains(phrase, StringComparison.Ordinal));
     }
 
-    private static bool ShouldResolve(FeatureRow row, GateOptions options)
+    private static bool ShouldResolve(FeatureRow row, string optionPhase, string optionPlatform)
     {
         var phase = row.Phase.Trim();
 
@@ -217,14 +247,14 @@ public static class GateChecker
             return false;
         }
 
-        if (!string.Equals(phase, options.Phase.Trim(), StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(phase, optionPhase, StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
 
         var platform = row.Platform.Trim();
         return string.Equals(platform, AllPlatform, StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(platform, options.Platform.Trim(), StringComparison.OrdinalIgnoreCase);
+               string.Equals(platform, optionPlatform, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsPackageRow(FeatureRow row) =>
