@@ -714,6 +714,49 @@ window_pixel_is_dark() {
     ((r + g + b < 300))
 }
 
+# Wait until the sidebar probe reports the collapsed (dark terminal) state.
+wait_for_sidebar_hidden() {
+    local timeout_s="${1:-5}"
+    local attempt
+    local iterations=$((timeout_s * 10))
+    local status
+
+    for ((attempt = 0; attempt < iterations; attempt++)); do
+        if window_pixel_is_dark "$SIDEBAR_PROBE_X" "$SIDEBAR_PROBE_Y"; then
+            return 0
+        else
+            status=$?
+        fi
+        if ((status == 2)); then
+            return 2
+        fi
+        sleep 0.1
+    done
+    return 1
+}
+
+# Wait until the sidebar probe reports the expanded (white list) state.
+wait_for_sidebar_visible() {
+    local timeout_s="${1:-5}"
+    local attempt
+    local iterations=$((timeout_s * 10))
+    local status
+
+    for ((attempt = 0; attempt < iterations; attempt++)); do
+        if window_pixel_is_dark "$SIDEBAR_PROBE_X" "$SIDEBAR_PROBE_Y"; then
+            sleep 0.1
+            continue
+        else
+            status=$?
+        fi
+        if ((status == 2)); then
+            return 2
+        fi
+        return 0
+    done
+    return 1
+}
+
 # The sidebar auto-hides as soon as the pointer moves right towards the tabs,
 # which shifts the whole tab strip 223px left mid-test. Collapse it explicitly
 # through the title-bar sessions button so tab coordinates are deterministic.

@@ -111,8 +111,7 @@
           Margin="16,0,10,10"
           ColumnDefinitions="220,3,*">
       <views:SessionSidebar Grid.Column="0"
-                            Name="Sidebar"
-                            PointerEntered="OnSidebarPointerEntered" />
+                            Name="Sidebar" />
 
       <GridSplitter Grid.Column="1"
                     Name="SidebarSplitter"
