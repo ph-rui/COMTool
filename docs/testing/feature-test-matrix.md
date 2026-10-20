@@ -7,7 +7,7 @@
 | Feature | Status | Automated | Phase | Platform | Command | Manual | Evidence |
 |---|---|---|---|---|---|---|---|
 | UI-01 | 部分 | APP01_MainWindowShows,TERM15_DoubleClickUsesMaximizePath,TitleBarTests.UI01_TitleBarDoubleClickTogglesMaximizeOnce,UI01_TitleBarDoubleClickMaximizeE2E | verify | all | dotnet test | WIN-01 | 窗口、终端和标题栏双击最大化/还原路径已有自动化；标题栏无原生白条、最小化/最大化/还原/关闭按钮、拖拽与 5px 边缘缩放需 Windows 真实桌面确认（WIN-01）；视觉差异不能仅靠截图判定 |
-| UI-02 | 完成 | UI02_SidebarExpandsOnLaunch,SidebarHoverTests.UI02_SidebarAutoHidesOnPointerMoveAndContentReflows | verify | all | dotnet test | - | 侧栏启动自动展开、宽度恢复、空状态、首次指针移入内容自动收起、标题栏移动不收起、左缘悬停重新展开和内容区动态回流由 headless 测试覆盖；Linux Xvfb 执行 UI02_SidebarExpandsOnLaunchE2E 与 UI02_SidebarAutoHideE2E |
+| UI-02 | 完成 | UI02_SidebarExpandsOnLaunch,SidebarHoverTests.UI02_SidebarAutoHidesOnPointerMoveAndContentReflows | verify | all | dotnet test | - | 侧栏启动自动展开、宽度恢复、空状态、首次指针移入内容自动收起、标题栏移动不收起、左缘悬停重新展开和内容区动态回流由 headless 测试覆盖；Linux Xvfb 执行 UI02_SidebarExpandsOnLaunchE2E 与 UI02_SidebarAutoHideE2E，后者覆盖从悬停条移入侧栏内边距及会话列表时不得误收起 |
 | UI-03 | 部分 | - | manual | all | manual | WIN-20 | 串口/SSH 分组、连接状态圆点和原地状态更新需真实桌面视觉核对，无法自动化 |
 | UI-04 | 部分 | - | manual | all | manual | WIN-20 | 侧栏 Open/Remove session 菜单、确认框和配置持久化需真实桌面交互，无法自动化 |
 | UI-05 | 完成 | UI05_TabSwitchReparentOrder,UI05_TabSwitchFocusesIncomingTerminal,UI05_TabSwitchKeepsBothTerminalsLive,UI05_RapidSwitchFocus,UI05_CloseSelectedTabSelectsNeighbor,UI05_ClosingLastTabClearsSelection | verify | all | dotnet test | - | 多标签新增/关闭/切换、双向切换后立即可输入由 headless 测试覆盖；Linux Xvfb 执行 UI05_TabSwitchTypingBothDirections |
