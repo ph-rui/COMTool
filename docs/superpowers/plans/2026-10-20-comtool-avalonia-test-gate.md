@@ -6,7 +6,7 @@
 
 **Architecture:** 新增一个跨平台 .NET 测试门禁检查器，关联 parity matrix、功能测试矩阵、测试列表和 E2E 日志；新增 App Headless 测试项目验证窗口生命周期、标签切换、焦点和策略逻辑；新增 Linux Xvfb 脚本验证真实 PTY、键盘焦点和 SSH 多连接；最后重构打包脚本为候选包/正式包两阶段。
 
-**Tech Stack:** .NET SDK `10.0.402`, Avalonia `12.1.4`, Avalonia.Headless.XUnit `12.1.4`, xUnit `2.9.3`, Linux Xvfb, xdotool, OpenSSH, PowerShell 5.1+。
+**Tech Stack:** .NET SDK `10.0.402`, Avalonia `12.1.4`, Avalonia.Headless.XUnit `12.1.4`, xUnit v3 `3.2.2`, Linux Xvfb, xdotool, OpenSSH, PowerShell 5.1+。Avalonia.Headless.XUnit 12.1.4 is xUnit v3-only, so the App test project must use `xunit.v3` and `<OutputType>Exe</OutputType>`.
 
 **Spec:** `docs/superpowers/specs/2026-10-20-comtool-avalonia-test-gate-design.md`
 
@@ -904,12 +904,13 @@ git commit -m "Add isolated config directory overrides"
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
+    <OutputType>Exe</OutputType>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia.Headless.XUnit" Version="12.1.4" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.4" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
-    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.v3" Version="3.2.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
   </ItemGroup>
   <ItemGroup>
@@ -968,8 +969,10 @@ Responsibilities:
 - set both environment variables for each test;
 - create `AvaloniaConfigDir`;
 - write `config.json` from a `ComtoolConfig` with `Version = 3`;
+- provide `Run(Action)` that catches failures, calls `KeepForFailure()`, and rethrows;
 - restore previous environment variables on dispose;
-- delete the root on success; keep it on failure for diagnosis.
+- delete the root on success; keep it on failure for diagnosis;
+- register process-exit cleanup for the shared root only when no failure was retained.
 
 - [ ] **Step 4: Write the smoke test**
 
@@ -978,15 +981,29 @@ Responsibilities:
 public void APP01_MainWindowShows()
 {
     using var env = new TestEnvironment();
+    MainWindow? window = null;
     env.SeedConfig(new ComtoolConfig());
-    var window = new MainWindow { DataContext = new MainViewModel() };
-    window.Show();
-    Dispatcher.UIThread.RunJobs();
-    Assert.True(window.IsVisible);
-    Assert.NotNull(window.FindControl<SessionSidebar>("Sidebar"));
-    window.Close();
+    try
+    {
+        env.Run(() =>
+        {
+            window = new MainWindow { DataContext = new MainViewModel() };
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(window.IsVisible);
+            Assert.NotNull(window.FindControl<SessionSidebar>("Sidebar"));
+            Assert.Contains(env.AvaloniaConfigDir, File.ReadAllText(AppLog.Path));
+        });
+    }
+    finally
+    {
+        window?.Close();
+        Dispatcher.UIThread.RunJobs();
+    }
 }
 ```
+
+Use `env.Run(...)` for every App test body so a failed assertion retains its temp root. Future snippets in Tasks 7-9 show only the assertions; wrap them the same way.
 
 - [ ] **Step 5: Run the test**
 
