@@ -317,16 +317,18 @@ if ($buildOk) {
     # Listing a whole solution can race between vstest projects on Windows and
     # return 1 even though every test was listed. Listing each project keeps
     # discovery deterministic while still producing one solution-wide file.
-    Set-Content -LiteralPath $testList -Value ""
     $listStatus = 0
+    $listLines = New-Object System.Collections.Generic.List[string]
     $listProjects = @($unitProjects | ForEach-Object { $_.Path }) + $appTestsProject
     foreach ($listProject in $listProjects) {
-        & $dotnet test $listProject -c Release --no-build --list-tests 2>&1 |
-            Tee-Object -FilePath $testList -Append | Out-Host
+        $lines = @(& $dotnet test $listProject -c Release --no-build --list-tests 2>&1)
         if ($LASTEXITCODE -ne 0) {
             $listStatus = $LASTEXITCODE
         }
+        $lines | Out-Host
+        $listLines.AddRange([string[]]$lines)
     }
+    $listLines | Set-Content -LiteralPath $testList -Encoding UTF8
 
     $appTestCount = 0
     if (Test-Path -LiteralPath $testList -PathType Leaf) {

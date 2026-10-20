@@ -48,8 +48,8 @@ public sealed class PackagingGateScriptTests
         var text = File.ReadAllText(path);
 
         Assert.Contains("$listProjects", text);
-        Assert.Contains("Tee-Object -FilePath $testList -Append", text);
-        Assert.DoesNotContain("--list-tests 2>&1 |\n        Tee-Object -FilePath $testList | Out-Host", text);
+        Assert.Contains("$listLines.AddRange", text);
+        Assert.Contains("Set-Content -LiteralPath $testList -Encoding UTF8", text);
     }
 
     private static string FindRepositoryRoot()
