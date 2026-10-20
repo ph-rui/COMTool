@@ -45,6 +45,9 @@ public sealed class ComtoolConfig
     [JsonPropertyName("sshSessionsMigrated")]
     public bool SshSessionsMigrated { get; set; }
 
+    [JsonPropertyName("tcpSessions")]
+    public List<TcpSession> TcpSessions { get; set; } = new();
+
     [JsonPropertyName("sessionSidebar")]
     public SessionSidebarConfig SessionSidebar { get; set; } = new();
 
@@ -160,6 +163,27 @@ public sealed class SerialConnectionConfig
 
     [JsonPropertyName("dtr")]
     public bool Dtr { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? Extra { get; set; }
+}
+
+public sealed class TcpSession
+{
+    [JsonPropertyName("key")]
+    public string Key { get; set; } = "";
+
+    [JsonPropertyName("mode")]
+    public string Mode { get; set; } = "client";
+
+    [JsonPropertyName("target")]
+    public string Target { get; set; } = "";
+
+    [JsonPropertyName("port")]
+    public int Port { get; set; } = 2345;
+
+    [JsonPropertyName("updated")]
+    public long Updated { get; set; }
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? Extra { get; set; }

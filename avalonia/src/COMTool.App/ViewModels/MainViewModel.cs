@@ -12,6 +12,7 @@ public enum SessionKind
     Local,
     Serial,
     Ssh,
+    Tcp,
 }
 
 public sealed partial class SessionItem : ObservableObject
@@ -26,7 +27,12 @@ public sealed partial class SessionItem : ObservableObject
 
     public bool IsSsh => Kind == SessionKind.Ssh;
 
-    public string IconGlyph => IsSsh ? "\uf233" : "\uf1e6";
+    public string IconGlyph => Kind switch
+    {
+        SessionKind.Ssh => "\uf233",
+        SessionKind.Tcp => "\uf0ac",
+        _ => "\uf1e6",
+    };
 
     public IBrush IconBrush => IsConnected
         ? new SolidColorBrush(Color.Parse("#43a047"))
@@ -89,7 +95,7 @@ public sealed partial class TerminalTab : ObservableObject
     [ObservableProperty]
     private string _zmodemPercentText = "";
 
-    public bool IsSessionTab => Kind is SessionKind.Serial or SessionKind.Ssh;
+    public bool IsSessionTab => Kind is SessionKind.Serial or SessionKind.Ssh or SessionKind.Tcp;
 }
 
 public partial class MainViewModel : ViewModelBase
@@ -186,20 +192,26 @@ public partial class MainViewModel : ViewModelBase
 
     public void UpdateConnectionStates(
         IReadOnlySet<string> connectedSerial,
-        IReadOnlySet<string> connectedSsh)
+        IReadOnlySet<string> connectedSsh,
+        IReadOnlySet<string> connectedTcp)
     {
         foreach (var item in Sections.SelectMany(section => section.Items))
         {
-            item.IsConnected = item.Kind == SessionKind.Serial
-                ? connectedSerial.Contains(item.SessionId)
-                : connectedSsh.Contains(item.SessionId);
+            item.IsConnected = item.Kind switch
+            {
+                SessionKind.Serial => connectedSerial.Contains(item.SessionId),
+                SessionKind.Ssh => connectedSsh.Contains(item.SessionId),
+                SessionKind.Tcp => connectedTcp.Contains(item.SessionId),
+                _ => false,
+            };
         }
     }
 
     public void LoadSessions(
         AppConfigService config,
         IReadOnlySet<string> connectedSerial,
-        IReadOnlySet<string> connectedSsh)
+        IReadOnlySet<string> connectedSsh,
+        IReadOnlySet<string> connectedTcp)
     {
         Sections.Clear();
 
@@ -238,6 +250,19 @@ public partial class MainViewModel : ViewModelBase
             });
         }
 
+        var tcp = new SidebarSection { Title = "TCP", ShowHeader = true };
+        foreach (var session in config.TcpSessions.SortedSessions())
+        {
+            tcp.Items.Add(new SessionItem
+            {
+                Name = TcpSessionRules.DisplayName(session),
+                SessionId = session.Key,
+                Kind = SessionKind.Tcp,
+                Detail = TcpSessionRules.Detail(session),
+                IsConnected = connectedTcp.Contains(session.Key),
+            });
+        }
+
         if (serial.Items.Count > 0)
         {
             Sections.Add(serial);
@@ -246,6 +271,11 @@ public partial class MainViewModel : ViewModelBase
         if (ssh.Items.Count > 0)
         {
             Sections.Add(ssh);
+        }
+
+        if (tcp.Items.Count > 0)
+        {
+            Sections.Add(tcp);
         }
 
         HasSessions = Sections.Count > 0;

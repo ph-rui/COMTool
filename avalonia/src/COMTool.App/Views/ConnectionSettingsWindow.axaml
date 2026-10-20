@@ -19,6 +19,7 @@
                       Height="30">
               <ComboBoxItem Content="Serial" />
               <ComboBoxItem Content="SSH" />
+              <ComboBoxItem Content="TCP" />
             </ComboBox>
 
             <Grid Name="SerialPanel"
@@ -116,6 +117,91 @@
                         IsChecked="True" />
 
               <Button Grid.Row="7" Grid.Column="0" Grid.ColumnSpan="2"
+                      Content="OPEN"
+                      Height="30"
+                      HorizontalAlignment="Stretch"
+                      HorizontalContentAlignment="Center"
+                      Background="#0f88eb"
+                      Foreground="White"
+                      BorderThickness="0"
+                      CornerRadius="4"
+                      Click="OnOpenClick" />
+            </Grid>
+
+            <Grid Name="TcpPanel"
+                  ColumnDefinitions="86,*"
+                  RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+                  RowSpacing="6"
+                  IsVisible="False">
+              <TextBlock Grid.Row="0" Grid.Column="0" Text="Mode" VerticalAlignment="Center" />
+              <ComboBox Grid.Row="0" Grid.Column="1"
+                        Name="TcpModeCombo"
+                        Width="155"
+                        Height="28"
+                        HorizontalAlignment="Left"
+                        SelectionChanged="OnTcpModeChanged">
+                <ComboBoxItem Content="Client" />
+                <ComboBoxItem Content="Server" />
+              </ComboBox>
+
+              <TextBlock Grid.Row="1" Grid.Column="0"
+                         Name="TcpTargetLabel"
+                         Text="Target"
+                         VerticalAlignment="Center" />
+              <TextBox Grid.Row="1" Grid.Column="1"
+                       Name="TcpTargetBox"
+                       Width="155"
+                       Height="28"
+                       HorizontalAlignment="Left"
+                       Text="127.0.0.1:2345" />
+
+              <TextBlock Grid.Row="2" Grid.Column="0"
+                         Name="TcpPortLabel"
+                         Text="Port"
+                         VerticalAlignment="Center"
+                         IsVisible="False" />
+              <TextBox Grid.Row="2" Grid.Column="1"
+                       Name="TcpPortBox"
+                       Width="155"
+                       Height="28"
+                       HorizontalAlignment="Left"
+                       Text="2345"
+                       IsVisible="False" />
+
+              <TextBlock Grid.Row="3" Grid.Column="0"
+                         Name="TcpLocalLabel"
+                         Text="Local"
+                         VerticalAlignment="Center" />
+              <TextBox Grid.Row="3" Grid.Column="1"
+                       Name="TcpLocalBox"
+                       Width="155"
+                       Height="28"
+                       HorizontalAlignment="Left"
+                       IsReadOnly="True" />
+
+              <TextBlock Grid.Row="4" Grid.Column="0"
+                         Name="TcpClientsLabel"
+                         Text="Clients"
+                         VerticalAlignment="Center"
+                         IsVisible="False" />
+              <ComboBox Grid.Row="4" Grid.Column="1"
+                        Name="TcpClientsCombo"
+                        Width="155"
+                        Height="28"
+                        HorizontalAlignment="Left"
+                        IsVisible="False"
+                        SelectionChanged="OnTcpClientSelectionChanged" />
+
+              <Button Grid.Row="5" Grid.Column="1"
+                      Name="TcpDisconnectButton"
+                      Content="Disconnect"
+                      Width="155"
+                      Height="28"
+                      HorizontalAlignment="Left"
+                      IsVisible="False"
+                      Click="OnTcpDisconnectClick" />
+
+              <Button Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="2"
                       Content="OPEN"
                       Height="30"
                       HorizontalAlignment="Stretch"

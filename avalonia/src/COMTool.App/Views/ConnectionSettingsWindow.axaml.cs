@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using COMTool.App.Services;
 using COMTool.App.ViewModels;
 using COMTool.Connections;
@@ -27,11 +28,16 @@ public partial class ConnectionSettingsWindow : Window
         "None", "XON/XOFF", "RTS/CTS", "DSR/DTR",
     };
 
+    private const string AllTcpClients = "All clients";
+
     private readonly AppConfigService _config;
     private readonly TerminalTab? _currentTab;
     private readonly Func<string, TerminalTab?, Task> _openSerial;
     private readonly Func<string, TerminalTab?, Task> _openSsh;
+    private readonly Func<string, TerminalTab?, Task> _openTcp;
     private readonly Func<string, Task> _showError;
+    private ITcpSession? _tcpSession;
+    private bool _updatingTcpClients;
 
     // Avalonia's XAML runtime loader requires a public parameterless
     // constructor. The window is always created through the parameterized
@@ -47,12 +53,14 @@ public partial class ConnectionSettingsWindow : Window
         TerminalTab? currentTab,
         Func<string, TerminalTab?, Task> openSerial,
         Func<string, TerminalTab?, Task> openSsh,
+        Func<string, TerminalTab?, Task> openTcp,
         Func<string, Task> showError)
     {
         _config = config;
         _currentTab = currentTab;
         _openSerial = openSerial;
         _openSsh = openSsh;
+        _openTcp = openTcp;
         _showError = showError;
 
         InitializeComponent();
@@ -60,6 +68,7 @@ public partial class ConnectionSettingsWindow : Window
         ConnectionTypeCombo.SelectedIndex = 0;
         PopulateSerialDefaults();
         PopulateSshDefaults();
+        PopulateTcpDefaults();
         PopulateCurrentSession();
     }
 
@@ -90,6 +99,18 @@ public partial class ConnectionSettingsWindow : Window
         RememberCheck.IsChecked = true;
     }
 
+    private void PopulateTcpDefaults()
+    {
+        TcpModeCombo.SelectedIndex = 0;
+        TcpTargetBox.Text = $"127.0.0.1:{TcpSessionRules.DefaultPort}";
+        TcpPortBox.Text = TcpSessionRules.DefaultPort.ToString();
+        TcpLocalBox.Text = "";
+        TcpClientsCombo.ItemsSource = new[] { AllTcpClients };
+        TcpClientsCombo.SelectedIndex = 0;
+        TcpDisconnectButton.IsEnabled = false;
+        UpdateTcpFields();
+    }
+
     private void PopulateCurrentSession()
     {
         if (_currentTab is null)
@@ -99,7 +120,12 @@ public partial class ConnectionSettingsWindow : Window
             return;
         }
 
-        ConnectionTypeCombo.SelectedIndex = _currentTab.Kind == SessionKind.Ssh ? 1 : 0;
+        ConnectionTypeCombo.SelectedIndex = _currentTab.Kind switch
+        {
+            SessionKind.Ssh => 1,
+            SessionKind.Tcp => 2,
+            _ => 0,
+        };
         UpdateConnectionPanels();
         Title = $"{_currentTab.Title} - Connection settings";
 
@@ -141,16 +167,57 @@ public partial class ConnectionSettingsWindow : Window
                 KeyFileBox.Text = session.SshKey;
             }
         }
+        else if (_currentTab.Kind == SessionKind.Tcp)
+        {
+            var session = _config.TcpSessions.Get(_currentTab.SessionId);
+            if (session is not null)
+            {
+                TcpModeCombo.SelectedIndex =
+                    TcpSessionRules.NormalizeMode(session.Mode) == TcpSessionRules.ServerMode
+                        ? 1
+                        : 0;
+                TcpTargetBox.Text = session.Target;
+                TcpPortBox.Text = session.Port.ToString();
+            }
+
+            if (_currentTab.Connection is ITcpSession tcp)
+            {
+                _tcpSession = tcp;
+                tcp.ClientsChanged += OnTcpClientsChanged;
+                RefreshTcpClients();
+            }
+
+            UpdateTcpFields();
+        }
     }
 
     private void OnConnectionTypeChanged(object? sender, SelectionChangedEventArgs e) =>
         UpdateConnectionPanels();
 
+    private void OnTcpModeChanged(object? sender, SelectionChangedEventArgs e) =>
+        UpdateTcpFields();
+
     private void UpdateConnectionPanels()
     {
-        var isSsh = ConnectionTypeCombo.SelectedIndex == 1;
-        SerialPanel.IsVisible = !isSsh;
-        SshPanel.IsVisible = isSsh;
+        var index = ConnectionTypeCombo.SelectedIndex;
+        SerialPanel.IsVisible = index == 0;
+        SshPanel.IsVisible = index == 1;
+        TcpPanel.IsVisible = index == 2;
+        UpdateTcpFields();
+    }
+
+    private void UpdateTcpFields()
+    {
+        var isServer = TcpModeCombo.SelectedIndex == 1;
+        TcpTargetLabel.IsVisible = !isServer;
+        TcpTargetBox.IsVisible = !isServer;
+        TcpPortLabel.IsVisible = isServer;
+        TcpPortBox.IsVisible = isServer;
+        TcpLocalLabel.IsVisible = !isServer;
+        TcpLocalBox.IsVisible = !isServer;
+        TcpClientsLabel.IsVisible = isServer;
+        TcpClientsCombo.IsVisible = isServer;
+        TcpDisconnectButton.IsVisible = isServer;
     }
 
     private async void OnBrowseKeyClick(object? sender, RoutedEventArgs e)
@@ -170,20 +237,27 @@ public partial class ConnectionSettingsWindow : Window
     {
         try
         {
-            if (ConnectionTypeCombo.SelectedIndex == 1)
+            switch (ConnectionTypeCombo.SelectedIndex)
             {
-                await OpenSshAsync();
-            }
-            else
-            {
-                await OpenSerialAsync();
+                case 1:
+                    await OpenSshAsync();
+                    break;
+                case 2:
+                    await OpenTcpAsync();
+                    break;
+                default:
+                    await OpenSerialAsync();
+                    break;
             }
         }
         catch (Exception ex)
         {
-            var action = ConnectionTypeCombo.SelectedIndex == 1
-                ? "Connect Failed"
-                : "Open Failed";
+            var action = ConnectionTypeCombo.SelectedIndex switch
+            {
+                1 => "Connect Failed",
+                2 => TcpModeCombo.SelectedIndex == 1 ? "Open Failed" : "Connect Failed",
+                _ => "Open Failed",
+            };
             await _showError($"{action}\n{ex.Message}");
         }
     }
@@ -264,6 +338,120 @@ public partial class ConnectionSettingsWindow : Window
         _config.Save();
         Close();
         await _openSsh(session.Key, _currentTab);
+    }
+
+    private async Task OpenTcpAsync()
+    {
+        var isServer = TcpModeCombo.SelectedIndex == 1;
+        var mode = isServer ? TcpSessionRules.ServerMode : TcpSessionRules.ClientMode;
+        var target = "";
+        int port;
+
+        if (isServer)
+        {
+            if (!int.TryParse(TcpPortBox.Text?.Trim(), out port)
+                || !TcpSessionRules.IsValidPort(port))
+            {
+                throw new InvalidOperationException("Port must be between 1 and 65535.");
+            }
+        }
+        else
+        {
+            if (!TcpTarget.TryParse(TcpTargetBox.Text, out var parsed) || parsed is null)
+            {
+                throw new InvalidOperationException("Target must be host[:port].");
+            }
+
+            target = parsed.ToString();
+            port = parsed.Port;
+        }
+
+        var session = _config.TcpSessions.Upsert(mode, target, port);
+        if (session is null)
+        {
+            throw new InvalidOperationException("Could not save the TCP session.");
+        }
+
+        _config.Save();
+        Close();
+        await _openTcp(session.Key, _currentTab);
+    }
+
+    private void OnTcpClientsChanged(object? sender, EventArgs e) =>
+        Dispatcher.UIThread.Post(RefreshTcpClients);
+
+    private void RefreshTcpClients()
+    {
+        if (_tcpSession is null)
+        {
+            return;
+        }
+
+        _updatingTcpClients = true;
+        try
+        {
+            var previous = TcpClientsCombo.SelectedItem as string;
+            var items = new List<string> { AllTcpClients };
+            items.AddRange(_tcpSession.Clients.Select(client => client.Endpoint));
+            TcpClientsCombo.ItemsSource = items;
+            var index = previous is null ? 0 : items.IndexOf(previous);
+            TcpClientsCombo.SelectedIndex = index >= 0 ? index : 0;
+            TcpLocalBox.Text = _tcpSession.LocalEndpoint;
+            TcpDisconnectButton.IsEnabled = _tcpSession.Clients.Count > 0;
+        }
+        finally
+        {
+            _updatingTcpClients = false;
+        }
+    }
+
+    private async void OnTcpClientSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (_updatingTcpClients || _tcpSession is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var selected = TcpClientsCombo.SelectedItem as string;
+            _tcpSession.SelectClient(
+                selected is null || selected == AllTcpClients ? null : selected);
+        }
+        catch (Exception ex)
+        {
+            await _showError($"Select Failed\n{ex.Message}");
+        }
+    }
+
+    private async void OnTcpDisconnectClick(object? sender, RoutedEventArgs e)
+    {
+        if (_tcpSession is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var selected = TcpClientsCombo.SelectedItem as string;
+            _tcpSession.DisconnectClient(
+                selected is null || selected == AllTcpClients ? null : selected);
+            RefreshTcpClients();
+        }
+        catch (Exception ex)
+        {
+            await _showError($"Disconnect Failed\n{ex.Message}");
+        }
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        if (_tcpSession is not null)
+        {
+            _tcpSession.ClientsChanged -= OnTcpClientsChanged;
+        }
+
+        base.OnClosed(e);
     }
 
     private void OnCloseClick(object? sender, RoutedEventArgs e) => Close();

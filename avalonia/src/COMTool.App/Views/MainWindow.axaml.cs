@@ -163,11 +163,12 @@ public partial class MainWindow : Window
         }
     }
 
-    private (HashSet<string> Serial, HashSet<string> Ssh) ConnectedSessions()
+    private (HashSet<string> Serial, HashSet<string> Ssh, HashSet<string> Tcp) ConnectedSessions()
     {
         if (DataContext is not MainViewModel viewModel)
         {
             return (new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase),
                 new HashSet<string>(StringComparer.OrdinalIgnoreCase));
         }
 
@@ -179,7 +180,11 @@ public partial class MainWindow : Window
             .Where(tab => tab.Kind == SessionKind.Ssh && IsTabConnected(tab))
             .Select(tab => tab.SessionId)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        return (serial, ssh);
+        var tcp = AllTabs()
+            .Where(tab => tab.Kind == SessionKind.Tcp && IsTabConnected(tab))
+            .Select(tab => tab.SessionId)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return (serial, ssh, tcp);
     }
 
     private void UpdateConnectionStates()
@@ -214,8 +219,8 @@ public partial class MainWindow : Window
             }
         }
 
-        var (serial, ssh) = ConnectedSessions();
-        viewModel.UpdateConnectionStates(serial, ssh);
+        var (serial, ssh, tcp) = ConnectedSessions();
+        viewModel.UpdateConnectionStates(serial, ssh, tcp);
     }
 
     private void RefreshSidebar()
@@ -225,8 +230,8 @@ public partial class MainWindow : Window
             return;
         }
 
-        var (serial, ssh) = ConnectedSessions();
-        viewModel.LoadSessions(_config, serial, ssh);
+        var (serial, ssh, tcp) = ConnectedSessions();
+        viewModel.LoadSessions(_config, serial, ssh, tcp);
     }
 
     private async void OnSessionActivated(object? sender, SessionItem item)
@@ -236,18 +241,22 @@ public partial class MainWindow : Window
             return;
         }
 
-        // An SSH session is a saved endpoint, not a single connection. If one
-        // is already live, every click opens another independent connection so
-        // the same host can be used in parallel. With no live connection the
-        // old reconnect behavior is kept: dead tabs are discarded first.
-        if (item.Kind == SessionKind.Ssh)
+        // SSH sessions and TCP clients are saved endpoints, not a single
+        // connection. If one is already live, every click opens another
+        // independent connection so the same endpoint can be used in parallel.
+        var opensNewConnection = item.Kind == SessionKind.Ssh
+            || (item.Kind == SessionKind.Tcp && !IsTcpServerSession(item.SessionId));
+        if (opensNewConnection)
         {
             var tabs = AllTabs().ToList();
             if (SessionActivationPolicy.ShouldOpenNewSsh(tabs, item.SessionId, IsTabConnected))
             {
-                foreach (var dead in SessionActivationPolicy.DeadSshTabsToClose(
+                foreach (var dead in SessionActivationPolicy.DeadSessionTabsToClose(
                     tabs,
                     item.SessionId,
+                    opensNewConnection && item.Kind == SessionKind.Tcp
+                        ? SessionKind.Tcp
+                        : SessionKind.Ssh,
                     IsTabConnected))
                 {
                     if (_detachedTabs.TryGetValue(dead, out var state))
@@ -262,7 +271,7 @@ public partial class MainWindow : Window
                 }
             }
         }
-        // Serial ports stay exclusive to one tab.
+        // Serial ports and TCP servers stay exclusive to one tab.
         else
         {
             var detached = FindDetachedTab(item);
@@ -303,10 +312,15 @@ public partial class MainWindow : Window
             {
                 await OpenSshSessionAsync(item.SessionId);
             }
+            else if (item.Kind == SessionKind.Tcp)
+            {
+                await OpenTcpSessionAsync(item.SessionId);
+            }
         }
         catch (Exception ex)
         {
             var action = item.Kind == SessionKind.Serial
+                || (item.Kind == SessionKind.Tcp && IsTcpServerSession(item.SessionId))
                 ? "Open Failed"
                 : "Connect Failed";
             await ShowErrorAsync($"{action}\n{ex.Message}");
@@ -330,6 +344,14 @@ public partial class MainWindow : Window
                 : $"{SshSessionRules.DisplayName(session)} ({SshSessionRules.Detail(session)})";
             kind = "SSH";
         }
+        else if (item.Kind == SessionKind.Tcp)
+        {
+            var session = _config.TcpSessions.Get(item.SessionId);
+            label = session is null
+                ? item.SessionId
+                : $"{TcpSessionRules.DisplayName(session)} ({TcpSessionRules.Detail(session)})";
+            kind = "TCP";
+        }
         else
         {
             label = item.SessionId;
@@ -348,6 +370,10 @@ public partial class MainWindow : Window
         {
             _config.SshSessions.Remove(item.SessionId);
             _config.PasswordCache.Remove(item.SessionId);
+        }
+        else if (item.Kind == SessionKind.Tcp)
+        {
+            _config.TcpSessions.Remove(item.SessionId);
         }
         else
         {
@@ -549,6 +575,114 @@ public partial class MainWindow : Window
 
     private static bool IsTabConnected(TerminalTab tab) =>
         tab.IsAlive && (tab.IsTransportOpen?.Invoke() ?? true);
+
+    private bool IsTcpServerSession(string key) =>
+        _config?.TcpSessions.Get(key)?.Mode == TcpSessionRules.ServerMode;
+
+    private async Task OpenTcpSessionAsync(string key)
+    {
+        if (_config is null || DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        var session = _config.TcpSessions.Get(key);
+        if (session is null)
+        {
+            throw new InvalidOperationException($"TCP session {key} was not found.");
+        }
+
+        ITcpSession connection;
+        string status;
+        if (TcpSessionRules.NormalizeMode(session.Mode) == TcpSessionRules.ServerMode)
+        {
+            connection = new TcpServerSession(new TcpServerOptions(session.Port));
+            status = $"Listening on 0.0.0.0:{session.Port}";
+        }
+        else
+        {
+            if (!TcpTarget.TryParse(session.Target, out var target) || target is null)
+            {
+                throw new InvalidOperationException("TCP target must be host[:port].");
+            }
+
+            connection = await TcpClientSession.ConnectAsync(
+                new TcpClientOptions(target.Host, target.Port));
+            status = $"Connected {target}";
+        }
+
+        var terminal = CreateTerminal();
+        var tab = new TerminalTab
+        {
+            Title = TcpSessionRules.DisplayName(session),
+            SessionId = key,
+            Kind = SessionKind.Tcp,
+            Content = terminal,
+            Connection = connection,
+            StatusMessage = status,
+            IsTransportOpen = () => connection.IsConnected,
+            CloseAction = () =>
+            {
+                try
+                {
+                    terminal.DetachConnection();
+                }
+                catch
+                {
+                    // The template may not have been applied if opening failed.
+                }
+
+                connection.Dispose();
+            },
+        };
+
+        SubscribeZmodem(tab, connection.Pty.Zmodem);
+        if (connection is TcpServerSession server)
+        {
+            server.ClientsChanged += (_, _) => Dispatcher.UIThread.Post(() =>
+            {
+                if (!tab.IsAlive)
+                {
+                    return;
+                }
+
+                var clients = server.Clients;
+                tab.StatusMessage = clients.Count == 0
+                    ? $"Listening on 0.0.0.0:{server.Port}"
+                    : $"{clients.Count} client(s): {string.Join(", ", clients.Select(client => client.Endpoint))}";
+                tab.StatusBrush = StatusInfoBrush;
+                tab.TabDotBrush = StatusInfoBrush;
+                UpdateConnectionStates();
+            });
+        }
+
+        var terminalAttached = false;
+        terminal.AttachedToVisualTree += (_, _) =>
+            Dispatcher.UIThread.Post(
+                () =>
+                {
+                    if (terminalAttached)
+                    {
+                        return;
+                    }
+
+                    terminalAttached = true;
+                    AttachTerminal(tab, terminal, connection.Pty);
+                    FocusTerminalWhenSelected(tab, terminal);
+                },
+                DispatcherPriority.Loaded);
+        connection.Pty.ProcessExited += (_, _) => Dispatcher.UIThread.Post(() =>
+        {
+            tab.IsAlive = false;
+            tab.StatusMessage = "Connection lose";
+            tab.StatusBrush = StatusWarningBrush;
+            tab.TabDotBrush = StatusWarningBrush;
+            UpdateConnectionStates();
+        });
+
+        viewModel.AddTab(tab);
+        UpdateConnectionStates();
+    }
 
     private void AttachTerminal(
         TerminalTab tab,
@@ -1965,6 +2099,7 @@ public partial class MainWindow : Window
             tab,
             OpenSerialFromSettingsAsync,
             OpenSshFromSettingsAsync,
+            OpenTcpFromSettingsAsync,
             ShowErrorAsync);
         _settingsWindow = window;
         window.Closed += (_, _) =>
@@ -2017,6 +2152,53 @@ public partial class MainWindow : Window
         RefreshSidebar();
     }
 
+    private async Task OpenTcpFromSettingsAsync(string key, TerminalTab? currentTab)
+    {
+        if (DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        var isServer = IsTcpServerSession(key);
+        if (isServer)
+        {
+            // A listening port can only have one owner. Reuse an already-live
+            // matching tab unless the user explicitly edited that same tab.
+            var live = AllTabs().FirstOrDefault(tab =>
+                tab.Kind == SessionKind.Tcp
+                && string.Equals(tab.SessionId, key, StringComparison.OrdinalIgnoreCase)
+                && !ReferenceEquals(tab, currentTab)
+                && IsTabConnected(tab));
+            if (live is not null)
+            {
+                if (_detachedTabs.TryGetValue(live, out var state))
+                {
+                    state.Window.Activate();
+                }
+                else
+                {
+                    viewModel.SelectedTab = live;
+                }
+
+                live.Content.Focus();
+                RestoreTerminalFocus();
+                return;
+            }
+        }
+
+        if (SettingsTabPolicy.TabToReplace(
+            viewModel.Tabs,
+            currentTab,
+            key,
+            SessionKind.Tcp) is { } currentTcp)
+        {
+            CloseTab(currentTcp);
+        }
+
+        await OpenTcpSessionAsync(key);
+        RefreshSidebar();
+    }
+
     private void OnFunctionalClick(object? sender, RoutedEventArgs e)
     {
         if (DataContext is MainViewModel { SelectedTab: { } tab })
@@ -2061,6 +2243,11 @@ public partial class MainWindow : Window
                 }
 
                 suggestedName = "comtool.ssh.json";
+            }
+            else if (tab.Kind == SessionKind.Tcp)
+            {
+                payload = _config.TcpSessions.Get(tab.SessionId);
+                suggestedName = "comtool.tcp.json";
             }
 
             if (payload is null)
@@ -2124,6 +2311,16 @@ public partial class MainWindow : Window
                 }
 
                 _config.SerialSessions.Upsert(session.Port, session.Serial, session.Name);
+            }
+            else if (root.TryGetProperty("mode", out _)
+                     && (root.TryGetProperty("target", out _) || root.TryGetProperty("port", out _)))
+            {
+                var session = root.Deserialize<TcpSession>()
+                    ?? throw new InvalidOperationException("Invalid TCP session config.");
+                if (_config.TcpSessions.Upsert(session.Mode, session.Target, session.Port) is null)
+                {
+                    throw new InvalidOperationException("TCP config has an invalid target or port.");
+                }
             }
             else if (root.TryGetProperty("host", out _))
             {

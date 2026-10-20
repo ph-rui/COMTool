@@ -31,10 +31,17 @@ public static class SessionActivationPolicy
     public static IReadOnlyList<TerminalTab> DeadSshTabsToClose(
         IReadOnlyList<TerminalTab> tabs,
         string sessionId,
+        Func<TerminalTab, bool> isConnected) =>
+        DeadSessionTabsToClose(tabs, sessionId, SessionKind.Ssh, isConnected);
+
+    public static IReadOnlyList<TerminalTab> DeadSessionTabsToClose(
+        IReadOnlyList<TerminalTab> tabs,
+        string sessionId,
+        SessionKind kind,
         Func<TerminalTab, bool> isConnected)
     {
         var matching = tabs
-            .Where(tab => tab.Kind == SessionKind.Ssh
+            .Where(tab => tab.Kind == kind
                 && string.Equals(tab.SessionId, sessionId, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
