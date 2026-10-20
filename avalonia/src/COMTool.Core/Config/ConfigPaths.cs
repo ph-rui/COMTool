@@ -6,24 +6,32 @@ public static class ConfigPaths
     public const string AvaloniaApplicationName = "COMTool-Avalonia";
 
     public static string PythonConfigDirectory() =>
-        OperatingSystem.IsWindows()
+        Override("COMTOOL_PYTHON_CONFIG_DIR")
+        ?? (OperatingSystem.IsWindows()
             ? Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                 ApplicationName)
             : Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                 ".config",
-                "comtool");
+                "comtool"));
 
     public static string AvaloniaConfigDirectory() =>
-        OperatingSystem.IsWindows()
+        Override("COMTOOL_AVALONIA_CONFIG_DIR")
+        ?? (OperatingSystem.IsWindows()
             ? Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                 AvaloniaApplicationName)
             : Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                 ".config",
-                "comtool-avalonia");
+                "comtool-avalonia"));
+
+    private static string? Override(string name)
+    {
+        var value = Environment.GetEnvironmentVariable(name);
+        return string.IsNullOrWhiteSpace(value) ? null : Path.GetFullPath(value);
+    }
 
     public static string PythonConfigFile() =>
         Path.Combine(PythonConfigDirectory(), "config.json");
