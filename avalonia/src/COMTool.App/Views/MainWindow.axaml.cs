@@ -12,6 +12,7 @@ using COMTool.App.Services;
 using COMTool.App.ViewModels;
 using COMTool.Connections;
 using COMTool.Core.Config;
+using COMTool.Terminal;
 using COMTool.Zmodem;
 using Iciclecreek.Terminal;
 
@@ -1197,19 +1198,24 @@ public partial class MainWindow : Window
             Process = string.Empty,
             FontFamily = TerminalFontFamily(),
             FontSize = 15,
-            Background = new SolidColorBrush(Color.Parse("#212121")),
-            Foreground = Brushes.White,
-            CursorColor = Color.Parse("#4caf50"),
+            Background = new SolidColorBrush(Color.Parse(TerminalTheme.Background)),
+            Foreground = new SolidColorBrush(Color.Parse(TerminalTheme.Foreground)),
+            CursorColor = Color.Parse(TerminalTheme.Cursor),
             BufferSize = 9999,
         };
         if (terminal.Options is { } terminalOptions)
         {
             terminalOptions.RightClickSelectsWord = false;
+            terminalOptions.Theme = TerminalTheme.CreatePythonTheme();
         }
 
         terminal.AttachedToVisualTree += (_, _) =>
             Dispatcher.UIThread.Post(
-                () => HideTerminalScrollBars(terminal),
+                () =>
+                {
+                    ApplyTerminalTheme(terminal);
+                    HideTerminalScrollBars(terminal);
+                },
                 DispatcherPriority.Loaded);
         terminal.PointerPressed += OnTerminalPointerPressed;
         terminal.KeyDown += OnTerminalKeyDown;
@@ -1222,6 +1228,27 @@ public partial class MainWindow : Window
             RoutingStrategies.Bubble,
             handledEventsToo: true);
         return terminal;
+    }
+
+    private static void ApplyTerminalTheme(TerminalControl terminal)
+    {
+        // A tab can be closed before the queued Loaded callback runs. There is
+        // no XTerm instance to update in that case.
+        if (TopLevel.GetTopLevel(terminal) is null)
+        {
+            return;
+        }
+
+        // The control seeds its palette from the Foreground/Background brushes
+        // when the template is applied, which happens after the options are
+        // created. Re-apply the Python palette once the XTerm instance exists.
+        var theme = TerminalTheme.CreatePythonTheme();
+        if (terminal.Options is { } options)
+        {
+            options.Theme = theme;
+        }
+
+        terminal.Terminal.Colors.ApplyTheme(theme);
     }
 
     private static void HideTerminalScrollBars(TerminalControl terminal)

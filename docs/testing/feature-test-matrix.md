@@ -22,7 +22,7 @@
 | UI-14 | 部分 | - | manual | all | manual | WIN-02 | Windows 150%/200% DPI 需要真实桌面和显示器，裁切属于视觉判断，无法自动化 |
 | UI-15 | 完成 | ConfigTests.SaveAndLoad_RoundTripsWindowSize | verify | all | dotnet test | - | 窗口正常尺寸保存/恢复由 ConfigTests 覆盖 |
 | TERM-01 | 完成 | TerminalEmulatorTests.HandlesWrappingTabsAndEraseSequences,TerminalEmulatorTests.MatchesPythonPyteGoldenScreen | verify | all | dotnet test | - | pyte golden 与换行/Tab/擦除序列测试覆盖 |
-| TERM-02 | 完成 | TerminalEmulatorTests.UsesXterm256Palette,TerminalEmulatorTests.ParsesAnsiColorAndWideCharacters | verify | all | dotnet test | - | ANSI 256 色、宽字符和调色板测试覆盖 |
+| TERM-02 | 完成 | TerminalEmulatorTests.UsesXterm256Palette,TerminalEmulatorTests.ParsesAnsiColorAndWideCharacters,TerminalPaletteTests.TERM02_BaseAnsiPaletteMatchesPythonAndPromptTextKeepsContrast | verify | all | dotnet test | - | ANSI 256 色、宽字符、基础 16 色与 Python 主题一致（含 ANSI 蓝/亮蓝提示符 WCAG 对比度 ≥4.5）测试覆盖 |
 | TERM-03 | 完成 | TerminalEmulatorTests.ResizeUpdatesDimensionsAndVisibleRows | verify | all | dotnet test | - | 终端 resize 尺寸与可见行测试覆盖 |
 | TERM-04 | 完成 | TerminalEmulatorTests.HandlesScrollingAndScrollback | verify | all | dotnet test | - | 滚动和 scrollback 测试覆盖 |
 | TERM-05 | 完成 | TerminalEmulatorTests.SelectionReturnsSelectedText | verify | all | dotnet test | - | 选择文本返回测试覆盖 |
@@ -89,7 +89,7 @@
 | PKG-04 | 部分 | - | manual | all | manual | WIN-08 | Windows/Linux 安装、升级、卸载和保留 Beta 配置需真实桌面安装环境，无法自动化 |
 | PKG-05 | 部分 | - | manual | all | manual | WIN-21 | 包体积和启动时间需真实 Windows/Linux 桌面测量并与性能基线对照，无法自动化 |
 | PKG-06 | 部分 | - | manual | all | manual | WIN-16 | CI 流水线需在托管 CI 实际运行并核对日志，本地门禁无法自动化 |
-| TST-01 | 完成 | CI01_SerializesCandidateInfo | verify | all | dotnet test | - | 完整套件 209 项通过（Core 41/Connections 38/Terminal 11/ZMODEM 32/TestGate 49/App 38）；CI01 覆盖 TestGate 候选元数据 |
+| TST-01 | 完成 | CI01_SerializesCandidateInfo | verify | all | dotnet test | - | 完整套件 210 项通过（Core 41/Connections 38/Terminal 11/ZMODEM 32/TestGate 49/App 39）；CI01 覆盖 TestGate 候选元数据 |
 | TST-02 | 完成 | TerminalEmulatorTests.MatchesPythonPyteGoldenScreen | verify | all | dotnet test | - | 同一字节流与 Python pyte 0.8.2 的 60x20 屏幕快照一致 |
 | TST-03 | 完成 | ZmodemTransferTests.SenderAndReceiverTransferFile,LrzszZmodemTests.RealSzFileIsReceived,LrzszZmodemTests.RealRzReceivesSentFile | verify | all | dotnet test | - | 模拟双向和真实 lrzsz 双向 64KB 二进制文件集成测试覆盖 |
 | TST-04 | 部分 | SshIntegrationTests.KeyAuthShellOutputResizeAndReconnect,SerialPtyIntegrationTests.SerialConnectionReadsAndWritesThroughPty | verify | linux | dotnet test | WIN-17 | Linux sshd/PTY 集成已自动化；Windows 实机 SSH/串口集成依赖真实硬件，无法自动化 |
