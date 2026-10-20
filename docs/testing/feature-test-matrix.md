@@ -42,7 +42,7 @@
 | SER-04 | 完成 | SerialCatalogTests.SettingsMapToSystemIoPortsEnums,SerialSessionSummaryTests.SER04_ConnectionSummaryFormatsBaudDataParityStopAndFlow,SerialSidebarDetailsTests.SER04_SerialSidebarShowsConnectionSummaryOnThirdLine | verify | all | dotnet test | - | 设置值到 System.IO.Ports 枚举映射、侧栏摘要格式（含非默认流控）及第三行实际渲染由测试覆盖 |
 | SER-05 | 部分 | SerialCatalogTests.SettingsMapToSystemIoPortsEnums | verify | all | dotnet test | WIN-11 | 枚举映射已自动化；真实 RTS/CTS、XON/XOFF、RTS/DTR 行为和 DSR/DTR 缺失提示依赖真实串口硬件和引脚接线，无法自动化 |
 | SER-06 | 部分 | - | manual | all | manual | WIN-04 | 端口占用需要真实串口硬件，无法自动化 |
-| SER-07 | 部分 | SerialPtyIntegrationTests.SerialConnectionReadsAndWritesThroughPty,SerialOpenBufferTests.SER07_OpeningSerialSessionDiscardsQueuedStaleBytes | verify | linux | dotnet test | WIN-05 | Linux PTY 读写和打开时清空驱动残留收发缓冲区已自动化；Windows 串口回环收发依赖真实硬件回路，无法自动化 |
+| SER-07 | 部分 | SerialPtyIntegrationTests.SerialConnectionReadsAndWritesThroughPty,SerialOpenBufferTests.SER07_OpeningSerialSessionDiscardsQueuedStaleBytes | verify | linux | dotnet test | WIN-05 | Linux PTY 读写和打开时清空驱动残留收发缓冲区已自动化；Windows COM99 `115200 8N1` 打开后显示干净 root 提示符（截图 `serial-clean-prompt-windows-after-buffer-fix.png`）；Windows 串口回环收发依赖真实硬件回路，无法自动化 |
 | SER-08 | 完成 | SerialAutoReconnectTests.SER08_ReplugReopensOpenSerialTab | verify | all | dotnet test | WIN-03 | 串口拔除、标签断开、重新插入后同一标签自动重开及新连接建立已由 headless 测试覆盖；真实硬件拔插见 WIN-03 |
 | SER-09 | 部分 | SessionStoreTests.SerialStore_Upsert_NormalizesPortAndKeepsPosition | verify | all | dotnet test | WIN-12 | 保存和端口规范化已自动化；Windows 配置内串口会话保存、重启恢复及 UI 收发依赖真实串口硬件，无法自动化 |
 | SER-10 | 部分 | SerialHotplugTests.SER03_MissingPortDoesNotDeleteRememberedSerialSession,SerialHotplugTests.SER03_RepluggedPortRestoresSidebarSession | verify | all | dotnet test | WIN-13 | 成功扫描后保留未连接会话、侧栏恢复和失败扫描不误删已自动化；真实设备运行中拔除后的标签状态需 WIN-13 实测 |
@@ -92,7 +92,7 @@
 | TST-01 | 完成 | CI01_SerializesCandidateInfo | verify | all | dotnet test | - | 完整套件 213 项通过（Core 42/Connections 39/Terminal 11/ZMODEM 32/TestGate 49/App 40）；CI01 覆盖 TestGate 候选元数据 |
 | TST-02 | 完成 | TerminalEmulatorTests.MatchesPythonPyteGoldenScreen | verify | all | dotnet test | - | 同一字节流与 Python pyte 0.8.2 的 60x20 屏幕快照一致 |
 | TST-03 | 完成 | ZmodemTransferTests.SenderAndReceiverTransferFile,LrzszZmodemTests.RealSzFileIsReceived,LrzszZmodemTests.RealRzReceivesSentFile | verify | all | dotnet test | - | 模拟双向和真实 lrzsz 双向 64KB 二进制文件集成测试覆盖 |
-| TST-04 | 部分 | SshIntegrationTests.KeyAuthShellOutputResizeAndReconnect,SerialPtyIntegrationTests.SerialConnectionReadsAndWritesThroughPty,SerialOpenBufferTests.SER07_OpeningSerialSessionDiscardsQueuedStaleBytes | verify | linux | dotnet test | WIN-17 | Linux sshd/PTY 集成及串口打开清空残留缓冲区已自动化；Windows 实机 SSH/串口集成依赖真实硬件，无法自动化 |
+| TST-04 | 部分 | SshIntegrationTests.KeyAuthShellOutputResizeAndReconnect,SerialPtyIntegrationTests.SerialConnectionReadsAndWritesThroughPty,SerialOpenBufferTests.SER07_OpeningSerialSessionDiscardsQueuedStaleBytes | verify | linux | dotnet test | WIN-17 | Linux sshd/PTY 集成及串口打开清空残留缓冲区已自动化；Windows COM99 已实测打开并显示干净提示符；Windows 实机 SSH/串口回环集成依赖真实硬件，无法自动化 |
 | TST-05 | 部分 | - | manual | all | manual | WIN-18 | 最终逐页像素复核属于视觉判断，无法自动化 |
 | TST-06 | 部分 | - | manual | all | manual | WIN-09 | 8 小时稳定性需要真实桌面/硬件持续运行和资源曲线，无法自动化 |
 | TST-07 | 部分 | - | manual | all | manual | WIN-19 | 默认版本切换与回退需要真实桌面安装环境演练，无法自动化 |
