@@ -41,6 +41,18 @@ public sealed class PackagingScriptTests
 public sealed class PackagingGateScriptTests
 {
     [Fact]
+    public void PK03_VerifyTrustsTrxOverNoisyVstestExitCode()
+    {
+        var root = FindRepositoryRoot();
+        var path = Path.Combine(root, "avalonia", "pack", "verify.ps1");
+        var text = File.ReadAllText(path);
+
+        Assert.Contains("Get-TrxFailureCount", text);
+        Assert.Contains("no failed tests", text);
+        Assert.Contains("$failed -eq 0", text);
+    }
+
+    [Fact]
     public void PK02_VerifyListsEachProjectToAvoidVstestRace()
     {
         var root = FindRepositoryRoot();
