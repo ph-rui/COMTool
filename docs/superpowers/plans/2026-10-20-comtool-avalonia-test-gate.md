@@ -1354,7 +1354,7 @@ git commit -m "Test terminal double-click maximize behavior"
 
 Functions:
 - `require_commands` checks `Xvfb`, `xdotool`, `openbox`, `sshd`, `ssh-keygen`, `lrzsz`/`rz`/`sz`, `nc`; on Linux it exits with the distro install command instead of skipping.
-- `find_free_display` picks `:99` or the next free display.
+- `find_free_display` picks the first free display at or above `:100`; never uses `:99` (reserved for the user's RDP).
 - `start_xvfb` writes the PID and waits for `xdpyinfo`; `start_wm` launches `openbox --sm-disable` on that display so maximize/restore has a real window manager.
 - `start_app <config-dir>` launches the app with `HOME`, `COMTOOL_AVALONIA_CONFIG_DIR`, `COMTOOL_PYTHON_CONFIG_DIR`, and `DISPLAY`.
 - `wait_for_window <title>` uses `timeout 20 xdotool search --sync --name`; timeout is a failure, not a hang.
@@ -1390,7 +1390,7 @@ Run:
 ```bash
 bash -n avalonia/tests/e2e/linux/lib.sh
 bash -n avalonia/tests/e2e/linux/run-ui-e2e.sh
-DISPLAY=:99 bash avalonia/tests/e2e/linux/run-ui-e2e.sh \
+E2E_DISPLAY_START=100 bash avalonia/tests/e2e/linux/run-ui-e2e.sh \
   --app avalonia/publish/linux-x64/COMTool.App
 ```
 Expected: `PASS APP01_SmokeLaunchE2E`, no orphan `COMTool.App`, `Xvfb`, `openbox` or `sshd` process.
@@ -1492,7 +1492,7 @@ Use the current Unix user. Do not write a plaintext password.
 
 Run:
 ```bash
-DISPLAY=:99 bash avalonia/tests/e2e/linux/run-ui-e2e.sh \
+E2E_DISPLAY_START=100 bash avalonia/tests/e2e/linux/run-ui-e2e.sh \
   --app avalonia/publish/linux-x64/COMTool.App
 ```
 Expected: `PASS UI02_SidebarExpandsOnLaunchE2E`, `PASS E2E01_OpenSshSession`, `PASS SSH06_MultipleConnectionsE2E`, `PASS UI05_TabSwitchTypingBothDirections`.
@@ -1541,7 +1541,7 @@ Expected: non-zero exit, no orphan Xvfb/openbox/sshd/app, and a printed temp roo
 
 Run:
 ```bash
-DISPLAY=:99 bash avalonia/tests/e2e/linux/run-ui-e2e.sh \
+E2E_DISPLAY_START=100 bash avalonia/tests/e2e/linux/run-ui-e2e.sh \
   --app avalonia/publish/linux-x64/COMTool.App
 ```
 Expected: all E2E IDs PASS except any explicitly approved platform limitation.
