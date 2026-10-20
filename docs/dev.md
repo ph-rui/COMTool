@@ -6,6 +6,21 @@
 如果你贡献了代码，也欢迎你把你贡献的功能模块的思路记录在这里
 
 
+## 测试/便携配置目录覆盖
+
+Avalonia 版支持两个可选环境变量，仅用于测试、便携式冒烟运行和端到端测试隔离：
+
+- `COMTOOL_AVALONIA_CONFIG_DIR`：仅覆盖 `ConfigPaths.AvaloniaConfigDirectory()`。
+- `COMTOOL_PYTHON_CONFIG_DIR`：仅覆盖 `ConfigPaths.PythonConfigDirectory()`。
+
+规则：
+
+- 只有变量值非空（且不完全由空白字符组成）时才覆盖默认路径；相对路径会通过 `Path.GetFullPath` 转为绝对路径。
+- 生产启动不设置这两个变量，默认行为保持不变。
+- 测试和端到端脚本应始终将它们指向临时目录。
+- **不要**把两个变量指向同一个目录，Avalonia 与 Python 配置目录必须保持分离。
+- 覆盖目录中不得写入真实密码、SSH 密钥或其他机密信息；测试结束应清理临时目录。
+
 ## 协议插件中的快捷键发送
 
 给 key mode 按钮定义了一个 eventFilter, 拦截所有按钮按下和抬起按键的操作
