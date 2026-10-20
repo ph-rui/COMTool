@@ -88,6 +88,7 @@ public sealed class TelnetSessionAppTests
                 window.FindControl<ComboBox>("ConnectionTypeCombo")!.SelectedIndex = 2;
                 Dispatcher.UIThread.RunJobs();
                 Assert.True(window.FindControl<Grid>("TelnetPanel")!.IsVisible);
+                Assert.Equal("23", window.FindControl<TextBox>("TelnetPortBox")!.Text);
 
                 window.FindControl<TextBox>("TelnetHostBox")!.Text = "example.com";
                 window.FindControl<TextBox>("TelnetPortBox")!.Text = "2323";
@@ -112,5 +113,11 @@ public sealed class TelnetSessionAppTests
         Assert.Equal("lab", session!.Alias);
         Assert.Equal("alice", session.User);
         Assert.Equal("secret", service.PasswordCache.Get(openedKey!));
+
+        var reloaded = AppConfigService.Load().TelnetSessions.Get(openedKey!);
+        Assert.NotNull(reloaded);
+        Assert.Equal("lab", reloaded!.Alias);
+        Assert.Equal("alice", reloaded.User);
+        Assert.Equal(2323, reloaded.Port);
     }
 }
