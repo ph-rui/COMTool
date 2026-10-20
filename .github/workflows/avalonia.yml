@@ -6,29 +6,27 @@ on:
     paths:
       - "avalonia/**"
       - "docs/parity-matrix.md"
+      - "docs/testing/**"
       - "docs/packaging/**"
-      - "docs/fixtures/ui/**"
-      - "docs/fixtures/phase0/**"
-      - "docs/fixtures/phase1/**"
-      - "docs/superpowers/specs/2026-10-19-comtool-avalonia-parallel-design.md"
-      - "docs/superpowers/plans/2026-10-19-comtool-avalonia-phase0-*.md"
-      - "docs/superpowers/plans/2026-10-19-comtool-avalonia-phase1-*.md"
+      - "docs/fixtures/**"
+      - "docs/superpowers/specs/2026-10-20-comtool-avalonia-test-gate-design.md"
+      - "docs/superpowers/plans/2026-10-20-comtool-avalonia-test-gate.md"
+      - ".github/workflows/avalonia.yml"
   pull_request:
     paths:
       - "avalonia/**"
       - "docs/parity-matrix.md"
+      - "docs/testing/**"
       - "docs/packaging/**"
-      - "docs/fixtures/ui/**"
-      - "docs/fixtures/phase0/**"
-      - "docs/fixtures/phase1/**"
-      - "docs/superpowers/specs/2026-10-19-comtool-avalonia-parallel-design.md"
-      - "docs/superpowers/plans/2026-10-19-comtool-avalonia-phase0-*.md"
-      - "docs/superpowers/plans/2026-10-19-comtool-avalonia-phase1-*.md"
+      - "docs/fixtures/**"
+      - "docs/superpowers/specs/2026-10-20-comtool-avalonia-test-gate-design.md"
+      - "docs/superpowers/plans/2026-10-20-comtool-avalonia-test-gate.md"
+      - ".github/workflows/avalonia.yml"
   workflow_dispatch:
 
 jobs:
-  build:
-    name: build and test
+  verify:
+    name: verify (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
@@ -41,27 +39,34 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
-      - name: Restore
-        run: dotnet restore avalonia/COMTool.Avalonia.sln
-
-      - name: Build
-        run: dotnet build avalonia/COMTool.Avalonia.sln -c Release --no-restore
-
-      - name: Test
-        run: dotnet test avalonia/COMTool.Avalonia.sln -c Release --no-build
-
-      - name: Test real lrzsz transfers
+      - name: Install Linux E2E dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y lrzsz
-          LRZSZ_DIR=/usr/bin dotnet test \
-            avalonia/tests/COMTool.Connections.Tests/COMTool.Connections.Tests.csproj \
-            -c Release --no-build --filter FullyQualifiedName~LrzszZmodemTests
+          sudo apt-get install -y \
+            xvfb xdotool openbox openssh-server lrzsz \
+            x11-utils x11-apps imagemagick netcat-openbsd iproute2 procps
+
+      - name: Verify (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: bash avalonia/pack/verify.sh
+
+      - name: Verify (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./avalonia/pack/verify.ps1
+
+      - name: Upload verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: avalonia-verify-${{ matrix.os }}
+          path: avalonia/publish/test-results/**
+          if-no-files-found: warn
 
   publish-windows:
-    name: publish windows x64
-    needs: build
+    name: candidate windows x64
+    needs: verify
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -70,45 +75,20 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
-      - name: Publish self-contained
-        run: >
-          dotnet publish avalonia/src/COMTool.App/COMTool.App.csproj
-          -c Release -r win-x64 --self-contained true
-          -p:PublishSingleFile=true
-          -p:IncludeNativeLibrariesForSelfExtract=true
-          -p:EnableCompressionInSingleFile=true
-          -p:DebugType=None -p:DebugSymbols=false
-          -o avalonia/publish/win-x64
-
-      - name: Validate installer scripts
+      - name: Build gated candidate
         shell: pwsh
-        run: |
-          $failed = $false
-          Get-ChildItem avalonia/pack/windows/*.ps1 | ForEach-Object {
-            $tokens = $null
-            $errors = $null
-            [System.Management.Automation.Language.Parser]::ParseFile(
-              $_.FullName, [ref]$tokens, [ref]$errors) | Out-Null
-            if ($errors.Count -gt 0) {
-              $failed = $true
-              Write-Error "$($_.Name): $($errors[0].Message)"
-            }
-          }
-          if ($failed) { exit 1 }
+        run: ./avalonia/pack/windows/pack.ps1
 
-      - name: Package release
-        shell: pwsh
-        run: ./avalonia/pack/windows/pack.ps1 -SkipPublish
-
-      - name: Upload Windows artifact
+      - name: Upload candidate only
         uses: actions/upload-artifact@v4
         with:
-          name: comtool-avalonia-beta-win-x64
-          path: avalonia/publish/package/
+          name: comtool-avalonia-candidate-win-x64
+          path: avalonia/publish/candidate/**
+          if-no-files-found: error
 
   publish-linux:
-    name: publish linux x64
-    needs: build
+    name: candidate linux x64
+    needs: verify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -117,19 +97,19 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
-      - name: Validate installer scripts
+      - name: Install Linux E2E dependencies
         run: |
-          bash -n avalonia/pack/linux/pack.sh
-          bash -n avalonia/pack/linux/install.sh
-          bash -n avalonia/pack/linux/uninstall.sh
+          sudo apt-get update
+          sudo apt-get install -y \
+            xvfb xdotool openbox openssh-server lrzsz \
+            x11-utils x11-apps imagemagick netcat-openbsd iproute2 procps
 
-      - name: Build Linux package
-        run: ./avalonia/pack/linux/pack.sh
+      - name: Build gated candidate
+        run: bash avalonia/pack/linux/pack.sh
 
-      - name: Upload Linux artifact
+      - name: Upload candidate only
         uses: actions/upload-artifact@v4
         with:
-          name: comtool-avalonia-beta-linux-x64
-          path: |
-            avalonia/publish/package/COMTool-Avalonia-linux-x64-*.tar.gz
-            avalonia/publish/package/SHA256SUMS-linux.txt
+          name: comtool-avalonia-candidate-linux-x64
+          path: avalonia/publish/candidate/**
+          if-no-files-found: error
