@@ -185,6 +185,19 @@ function Get-TrxResultCount {
     return ([regex]::Matches($raw, '<UnitTestResult ')).Count
 }
 
+function Get-TrxFailureCount {
+    param([string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return 0
+    }
+    $raw = Get-Content -LiteralPath $Path -Raw
+    if (-not $raw) {
+        return 0
+    }
+    return ([regex]::Matches($raw, 'outcome="Failed"')).Count
+}
+
 # Runs one native command, writing combined output to $LogPath. Returns the
 # native exit code from $LASTEXITCODE so the caller can check it immediately.
 function Invoke-Logged {
@@ -249,20 +262,20 @@ if ($buildOk) {
                     --logger "trx;LogFileName=$trxName"
             }
 
-        if ($status -ne 0) {
-            $unitFailed = $true
-            $trxEvidence.Add("${trxName}: FAIL (test exit $status)")
-        }
-        else {
-            $count = Get-TrxResultCount -Path $trxPath
-            if ($count -gt 0) {
-                $unitTotal += $count
-                $trxEvidence.Add("${trxName}: $count results")
+        $count = Get-TrxResultCount -Path $trxPath
+        $failed = Get-TrxFailureCount -Path $trxPath
+        if ($count -gt 0 -and $failed -eq 0) {
+            $unitTotal += $count
+            if ($status -ne 0) {
+                $trxEvidence.Add("${trxName}: $count results (test exit $status; no failed tests)")
             }
             else {
-                $unitFailed = $true
-                $trxEvidence.Add("${trxName}: FAIL (missing, empty, or no results)")
+                $trxEvidence.Add("${trxName}: $count results")
             }
+        }
+        else {
+            $unitFailed = $true
+            $trxEvidence.Add("${trxName}: FAIL (exit $status, $count results, $failed failed)")
         }
     }
 
@@ -283,21 +296,21 @@ if ($buildOk) {
                 --logger "trx;LogFileName=app-tests.trx"
         }
     $appTrx = Join-Path $resultsDir "app-tests.trx"
-    if ($appStatus -ne 0) {
-        Add-StepResult "app-tests" "FAIL (exit $appStatus)"
-        $failures++
-    }
-    else {
-        $appCount = Get-TrxResultCount -Path $appTrx
-        if ($appCount -gt 0) {
-            $appTotal = $appCount
-            Add-StepResult "app-tests" "PASS ($appCount results)"
+    $appCount = Get-TrxResultCount -Path $appTrx
+    $appFailed = Get-TrxFailureCount -Path $appTrx
+    if ($appCount -gt 0 -and $appFailed -eq 0) {
+        $appTotal = $appCount
+        if ($appStatus -ne 0) {
+            Add-StepResult "app-tests" "PASS ($appCount results; test exit $appStatus, no failed tests)"
         }
         else {
-            Add-StepResult "app-tests" `
-                "FAIL (missing, empty, or no results in app-tests.trx)"
-            $failures++
+            Add-StepResult "app-tests" "PASS ($appCount results)"
         }
+    }
+    else {
+        Add-StepResult "app-tests" `
+            "FAIL (exit $appStatus, $appCount results, $appFailed failed, app-tests.trx)"
+        $failures++
     }
 }
 else {
