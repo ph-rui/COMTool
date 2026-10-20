@@ -13,7 +13,7 @@ internal sealed class TelnetAutoLogin
     private const int MaxTailLength = 8192;
 
     private static readonly Regex AnsiEscape = new(
-        @"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1B\\))",
+        @"\x1B(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1B\\)|[@-Z\\-_])",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex UserPrompt = new(
