@@ -24,7 +24,8 @@
     </Grid>
 
     <Grid Grid.Row="2" Margin="16,0,0,0">
-      <Border Background="{DynamicResource SidebarListBackgroundBrush}"
+      <Border Name="SessionListFrame"
+              Background="{DynamicResource SidebarListBackgroundBrush}"
               BorderBrush="{DynamicResource SidebarBorderBrush}"
               BorderThickness="1"
               CornerRadius="3"

@@ -382,23 +382,36 @@ run_ui02_sidebar_auto_hide() {
     grep -q '"visible": false' "$config" 2>/dev/null \
         || fail "$test_id" "auto-hide rewrote the saved sidebar preference"
 
-    # Entering the left-edge hover strip must reopen the panel and let the
-    # content shrink back to the saved sidebar width.
-    xdotool mousemove --window "$WINDOW_ID" 10 300 || fail "$test_id" "could not move pointer to the left edge"
+    # The list frame's left edge is x=32 for the seeded 220px sidebar. Moving
+    # just left of that red edge must reopen the panel even though the point is
+    # outside the old fixed 10px hover strip.
+    xdotool mousemove --window "$WINDOW_ID" 25 300 || fail "$test_id" "could not move pointer just left of the list frame"
     if ! wait_for_sidebar_visible 5; then
-        fail "$test_id" "sidebar did not reopen from the left-edge hover strip"
+        fail "$test_id" "sidebar did not reopen from the list frame's left edge"
     fi
 
-    # The whole expanded panel, including the padding to the left of the
-    # session list, is inside the hover area. Moving onto that padding must not
-    # immediately retract it again before the pointer reaches a session row.
+    # Anywhere between the list frame's red and green edges stays open.
     xdotool mousemove --window "$WINDOW_ID" 30 300 || fail "$test_id" "could not move pointer into sidebar padding"
     if ! wait_for_sidebar_visible 2; then
-        fail "$test_id" "sidebar retracted while pointer was inside its padding"
+        fail "$test_id" "sidebar retracted while pointer was inside its left padding"
     fi
     xdotool mousemove --window "$WINDOW_ID" 100 300 || fail "$test_id" "could not move pointer into the session list"
     if ! wait_for_sidebar_visible 2; then
         fail "$test_id" "sidebar retracted while pointer was over the session list"
+    fi
+
+    # Crossing the list frame's right edge (x=236 for the seeded width) must
+    # retract the panel even before the pointer reaches the terminal center.
+    xdotool mousemove --window "$WINDOW_ID" 240 300 || fail "$test_id" "could not move pointer past the list frame's right edge"
+    if ! wait_for_sidebar_hidden 5; then
+        fail "$test_id" "sidebar did not retract after crossing the list frame's right edge"
+    fi
+
+    # The E2E suite reuses one app instance; later SSH tests click the session
+    # row directly and expect the panel to be expanded.
+    xdotool mousemove --window "$WINDOW_ID" 25 300 || fail "$test_id" "could not move pointer back to the list frame's left edge"
+    if ! wait_for_sidebar_visible 5; then
+        fail "$test_id" "sidebar did not reopen before the next test"
     fi
     pass "$test_id"
 }
