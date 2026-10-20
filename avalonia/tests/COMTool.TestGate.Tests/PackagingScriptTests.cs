@@ -37,3 +37,33 @@ public sealed class PackagingScriptTests
         throw new InvalidOperationException("repository root was not found");
     }
 }
+
+public sealed class PackagingGateScriptTests
+{
+    [Fact]
+    public void PK02_VerifyRetriesIntermittentTestListFailure()
+    {
+        var root = FindRepositoryRoot();
+        var path = Path.Combine(root, "avalonia", "pack", "verify.ps1");
+        var text = File.ReadAllText(path);
+
+        Assert.Contains("$listAttempts", text);
+        Assert.Contains("retrying", text);
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "docs", "parity-matrix.md")))
+            {
+                return directory.FullName;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new InvalidOperationException("repository root was not found");
+    }
+}
