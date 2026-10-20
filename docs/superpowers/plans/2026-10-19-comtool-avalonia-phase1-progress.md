@@ -386,7 +386,7 @@ Validated headlessly on the Windows test host over SSH (no RDP used):
   `test-list.txt`, six E2E PASS lines and `PKG01_CandidateSmoke`; Windows and
   macOS structural checks also pass with Linux-only rows skipped.
 - Suite total is now 164: Core 20, Connections 31, Terminal 11, ZMODEM 32,
-  TestGate 46, App 24.
+  TestGate 47, App 24.
 - The package hashes above are historical. Production `ConfigPaths` changed
   after those builds, so a new gated candidate must be built and signed before
   any formal package is promoted.
