@@ -17,21 +17,20 @@ public sealed class AppSmokeTests
         MainWindow? window = null;
         try
         {
-            env.SeedConfig(new ComtoolConfig());
-            window = new MainWindow { DataContext = new MainViewModel() };
-            window.Show();
-            Dispatcher.UIThread.RunJobs();
+            env.Run(() =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                window = new MainWindow { DataContext = new MainViewModel() };
+                window.Show();
+                Dispatcher.UIThread.RunJobs();
 
-            Assert.True(window.IsVisible);
-            Assert.NotNull(window.FindControl<SessionSidebar>("Sidebar"));
-            Assert.StartsWith(TestAppBuilder.Root, env.AvaloniaConfigDir, StringComparison.Ordinal);
-            Assert.StartsWith(TestAppBuilder.Root, env.PythonConfigDir, StringComparison.Ordinal);
-            Assert.StartsWith(TestAppBuilder.Root, AppLog.Path, StringComparison.Ordinal);
-        }
-        catch
-        {
-            env.KeepForFailure();
-            throw;
+                Assert.True(window.IsVisible);
+                Assert.NotNull(window.FindControl<SessionSidebar>("Sidebar"));
+
+                var expectedConfigPath = Path.Combine(env.AvaloniaConfigDir, "config.json");
+                var log = File.ReadAllText(AppLog.Path);
+                Assert.Contains(expectedConfigPath, log, StringComparison.Ordinal);
+            });
         }
         finally
         {

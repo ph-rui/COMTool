@@ -1,5 +1,4 @@
 using COMTool.Core.Config;
-using Xunit;
 
 namespace COMTool.App.Tests;
 
@@ -39,7 +38,24 @@ public sealed class TestEnvironment : IDisposable
         config.Save(Path.Combine(AvaloniaConfigDir, "config.json"));
     }
 
-    public void KeepForFailure() => _keepForFailure = true;
+    public void Run(Action action)
+    {
+        try
+        {
+            action();
+        }
+        catch
+        {
+            KeepForFailure();
+            throw;
+        }
+    }
+
+    public void KeepForFailure()
+    {
+        _keepForFailure = true;
+        TestAppBuilder.MarkFailureRetained();
+    }
 
     public void Dispose()
     {
@@ -52,9 +68,7 @@ public sealed class TestEnvironment : IDisposable
         Environment.SetEnvironmentVariable(AvaloniaConfigVariable, _previousAvaloniaConfigDir);
         Environment.SetEnvironmentVariable(PythonConfigVariable, _previousPythonConfigDir);
 
-        var failed = _keepForFailure
-            || TestContext.Current.TestState?.Result == TestResult.Failed;
-        if (failed)
+        if (_keepForFailure)
         {
             Console.WriteLine($"[COMTool.App.Tests] kept test root: {Root}");
             return;
