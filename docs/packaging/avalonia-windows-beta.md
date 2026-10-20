@@ -107,9 +107,10 @@ sandbox install:
   uninstall (no `-RemoveConfig`).
 
 The latest app binary (version `0.01`, borderless chrome, sidebar auto-hide on
-the first pointer move into the content area, sidebar remains open while the
-pointer is anywhere inside its full area including the inner padding and
-session list, sidebar expanded on every launch, serial sessions retained across
+the first pointer move into the content area, sidebar reopens when the pointer
+moves left of the session-list frame's red edge and retracts only after
+crossing its green edge, with both trigger points following sidebar resize,
+sidebar expanded on every launch, serial sessions retained across
 unplug/replug with open serial tabs reopened automatically, multiple
 independent connections from one saved SSH session, PTY-preserving tab
 switching with immediate terminal input, non-focus-stealing chrome controls,

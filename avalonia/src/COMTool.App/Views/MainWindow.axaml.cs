@@ -31,6 +31,7 @@ public partial class MainWindow : Window
     private DispatcherTimer? _portTimer;
     private readonly DispatcherTimer _sessionHoverTimer;
     private bool _windowPointerPressed;
+    private Rect _sessionListFrame;
     private double _lastSessionPointerX;
     private double _lastSessionPointerY;
     private double _lastSessionTimerX;
@@ -1951,6 +1952,13 @@ public partial class MainWindow : Window
 
     private void SetSidebarVisible(bool visible, bool persist = true)
     {
+        if (!visible)
+        {
+            // Keep the last visible frame so the reopen trigger still matches
+            // the red edge after the panel collapses.
+            GetSessionListFrame();
+        }
+
         _sidebarVisible = visible;
         Sidebar.IsVisible = visible;
         SidebarSplitter.IsVisible = visible;
@@ -1979,7 +1987,11 @@ public partial class MainWindow : Window
 
     internal void CheckSidebarAutoHideForTests() => CheckSessionSidebarAutoHide();
 
-    internal void ShowSidebarFromHoverForTests() => ShowSessionSidebarAuto();
+    internal void SetSidebarWidthForTests(double width)
+    {
+        _sidebarWidth = ClampSidebarWidth(width);
+        BodyGrid.ColumnDefinitions[0].Width = new GridLength(_sidebarWidth);
+    }
 
     internal void StopSidebarHoverTimerForTests() => _sessionHoverTimer.Stop();
 
@@ -2038,14 +2050,12 @@ public partial class MainWindow : Window
         }
 
         var bodyOrigin = BodyGrid.TranslatePoint(new Point(0, 0), this) ?? new Point(16, 35);
-        var width = BodyGrid.ColumnDefinitions[0].ActualWidth;
-        if (width <= 0)
-        {
-            width = ClampSidebarWidth(_sidebarWidth);
-        }
+        var frame = GetSessionListFrame();
+        var left = frame.Width > 0 ? frame.Left : bodyOrigin.X;
+        var right = frame.Width > 0 ? frame.Right : bodyOrigin.X + FallbackSidebarWidth();
 
-        return _lastSessionPointerX >= bodyOrigin.X
-            && _lastSessionPointerX <= bodyOrigin.X + width
+        return _lastSessionPointerX >= left
+            && _lastSessionPointerX <= right
             && _lastSessionPointerY >= bodyOrigin.Y
             && _lastSessionPointerY <= bodyOrigin.Y + BodyGrid.Bounds.Height;
     }
@@ -2053,11 +2063,39 @@ public partial class MainWindow : Window
     private bool IsInSessionSidebarApproach()
     {
         var bodyOrigin = BodyGrid.TranslatePoint(new Point(0, 0), this) ?? new Point(16, 35);
+        var frame = GetSessionListFrame();
+        var left = frame.Width > 0 ? frame.Left : bodyOrigin.X;
         var bodyBottom = bodyOrigin.Y + BodyGrid.Bounds.Height;
         return _lastSessionPointerX >= 0
-            && _lastSessionPointerX <= bodyOrigin.X
+            && _lastSessionPointerX <= left
             && _lastSessionPointerY >= bodyOrigin.Y
             && _lastSessionPointerY <= bodyBottom;
+    }
+
+    private double FallbackSidebarWidth()
+    {
+        var width = BodyGrid.ColumnDefinitions[0].ActualWidth;
+        return width > 0 ? width : ClampSidebarWidth(_sidebarWidth);
+    }
+
+    private Rect GetSessionListFrame()
+    {
+        if (Sidebar.IsVisible)
+        {
+            var frame = Sidebar.SessionListFrameControl;
+            if (frame.Bounds.Width > 0
+                && frame.Bounds.Height > 0
+                && frame.TranslatePoint(new Point(0, 0), this) is { } origin)
+            {
+                _sessionListFrame = new Rect(
+                    origin.X,
+                    origin.Y,
+                    frame.Bounds.Width,
+                    frame.Bounds.Height);
+            }
+        }
+
+        return _sessionListFrame;
     }
 
     private void OnWindowPointerMoved(object? sender, PointerEventArgs e)
@@ -2065,6 +2103,13 @@ public partial class MainWindow : Window
         var position = e.GetPosition(this);
         _lastSessionPointerX = position.X;
         _lastSessionPointerY = position.Y;
+
+        if (!_sidebarVisible
+            && !_windowPointerPressed
+            && IsInSessionSidebarApproach())
+        {
+            ShowSessionSidebarAuto();
+        }
 
         if (e.Source is Control source
             && source.FindAncestorOfType<Button>(includeSelf: true) is not null)

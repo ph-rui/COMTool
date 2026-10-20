@@ -26,6 +26,8 @@ public partial class SessionSidebar : UserControl
 
     public bool HasOpenContextMenu => _contextMenu?.IsOpen == true;
 
+    internal Border SessionListFrameControl => SessionListFrame;
+
     private void OnSessionTapped(object? sender, TappedEventArgs e)
     {
         if (sender is Control { DataContext: SessionItem item })
