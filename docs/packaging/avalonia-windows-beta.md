@@ -120,20 +120,25 @@ independent connections from one saved SSH session, PTY-preserving tab
 switching with immediate terminal input, non-focus-stealing chrome controls,
 centered tool-strip icons, remembered window size, encoding-dropdown focus
 return, automatic terminal focus after opening a session, immediate
-single-character echo, double-click terminal maximize/restore, and the
-ReadyToRun release build) was published over SSH and copied to:
+single-character echo, double-click terminal maximize/restore, and a ZMODEM
+status-row fix that keeps the 150px progress bar inside its slot and uses the
+Fluent progress text so the percentage stays readable on light and dark themes)
+was built as a ReadyToRun release and copied to:
 
 - `C:\Users\zhangrui\COMTool-Avalonia.exe` (working copy)
 - `D:\Users\zhangrui\Desktop\COMTool-Avalonia.exe` (desktop copy)
 
-- size: 175,849,904 bytes;
-- SHA256: `3F76716D55ED76314C77E0583AA1CF0138FB7C9B5224D35CEEDCB900CE9F79BD`;
+- size: 175,845,808 bytes;
+- SHA256: `2E7D60991DE673D510F5F4693C738349BA2D2F53D452A68584E267768543A9DF`;
 - both remote copies matched that hash via `Get-FileHash`.
 
 The old `COMTool-Avalonia` process was stopped before the copies were replaced.
 No `COMTool-Avalonia.exe.bak-*` files were created or retained. The working
-copy was launched again after deployment and remained alive/responding; the
-desktop app must be launched again to exercise this build interactively.
+copy was launched again after deployment and remained alive/responding. A real
+`sz` receive over SSH on the Windows desktop showed the full `win-zm.bin` label
+and a readable `22%` inside the progress bar; the status-row crop is
+`docs/fixtures/phase1/zmodem-active-windows-1280x800.png`. The desktop copy
+must be launched again to exercise this build interactively.
 
 This was a direct executable deployment over the existing working and desktop
 copies, not a formal packaged release. No new candidate zip was created or
@@ -146,7 +151,8 @@ b1a301ceac491a5aa707103416c4861a43b86db22552558ab8a715815aafb436
 ```
 
 That hash is from the earlier packaging run and does not include the stopped
-SSH session change; it changes whenever the app is rebuilt. Linux warm-start
+SSH session or ZMODEM status-row changes; it changes whenever the app is
+rebuilt. Linux warm-start
 measurements took the packaged app from 1.54 s to 0.66-0.70 s; Windows startup
 still needs confirmation on the target desktop.
 
