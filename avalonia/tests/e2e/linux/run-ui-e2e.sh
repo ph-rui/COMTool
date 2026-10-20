@@ -178,6 +178,11 @@ run_app01_smoke() {
     if [[ ! "$width" =~ ^[0-9]+$ || ! "$height" =~ ^[0-9]+$ ]]; then
         fail "$test_id" "invalid window geometry: ${width}x${height}"
     fi
+    width=$((10#$width))
+    height=$((10#$height))
+    if ((width <= 0 || height <= 0)); then
+        fail "$test_id" "invalid window geometry: ${width}x${height}"
+    fi
     log "Window geometry: ${width}x${height}"
 
     # The window uses WindowDecorations=None. The close button is the final

@@ -15,6 +15,7 @@ APP="${APP:-}"
 XVFB_BIN="${XVFB_BIN:-}"
 WM_BIN="${WM_BIN:-}"
 XVFB_PID="${XVFB_PID:-}"
+XVFB_STARTED="${XVFB_STARTED:-0}"
 WM_PID="${WM_PID:-}"
 APP_PID="${APP_PID:-}"
 SSHD_PID="${SSHD_PID:-}"
@@ -93,7 +94,7 @@ install_hint() {
             printf '%s\n' "sudo zypper install -y xvfb xdotool openbox openssh lrzsz netcat-openbsd xdpyinfo xprop ImageMagick"
             ;;
         *)
-            printf '%s\n' "Install Xvfb, xdotool, openbox (or mutter), OpenSSH server/client, lrzsz, netcat, xdpyinfo, and ImageMagick or xwd."
+            printf '%s\n' "Install Xvfb, xdotool, openbox (or mutter), OpenSSH server/client, lrzsz, netcat, xdpyinfo, xprop, and ImageMagick or xwd."
             ;;
     esac
 }
@@ -109,7 +110,7 @@ require_commands() {
         missing+=("openbox or mutter (or set WM_BIN)")
     fi
 
-    for command_name in xdotool xdpyinfo timeout sshd ssh-keygen nc rz sz; do
+    for command_name in xdotool xdpyinfo xprop timeout sshd ssh-keygen nc rz sz; do
         if ! command -v "$command_name" >/dev/null 2>&1; then
             missing+=("$command_name")
         fi
@@ -128,17 +129,23 @@ require_commands() {
     fi
 }
 
+# Normalize a decimal string without letting bash treat leading zeroes as
+# octal. Values such as "099" must become 99, not an arithmetic error.
+normalize_decimal() {
+    local value="$1"
+    [[ "$value" =~ ^[0-9]+$ ]] || return 1
+    printf '%s\n' "$((10#$value))"
+}
+
 display_in_use() {
     local display="$1"
-    local number="${display#:}"
-    number="${number%%.*}"
+    local number
 
-    [[ -n "$number" ]] || return 1
+    number="$(normalize_decimal "${display#:}")" || return 1
     if [[ -e "/tmp/.X${number}-lock" || -e "/tmp/.X11-unix/X${number}" ]]; then
         return 0
     fi
-    if command -v xdpyinfo >/dev/null 2>&1 \
-        && timeout 2 xdpyinfo -display "$display" >/dev/null 2>&1; then
+    if timeout 2 xdpyinfo -display ":$number" >/dev/null 2>&1; then
         return 0
     fi
     return 1
@@ -150,6 +157,8 @@ display_in_use() {
 find_free_display() {
     local requested="${COMTOOL_E2E_DISPLAY:-}"
     local start="${E2E_DISPLAY_START:-100}"
+    local requested_number
+    local start_number
     local number
 
     if [[ -n "$requested" ]]; then
@@ -157,10 +166,15 @@ find_free_display() {
             log "Invalid COMTOOL_E2E_DISPLAY value: $requested"
             return 1
         fi
-        if [[ "$requested" == ":99" ]]; then
-            log "Refusing display :99; it belongs to the user's RDP session"
+        if ! requested_number="$(normalize_decimal "${requested#:}")"; then
+            log "Invalid COMTOOL_E2E_DISPLAY value: $requested"
             return 1
         fi
+        if ((requested_number == 99)); then
+            log "Refusing display :$requested_number; it belongs to the user's RDP session"
+            return 1
+        fi
+        requested=":$requested_number"
         if display_in_use "$requested"; then
             log "Requested display $requested is already in use"
             return 1
@@ -169,12 +183,12 @@ find_free_display() {
         return 0
     fi
 
-    if [[ ! "$start" =~ ^[0-9]+$ ]]; then
+    if ! start_number="$(normalize_decimal "$start")"; then
         log "Invalid E2E_DISPLAY_START value: $start"
         return 1
     fi
 
-    for ((number = start; number < start + 100; number++)); do
+    for ((number = start_number; number < start_number + 100; number++)); do
         if ((number == 99)); then
             continue
         fi
@@ -184,7 +198,7 @@ find_free_display() {
         fi
     done
 
-    log "No free X display found starting at :$start"
+    log "No free X display found starting at :$start_number"
     return 1
 }
 
@@ -200,6 +214,7 @@ start_xvfb() {
     "$XVFB_BIN" "$display" -screen 0 1280x800x24 -ac +extension RANDR -nolisten tcp \
         >>"$TMP_ROOT/xvfb.log" 2>&1 &
     XVFB_PID=$!
+    XVFB_STARTED=1
 
     for ((attempt = 0; attempt < 100; attempt++)); do
         if ! kill -0 "$XVFB_PID" 2>/dev/null; then
@@ -208,7 +223,7 @@ start_xvfb() {
             XVFB_PID=""
             return 1
         fi
-        if DISPLAY="$display" xdpyinfo >/dev/null 2>&1; then
+        if timeout 2 xdpyinfo -display "$display" >/dev/null 2>&1; then
             DISPLAY_NUM="$display"
             export DISPLAY="$display"
             log "Xvfb ready on $display (pid $XVFB_PID)"
@@ -260,9 +275,8 @@ start_wm() {
             WM_PID=""
             return 1
         fi
-        if command -v xprop >/dev/null 2>&1 \
-            && DISPLAY="$display" xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null \
-                | grep -q 'window id'; then
+        if timeout 2 xprop -display "$display" -root _NET_SUPPORTING_WM_CHECK 2>/dev/null \
+            | grep -q 'window id'; then
             log "$wm_name ready on $display (pid $WM_PID)"
             return 0
         fi
@@ -317,7 +331,10 @@ start_app() {
     : >"$TMP_ROOT/app.stdout.log"
     (
         cd -- "$app_dir"
-        HOME="$home_dir" \
+        # exec env keeps the background PID identical to the real application
+        # PID, so cleanup kills the app rather than an intermediate subshell.
+        exec env \
+            HOME="$home_dir" \
             XDG_CONFIG_HOME="$home_dir/.config" \
             XDG_RUNTIME_DIR="$runtime_dir" \
             COMTOOL_AVALONIA_CONFIG_DIR="$avalonia_dir" \
@@ -545,16 +562,20 @@ stop_wm() {
 
 stop_xvfb() {
     local display="${DISPLAY_NUM:-}"
+    local started="${XVFB_STARTED:-0}"
     local number
 
     stop_pid "${XVFB_PID:-}" "Xvfb"
     XVFB_PID=""
 
-    if [[ -n "$display" ]]; then
-        number="${display#:}"
-        number="${number%%.*}"
-        rm -f -- "/tmp/.X${number}-lock" "/tmp/.X11-unix/X${number}" 2>/dev/null || true
+    # Only remove display files when this run launched Xvfb itself. A failed
+    # startup or a display owned by another desktop/server must not be touched.
+    if [[ "$started" == "1" && -n "$display" ]]; then
+        if number="$(normalize_decimal "${display#:}")"; then
+            rm -f -- "/tmp/.X${number}-lock" "/tmp/.X11-unix/X${number}" 2>/dev/null || true
+        fi
     fi
+    XVFB_STARTED=0
     DISPLAY_NUM=""
     WINDOW_ID=""
 }
