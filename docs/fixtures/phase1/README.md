@@ -1,8 +1,9 @@
 # Phase 1 session/tab evidence
 
-Captured on Xvfb `:99` at 100% scaling. The early images use an 850x500
-client area; the 1176x552 images are the Python reference geometry. These are
-functional evidence images, not final pixel baselines.
+Early images were captured on Xvfb `:99` at 100% scaling. The current automated
+E2E harness selects a free display at `100+` and never uses `:99`. The early
+images use an 850x500 client area; the 1176x552 images are the Python reference
+geometry. These are functional evidence images, not final pixel baselines.
 
 | File | What it proves |
 | --- | --- |
@@ -54,6 +55,24 @@ functional evidence images, not final pixel baselines.
 | `dpi-150-1280x800.png` | At 150% X11 scaling (`Xft.dpi=144`) the sidebar, tabs, encoding selector, terminal prompt and status line remain unclipped and readable. |
 | `dpi-200-1736x1036.png` | At 200% scaling on a 2560x1600 Xvfb display the 850x500 logical window is 1700x1000 client pixels; title bar, tabs, terminal text and prompt are all crisp and unclipped. |
 | `performance-2026-10-20.md` | Startup, terminal parsing, SSH 10 MB throughput, R2R packaging and Native AOT experiment measurements. |
+
+## Automated test-gate coverage (2026-10-20)
+
+`docs/testing/feature-test-matrix.md` now maps all 89 parity rows. The gate
+passes in `verify` and `package` phases on Linux, and the structure also passes
+for Windows/macOS. The suite is 164 tests:
+
+- Core 20, Connections 31, Terminal 11, ZMODEM 32, TestGate 46, App 24.
+- Linux Xvfb E2E: `APP01_SmokeLaunchE2E`,
+  `UI02_SidebarExpandsOnLaunchE2E`, `E2E01_OpenSshSession`,
+  `SSH06_MultipleConnectionsE2E`, `UI05_TabSwitchTypingBothDirections`,
+  `TERM15_DoubleClickMaximizeE2E`.
+- Candidate package smoke: `PKG01_CandidateSmoke`.
+
+The images below remain the manual evidence for `WIN-*` items such as the
+title-bar/white-strip check (`WIN-01`), DPI (`WIN-02`), ZMODEM dialogs
+(`WIN-07`), install/upgrade/uninstall (`WIN-08`), and the final pixel review
+(`WIN-18`). Automated tests do not replace those real-desktop checks.
 
 The tab title rule matches Python: serial tabs use the port name, SSH tabs use
 the alias when present and the host otherwise. Closing a tab only closes the
