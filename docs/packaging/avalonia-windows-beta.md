@@ -110,7 +110,9 @@ The latest app binary (version `0.01`, borderless chrome, sidebar auto-hide on
 the first pointer move into the content area, sidebar reopens when the pointer
 moves left of the session-list frame's red edge and retracts only after
 crossing its green edge, with both trigger points following sidebar resize,
-sidebar expanded on every launch, serial sessions retained across
+SSH shell exit/tab close followed by a terminal layout resize no longer
+accessing the disposed shell stream, sidebar expanded on every launch, serial
+sessions retained across
 unplug/replug with open serial tabs reopened automatically, multiple
 independent connections from one saved SSH session, PTY-preserving tab
 switching with immediate terminal input, non-focus-stealing chrome controls,
@@ -123,7 +125,7 @@ ReadyToRun release build) was published over SSH and copied to:
 - `D:\Users\zhangrui\Desktop\COMTool-Avalonia.exe` (desktop copy)
 
 - size: 175,784,368 bytes;
-- SHA256: `155AB705FA22321E5E9E38718AC213C25C11EAABAC0D6EFBEC2C1D76345D4BF0`;
+- SHA256: `BD0033CA005999FCB35FB80B6D446480FF169C1D69B8C492F4A181AD909E4046`;
 - both remote copies matched that hash via `Get-FileHash`.
 
 The old `COMTool-Avalonia` process was stopped before the copies were replaced.
