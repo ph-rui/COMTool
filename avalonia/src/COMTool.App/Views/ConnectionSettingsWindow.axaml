@@ -237,6 +237,7 @@
                       Click="OnTcpDisconnectClick" />
 
               <Button Grid.Row="9" Grid.Column="0" Grid.ColumnSpan="2"
+                      Name="TcpOpenButton"
                       Content="OPEN"
                       Height="30"
                       HorizontalAlignment="Stretch"
