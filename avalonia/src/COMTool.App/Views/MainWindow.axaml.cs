@@ -1254,7 +1254,6 @@ public partial class MainWindow : Window
                 tab.IsZmodemIndeterminate = true;
                 tab.IsZmodemCancellable = true;
                 tab.ZmodemLabel = "Select files to send...";
-                tab.ZmodemPercentText = "";
                 tab.ZmodemProgress = 0;
                 _ = PromptZmodemSendAsync(tab, zmodem);
             });
@@ -1285,7 +1284,6 @@ public partial class MainWindow : Window
             tab.IsZmodemCancellable = true;
             tab.ZmodemLabel = progress.Name;
             tab.ZmodemProgress = percent;
-            tab.ZmodemPercentText = $"{percent}%";
             tab.StatusMessage =
                 $"{(progress.IsSend ? "Sending" : "Receiving")} {progress.Name} {percent}%{detail}";
             tab.StatusBrush = StatusProgressBrush;
@@ -1338,7 +1336,6 @@ public partial class MainWindow : Window
         tab.IsZmodemIndeterminate = true;
         tab.IsZmodemCancellable = true;
         tab.ZmodemLabel = "Sending...";
-        tab.ZmodemPercentText = "";
         tab.ZmodemProgress = 0;
         tab.StatusMessage = "Sending...";
         tab.StatusBrush = StatusProgressBrush;
