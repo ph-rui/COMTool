@@ -122,8 +122,8 @@ ReadyToRun release build) was published over SSH and copied to:
 - `C:\Users\zhangrui\COMTool-Avalonia.exe` (working copy)
 - `D:\Users\zhangrui\Desktop\COMTool-Avalonia.exe` (desktop copy)
 
-- size: 175,780,272 bytes;
-- SHA256: `A008CCDD7A5BFD7C08CAFA6829D42A1145C17CA809233496E995082EB0D03999`;
+- size: 175,784,368 bytes;
+- SHA256: `155AB705FA22321E5E9E38718AC213C25C11EAABAC0D6EFBEC2C1D76345D4BF0`;
 - both remote copies matched that hash via `Get-FileHash`.
 
 The old `COMTool-Avalonia` process was stopped before the copies were replaced.
