@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.Interactivity;
 using Avalonia.Threading;
 using COMTool.App.Services;
 using COMTool.App.ViewModels;
@@ -95,5 +96,56 @@ public sealed class TcpSessionAppTests
             window?.Close();
             Dispatcher.UIThread.RunJobs();
         }
+    }
+
+    [AvaloniaFact]
+    public void NET04_OpenTcpSettingsSavesAutoReconnect()
+    {
+        using var env = new TestEnvironment();
+        env.SeedConfig(new ComtoolConfig());
+        var service = AppConfigService.Load();
+        ConnectionSettingsWindow? window = null;
+        string? openedKey = null;
+        try
+        {
+            env.Run(() =>
+            {
+                Func<string, TerminalTab?, Task> open = (_, _) => Task.CompletedTask;
+                window = new ConnectionSettingsWindow(
+                    service,
+                    null,
+                    open,
+                    open,
+                    (key, _) =>
+                    {
+                        openedKey = key;
+                        return Task.CompletedTask;
+                    },
+                    _ => Task.CompletedTask);
+                window.Show();
+                Dispatcher.UIThread.RunJobs();
+
+                window.FindControl<ComboBox>("ConnectionTypeCombo")!.SelectedIndex = 2;
+                window.FindControl<ComboBox>("TcpProtocolCombo")!.SelectedIndex = 0;
+                window.FindControl<ComboBox>("TcpModeCombo")!.SelectedIndex = 0;
+                window.FindControl<TextBox>("TcpTargetBox")!.Text = "127.0.0.1:2345";
+                window.FindControl<CheckBox>("TcpAutoReconnectCheck")!.IsChecked = true;
+                window.FindControl<TextBox>("TcpReconnectIntervalBox")!.Text = "0.5";
+                window.FindControl<Button>("TcpOpenButton")!
+                    .RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Dispatcher.UIThread.RunJobs();
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+
+        Assert.Equal("tcp:client:127.0.0.1:2345", openedKey);
+        var session = service.TcpSessions.Get(openedKey!);
+        Assert.NotNull(session);
+        Assert.True(session!.AutoReconnect);
+        Assert.Equal(0.5, session.ReconnectInterval);
     }
 }
