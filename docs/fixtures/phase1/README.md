@@ -38,6 +38,7 @@ geometry. These are functional evidence images, not final pixel baselines.
 | `zmodem-active-windows-1280x800.png` | Windows 10 RDP, real `sz` receive: the 150px progress bar stays in its slot, `22%` is readable inside the bar and the filename is no longer covered. |
 | `zmodem-cancelled-850x500.png` | Cancel writes ZCAN, restores the panel and reports `File transfer cancelled`. |
 | `zmodem-cancel-input-850x500.png` | Terminal input and the remote shell prompt work again after cancelling a ZMODEM transfer. |
+| `terminal-palette-windows-1280x800.png` | Windows 10 RDP SSH terminal after applying the Python ANSI palette: prompt and `ls` directory names use readable ANSI blue/bright blue (`#2196f3`/`#6cb6ff`) on `#212121` instead of XTerm.NET's near-black defaults. |
 | `terminal-key-mappings-850x500.png` | `cat -v` shows the expected sequences for arrows, Home/End, Insert/Delete and F1-F12, including both SS3 and CSI forms. |
 | `terminal-autofocus-ssh-1000x650.png` | Clicking an SSH session immediately focuses the new terminal; `echo PACKAGE_FOCUS` is accepted and executed without clicking the terminal area first. |
 | `terminal-single-char-echo-1000x650.png` | Typing a bare `i` over SSH echoes immediately even though `i` is a prefix of the highlight keywords `info`/`invalid`/`important`; the highlighter's pending prefix is flushed after 15 ms instead of waiting for Enter. |

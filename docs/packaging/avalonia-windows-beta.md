@@ -120,23 +120,30 @@ independent connections from one saved SSH session, PTY-preserving tab
 switching with immediate terminal input, non-focus-stealing chrome controls,
 centered tool-strip icons, remembered window size, encoding-dropdown focus
 return, automatic terminal focus after opening a session, immediate
-single-character echo, double-click terminal maximize/restore, and a ZMODEM
-status-row fix that keeps the 150px progress bar inside its slot and uses the
-Fluent progress text so the percentage stays readable on light and dark themes)
-was built as a ReadyToRun release and copied to:
+single-character echo, double-click terminal maximize/restore, a terminal ANSI
+palette that matches the Python reference app (including readable blue and
+bright-blue prompt/directory colors on `#212121`), and a ZMODEM status-row fix
+that keeps the 150px progress bar inside its slot and uses the Fluent progress
+text so the percentage stays readable on light and dark themes) was built as a
+ReadyToRun release and copied to:
 
 - `C:\Users\zhangrui\COMTool-Avalonia.exe` (working copy)
 - `D:\Users\zhangrui\Desktop\COMTool-Avalonia.exe` (desktop copy)
 
-- size: 175,845,808 bytes;
-- SHA256: `2E7D60991DE673D510F5F4693C738349BA2D2F53D452A68584E267768543A9DF`;
+- size: 175,854,000 bytes;
+- SHA256: `4A0790B967991F7EEA746AD5AE341B056044BA681F0211E54EE62F794EEFCB2D`;
 - both remote copies matched that hash via `Get-FileHash`.
 
 The old `COMTool-Avalonia` process was stopped before the copies were replaced.
 No `COMTool-Avalonia.exe.bak-*` files were created or retained. The working
-copy was launched again after deployment and remained alive/responding. A real
-`sz` receive over SSH on the Windows desktop showed the full `win-zm.bin` label
-and a readable `22%` inside the progress bar; the status-row crop is
+copy was launched again after deployment and remained alive/responding
+(PID 50044, `Responding=True`). Opening the saved SSH session and running `ls`
+on the Windows desktop showed the prompt and directory names in the Python
+palette's readable ANSI blue/bright blue instead of XTerm.NET's near-black
+defaults; the screenshot is
+`docs/fixtures/phase1/terminal-palette-windows-1280x800.png`. A previous build
+also passed a real `sz` receive over SSH with the full `win-zm.bin` label and a
+readable `22%`; the status-row crop is
 `docs/fixtures/phase1/zmodem-active-windows-1280x800.png`. The desktop copy
 must be launched again to exercise this build interactively.
 
