@@ -31,7 +31,7 @@
 | ID | 功能 | 优先级 | 状态 | 验收要点 |
 |---|---|---|---|---|
 | TERM-01 | ANSI/VT100 基础序列 | P0 | 完成 | 换行、自动换行、制表、清行/清屏、光标定位与滚动均由 pyte 对照 golden 测试覆盖 |
-| TERM-02 | 256 色/真彩色 | P0 | 完成 | 256 色调色板与前景/背景实测通过；基础 16 色改为 Python 主题（blue `#2196f3`、bright blue `#6cb6ff`），ANSI 蓝/亮蓝在 `#212121` 背景上的 WCAG 对比度分别为 5.15/7.49，避免提示符和目录名近乎不可读 |
+| TERM-02 | 256 色/真彩色 | P0 | 完成 | 256 色调色板与前景/背景实测通过；基础 16 色改为 Python 主题（blue `#2196f3`、bright blue `#6cb6ff`），ANSI 蓝/亮蓝在 `#212121` 背景上的 WCAG 对比度分别为 5.15/7.49，避免提示符和目录名近乎不可读；Windows 实测见 `docs/fixtures/phase1/terminal-palette-windows-1280x800.png` |
 | TERM-03 | 自动换行、窗口 resize | P0 | 完成 | 窗口 resize 后 `stty size` 同步变化 |
 | TERM-04 | 滚动回看 | P0 | 完成 | 历史缓冲、滚轮/PageUp/PageDown 已实现；滚动条按 Python 隐藏 |
 | TERM-05 | 选择与复制 | P0 | 完成 | 左键拖选、右键复制、高亮已验证 |
