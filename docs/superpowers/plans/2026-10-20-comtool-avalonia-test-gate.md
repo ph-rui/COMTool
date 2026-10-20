@@ -274,7 +274,8 @@ git commit -m "Add test gate matrix parser"
 - Create: `avalonia/tools/COMTool.TestGate/ManualAcceptance.cs`
 - Create: `avalonia/tests/COMTool.TestGate.Tests/GateCheckerTests.cs`
 - Create: `avalonia/tests/COMTool.TestGate.Tests/ManualAcceptanceTests.cs`
-- Modify: `avalonia/tools/COMTool.TestGate/FeatureMatrix.cs`
+
+`FeatureMatrix.cs` needs no change in this task; its Task 1 shape already exposes every field the checker uses.
 
 **Interfaces:**
 - Consumes: `FeatureMatrix.Load`, `ParityMatrix.Load`.
@@ -364,7 +365,7 @@ public void GC04_PartialManualOnlyWithReasonPasses()
 {
     var result = Check(
         Parity("SER-03", "部分"),
-        Row("SER-03", "部分", manual: "WIN-03", evidence: "真实 USB 热插拔无法在 CI 模拟"));
+        Row("SER-03", "部分", manual: "WIN-03", evidence: "真实 USB 热插拔无法自动化，CI 无法模拟"));
     Assert.True(result.IsSuccess);
 }
 
@@ -396,6 +397,129 @@ public void GC07_LinuxOnlyRowIsNotRequiredOnWindows()
         Row("UI-05", "完成", "UI05_E2E", platform: "linux"),
         platform: "windows");
     Assert.True(result.IsSuccess);
+}
+
+[Fact]
+public void GC08_GenericReasonRejected()
+{
+    var result = Check(
+        Parity("SER-03", "部分"),
+        Row("SER-03", "部分", manual: "WIN-03", evidence: "不能确定"));
+    Assert.Contains(result.Errors, e => e.Contains("不能自动化"));
+}
+
+[Fact]
+public void GC09_MissingManualIdFails()
+{
+    var result = Check(
+        Parity("SER-03", "部分"),
+        Row("SER-03", "部分", phase: "package", manual: "WIN-99", evidence: "硬件原因无法自动化"));
+    Assert.Contains(result.Errors, e => e.Contains("WIN-99"));
+}
+
+[Fact]
+public void GC10_PackageRowRequiredInPackagePhase()
+{
+    var parity = Parity("PKG-01", "完成");
+    var row = Row("PKG-01", "完成", "PKG01_CandidateSmoke", phase: "package");
+    Assert.False(Check(parity, row, phase: "package").IsSuccess);
+    Assert.True(Check(parity, row, phase: "package", package: "PASS PKG01_CandidateSmoke").IsSuccess);
+}
+
+[Fact]
+public void GC11_LinuxRowRequiredOnLinux()
+{
+    var parity = Parity("UI-05", "完成");
+    var row = Row("UI-05", "完成", "UI05_E2E", platform: "linux");
+    Assert.False(Check(parity, row, platform: "linux").IsSuccess);
+    Assert.True(Check(parity, row, platform: "linux", e2e: "PASS UI05_E2E").IsSuccess);
+    Assert.True(Check(parity, row, platform: "windows").IsSuccess);
+}
+
+[Fact]
+public void GC12_MissingNotStartedRowFails()
+{
+    var result = Check(
+        Parity("UI-10", "未开始"),
+        Row("UI-11", "部分", manual: "WIN-03", evidence: "硬件原因无法自动化"));
+    Assert.Contains(result.Errors, e => e.Contains("UI-10"));
+}
+
+[Fact]
+public void GC13_UnknownStatusFails()
+{
+    var result = Check(
+        Parity("UI-05", "进行中"),
+        Row("UI-05", "完成", "UI05_X", phase: "package"),
+        testList: "UI05_X");
+    Assert.Contains(result.Errors, e => e.Contains("进行中"));
+}
+
+[Fact]
+public void GC14_UnknownPlatformFails()
+{
+    var result = Check(Parity("UI-05", "完成"), Row("UI-05", "完成", "UI05_X", platform: "linx"), testList: "UI05_X");
+    Assert.Contains(result.Errors, e => e.Contains("linx"));
+}
+
+[Fact]
+public void GC15_DuplicateMatrixFeatureFails()
+{
+    var matrix = MatrixHeader +
+        "\n| UI-05 | 完成 | UI05_X | verify | all | dotnet test | - | - |" +
+        "\n| UI-05 | 完成 | UI05_X | verify | all | dotnet test | - | - |";
+    var result = Check(Parity("UI-05", "完成"), matrix, testList: "UI05_X");
+    Assert.Contains(result.Errors, e => e.Contains("重复") || e.Contains("duplicate"));
+}
+
+[Fact]
+public void GC16_CompletedManualPhaseFails()
+{
+    var result = Check(
+        Parity("UI-05", "完成"),
+        Row("UI-05", "完成", phase: "manual", manual: "WIN-03"));
+    Assert.Contains(result.Errors, e => e.Contains("UI-05") && e.Contains("自动化"));
+}
+
+[Fact]
+public void GC17_FqnSubstringIsNotAMatch()
+{
+    var result = Check(
+        Parity("UI-05", "完成"),
+        Row("UI-05", "完成", "COMTool.App.Tests.UI05"),
+        testList: "COMTool.App.Tests.UI05_Extra");
+    Assert.Contains(result.Errors, e => e.Contains("COMTool.App.Tests.UI05"));
+}
+
+[Fact]
+public void GC18_ManualRowWithAutomatedIdFails()
+{
+    var result = Check(
+        Parity("UI-05", "完成"),
+        Row("UI-05", "完成", "UI05_DoesNotExist", phase: "manual", manual: "WIN-03"));
+    Assert.Contains(result.Errors, e => e.Contains("manual") || e.Contains("Automated"));
+}
+
+[Fact]
+public void GC19_InvalidOptionPhaseFails()
+{
+    var result = Check(
+        Parity("UI-05", "完成"),
+        Row("UI-05", "完成", "UI05_X"),
+        testList: "UI05_X",
+        phase: "verfiy");
+    Assert.Contains(result.Errors, e => e.Contains("verfiy"));
+}
+
+[Fact]
+public void GC20_InvalidOptionPlatformFails()
+{
+    var result = Check(
+        Parity("UI-05", "完成"),
+        Row("UI-05", "完成", "UI05_X"),
+        testList: "UI05_X",
+        platform: "all");
+    Assert.Contains(result.Errors, e => e.Contains("all"));
 }
 
 [Fact]
@@ -448,20 +572,23 @@ Expected: FAIL because `GateChecker` does not exist.
 Rules, in order:
 1. Build parity status map; ignore headings and non-feature rows.
 2. Build matrix rows keyed by `Feature`.
-3. For each parity status:
-   - `完成`: matrix row exists; at least one `Automated`; every automated ID resolves against `TestListPath`, E2E log or package log according to phase.
-   - `部分`: matrix row exists; at least one `Automated` or `Manual`; if no `Automated`, `Evidence` must be non-empty and must contain a reason word from `不能自动化|无法自动化|硬件|视觉|真实桌面`.
-   - `未开始`/`不适用`: matrix row may exist with `-`, no test required.
-4. Only enforce rows whose `Platform` is `all` or matches `options.Platform`.
-5. Only enforce rows whose `Phase` matches `options.Phase` or is `manual`.
-6. Manual IDs must appear in `docs/testing/manual-acceptance.md` table.
-7. Unknown matrix feature IDs fail.
-8. Duplicate feature IDs fail.
+3. Every parity feature must have a matrix row, including `未开始` and `不适用`; a missing row is an error.
+4. Validate `options.Phase` (`verify|package`) and `options.Platform` (`linux|windows|macos`), every parity status, and every matrix `Phase`/`Platform` against the allowed values before any filtering; unknown values fail.
+5. For each parity status:
+   - `完成`: at least one `Automated`; `Phase=manual` is not sufficient; every automated ID resolves against `TestListPath`, E2E log or package log according to phase.
+   - `部分`: at least one `Automated` or `Manual`; if no `Automated`, `Evidence` must be non-empty and must contain a reason phrase from `不能自动化|无法自动化|硬件|视觉|真实桌面`.
+   - `未开始`/`不适用`: row exists with `-`, no test required.
+6. `Phase=manual` rows must be manual-only: declaring any `Automated` ID on a manual row is an error. This closes the completed+manual bypass in every form.
+7. Only execute/resolve test rows whose `Platform` is `all` or matches `options.Platform`.
+8. Only execute/resolve test rows whose `Phase` matches `options.Phase`; `Phase=manual` rows are structurally validated but their test execution is deferred to signoff.
+9. Manual IDs must appear in `docs/testing/manual-acceptance.md` table for every matrix row, regardless of phase/platform.
+10. Unknown matrix feature IDs fail.
+11. Duplicate feature IDs fail.
 
 Test ID resolution:
 - exact match;
 - fully-qualified suffix match (`.UI05_...`);
-- otherwise `Contains(id, StringComparison.Ordinal)` if the matrix value starts with `COMTool.` or contains `Tests.`.
+- no substring/`Contains` fallback.
 
 - [ ] **Step 4: Confirm the parity parser test already exists**
 
