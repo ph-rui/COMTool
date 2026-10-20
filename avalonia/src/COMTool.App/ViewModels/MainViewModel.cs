@@ -106,6 +106,8 @@ public partial class MainViewModel : ViewModelBase
 
     public bool IsSidebarVisible { get; set; } = true;
 
+    public event Action<TerminalTab?>? SelectedTabChanging;
+
     public TerminalTab? SelectedTab
     {
         get => _selectedTab;
@@ -115,6 +117,10 @@ public partial class MainViewModel : ViewModelBase
             {
                 return;
             }
+
+            // The content host detaches the previous terminal when this changes.
+            // Let the view preserve its live connection before that happens.
+            SelectedTabChanging?.Invoke(_selectedTab);
 
             if (_selectedTab is not null)
             {

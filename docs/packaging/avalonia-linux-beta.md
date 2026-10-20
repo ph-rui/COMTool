@@ -77,10 +77,10 @@ Validated on Linux with Xvfb `:99` (1280x800, 100% scaling):
 
 - package built from the current Avalonia app sources with ReadyToRun enabled
   and single-file compression disabled;
-- tarball size 69,554,443 bytes, SHA256
-  `bb6f6dd88b775d478c44d2a4bd761878ddd7f9928658f4ccfa1fe9b59c64756d`;
-- packaged executable size 168,876,343 bytes, SHA256
-  `1a1edac77ccf6ab629c7990bac02b0b15ab61d726cc3aab8fc5aaafdfbd55649`;
+- tarball size 69,563,572 bytes, SHA256
+  `984e74666533d402be05b25ae9a452b570492762e7e458cf819f01f392cac483`;
+- packaged executable size 168,878,903 bytes, SHA256
+  `a53c26810e9d36d9805868355940dde98555e5bd1d7f1546d353a7153cc3f0a3`;
 - warm startup to the first main window measured 0.66-0.70 s (median 0.66 s
   in the latest run) on Xvfb `:99`, down from 1.54 s for the previous
   compressed build; see `docs/fixtures/phase1/performance-2026-10-20.md`;
@@ -88,8 +88,14 @@ Validated on Linux with Xvfb `:99` (1280x800, 100% scaling):
   launch, multiple independent connections from one saved SSH session, Material
   Design title-bar icons, centered settings/plugin/functional icons, remembered
   window size, non-focus-stealing chrome controls, encoding-drop-down focus
-  return, immediate single-character SSH echo and terminal-pane double-click
-  maximize/restore were exercised on Xvfb before and after packaging;
+  return, immediate single-character SSH echo, terminal-pane double-click
+  maximize/restore, and PTY-preserving tab switching were exercised on Xvfb
+  before and after packaging;
+- the packaged app switched between two live SSH tabs in both directions and
+  accepted `echo PACKAGED_SWITCH_TWO_OK` / `echo PACKAGED_SWITCH_ONE_OK`
+  immediately after each tab click, without clicking the terminal area first;
+  see `docs/fixtures/phase1/tab-switch-input-second-1000x650.png` and
+  `tab-switch-input-first-1000x650.png`;
 - `bash -n` passed for all three scripts;
 - install created an executable app, absolute launcher symlink, desktop entry
   and icon;

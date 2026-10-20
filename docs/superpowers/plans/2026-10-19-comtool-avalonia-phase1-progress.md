@@ -323,9 +323,52 @@ Validated headlessly on the Windows test host over SSH (no RDP used):
   terminal double-click maximized to 1280x800, `echo FINAL_PACKAGE_OK` executed,
   and a second double-click restored 1000x650.
 - Copied the final Windows executable to the C-drive and Desktop copies over
-  SSH; both `Get-FileHash` results match the hash above. An older running
-  instance still holds the previous image until it is closed, so the desktop
-  app needs one restart before the new behaviors are visible.
+  SSH; both `Get-FileHash` results match the hash above. At that time an older
+  running instance still held the previous image until it was closed; it has
+  since been closed and the paths have been refreshed again (see the
+  tab-switch section below).
+
+## 2026-10-20 tab-switch input fix
+
+- Reproduced the reported "switching tabs then cannot type" failure with two
+  live SSH tabs. Focus was reaching the selected terminal's inner
+  `TerminalView`, but `TerminalControl.IsLive` became `false` after the switch.
+  The content host detaches the previous terminal, and the terminal library's
+  `OnDetachedFromLogicalTree` cleaned up the attached PTY reader because the
+  app had not declared a reparent.
+- Added a `SelectedTabChanging` event to `MainViewModel`, raised before the
+  selected tab changes. `MainWindow` calls `BeginReparent()` on the outgoing
+  terminal, then calls `EndReparent()` and focuses the incoming terminal once
+  it is attached and still selected. The focus post now waits for
+  `AttachedToVisualTree` instead of assuming the content host has already
+  swapped its child.
+- Verified on Xvfb with two live SSH tabs in both directions: clicking a tab,
+  typing `echo ...` and pressing Enter works immediately without clicking the
+  black terminal area. Each tab keeps its own shell, buffer and history.
+  Evidence is `tab-switch-input-second-1000x650.png` and
+  `tab-switch-input-first-1000x650.png`.
+- Re-ran the double-click regressions: terminal-pane double-click still
+  maximizes/restores, and tab double-click still detaches/reattaches the live
+  terminal; the detached window accepted `echo DETACHED_INPUT_OK` without
+  reconnecting or duplicating the buffer.
+- Full suite remains 87 passing (Core 13, Connections 31, Terminal 11,
+  ZMODEM 32), no warnings.
+- Rebuilt the ReadyToRun packages. New Windows executable SHA256
+  `919dff9ddd6dd490e44184f3d6d27b6fbe17cba35cbbd25aa0057d1c3f2eb62c`
+  (175,559,088 bytes); Windows zip SHA256
+  `b1a301ceac491a5aa707103416c4861a43b86db22552558ab8a715815aafb436`
+  (74,795,557 bytes); Linux executable SHA256
+  `a53c26810e9d36d9805868355940dde98555e5bd1d7f1546d353a7153cc3f0a3`
+  (168,878,903 bytes); Linux tar SHA256
+  `984e74666533d402be05b25ae9a452b570492762e7e458cf819f01f392cac483`
+  (69,563,572 bytes).
+- Ran the packaged Linux executable with two SSH tabs: both switch directions
+  accepted `echo PACKAGED_SWITCH_TWO_OK` / `echo PACKAGED_SWITCH_ONE_OK`
+  immediately, confirming the fix survives R2R packaging.
+- Copied the new Windows executable to both C-drive and Desktop paths over SSH;
+  both `Get-FileHash` results matched the new executable hash, and no old
+  `COMTool-Avalonia` process was running to lock the files. The Windows desktop
+  app still needs to be launched for visual/DPI confirmation.
 
 ## Still open for Phase 1
 

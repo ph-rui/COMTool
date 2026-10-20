@@ -97,6 +97,7 @@ public partial class MainWindow : Window
         }
 
         _loaded = true;
+        viewModel.SelectedTabChanging += OnSelectedTabChanging;
         if (Environment.GetCommandLineArgs().Contains("--demo"))
         {
             viewModel.LoadDemoSessions();
@@ -871,7 +872,23 @@ public partial class MainWindow : Window
         if (sender is Border { Tag: TerminalTab tab } && DataContext is MainViewModel viewModel)
         {
             viewModel.SelectedTab = tab;
-            tab.Content.Focus();
+            // The content host swaps its child during the selection change.
+            // Focusing immediately can run before the new terminal is in the
+            // visual tree, leaving focus on the tab strip or the window.
+            if (tab.Content is TerminalControl terminal)
+            {
+                FocusTerminalWhenSelected(tab, terminal);
+            }
+        }
+    }
+
+    private static void OnSelectedTabChanging(TerminalTab? tab)
+    {
+        if (tab?.Content is TerminalControl terminal)
+        {
+            // Tab switching detaches the previous content control. Keep its PTY
+            // reader alive until it is selected and attached again.
+            terminal.BeginReparent();
         }
     }
 
@@ -1487,20 +1504,38 @@ public partial class MainWindow : Window
 
     private void FocusTerminalWhenSelected(TerminalTab tab, TerminalControl terminal)
     {
-        // The terminal is not in the visual tree yet when the tab is added.
-        // Focus it after the template has been applied, otherwise the first
-        // keystrokes go to the session sidebar or the window itself.
-        Dispatcher.UIThread.Post(
-            () =>
+        // Switching tabs detaches the old terminal and attaches the new one
+        // during the content-host update. A dispatcher post alone can run
+        // before that attach and then lose focus with the old control, so wait
+        // for the selected terminal to enter the visual tree.
+        void FocusIfStillSelected()
+        {
+            if (tab.IsAlive
+                && DataContext is MainViewModel viewModel
+                && ReferenceEquals(viewModel.SelectedTab, tab))
             {
-                if (tab.IsAlive
-                    && DataContext is MainViewModel viewModel
-                    && ReferenceEquals(viewModel.SelectedTab, tab))
-                {
-                    terminal.Focus();
-                }
-            },
-            DispatcherPriority.Input);
+                terminal.EndReparent();
+                terminal.Focus();
+            }
+        }
+
+        if (terminal.IsAttachedToVisualTree())
+        {
+            Dispatcher.UIThread.Post(FocusIfStillSelected, DispatcherPriority.Loaded);
+            return;
+        }
+
+        EventHandler<VisualTreeAttachmentEventArgs>? onAttached = null;
+        onAttached = (_, _) =>
+        {
+            terminal.AttachedToVisualTree -= onAttached;
+            Dispatcher.UIThread.Post(FocusIfStillSelected, DispatcherPriority.Loaded);
+        };
+        terminal.AttachedToVisualTree += onAttached;
+
+        // Covers the case where the content host attaches synchronously before
+        // the event subscription; the attach handler is then a no-op.
+        Dispatcher.UIThread.Post(FocusIfStillSelected, DispatcherPriority.Loaded);
     }
 
     private void OnSessionsToggle(object? sender, RoutedEventArgs e)
