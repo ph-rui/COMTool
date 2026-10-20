@@ -122,7 +122,10 @@ centered tool-strip icons, remembered window size, encoding-dropdown focus
 return, automatic terminal focus after opening a session, immediate
 single-character echo, double-click terminal maximize/restore, a terminal ANSI
 palette that matches the Python reference app (including readable blue and
-bright-blue prompt/directory colors on `#212121`), and a ZMODEM status-row fix
+bright-blue prompt/directory colors on `#212121`), a serial sidebar summary
+that keeps the device description and adds `115200 8N1` on a third line, a
+serial open path that purges stale driver receive/transmit buffers exactly like
+the Python app, and a ZMODEM status-row fix
 that keeps the 150px progress bar inside its slot and uses the Fluent progress
 text so the percentage stays readable on light and dark themes) was built as a
 ReadyToRun release and copied to:
@@ -130,14 +133,21 @@ ReadyToRun release and copied to:
 - `C:\Users\zhangrui\COMTool-Avalonia.exe` (working copy)
 - `D:\Users\zhangrui\Desktop\COMTool-Avalonia.exe` (desktop copy)
 
-- size: 175,854,000 bytes;
-- SHA256: `4A0790B967991F7EEA746AD5AE341B056044BA681F0211E54EE62F794EEFCB2D`;
+- build commit: `4b1f1cf`;
+- size: 175,858,096 bytes;
+- SHA256: `6C9B1196B70A71526FE14E4DC4E95A26AC56B13355E907E4DD4DFF9E35728236`;
 - both remote copies matched that hash via `Get-FileHash`.
 
 The old `COMTool-Avalonia` process was stopped before the copies were replaced.
-No `COMTool-Avalonia.exe.bak-*` files were created or retained. The working
-copy was launched again after deployment and remained alive/responding
-(PID 50044, `Responding=True`). Opening the saved SSH session and running `ls`
+No `COMTool-Avalonia.exe.bak-*` files were created or retained. The desktop
+copy was launched again after deployment in the interactive RDP session and
+remained alive/responding (PID 45516, `Responding=True`). The saved COM99
+session opened at `115200 8N1` and showed the clean
+`root@imx95evk:~/depth#` prompt with no stale binary payload or replacement
+characters; the sidebar and terminal evidence are
+`docs/fixtures/phase1/serial-sidebar-summary-windows-115200-8n1.png` and
+`docs/fixtures/phase1/serial-clean-prompt-windows-after-buffer-fix.png`.
+Opening the saved SSH session and running `ls`
 on the Windows desktop showed the prompt and directory names in the Python
 palette's readable ANSI blue/bright blue instead of XTerm.NET's near-black
 defaults; the screenshot is
@@ -158,8 +168,8 @@ b1a301ceac491a5aa707103416c4861a43b86db22552558ab8a715815aafb436
 ```
 
 That hash is from the earlier packaging run and does not include the stopped
-SSH session, terminal palette or ZMODEM status-row changes; it changes
-whenever the app is rebuilt. Linux warm-start
+SSH session, terminal palette, serial sidebar summary, stale serial buffer
+purge or ZMODEM status-row changes; it changes whenever the app is rebuilt. Linux warm-start
 measurements took the packaged app from 1.54 s to 0.66-0.70 s; Windows startup
 still needs confirmation on the target desktop.
 
