@@ -138,7 +138,7 @@
 
 | ID | 项目 | 优先级 | 状态 | 验收要点 |
 |---|---|---|---|---|
-| TST-01 | 单元测试 | P0 | 完成 | 208 项通过（Core 41/Connections 38/Terminal 11/ZMODEM 32/TestGate 49/App 37） |
+| TST-01 | 单元测试 | P0 | 完成 | 209 项通过（Core 41/Connections 38/Terminal 11/ZMODEM 32/TestGate 49/App 38） |
 | TST-02 | 终端 golden 测试 | P0 | 完成 | 同一字节流与 Python pyte 0.8.2（60x20、LNM）屏幕行/光标快照一致 |
 | TST-03 | ZMODEM 集成测试 | P0 | 完成 | 模拟双向收发和真实 lrzsz 双向 64KB 二进制文件内容校验通过 |
 | TST-04 | SSH/串口集成测试 | P0 | 部分 | 本地 sshd、Windows 配置内 SSH/串口、Linux socat PTY 已测 |

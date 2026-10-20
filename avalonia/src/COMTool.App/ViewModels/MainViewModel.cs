@@ -86,6 +86,11 @@ public sealed partial class TerminalTab : ObservableObject
     [ObservableProperty]
     private bool _isZmodemIndeterminate;
 
+    public bool IsZmodemProgressTextVisible => !IsZmodemIndeterminate;
+
+    partial void OnIsZmodemIndeterminateChanged(bool value) =>
+        OnPropertyChanged(nameof(IsZmodemProgressTextVisible));
+
     [ObservableProperty]
     private bool _isZmodemCancellable = true;
 
@@ -94,9 +99,6 @@ public sealed partial class TerminalTab : ObservableObject
 
     [ObservableProperty]
     private double _zmodemProgress;
-
-    [ObservableProperty]
-    private string _zmodemPercentText = "";
 
     public bool IsSessionTab => Kind is SessionKind.Serial or SessionKind.Ssh or SessionKind.Tcp;
 }
