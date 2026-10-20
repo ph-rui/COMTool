@@ -12,6 +12,7 @@ public enum SessionKind
     Local,
     Serial,
     Ssh,
+    Telnet,
     Tcp,
 }
 
@@ -31,6 +32,7 @@ public sealed partial class SessionItem : ObservableObject
     public string IconGlyph => Kind switch
     {
         SessionKind.Ssh => "\uf233",
+        SessionKind.Telnet => "\uf120",
         SessionKind.Tcp => "\uf0ac",
         _ => "\uf1e6",
     };
@@ -101,7 +103,7 @@ public sealed partial class TerminalTab : ObservableObject
     [ObservableProperty]
     private double _zmodemProgress;
 
-    public bool IsSessionTab => Kind is SessionKind.Serial or SessionKind.Ssh or SessionKind.Tcp;
+    public bool IsSessionTab => Kind is SessionKind.Serial or SessionKind.Ssh or SessionKind.Telnet or SessionKind.Tcp;
 }
 
 public partial class MainViewModel : ViewModelBase
@@ -201,7 +203,8 @@ public partial class MainViewModel : ViewModelBase
     public void UpdateConnectionStates(
         IReadOnlySet<string> connectedSerial,
         IReadOnlySet<string> connectedSsh,
-        IReadOnlySet<string> connectedTcp)
+        IReadOnlySet<string> connectedTcp,
+        IReadOnlySet<string>? connectedTelnet = null)
     {
         foreach (var item in Sections.SelectMany(section => section.Items))
         {
@@ -209,6 +212,7 @@ public partial class MainViewModel : ViewModelBase
             {
                 SessionKind.Serial => connectedSerial.Contains(item.SessionId),
                 SessionKind.Ssh => connectedSsh.Contains(item.SessionId),
+                SessionKind.Telnet => connectedTelnet?.Contains(item.SessionId) == true,
                 SessionKind.Tcp => connectedTcp.Contains(item.SessionId),
                 _ => false,
             };
@@ -219,7 +223,8 @@ public partial class MainViewModel : ViewModelBase
         AppConfigService config,
         IReadOnlySet<string> connectedSerial,
         IReadOnlySet<string> connectedSsh,
-        IReadOnlySet<string> connectedTcp)
+        IReadOnlySet<string> connectedTcp,
+        IReadOnlySet<string>? connectedTelnet = null)
     {
         Sections.Clear();
 
@@ -267,6 +272,19 @@ public partial class MainViewModel : ViewModelBase
             });
         }
 
+        var telnet = new SidebarSection { Title = "Telnet", ShowHeader = true };
+        foreach (var session in config.TelnetSessions.SortedSessions())
+        {
+            telnet.Items.Add(new SessionItem
+            {
+                Name = TelnetSessionRules.DisplayName(session),
+                SessionId = session.Key,
+                Kind = SessionKind.Telnet,
+                Detail = TelnetSessionRules.Detail(session),
+                IsConnected = connectedTelnet?.Contains(session.Key) == true,
+            });
+        }
+
         var tcp = new SidebarSection { Title = "TCP", ShowHeader = true };
         foreach (var session in config.TcpSessions.SortedSessions())
         {
@@ -288,6 +306,11 @@ public partial class MainViewModel : ViewModelBase
         if (ssh.Items.Count > 0)
         {
             Sections.Add(ssh);
+        }
+
+        if (telnet.Items.Count > 0)
+        {
+            Sections.Add(telnet);
         }
 
         if (tcp.Items.Count > 0)

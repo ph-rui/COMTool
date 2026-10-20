@@ -49,7 +49,8 @@ public sealed class NewSessionMenuTests
             {
                 (SessionKind.Serial, 0, "SerialPanel"),
                 (SessionKind.Ssh, 1, "SshPanel"),
-                (SessionKind.Tcp, 2, "TcpPanel"),
+                (SessionKind.Telnet, 2, "TelnetPanel"),
+                (SessionKind.Tcp, 3, "TcpPanel"),
             };
 
             foreach (var (kind, index, panelName) in cases)
@@ -61,6 +62,7 @@ public sealed class NewSessionMenuTests
                     window = new ConnectionSettingsWindow(
                         service,
                         null,
+                        open,
                         open,
                         open,
                         open,
@@ -153,10 +155,10 @@ public sealed class NewSessionMenuTests
         var items = flyout.Items.OfType<MenuItem>().ToList();
 
         Assert.Equal(
-            new[] { "Serial", "SSH", "TCP", "Local terminal" },
+            new[] { "Serial", "SSH", "Telnet", "TCP", "Local terminal" },
             items.Select(item => item.Header?.ToString()).ToArray());
         Assert.Equal(
-            new[] { "Serial", "SSH", "TCP", "Local" },
+            new[] { "Serial", "SSH", "Telnet", "TCP", "Local" },
             items.Select(item => item.Tag?.ToString()).ToArray());
         Assert.DoesNotContain(
             items,

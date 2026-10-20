@@ -35,6 +35,7 @@ public partial class ConnectionSettingsWindow : Window
     private readonly SessionKind _initialKind;
     private readonly Func<string, TerminalTab?, Task> _openSerial;
     private readonly Func<string, TerminalTab?, Task> _openSsh;
+    private readonly Func<string, TerminalTab?, Task> _openTelnet;
     private readonly Func<string, TerminalTab?, Task> _openTcp;
     private readonly Func<string, Task> _showError;
     private ITcpSession? _tcpSession;
@@ -54,6 +55,7 @@ public partial class ConnectionSettingsWindow : Window
         TerminalTab? currentTab,
         Func<string, TerminalTab?, Task> openSerial,
         Func<string, TerminalTab?, Task> openSsh,
+        Func<string, TerminalTab?, Task> openTelnet,
         Func<string, TerminalTab?, Task> openTcp,
         Func<string, Task> showError,
         SessionKind initialKind = SessionKind.Serial)
@@ -63,6 +65,7 @@ public partial class ConnectionSettingsWindow : Window
         _initialKind = initialKind;
         _openSerial = openSerial;
         _openSsh = openSsh;
+        _openTelnet = openTelnet;
         _openTcp = openTcp;
         _showError = showError;
 
@@ -71,6 +74,7 @@ public partial class ConnectionSettingsWindow : Window
         ConnectionTypeCombo.SelectedIndex = 0;
         PopulateSerialDefaults();
         PopulateSshDefaults();
+        PopulateTelnetDefaults();
         PopulateTcpDefaults();
         PopulateCurrentSession();
     }
@@ -102,6 +106,15 @@ public partial class ConnectionSettingsWindow : Window
         RememberCheck.IsChecked = true;
     }
 
+    private void PopulateTelnetDefaults()
+    {
+        TelnetPortBox.Text = TelnetSessionRules.DefaultPort.ToString();
+        TelnetUserBox.Text = "";
+        TelnetAliasBox.Text = "";
+        TelnetPasswordBox.Text = "";
+        TelnetRememberCheck.IsChecked = true;
+    }
+
     private void PopulateTcpDefaults()
     {
         TcpProtocolCombo.SelectedIndex = 0;
@@ -124,7 +137,8 @@ public partial class ConnectionSettingsWindow : Window
             ConnectionTypeCombo.SelectedIndex = _initialKind switch
             {
                 SessionKind.Ssh => 1,
-                SessionKind.Tcp => 2,
+                SessionKind.Telnet => 2,
+                SessionKind.Tcp => 3,
                 _ => 0,
             };
             Title = "New session";
@@ -135,7 +149,8 @@ public partial class ConnectionSettingsWindow : Window
         ConnectionTypeCombo.SelectedIndex = _currentTab.Kind switch
         {
             SessionKind.Ssh => 1,
-            SessionKind.Tcp => 2,
+            SessionKind.Telnet => 2,
+            SessionKind.Tcp => 3,
             _ => 0,
         };
         UpdateConnectionPanels();
@@ -179,6 +194,17 @@ public partial class ConnectionSettingsWindow : Window
                 KeyFileBox.Text = session.SshKey;
             }
         }
+        else if (_currentTab.Kind == SessionKind.Telnet)
+        {
+            var session = _config.TelnetSessions.Get(_currentTab.SessionId);
+            if (session is not null)
+            {
+                TelnetHostBox.Text = session.Host;
+                TelnetPortBox.Text = session.Port.ToString();
+                TelnetUserBox.Text = session.User;
+                TelnetAliasBox.Text = session.Alias;
+            }
+        }
         else if (_currentTab.Kind == SessionKind.Tcp)
         {
             var session = _config.TcpSessions.Get(_currentTab.SessionId);
@@ -220,7 +246,8 @@ public partial class ConnectionSettingsWindow : Window
         var index = ConnectionTypeCombo.SelectedIndex;
         SerialPanel.IsVisible = index == 0;
         SshPanel.IsVisible = index == 1;
-        TcpPanel.IsVisible = index == 2;
+        TelnetPanel.IsVisible = index == 2;
+        TcpPanel.IsVisible = index == 3;
         UpdateTcpFields();
     }
 
@@ -270,6 +297,9 @@ public partial class ConnectionSettingsWindow : Window
                     await OpenSshAsync();
                     break;
                 case 2:
+                    await OpenTelnetAsync();
+                    break;
+                case 3:
                     await OpenTcpAsync();
                     break;
                 default:
@@ -281,8 +311,8 @@ public partial class ConnectionSettingsWindow : Window
         {
             var action = ConnectionTypeCombo.SelectedIndex switch
             {
-                1 => "Connect Failed",
-                2 => TcpProtocolCombo.SelectedIndex == 1 || TcpModeCombo.SelectedIndex == 1
+                1 or 2 => "Connect Failed",
+                3 => TcpProtocolCombo.SelectedIndex == 1 || TcpModeCombo.SelectedIndex == 1
                     ? "Open Failed"
                     : "Connect Failed",
                 _ => "Open Failed",
@@ -367,6 +397,45 @@ public partial class ConnectionSettingsWindow : Window
         _config.Save();
         Close();
         await _openSsh(session.Key, _currentTab);
+    }
+
+    private async Task OpenTelnetAsync()
+    {
+        var host = TelnetHostBox.Text?.Trim() ?? "";
+        if (host.Length == 0)
+        {
+            throw new InvalidOperationException("Host must not be empty.");
+        }
+
+        if (!int.TryParse(TelnetPortBox.Text?.Trim(), out var port) || port <= 0 || port > 65535)
+        {
+            throw new InvalidOperationException("Telnet port must be between 1 and 65535.");
+        }
+
+        var password = TelnetPasswordBox.Text ?? "";
+        var remember = TelnetRememberCheck.IsChecked == true;
+        var session = _config.TelnetSessions.Upsert(
+            host,
+            port,
+            TelnetUserBox.Text?.Trim() ?? "",
+            alias: TelnetAliasBox.Text?.Trim() ?? "");
+        if (session is null)
+        {
+            throw new InvalidOperationException("Could not save the Telnet session.");
+        }
+
+        if (password.Length > 0)
+        {
+            _config.PasswordCache.Set(session.Key, password);
+            if (remember)
+            {
+                _config.RememberTelnetPassword(session, password, remember: true);
+            }
+        }
+
+        _config.Save();
+        Close();
+        await _openTelnet(session.Key, _currentTab);
     }
 
     private async Task OpenTcpAsync()
