@@ -54,6 +54,15 @@ public sealed class ConfigTests : IDisposable
             Alias = "lab",
             EncryptedPassword = "dpapi-token",
         });
+        config.TelnetSessions.Add(new TelnetSession
+        {
+            Key = "telnet:alice@example.com:23",
+            Host = "example.com",
+            Port = 23,
+            User = "alice",
+            Alias = "telnet-lab",
+            EncryptedPassword = "telnet-token",
+        });
 
         config.Save(path);
         var loaded = ComtoolConfig.Load(path);
@@ -63,6 +72,8 @@ public sealed class ConfigTests : IDisposable
         Assert.Single(loaded.SerialSessions);
         Assert.Equal(921600, loaded.SerialSessions[0].Serial.Baudrate);
         Assert.Equal("dpapi-token", loaded.SshSessions[0].EncryptedPassword);
+        Assert.Equal("telnet-token", loaded.TelnetSessions[0].EncryptedPassword);
+        Assert.Equal("telnet", loaded.TelnetSessions[0].Transport);
     }
 
     [Fact]

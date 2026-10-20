@@ -12,6 +12,7 @@ public sealed class AppConfigService
 {
     private readonly SerialSessionStore _serialSessions = new();
     private readonly SshSessionStore _sshSessions = new();
+    private readonly TelnetSessionStore _telnetSessions = new();
     private readonly TcpSessionStore _tcpSessions = new();
 
     public static WindowConfig? TryReadWindowConfig()
@@ -39,6 +40,7 @@ public sealed class AppConfigService
         ConfigPath = configPath;
         _serialSessions.Load(config);
         _sshSessions.Load(config);
+        _telnetSessions.Load(config);
         _tcpSessions.Load(config);
     }
 
@@ -49,6 +51,8 @@ public sealed class AppConfigService
     public SerialSessionStore SerialSessions => _serialSessions;
 
     public SshSessionStore SshSessions => _sshSessions;
+
+    public TelnetSessionStore TelnetSessions => _telnetSessions;
 
     public TcpSessionStore TcpSessions => _tcpSessions;
 
@@ -108,6 +112,7 @@ public sealed class AppConfigService
     {
         _serialSessions.Save(Config);
         _sshSessions.Save(Config);
+        _telnetSessions.Save(Config);
         _tcpSessions.Save(Config);
         Config.Save(ConfigPath);
     }
@@ -134,6 +139,32 @@ public sealed class AppConfigService
             session.User,
             alias: session.Alias,
             sshKey: session.SshKey,
+            encryptedPassword: token);
+        PasswordCache.Set(session.Key, password);
+        Save();
+    }
+
+    public void RememberTelnetPassword(
+        TelnetSession session,
+        string password,
+        bool remember)
+    {
+        if (!remember || password.Length == 0)
+        {
+            return;
+        }
+
+        var token = SecretProtector.Protect(password);
+        if (token.Length == 0)
+        {
+            return;
+        }
+
+        _telnetSessions.Upsert(
+            session.Host,
+            session.Port,
+            session.User,
+            alias: session.Alias,
             encryptedPassword: token);
         PasswordCache.Set(session.Key, password);
         Save();

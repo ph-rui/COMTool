@@ -3,8 +3,8 @@ using System.Collections.Concurrent;
 namespace COMTool.Core.Config;
 
 /// <summary>
-/// Per-process SSH password cache. Passwords live in memory only and are
-/// keyed by the same stable key used by the SSH session store.
+/// Per-process SSH/Telnet password cache. Passwords live in memory only and
+/// are keyed by the same stable key used by the matching session store.
 /// </summary>
 public sealed class SshPasswordCache
 {

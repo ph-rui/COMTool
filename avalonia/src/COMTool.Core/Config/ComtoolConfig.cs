@@ -45,6 +45,9 @@ public sealed class ComtoolConfig
     [JsonPropertyName("sshSessionsMigrated")]
     public bool SshSessionsMigrated { get; set; }
 
+    [JsonPropertyName("telnetSessions")]
+    public List<TelnetSession> TelnetSessions { get; set; } = new();
+
     [JsonPropertyName("tcpSessions")]
     public List<TcpSession> TcpSessions { get; set; } = new();
 
@@ -217,6 +220,36 @@ public sealed class SshSession
 
     [JsonPropertyName("ssh_key")]
     public string SshKey { get; set; } = "";
+
+    [JsonPropertyName("passwd_enc")]
+    public string EncryptedPassword { get; set; } = "";
+
+    [JsonPropertyName("updated")]
+    public long Updated { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? Extra { get; set; }
+}
+
+public sealed class TelnetSession
+{
+    [JsonPropertyName("transport")]
+    public string Transport { get; set; } = "telnet";
+
+    [JsonPropertyName("key")]
+    public string Key { get; set; } = "";
+
+    [JsonPropertyName("host")]
+    public string Host { get; set; } = "";
+
+    [JsonPropertyName("port")]
+    public int Port { get; set; } = 23;
+
+    [JsonPropertyName("user")]
+    public string User { get; set; } = "";
+
+    [JsonPropertyName("alias")]
+    public string Alias { get; set; } = "";
 
     [JsonPropertyName("passwd_enc")]
     public string EncryptedPassword { get; set; } = "";
