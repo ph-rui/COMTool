@@ -56,7 +56,7 @@
 | SER-04 | 波特率/数据位/校验/停止位 | P0 | 完成 | 映射与可编辑自定义波特率设置页已实现；串口侧栏在设备描述下显示 `115200 8N1` 摘要，非默认流控追加 `· RTS/CTS` / `· XON/XOFF` |
 | SER-05 | 流控/RTS/DTR | P0 | 部分 | RTS/CTS、XON/XOFF 与 RTS/DTR 引脚映射已实现；`System.IO.Ports` 不提供 DSR/DTR 流控，已避免错误映射为 RTS/CTS+XON/XOFF，原生实现待补 |
 | SER-06 | 打开/关闭/占用错误 | P0 | 部分 | Windows COM99/97/23 打开通过；错误对话框统一为 `Error` + `Open Failed`/`Connect Failed`，SSH 拒绝连接已实测；Windows 串口占用场景待硬件 |
-| SER-07 | 收发数据 | P0 | 部分 | Linux PTY 收发通过；Windows 接收待硬件回环 |
+| SER-07 | 收发数据 | P0 | 部分 | Linux PTY 收发通过；打开串口时与 Python 一致清空驱动残留收发缓冲区（防止上次 ZMODEM/串口二进制数据被当成新数据读出），失败回归测试先复现后修复；Windows 接收待硬件回环 |
 | SER-08 | 自动重连 | P1 | 完成 | 打开中的串口标签在设备拔除后标记 `Connection lose`，2 秒轮询发现同一 COM 重新插入后自动重开并恢复标签；失败自动重试且不弹错误框；手动关闭标签不会重开；硬件拔插见 WIN-03 |
 | SER-09 | 会话保存与恢复 | P0 | 部分 | 侧栏/标签生命周期已接入；Windows 配置内串口已 headless 打开，UI 收发待硬件 |
 | SER-10 | 设备消失保留与恢复 | P0 | 部分 | 成功扫描后不再删除未连接会话；侧栏隐藏不可用端口，重新插入后恢复；硬件消失场景待实测 |
@@ -138,7 +138,7 @@
 
 | ID | 项目 | 优先级 | 状态 | 验收要点 |
 |---|---|---|---|---|
-| TST-01 | 单元测试 | P0 | 完成 | 212 项通过（Core 42/Connections 38/Terminal 11/ZMODEM 32/TestGate 49/App 40） |
+| TST-01 | 单元测试 | P0 | 完成 | 213 项通过（Core 42/Connections 39/Terminal 11/ZMODEM 32/TestGate 49/App 40） |
 | TST-02 | 终端 golden 测试 | P0 | 完成 | 同一字节流与 Python pyte 0.8.2（60x20、LNM）屏幕行/光标快照一致 |
 | TST-03 | ZMODEM 集成测试 | P0 | 完成 | 模拟双向收发和真实 lrzsz 双向 64KB 二进制文件内容校验通过 |
 | TST-04 | SSH/串口集成测试 | P0 | 部分 | 本地 sshd、Windows 配置内 SSH/串口、Linux socat PTY 已测 |

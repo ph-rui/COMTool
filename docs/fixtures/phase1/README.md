@@ -63,9 +63,9 @@ geometry. These are functional evidence images, not final pixel baselines.
 
 `docs/testing/feature-test-matrix.md` now maps all 90 parity rows. The gate
 passes in `verify` and `package` phases on Linux, and the structure also passes
-for Windows/macOS. The suite is 212 tests:
+for Windows/macOS. The suite is 213 tests:
 
-- Core 42, Connections 38, Terminal 11, ZMODEM 32, TestGate 49, App 40.
+- Core 42, Connections 39, Terminal 11, ZMODEM 32, TestGate 49, App 40.
 - Linux Xvfb E2E: `APP01_SmokeLaunchE2E`,
   `UI01_TitleBarDoubleClickMaximizeE2E`,
   `UI02_SidebarExpandsOnLaunchE2E`, `UI02_SidebarAutoHideE2E`,
