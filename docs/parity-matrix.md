@@ -52,14 +52,14 @@
 |---|---|---|---|---|
 | SER-01 | 端口枚举与描述 | P0 | 完成 | Windows 实机输出 `COM23 USB-SERIAL CH340`、`COM97 USB-Enhanced-SERIAL-B CH344` 等描述，自然排序正确 |
 | SER-02 | 自然排序 | P0 | 完成 | COM2 < COM10，`/dev/ttyUSB2` < `ttyUSB10` |
-| SER-03 | 热插拔刷新 | P0 | 部分 | UI 定时扫描/设备集变化刷新已接入；硬件热插拔待测 |
+| SER-03 | 热插拔刷新 | P0 | 部分 | UI 每 2 秒扫描；成功扫描后侧栏按可用端口显示，拔除隐藏但保留会话，重新插入自动恢复；硬件热插拔待实测 |
 | SER-04 | 波特率/数据位/校验/停止位 | P0 | 完成 | 映射与可编辑自定义波特率设置页已实现 |
 | SER-05 | 流控/RTS/DTR | P0 | 部分 | RTS/CTS、XON/XOFF 与 RTS/DTR 引脚映射已实现；`System.IO.Ports` 不提供 DSR/DTR 流控，已避免错误映射为 RTS/CTS+XON/XOFF，原生实现待补 |
 | SER-06 | 打开/关闭/占用错误 | P0 | 部分 | Windows COM99/97/23 打开通过；错误对话框统一为 `Error` + `Open Failed`/`Connect Failed`，SSH 拒绝连接已实测；Windows 串口占用场景待硬件 |
 | SER-07 | 收发数据 | P0 | 部分 | Linux PTY 收发通过；Windows 接收待硬件回环 |
 | SER-08 | 自动重连 | P1 | 不适用 | Python 串口连接没有自动重连配置；手动点击会话重连已完成，TCP/UDP 的自动重连属于网络插件 |
 | SER-09 | 会话保存与恢复 | P0 | 部分 | 侧栏/标签生命周期已接入；Windows 配置内串口已 headless 打开，UI 收发待硬件 |
-| SER-10 | 设备消失清理 | P0 | 部分 | UI 仅在成功扫描后清理；硬件消失场景待测 |
+| SER-10 | 设备消失保留与恢复 | P0 | 部分 | 成功扫描后不再删除未连接会话；侧栏隐藏不可用端口，重新插入后恢复；硬件消失场景待实测 |
 
 ## 4. SSH
 
@@ -114,7 +114,7 @@
 | ID | 功能 | 优先级 | 状态 | 验收要点 |
 |---|---|---|---|---|
 | CFG-01 | `config.json` 字段兼容 | P0 | 完成 | schema、默认值、Python 单向导入和未知字段保留已测试 |
-| CFG-02 | 串口会话存储 | P0 | 完成 | 归一化去重、排序、描述和成功扫描后清理已实现并测试 |
+| CFG-02 | 串口会话存储 | P0 | 完成 | 归一化去重、排序、描述和未连接会话保留已实现并测试 |
 | CFG-03 | SSH 会话存储 | P0 | 完成 | key、别名、`passwd_enc`、迁移和独立副本已测试 |
 | CFG-04 | 配置导入 | P0 | 完成 | 单向导入、不覆盖、备份、未知字段保留测试通过 |
 | CFG-05 | 日志 | P0 | 完成 | `%APPDATA%/COMTool-Avalonia/run.log`，2MB 滚动，异常记录 |
@@ -137,7 +137,7 @@
 
 | ID | 项目 | 优先级 | 状态 | 验收要点 |
 |---|---|---|---|---|
-| TST-01 | 单元测试 | P0 | 完成 | 199 项通过（Core 41/Connections 37/Terminal 11/ZMODEM 32/TestGate 49/App 29） |
+| TST-01 | 单元测试 | P0 | 完成 | 201 项通过（Core 41/Connections 37/Terminal 11/ZMODEM 32/TestGate 49/App 31） |
 | TST-02 | 终端 golden 测试 | P0 | 完成 | 同一字节流与 Python pyte 0.8.2（60x20、LNM）屏幕行/光标快照一致 |
 | TST-03 | ZMODEM 集成测试 | P0 | 完成 | 模拟双向收发和真实 lrzsz 双向 64KB 二进制文件内容校验通过 |
 | TST-04 | SSH/串口集成测试 | P0 | 部分 | 本地 sshd、Windows 配置内 SSH/串口、Linux socat PTY 已测 |

@@ -61,7 +61,13 @@ public sealed class AppConfigService
     public IReadOnlyDictionary<string, SerialPortInfo> PortMap { get; private set; } =
         new Dictionary<string, SerialPortInfo>(StringComparer.OrdinalIgnoreCase);
 
-    public static AppConfigService Load()
+    /// <summary>
+    /// True after at least one successful scan. A failed scan must not be
+    /// interpreted as "all devices disappeared".
+    /// </summary>
+    public bool PortScanSucceeded { get; private set; }
+
+    public static AppConfigService Load(Func<SerialPortScanResult>? scanPorts = null)
     {
         var import = PythonConfigImporter.ImportIfMissing();
         var path = ConfigPaths.AvaloniaConfigFile();
@@ -70,13 +76,14 @@ public sealed class AppConfigService
         {
             ImportResult = import,
         };
-        service.RefreshPorts();
+        service.RefreshPorts(scanPorts?.Invoke() ?? SerialPortCatalog.Scan());
         return service;
     }
 
-    public SerialPortScanResult RefreshPorts()
+    public SerialPortScanResult RefreshPorts() => RefreshPorts(SerialPortCatalog.Scan());
+
+    public SerialPortScanResult RefreshPorts(SerialPortScanResult scan)
     {
-        var scan = SerialPortCatalog.Scan();
         if (!scan.Success)
         {
             // Keep the previous port map and all remembered serial sessions.
@@ -88,13 +95,12 @@ public sealed class AppConfigService
             port => port.Device,
             port => port,
             StringComparer.OrdinalIgnoreCase);
+        PortScanSucceeded = true;
 
-        var removed = _serialSessions.Prune(scan.Ports.Select(port => port.Device));
-        if (removed.Count > 0)
-        {
-            Save();
-        }
-
+        // Remembered serial sessions intentionally survive unplugging. The
+        // sidebar hides unavailable ports and shows them again when the same
+        // COM device returns; deleting the session here would make hotplug
+        // recovery impossible.
         return scan;
     }
 
