@@ -121,7 +121,7 @@ public sealed partial class SftpPaneViewModel : ObservableObject
     public bool IsTransferring
     {
         get => _isTransferring;
-        private set
+        internal set
         {
             if (SetProperty(ref _isTransferring, value))
             {
@@ -135,6 +135,18 @@ public sealed partial class SftpPaneViewModel : ObservableObject
     /// </summary>
     public bool CanTransfer =>
         !IsTransferring && (SelectedRemoteEntry is not null || SelectedLocalEntry is not null);
+
+    /// <summary>
+    /// True when an upload can be started. An upload takes the entries of
+    /// the local side, so a local entry has to be marked.
+    /// </summary>
+    public bool CanUpload => SelectedLocalEntry is not null;
+
+    /// <summary>
+    /// True when a download can be started. A download takes the entries of
+    /// the remote side, so a remote entry has to be marked.
+    /// </summary>
+    public bool CanDownload => SelectedRemoteEntry is not null;
 
     /// <summary>
     /// The last thing that happened, shown under the panes.
@@ -151,7 +163,7 @@ public sealed partial class SftpPaneViewModel : ObservableObject
     public double TransferProgress
     {
         get => _transferProgress;
-        private set => SetProperty(ref _transferProgress, value);
+        internal set => SetProperty(ref _transferProgress, value);
     }
 
     /// <summary>
@@ -535,11 +547,13 @@ public sealed partial class SftpPaneViewModel : ObservableObject
     partial void OnSelectedRemoteEntryChanged(SftpEntry? value)
     {
         OnPropertyChanged(nameof(CanTransfer));
+        OnPropertyChanged(nameof(CanDownload));
     }
 
     partial void OnSelectedLocalEntryChanged(SftpEntry? value)
     {
         OnPropertyChanged(nameof(CanTransfer));
+        OnPropertyChanged(nameof(CanUpload));
     }
 
     private void ApplyEntries(ObservableCollection<SftpEntry> target, IEnumerable<SftpEntry> entries)
