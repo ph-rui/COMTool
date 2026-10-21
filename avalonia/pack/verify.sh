@@ -101,6 +101,7 @@ results_root="$repo_root/avalonia/publish/test-results"
 # TRX. App.Tests is deliberately excluded here and keeps app-tests.trx.
 unit_projects=(
     "COMTool.Core.Tests:$repo_root/avalonia/tests/COMTool.Core.Tests/COMTool.Core.Tests.csproj"
+    "COMTool.Sftp.Tests:$repo_root/avalonia/tests/COMTool.Sftp.Tests/COMTool.Sftp.Tests.csproj"
     "COMTool.Terminal.Tests:$repo_root/avalonia/tests/COMTool.Terminal.Tests/COMTool.Terminal.Tests.csproj"
     "COMTool.Connections.Tests:$repo_root/avalonia/tests/COMTool.Connections.Tests/COMTool.Connections.Tests.csproj"
     "COMTool.Zmodem.Tests:$repo_root/avalonia/tests/COMTool.Zmodem.Tests/COMTool.Zmodem.Tests.csproj"

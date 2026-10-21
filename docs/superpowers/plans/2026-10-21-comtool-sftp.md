@@ -56,7 +56,7 @@
 - Consumes: nothing.
 - Produces:
   - `namespace COMTool.Sftp` -> `public static class SftpPath` with `const char Separator = '/'`, `const string Root = "/"`, `static string Combine(string basePath, string name)`, `static string GetParent(string path)`, `static string GetFileName(string path)`, `static bool IsRoot(string path)`, `static string Normalize(string path)`.
-  - `namespace COMTool.Sftp` -> `public readonly record struct SftpPermission(bool OwnerRead, bool OwnerWrite, bool OwnerExecute, bool GroupRead, bool GroupWrite, bool GroupExecute, bool OthersRead, bool OthersWrite, bool OthersExecute)` with `static SftpPermission FromOctal(int mode)`, `int ToOctal()`, `string ToRwxString()`, `static SftpPermission FromRwxString(string text)`.
+  - `namespace COMTool.Sftp` -> `public readonly record struct SftpPermission(bool OwnerRead, bool OwnerWrite, bool OwnerExecute, bool GroupRead, bool GroupWrite, bool GroupExecute, bool OthersRead, bool OthersWrite, bool OthersExecute)` with `static SftpPermission FromOctal(int mode)`, `int ToOctal()`, `string ToRwxString()`, `static SftpPermission FromRwxString(string text)`, `static SftpPermission FromOctalText(string octalText)`, `string ToOctalText()`.
 
 - [ ] **Step 1: Create the kernel project and the test project**
 
@@ -127,7 +127,7 @@ public void NormalizeCollapsesAndResolvesDotSegments()
 public void NormalizeCannotEscapeTheRoot()
 {
     Assert.Equal("/x", SftpPath.Normalize("/../x"));
-    Assert.Equal("/a", SftpPath.Normalize("/a/../.."));
+    Assert.Equal("/", SftpPath.Normalize("/a/../.."));
 }
 
 [Fact]
@@ -160,8 +160,9 @@ Run: same command as Step 4. Expected: 6 tests pass.
 [Fact]
 public void OctalRoundTrips()
 {
-    foreach (var mode in new[] { 0o000, 0o644, 0o755, 0o600, 0o777 })
+    foreach (var digits in new[] { "000", "644", "755", "600", "777" })
     {
+        var mode = Mode(digits);
         Assert.Equal(mode, SftpPermission.FromOctal(mode).ToOctal());
     }
 }
@@ -169,27 +170,45 @@ public void OctalRoundTrips()
 [Fact]
 public void RwxStringMatchesTheOctalMode()
 {
-    Assert.Equal("rw-r--r--", SftpPermission.FromOctal(0o644).ToRwxString());
-    Assert.Equal("rwxr-xr-x", SftpPermission.FromOctal(0o755).ToRwxString());
+    Assert.Equal("rw-r--r--", SftpPermission.FromOctal(Mode("644")).ToRwxString());
+    Assert.Equal("rwxr-xr-x", SftpPermission.FromOctal(Mode("755")).ToRwxString());
 }
 
 [Fact]
 public void ExecuteIsIndependentOfRead()
 {
-    // 0111 is execute only: the read bit is not implied.
-    Assert.Equal("x--x--x", SftpPermission.FromOctal(0o111).ToRwxString());
-    Assert.Equal(0o111, SftpPermission.FromOctal(0o111).ToOctal());
-    Assert.True(SftpPermission.FromOctal(0o111).OwnerExecute);
-    Assert.False(SftpPermission.FromOctal(0o111).OwnerRead);
+    // 0111 is execute only: the read bit is not implied. The three
+    // characters of a group are always read, write, execute.
+    Assert.Equal("--x--x--x", SftpPermission.FromOctal(Mode("111")).ToRwxString());
+    Assert.Equal(Mode("111"), SftpPermission.FromOctal(Mode("111")).ToOctal());
+    Assert.True(SftpPermission.FromOctal(Mode("111")).OwnerExecute);
+    Assert.False(SftpPermission.FromOctal(Mode("111")).OwnerRead);
 }
 
 [Fact]
 public void RwxStringRoundTrips()
 {
-    Assert.Equal(0o644, SftpPermission.FromRwxString("rw-r--r--").ToOctal());
-    Assert.Equal(0o111, SftpPermission.FromRwxString("x--x--x").ToOctal());
+    Assert.Equal(Mode("644"), SftpPermission.FromRwxString("rw-r--r--").ToOctal());
+    Assert.Equal(Mode("111"), SftpPermission.FromRwxString("--x--x--x").ToOctal());
+}
+
+[Fact]
+public void OctalTextRoundTrips()
+{
+    Assert.Equal("644", SftpPermission.FromOctal(Mode("644")).ToOctalText());
+    Assert.Equal("000", SftpPermission.FromOctal(Mode("000")).ToOctalText());
+    Assert.Equal(Mode("640"), SftpPermission.FromOctalText("640").ToOctal());
+    Assert.Equal("640", SftpPermission.FromOctalText("640").ToOctalText());
 }
 ```
+
+C# has no octal integer literals, and a leading `0` does not make one: `0644` is the decimal number 644. Write the modes the way they appear on the shell and convert them, either with a test helper
+
+```csharp
+private static int Mode(string octalDigits) => Convert.ToInt32(octalDigits, 8);
+```
+
+or with the `SftpPermission.FromOctalText` / `ToOctalText` helpers.
 
 - [ ] **Step 8: Run the permission tests to verify they fail**
 
@@ -199,19 +218,19 @@ Expected: build failure with `CS0103: The name 'SftpPermission' does not exist`.
 
 - [ ] **Step 9: Implement `SftpPermission`**
 
-`avalonia/src/COMTool.Sftp/SftpPermission.cs`. `ToOctal` returns `Owner* << 6 | Group* << 3 | Others*` where each group is `read(4) + write(2) + execute(1)`. `FromOctal` masks the mode with `0o777` and extracts the same bits. `ToRwxString` emits three characters per group, using `-` for a clear bit. `FromRwxString` parses the same three-by-three layout and ignores any character other than `r`, `w` and `x`.
+`avalonia/src/COMTool.Sftp/SftpPermission.cs`. `ToOctal` returns `Owner* << 6 | Group* << 3 | Others*` where each group is `read(4) + write(2) + execute(1)`. `FromOctal` masks the mode with `0o777` and extracts the same bits. `ToRwxString` emits three characters per group in the order read, write, execute, using `-` for a clear bit, so an execute-only group is `--x`. `FromRwxString` parses the same three-by-three layout and ignores any character other than `r`, `w` and `x`. `FromOctalText` parses an octal mode written as digits and `ToOctalText` renders the mode as three octal digits; they exist because C# has no octal literals.
 
 - [ ] **Step 10: Run all kernel tests to verify they pass**
 
 Run: `DOTNET_ROOT=/tmp/opencode/dotnet /tmp/opencode/dotnet/dotnet test avalonia/tests/COMTool.Sftp.Tests/COMTool.Sftp.Tests.csproj -c Release`
 
-Expected: 10 tests pass.
+Expected: 11 tests pass.
 
 - [ ] **Step 11: Commit**
 
 ```bash
 cd /tmp/opencode/COMTool
-git add avalonia/src/COMTool.Sftp avalonia/tests/COMTool.Sftp.Tests avalonia/COMTool.Avalonia.sln avalonia/pack/verify.sh
+git add avalonia/src/COMTool.Sftp avalonia/tests/COMTool.Sftp.Tests avalonia/COMTool.Avalonia.sln avalonia/pack/verify.sh docs/superpowers/plans/2026-10-21-comtool-sftp.md
 git commit -m "feat(avalonia): add the SFTP kernel project with path and permission primitives"
 ```
 
@@ -296,7 +315,7 @@ Expected: build failure with `CS0103: The name 'SystemLocalFileSystem' does not 
 
 `avalonia/src/COMTool.Sftp/SystemLocalFileSystem.cs`.
 
-- `ListAsync` uses `new DirectoryInfo(path).EnumerateFileSystemInfos()`, maps each item to an `SftpEntry` with `Name = item.Name`, `Path = item.FullName`, `IsDirectory = item is DirectoryInfo`, `Size = file.Length` for files and `0` for directories, `LastWriteTimeUtc = item.LastWriteTimeUtc`, and a permission derived from the read-only attribute: `SftpPermission.FromOctal(readOnly ? 0o444 : 0o644)`.
+- `ListAsync` uses `new DirectoryInfo(path).EnumerateFileSystemInfos()`, maps each item to an `SftpEntry` with `Name = item.Name`, `Path = item.FullName`, `IsDirectory = item is DirectoryInfo`, `Size = file.Length` for files and `0` for directories, `LastWriteTimeUtc = item.LastWriteTimeUtc`, and a permission derived from the read-only attribute: `SftpPermission.FromOctalText(readOnly ? "444" : "644")`.
 - `OpenReadAsync` returns `new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read)`.
 - `OpenWriteAsync` returns `new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None)` — `FileMode.Create` truncates an existing file, which is what the overwrite policy needs.
 - `CreateDirectoryAsync` uses `Directory.CreateDirectory` (an existing directory is reused, not an error).
