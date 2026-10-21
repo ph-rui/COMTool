@@ -249,8 +249,9 @@ git commit -m "feat(avalonia): add the SFTP kernel project with path and permiss
 - Consumes: `SftpEntry`, `SftpPermission` from Task 1.
 - Produces:
   - `public sealed record SftpEntry(string Name, string Path, bool IsDirectory, bool IsSymbolicLink, long Size, DateTime LastWriteTimeUtc, SftpPermission Permission)`.
-  - `public interface ISftpFileSystem : IAsyncDisposable` with `string HomeDirectory { get; }`, `Task<IReadOnlyList<SftpEntry>> ListAsync(string path, CancellationToken cancellationToken)`, `Task<Stream> OpenReadAsync(string path, CancellationToken cancellationToken)`, `Task<Stream> OpenWriteAsync(string path, CancellationToken cancellationToken)`, `Task CreateDirectoryAsync(string path, CancellationToken cancellationToken)`, `Task RenameAsync(string oldPath, string newPath, CancellationToken cancellationToken)`, `Task DeleteFileAsync(string path, CancellationToken cancellationToken)`, `Task DeleteDirectoryAsync(string path, bool recursive, CancellationToken cancellationToken)`, `Task SetPermissionsAsync(string path, int octalMode, CancellationToken cancellationToken)`, `Task<bool> ExistsAsync(string path, CancellationToken cancellationToken)`.
-  - `public interface ILocalFileSystem : IAsyncDisposable` with exactly the same members.
+  - `public interface IFileSystem : IAsyncDisposable` with `string HomeDirectory { get; }`, `Task<IReadOnlyList<SftpEntry>> ListAsync(string path, CancellationToken cancellationToken)`, `Task<Stream> OpenReadAsync(string path, CancellationToken cancellationToken)`, `Task<Stream> OpenWriteAsync(string path, CancellationToken cancellationToken)`, `Task CreateDirectoryAsync(string path, CancellationToken cancellationToken)`, `Task RenameAsync(string oldPath, string newPath, CancellationToken cancellationToken)`, `Task DeleteFileAsync(string path, CancellationToken cancellationToken)`, `Task DeleteDirectoryAsync(string path, bool recursive, CancellationToken cancellationToken)`, `Task SetPermissionsAsync(string path, int octalMode, CancellationToken cancellationToken)`, `Task<bool> ExistsAsync(string path, CancellationToken cancellationToken)`. The two side interfaces derive from it, so the transfer engine can walk both with the same code.
+  - `public interface ISftpFileSystem : IFileSystem`, the remote side.
+  - `public interface ILocalFileSystem : IFileSystem`, the local side.
   - `public sealed class SystemLocalFileSystem : ILocalFileSystem` with a parameterless constructor; `HomeDirectory` returns `Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)`.
 
 - [ ] **Step 1: Write the failing local file system tests**
@@ -309,7 +310,7 @@ Expected: build failure with `CS0103: The name 'SystemLocalFileSystem' does not 
 
 - [ ] **Step 3: Implement the abstractions**
 
-`avalonia/src/COMTool.Sftp/SftpEntry.cs`, `ISftpFileSystem.cs`, `ILocalFileSystem.cs` with exactly the members listed in the Interfaces block. `ILocalFileSystem` is a separate interface with the same member list, so a test double can implement either side independently and the App can depend on the interface instead of `System.IO`.
+`avalonia/src/COMTool.Sftp/SftpEntry.cs`, `IFileSystem.cs`, `ISftpFileSystem.cs`, `ILocalFileSystem.cs` with exactly the members listed in the Interfaces block. `ILocalFileSystem` is a separate interface with the same member list, so a test double can implement either side independently and the App can depend on the interface instead of `System.IO`. Both sides derive from `IFileSystem`, which the transfer engine uses to walk the remote and the local side with the same code.
 
 - [ ] **Step 4: Implement `SystemLocalFileSystem`**
 
@@ -636,7 +637,7 @@ Break the implementation on purpose in three ways and confirm the matching test 
 
 ```bash
 cd /tmp/opencode/COMTool
-git add avalonia/src/COMTool.Sftp avalonia/tests/COMTool.Sftp.Tests
+git add avalonia/src/COMTool.Sftp avalonia/tests/COMTool.Sftp.Tests docs/superpowers/plans/2026-10-21-comtool-sftp.md
 git commit -m "feat(avalonia): add the SFTP transfer engine with conflict handling and recursion limits"
 ```
 
