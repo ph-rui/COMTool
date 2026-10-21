@@ -175,7 +175,11 @@ public sealed class TelnetConnectionTests
             ("User name: ", "Password: "),
             (">>User Name: ", "Password for admin: "),
             ("Login name: ", "Passwd: "),
+            ("Login ID: ", "PIN: "),
+            ("Account name: ", "Passcode: "),
+            ("Please enter your user name: ", "Please enter your password: "),
             ("用户名：", "密码："),
+            ("Login ID: \0", "PIN: \0"),
         };
 
         foreach (var (userPrompt, passwordPrompt) in prompts)
