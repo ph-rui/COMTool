@@ -284,6 +284,32 @@ This was a direct executable deployment over the existing working and desktop
 copies, not a formal packaged release. No new candidate zip was created or
 signed off for this build.
 
+A third direct deployment on 2026-10-21 replaced both copies with commit
+`8261fff`, which gives Telnet sessions the same MobaXterm-style stopped
+screen as SSH: a dropped connection shows `Session stopped` with the
+`<return>`/`R`/`S` prompt, `R` reconnects inside the same tab with the saved
+host, port, user and password, and a failed restart keeps the stopped screen
+so `R` can be pressed again:
+
+- size: 174,584,240 bytes;
+- SHA256: `D76F57045E764E48F1CE77C94D504C3519086EE9D07864D46A1415FD221FB07D`;
+- both remote copies matched that hash via `Get-FileHash`;
+- no `COMTool-Avalonia.exe.bak-*` files were created (`BAK_COUNT=0`);
+- a Windows process smoke test started the deployed working copy, observed it
+  `Running` and `Responding=True`, then stopped it; this does not replace the
+  interactive GUI check;
+- the automated suite passes 241 tests and Linux Xvfb E2E passes 11/11
+  (including the new `TELNET02_RestartStoppedSessionE2E`);
+- the Linux visual fixtures are
+  `docs/fixtures/phase1/telnet-stopped-screen-1000x650.png` and
+  `docs/fixtures/phase1/telnet-restarted-after-r-1000x650.png`; the
+  interactive Windows check of the stopped screen and the `R` reconnect
+  against a real Telnet device remains pending.
+
+This was a direct executable deployment over the existing working and desktop
+copies, not a formal packaged release. No new candidate zip was created or
+signed off for this build.
+
 The previously packaged release zip is 74,795,557 bytes with SHA256:
 
 ```text
