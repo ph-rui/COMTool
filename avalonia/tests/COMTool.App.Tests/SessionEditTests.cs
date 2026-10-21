@@ -185,4 +185,54 @@ public sealed class SessionEditTests
             Dispatcher.UIThread.RunJobs();
         }
     }
+
+    [AvaloniaFact]
+    public void UI08_TabSettingsGearKeepsClearanceFromCloseButton()
+    {
+        using var env = new TestEnvironment();
+        env.SeedConfig(new ComtoolConfig());
+        MainWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                var tab = new TerminalTab
+                {
+                    Title = "First tab",
+                    SessionId = "first.example",
+                    Kind = SessionKind.Ssh,
+                    Content = new Border(),
+                };
+                var viewModel = new MainViewModel();
+                window = new MainWindow { DataContext = viewModel };
+                window.Show();
+                window.StopPortTimerForTests();
+                window.StopSidebarHoverTimerForTests();
+                viewModel.AddTab(tab);
+                viewModel.SelectedTab = tab;
+                tab.IsTabHovered = true;
+                Dispatcher.UIThread.RunJobs();
+                window.UpdateLayout();
+                Dispatcher.UIThread.RunJobs();
+
+                var buttons = window.GetVisualDescendants().OfType<Button>().ToList();
+                var gear = buttons.Single(button => button.Name == "TabSettingsButton");
+                var close = buttons.Single(button => button.Classes.Contains("TabCloseButton"));
+                Assert.True(gear.IsVisible);
+                Assert.True(close.IsVisible);
+
+                // Both buttons share the tab StackPanel as their parent, so
+                // their bounds are in the same coordinate space.
+                var gap = close.Bounds.Left - (gear.Bounds.Left + gear.Bounds.Width);
+                Assert.True(
+                    gap >= 16,
+                    $"expected at least 16px between the gear and the close button, got {gap}px");
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
 }
