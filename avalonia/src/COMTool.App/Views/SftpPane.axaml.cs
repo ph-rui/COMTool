@@ -87,6 +87,22 @@ public sealed partial class SftpPane : UserControl
 
     internal Grid LocalPaneGridControl => LocalPaneGrid;
 
+    internal Button UploadButtonControl => UploadButton;
+
+    internal Button DownloadButtonControl => DownloadButton;
+
+    internal Button CancelButtonControl => CancelButton;
+
+    internal ProgressBar TransferProgressBarControl => TransferProgressBar;
+
+    internal Border ConflictPanelControl => ConflictPanel;
+
+    internal TextBox ConflictRenameBoxControl => ConflictRenameBox;
+
+    internal CheckBox ApplyToAllBoxControl => ApplyToAllBox;
+
+    internal CheckBox NeverAskAgainBoxControl => NeverAskAgainBox;
+
     /// <summary>
     /// The window that changes the permissions, while it is open.
     /// </summary>
@@ -329,16 +345,50 @@ public sealed partial class SftpPane : UserControl
         window.Show();
     }
 
-    private void OnUploadClick(object? sender, RoutedEventArgs e)
+    private async void OnUploadClick(object? sender, RoutedEventArgs e)
     {
+        var viewModel = ViewModel;
+        if (viewModel is null)
+        {
+            return;
+        }
+
+        await viewModel.UploadAsync();
     }
 
-    private void OnDownloadClick(object? sender, RoutedEventArgs e)
+    private async void OnDownloadClick(object? sender, RoutedEventArgs e)
     {
+        var viewModel = ViewModel;
+        if (viewModel is null)
+        {
+            return;
+        }
+
+        await viewModel.DownloadAsync();
     }
 
     private void OnCancelClick(object? sender, RoutedEventArgs e)
     {
         ViewModel?.CancelTransfer();
+    }
+
+    private void OnConflictOverwriteClick(object? sender, RoutedEventArgs e)
+    {
+        ViewModel?.ResolveConflict(SftpConflictAction.Overwrite);
+    }
+
+    private void OnConflictSkipClick(object? sender, RoutedEventArgs e)
+    {
+        ViewModel?.ResolveConflict(SftpConflictAction.Skip);
+    }
+
+    private void OnConflictRenameClick(object? sender, RoutedEventArgs e)
+    {
+        ViewModel?.ResolveConflict(SftpConflictAction.Rename);
+    }
+
+    private void OnConflictCancelClick(object? sender, RoutedEventArgs e)
+    {
+        ViewModel?.ResolveConflict(SftpConflictAction.Cancel);
     }
 }

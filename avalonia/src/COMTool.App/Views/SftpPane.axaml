@@ -31,8 +31,16 @@
                  PlaceholderText="new name"
                  KeyDown="OnRenameNameKeyDown" />
         <Button Name="ChmodButton" Content="chmod" Margin="0,0,8,0" Click="OnChmodClick" />
-        <Button Name="UploadButton" Content="Upload" Margin="0,0,4,0" Click="OnUploadClick" />
-        <Button Name="DownloadButton" Content="Download" Margin="0,0,8,0" Click="OnDownloadClick" />
+        <Button Name="UploadButton"
+                Content="Upload"
+                Margin="0,0,4,0"
+                IsEnabled="{Binding CanUpload}"
+                Click="OnUploadClick" />
+        <Button Name="DownloadButton"
+                Content="Download"
+                Margin="0,0,8,0"
+                IsEnabled="{Binding CanDownload}"
+                Click="OnDownloadClick" />
         <CheckBox Name="FollowLinksCheckBox"
                   Content="Follow symbolic links"
                   Margin="0,0,8,0"
@@ -112,30 +120,101 @@
       </Grid>
     </Grid>
 
-    <!-- The line that tells what happened, and the progress of a
-         transfer that runs. -->
-    <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto">
-      <TextBlock Grid.Column="0"
-                 Name="StatusText"
-                 Text="{Binding StatusMessage}"
-                 Margin="6,0"
-                 VerticalAlignment="Center"
-                 TextTrimming="CharacterEllipsis" />
-      <ProgressBar Grid.Column="1"
-                   Name="TransferProgressBar"
-                   Width="120"
-                   Height="12"
-                   Minimum="0"
-                   Maximum="100"
-                   Value="{Binding TransferProgress}"
-                   IsVisible="{Binding IsTransferring}"
-                   VerticalAlignment="Center" />
-      <Button Grid.Column="2"
-              Name="CancelTransferButton"
-              Content="Cancel"
-              Margin="4,0,4,0"
-              IsVisible="{Binding IsTransferring}"
-              Click="OnCancelClick" />
+    <!-- The line that tells what happened, the progress of a transfer that
+         runs and the question about a target that already exists. -->
+    <Grid Grid.Row="2" RowDefinitions="Auto,Auto">
+      <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto">
+        <TextBlock Grid.Column="0"
+                   Name="StatusText"
+                   Text="{Binding StatusMessage}"
+                   Margin="6,0"
+                   VerticalAlignment="Center"
+                   TextTrimming="CharacterEllipsis" />
+        <ProgressBar Grid.Column="1"
+                     Name="TransferProgressBar"
+                     Width="120"
+                     Height="12"
+                     Minimum="0"
+                     Maximum="100"
+                     Value="{Binding TransferProgress}"
+                     IsVisible="{Binding IsTransferring}"
+                     VerticalAlignment="Center" />
+        <Button Grid.Column="2"
+                Name="CancelButton"
+                Content="Cancel"
+                Margin="4,0,4,0"
+                IsVisible="{Binding IsTransferring}"
+                Click="OnCancelClick" />
+      </Grid>
+
+      <!-- The question about a target that already exists. It sits inside
+           the drawer, so the terminal stays usable while it is shown. -->
+      <Border Grid.Row="1"
+              Name="ConflictPanel"
+              Background="#fff4ce"
+              BorderBrush="#d8b45a"
+              BorderThickness="1"
+              Padding="6"
+              IsVisible="{Binding IsConflictVisible}">
+        <Grid RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="*,Auto,Auto,Auto,Auto">
+          <TextBlock Grid.Row="0"
+                     Grid.Column="0"
+                     Name="ConflictMessageText"
+                     Text="{Binding ConflictMessage}"
+                     VerticalAlignment="Center"
+                     TextTrimming="CharacterEllipsis" />
+
+          <TextBox Grid.Row="1"
+                   Grid.Column="0"
+                   Name="ConflictRenameBox"
+                   Width="160"
+                   HorizontalAlignment="Left"
+                   Margin="0,4,0,0"
+                   Text="{Binding ConflictRenameText, Mode=TwoWay}" />
+
+          <CheckBox Grid.Row="2"
+                    Grid.Column="0"
+                    Name="ApplyToAllBox"
+                    Content="Apply to all"
+                    Margin="0,4,0,0"
+                    IsChecked="{Binding ApplyToAll}" />
+          <CheckBox Grid.Row="2"
+                    Grid.Column="1"
+                    Name="NeverAskAgainBox"
+                    Content="Never ask again"
+                    Margin="0,4,0,0"
+                    IsChecked="{Binding NeverAskAgain}" />
+
+          <Button Grid.Row="0"
+                  Grid.Column="1"
+                  Name="ConflictOverwriteButton"
+                  Content="Overwrite"
+                  Margin="4,0,0,0"
+                  VerticalAlignment="Center"
+                  Click="OnConflictOverwriteClick" />
+          <Button Grid.Row="0"
+                  Grid.Column="2"
+                  Name="ConflictSkipButton"
+                  Content="Skip"
+                  Margin="4,0,0,0"
+                  VerticalAlignment="Center"
+                  Click="OnConflictSkipClick" />
+          <Button Grid.Row="0"
+                  Grid.Column="3"
+                  Name="ConflictRenameButton"
+                  Content="Rename"
+                  Margin="4,0,0,0"
+                  VerticalAlignment="Center"
+                  Click="OnConflictRenameClick" />
+          <Button Grid.Row="0"
+                  Grid.Column="4"
+                  Name="ConflictCancelButton"
+                  Content="Cancel"
+                  Margin="4,0,0,0"
+                  VerticalAlignment="Center"
+                  Click="OnConflictCancelClick" />
+        </Grid>
+      </Border>
     </Grid>
   </Grid>
 </UserControl>
