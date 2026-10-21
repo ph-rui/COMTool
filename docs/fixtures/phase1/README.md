@@ -15,6 +15,8 @@ geometry. These are functional evidence images, not final pixel baselines.
 | `window-size-restored-1000x650.png` | The window was resized to 1000x650, closed, and reopened at 1000x650; closing it while maximized still saved the previous normal size instead of the full-screen size. |
 | `about-version-0.01-1280x800.png` | The About dialog reports `v0.01` with the Beta config path and existing project links. |
 | `new-session-selector-linux.png` | The empty-state `+` menu now lists Serial, SSH, TCP and Local terminal; the Python plugin placeholders are gone. |
+| `titlebar-terminal-icon-850x500.png` | The title-bar/window icon is the deep-blue rounded terminal mark with a white `>_` prompt, replacing the squeezed horizontal wordmark. |
+| `new-session-icons-850x500.png` | The `+` flyout shows MobaXterm-style type icons: green plug (Serial), blue server (SSH), teal terminal (Telnet), orange network (TCP), slate desktop (Local terminal). |
 | `sessions-850x500.png` | Config-backed sidebar shows remembered SSH sessions and no tabs after restart. |
 | `two-tabs-850x500.png` | Multiple SSH tabs are open; `win-ssh` is selected, `local-ssh` is not. Sidebar status dots reflect open sessions. |
 | `switch-tab-850x500.png` | Clicking the `local-ssh` tab switches the terminal content back without reconnecting. |
@@ -69,9 +71,9 @@ geometry. These are functional evidence images, not final pixel baselines.
 
 `docs/testing/feature-test-matrix.md` now maps all parity rows, including the
 Telnet rows. The gate passes in `verify` and `package` phases on Linux, and the
-structure also passes for Windows/macOS. The suite is 227 tests:
+structure also passes for Windows/macOS. The suite is 230 tests:
 
-- Core 45, Connections 44, Terminal 11, ZMODEM 32, TestGate 49, App 46.
+- Core 45, Connections 45, Terminal 11, ZMODEM 32, TestGate 49, App 48.
 - Linux Xvfb E2E: `APP01_SmokeLaunchE2E`,
   `UI01_TitleBarDoubleClickMaximizeE2E`,
   `UI02_SidebarExpandsOnLaunchE2E`, `UI02_SidebarAutoHideE2E`,

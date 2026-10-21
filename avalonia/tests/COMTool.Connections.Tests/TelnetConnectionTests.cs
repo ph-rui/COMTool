@@ -168,6 +168,57 @@ public sealed class TelnetConnectionTests
     }
 
     [Fact]
+    public async Task TELNET03_CommonLoginPromptVariantsTriggerAutoLogin()
+    {
+        var prompts = new[]
+        {
+            ("User name: ", "Password: "),
+            (">>User Name: ", "Password for admin: "),
+            ("Login name: ", "Passwd: "),
+            ("用户名：", "密码："),
+        };
+
+        foreach (var (userPrompt, passwordPrompt) in prompts)
+        {
+            var listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            try
+            {
+                var accept = listener.AcceptTcpClientAsync();
+                using var session = await TelnetConnection.ConnectAsync(
+                    new TelnetConnectionOptions(
+                        "127.0.0.1",
+                        port,
+                        "alice",
+                        "secret",
+                        Timeout: TimeSpan.FromSeconds(5)));
+                using var peer = await accept.WaitAsync(TimeSpan.FromSeconds(5));
+                var stream = peer.GetStream();
+                _ = await ReadUntilAsync(stream, new[] { Iac, Do, Sga }, 5);
+
+                await stream.WriteAsync(Encoding.UTF8.GetBytes(userPrompt));
+                var user = await ReadUntilAsync(
+                    stream,
+                    new byte[] { (byte)'\r', (byte)'\n' },
+                    5);
+                Assert.Contains("alice", Encoding.UTF8.GetString(user));
+
+                await stream.WriteAsync(Encoding.UTF8.GetBytes(passwordPrompt));
+                var password = await ReadUntilAsync(
+                    stream,
+                    new byte[] { (byte)'\r', (byte)'\n' },
+                    5);
+                Assert.Contains("secret", Encoding.UTF8.GetString(password));
+            }
+            finally
+            {
+                listener.Stop();
+            }
+        }
+    }
+
+    [Fact]
     public async Task TELNET04_NoPromptDoesNotSendCredentials()
     {
         var listener = new TcpListener(IPAddress.Loopback, 0);
