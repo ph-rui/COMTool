@@ -1475,10 +1475,10 @@ Expected: the tests fail because the named controls do not exist in the drawer y
 
 In `avalonia/src/COMTool.App/Views/SftpPane.axaml`:
 
-- `UploadButton` and `DownloadButton` in the toolbar, bound to `IsEnabled` of `CanTransfer` and to the selection.
+- `UploadButton` and `DownloadButton` in the toolbar. The upload is enabled by `CanUpload`, which asks for a marked local entry, and the download by `CanDownload`, which asks for a marked remote entry.
 - `CancelButton` in the status area, visible only when `IsTransferring` is true.
 - `TransferProgressBar` in the status area, `Minimum 0`, `Maximum 100`, bound to `TransferProgress`.
-- A `Border` named `ConflictPanel` in the status area, visible only when `IsConflictVisible` is true. It holds a `TextBlock` bound to `ConflictMessage`, a `TextBox` named `ConflictRenameBox` bound to `ConflictRenameText`, the four buttons and the two checkboxes.
+- A `Border` named `ConflictPanel` in the status area, visible only when `IsConflictVisible` is true. It holds a `TextBlock` bound to `ConflictMessage`, a `TextBox` named `ConflictRenameBox` bound to `ConflictRenameText`, the four buttons and the two checkboxes. It sits on a row of its own below the status line, so that the four buttons and the two checkboxes have a line to themselves.
 
 In `avalonia/src/COMTool.App/Views/SftpPane.axaml.cs`, wire the buttons to the view model:
 
