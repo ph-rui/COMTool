@@ -186,6 +186,25 @@ matching (`User name:`, `Login ID:`, `Account name:`, `Please enter ...`,
 - automated Linux Xvfb and headless checks pass, while the Windows GUI visual
   check and a real-device Telnet prompt check for this build are still pending.
 
+A follow-up direct deployment on 2026-10-21 replaced both copies with commit
+`6cd4366`, which recognizes Telnet login prompts with a host-name prefix such
+as `SonnePower_070_Ax login:`, adds an `Edit session` sidebar action that
+populates saved host/port/user settings, removes the bright icon rim, and
+reduces the title-bar icon to 28px:
+
+- size: 174,571,952 bytes;
+- SHA256: `804938A568D45B6D8812A872B42273FF099EE3D2F23232F61C41B1F3BA73722C`;
+- both remote copies matched that hash via `Get-FileHash`;
+- no `COMTool-Avalonia.exe.bak-*` files were created (`BAK_COUNT=0`);
+- a Windows process smoke test started the deployed working copy, observed it
+  `Running` and `Responding=True`, then stopped it; this does not replace the
+  interactive GUI check;
+- the `SonnePower_070_Ax login:` prompt is covered by the automated
+  `TELNET03_CommonLoginPromptVariantsTriggerAutoLogin` test, but a retest
+  against the user's real Telnet device is still required;
+- Windows visual confirmation of the 28px rim-free title-bar icon and the
+  `Edit session` menu remains pending.
+
 This was a direct executable deployment over the existing working and desktop
 copies, not a formal packaged release. No new candidate zip was created or
 signed off for this build.
