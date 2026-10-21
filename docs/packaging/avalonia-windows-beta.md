@@ -170,12 +170,13 @@ logged in without retyping it. Evidence:
 its config were not touched.
 
 A later direct deployment on 2026-10-21 replaced both copies with commit
-`829609e`, which adds the square deep-blue title-bar/window icon, the
+`7d2f34e`, which adds the square deep-blue title-bar/window icon, the
 MobaXterm-style new-session type icons, and broader Telnet login-prompt
-matching (`User name:`, `>>`-prefixed and Chinese prompts):
+matching (`User name:`, `Login ID:`, `Account name:`, `Please enter ...`,
+`>>`-prefixed and Chinese prompts):
 
 - size: 174,596,528 bytes;
-- SHA256: `7FB067E724F968752C77CC1862E3F72A60AC199C779E0C73032D8553E0B39077`;
+- SHA256: `A19A0BEEA9CB1DA61679E6AA9857A55FA9A357E8D2EFA4BB31861E0946252EC7`;
 - both remote copies matched that hash via `Get-FileHash`;
 - no `COMTool-Avalonia.exe.bak-*` files were created, and the old process was
   not running when the copies were replaced;
