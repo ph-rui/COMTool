@@ -1615,6 +1615,22 @@ public partial class MainWindow : Window
         viewModel.AddTab(tab);
     }
 
+    private void OnTabPointerEntered(object? sender, PointerEventArgs e)
+    {
+        if (sender is Border { Tag: TerminalTab tab })
+        {
+            tab.IsTabHovered = true;
+        }
+    }
+
+    private void OnTabPointerExited(object? sender, PointerEventArgs e)
+    {
+        if (sender is Border { Tag: TerminalTab tab })
+        {
+            tab.IsTabHovered = false;
+        }
+    }
+
     private void OnTabPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (sender is Border { Tag: TerminalTab tab } && DataContext is MainViewModel viewModel)

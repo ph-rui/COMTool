@@ -220,13 +220,15 @@
                     <Border Classes="TabItemBorder"
                             Classes.selected="{Binding IsSelected}"
                             Focusable="False"
+                            PointerEntered="OnTabPointerEntered"
+                            PointerExited="OnTabPointerExited"
                             PointerPressed="OnTabPointerPressed"
                             DoubleTapped="OnTabDoubleTapped"
                             ToolTip.Tip="Double click to detach as a window"
                             Tag="{Binding}">
                       <StackPanel Orientation="Horizontal"
                                   VerticalAlignment="Center"
-                                  Spacing="6">
+                                  Spacing="8">
                         <Ellipse Width="8" Height="8"
                                  Fill="{Binding TabDotBrush}"
                                  VerticalAlignment="Center" />
@@ -238,7 +240,7 @@
                                 Width="16" Height="16"
                                 MinWidth="0" MinHeight="0"
                                 Padding="0"
-                                IsVisible="{Binding IsSelected}"
+                                IsVisible="{Binding ShowTabSettings}"
                                 Tag="{Binding}"
                                 ToolTip.Tip="Connection settings for this tab"
                                 Click="OnTabSettingsClick">

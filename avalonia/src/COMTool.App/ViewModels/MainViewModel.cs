@@ -66,6 +66,17 @@ public sealed partial class TerminalTab : ObservableObject
     private bool _isSelected;
 
     [ObservableProperty]
+    private bool _isTabHovered;
+
+    public bool ShowTabSettings => IsSelected && IsTabHovered;
+
+    partial void OnIsSelectedChanged(bool value) =>
+        OnPropertyChanged(nameof(ShowTabSettings));
+
+    partial void OnIsTabHoveredChanged(bool value) =>
+        OnPropertyChanged(nameof(ShowTabSettings));
+
+    [ObservableProperty]
     private bool _isAlive = true;
 
     [ObservableProperty]

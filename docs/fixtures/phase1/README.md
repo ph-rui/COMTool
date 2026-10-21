@@ -19,7 +19,8 @@ geometry. These are functional evidence images, not final pixel baselines.
 | `new-session-icons-850x500.png` | The `+` flyout shows MobaXterm-style type icons: green plug (Serial), blue server (SSH), teal terminal (Telnet), orange network (TCP), slate desktop (Local terminal). |
 | `sidebar-add-session-850x500.png` | The `+` new-session button now lives at the right of the `User sessions` sidebar header; its flyout opens next to the sidebar with Serial, SSH, Telnet, TCP and Local terminal. The toolbar encoding selector remains, and the Functional arrow/panel is gone. |
 | `sidebar-add-session-menu-stays-open-850x500.png` | Pointer hover on the sidebar `+` and its open new-session menu no longer retracts the sidebar; the menu stays open while moving onto its items. |
-| `tab-settings-gear-850x500.png` | The connection-settings gear now appears inside the selected tab, next to its close button, so it is unambiguous which tab it edits; unselected tabs show only their close button. |
+| `tab-settings-gear-at-rest-850x500.png` | Two tabs at rest: the selected tab shows only its title and close button, so the tab strip is not crowded. |
+| `tab-settings-gear-850x500.png` | Hovering the selected tab reveals the connection-settings gear inside that tab, next to its close button, so it is unambiguous which tab it edits; unselected tabs never show the gear. |
 | `sessions-850x500.png` | Config-backed sidebar shows remembered SSH sessions and no tabs after restart. |
 | `two-tabs-850x500.png` | Multiple SSH tabs are open; `win-ssh` is selected, `local-ssh` is not. Sidebar status dots reflect open sessions. |
 | `switch-tab-850x500.png` | Clicking the `local-ssh` tab switches the terminal content back without reconnecting. |
