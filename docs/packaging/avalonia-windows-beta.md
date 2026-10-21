@@ -261,6 +261,25 @@ unselected tabs never show the gear:
   `docs/fixtures/phase1/tab-settings-gear-850x500.png`; interactive Windows
   confirmation of the hover-only gear remains pending.
 
+A follow-up direct deployment on 2026-10-21 replaced both copies with commit
+`f51ebad`, which gives immediate sidebar feedback when opening a session:
+the clicked row shows a blue `Connecting...` state, repeated clicks while the
+attempt is pending are ignored, and SSH connection setup runs off the UI
+thread so an unreachable host no longer freezes the window:
+
+- size: 174,567,856 bytes;
+- SHA256: `DA36A898E2B8C122D1EAD45018F6BBD6324FBB1D0D0077BB8D0EDBCCCDEF9DA8`;
+- both remote copies matched that hash via `Get-FileHash`;
+- no `COMTool-Avalonia.exe.bak-*` files were created (`BAK_COUNT=0`);
+- a Windows process smoke test started the deployed working copy, observed it
+  `Running` and `Responding=True`, then stopped it; this does not replace the
+  interactive GUI check;
+- the automated suite passes 237 tests and Linux Xvfb E2E passes 10/10;
+- the Linux visual fixture is
+  `docs/fixtures/phase1/session-connecting-feedback-1000x650.png`; interactive
+  Windows confirmation against the unreachable `192.168.1.12` Telnet session
+  remains pending.
+
 This was a direct executable deployment over the existing working and desktop
 copies, not a formal packaged release. No new candidate zip was created or
 signed off for this build.
