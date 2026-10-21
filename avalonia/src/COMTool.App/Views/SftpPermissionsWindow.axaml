@@ -1,0 +1,41 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="COMTool.App.Views.SftpPermissionsWindow"
+        Title="Permissions"
+        Width="260"
+        SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+  <StackPanel Margin="12" Spacing="10">
+    <Grid ColumnDefinitions="70,Auto,Auto,Auto"
+          RowDefinitions="Auto,Auto,Auto,Auto">
+      <TextBlock Grid.Row="0" Grid.Column="1" Text="Read" />
+      <TextBlock Grid.Row="0" Grid.Column="2" Text="Write" />
+      <TextBlock Grid.Row="0" Grid.Column="3" Text="Execute" />
+
+      <TextBlock Grid.Row="1" Grid.Column="0" Text="Owner" VerticalAlignment="Center" />
+      <CheckBox Name="OwnerReadBox" Grid.Row="1" Grid.Column="1" IsCheckedChanged="OnBoxChanged" />
+      <CheckBox Name="OwnerWriteBox" Grid.Row="1" Grid.Column="2" IsCheckedChanged="OnBoxChanged" />
+      <CheckBox Name="OwnerExecuteBox" Grid.Row="1" Grid.Column="3" IsCheckedChanged="OnBoxChanged" />
+
+      <TextBlock Grid.Row="2" Grid.Column="0" Text="Group" VerticalAlignment="Center" />
+      <CheckBox Name="GroupReadBox" Grid.Row="2" Grid.Column="1" IsCheckedChanged="OnBoxChanged" />
+      <CheckBox Name="GroupWriteBox" Grid.Row="2" Grid.Column="2" IsCheckedChanged="OnBoxChanged" />
+      <CheckBox Name="GroupExecuteBox" Grid.Row="2" Grid.Column="3" IsCheckedChanged="OnBoxChanged" />
+
+      <TextBlock Grid.Row="3" Grid.Column="0" Text="Others" VerticalAlignment="Center" />
+      <CheckBox Name="OthersReadBox" Grid.Row="3" Grid.Column="1" IsCheckedChanged="OnBoxChanged" />
+      <CheckBox Name="OthersWriteBox" Grid.Row="3" Grid.Column="2" IsCheckedChanged="OnBoxChanged" />
+      <CheckBox Name="OthersExecuteBox" Grid.Row="3" Grid.Column="3" IsCheckedChanged="OnBoxChanged" />
+    </Grid>
+
+    <StackPanel Orientation="Horizontal" Spacing="8">
+      <TextBlock Text="Mode" VerticalAlignment="Center" />
+      <TextBox Name="OctalBox" Width="70" TextChanged="OnOctalTextChanged" />
+    </StackPanel>
+
+    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+      <Button Name="ApplyButton" Content="Apply" Click="OnApplyClick" />
+    </StackPanel>
+  </StackPanel>
+</Window>
