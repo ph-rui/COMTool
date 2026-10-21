@@ -144,11 +144,31 @@ public sealed class SessionEditTests
                 var secondGear = gears.Single(button =>
                     ReferenceEquals(button.DataContext, second));
                 Assert.False(firstGear.IsVisible);
-                Assert.True(secondGear.IsVisible);
+                Assert.False(secondGear.IsVisible);
                 Assert.Contains(
                     "settings",
                     ToolTip.GetTip(secondGear)?.ToString(),
                     StringComparison.OrdinalIgnoreCase);
+
+                // Hovering a tab does not reveal settings until that tab is selected.
+                first.IsTabHovered = true;
+                Dispatcher.UIThread.RunJobs();
+                Assert.False(firstGear.IsVisible);
+
+                viewModel.SelectedTab = first;
+                Dispatcher.UIThread.RunJobs();
+                Assert.True(firstGear.IsVisible);
+                Assert.False(secondGear.IsVisible);
+
+                viewModel.SelectedTab = second;
+                Dispatcher.UIThread.RunJobs();
+                Assert.False(firstGear.IsVisible);
+                Assert.False(secondGear.IsVisible);
+
+                // The selected tab reveals its settings gear while hovered.
+                second.IsTabHovered = true;
+                Dispatcher.UIThread.RunJobs();
+                Assert.True(secondGear.IsVisible);
 
                 secondGear.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 Dispatcher.UIThread.RunJobs();
