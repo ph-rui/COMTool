@@ -180,6 +180,9 @@ matching (`User name:`, `Login ID:`, `Account name:`, `Please enter ...`,
 - both remote copies matched that hash via `Get-FileHash`;
 - no `COMTool-Avalonia.exe.bak-*` files were created, and the old process was
   not running when the copies were replaced;
+- a Windows process smoke test started the deployed working copy from the SSH
+  session, observed it `Running` and `Responding=True` for six seconds, then
+  stopped it; this does not replace the interactive GUI check;
 - automated Linux Xvfb and headless checks pass, while the Windows GUI visual
   check and a real-device Telnet prompt check for this build are still pending.
 
