@@ -1073,13 +1073,12 @@ Add the `using` for `COMTool.Terminal` if the file does not already have it.
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="COMTool.App.Views.SshSessionView">
-  <Grid RowDefinitions="*,4,*">
+  <Grid Name="SessionGrid" RowDefinitions="*,4,*">
     <ContentControl Name="TerminalHost" Grid.Row="0" />
     <GridSplitter Name="SftpSplitter"
                   Grid.Row="1"
                   Height="4"
-                  ResizeDirection="Rows"
-                  IsVisible="{Binding SftpPane.IsExpanded}" />
+                  ResizeDirection="Rows" />
     <ContentControl Name="SftpHost" Grid.Row="2" />
   </Grid>
 </UserControl>
@@ -1089,7 +1088,7 @@ Add the `using` for `COMTool.Terminal` if the file does not already have it.
 
 The drawer height and the drawer visibility are **not** bound in XAML. A `ContentControl` that hosts a `Control` keeps the inherited `DataContext`, so a `{Binding SftpPane.IsExpanded}` inside `SshSessionView.axaml` would resolve against the window view model, not against the view. Implement them in the code-behind instead:
 
-- `SshSessionView` subscribes to `SftpPane.PropertyChanged` and sets `SftpHost.Height` to `SftpPane.PaneHeight`, `SftpHost.IsVisible` to `SftpPane.IsExpanded` and `SftpSplitter.IsVisible` to `SftpPane.IsExpanded`.
+- `SshSessionView` subscribes to `SftpPane.PropertyChanged` and sets the height of the row of the drawer to `SftpPane.PaneHeight`, `SftpHost.IsVisible` to `SftpPane.IsExpanded` and `SftpSplitter.IsVisible` to `SftpPane.IsExpanded`. The height belongs to the row and not to the control of the drawer: a row of the size "*" does not obey the height of its child, and the handle of the splitter resizes the row.
 - The `GridSplitter` writes the dragged height back into `SftpPane.PaneHeight`.
 - Setting a new `SftpPane` unsubscribes from the old one and subscribes to the new one, so the view does not leak a handler.
 
@@ -1123,10 +1122,13 @@ var tab = new TerminalTab
 _ = pane.LoadAsync(CancellationToken.None);
 ```
 
+  The drawer is asked for its remote side through `() => connection.CreateSftpFileSystem()`. The connection owns the client of the sftp subsystem and disposes it with the tab.
+
   Add `using COMTool.Sftp;` to `MainWindow.axaml.cs` for `SystemLocalFileSystem`.
 
-- Replace every `tab.Content as TerminalControl` with `tab.Terminal`. There are ten such sites in `MainWindow.axaml.cs`; `tab.Content` is now a `SshSessionView` for SSH tabs, so the casts would silently return null and break the terminal focus, the detach/reattach flow and the double-click detach window.
-- In `RestartSshSessionAsync`, use `tab.Terminal` instead of `tab.Content as TerminalControl`, and after the new connection is attached call `tab.SftpPane?.SetRemoteFactory(() => connection.CreateSftpFileSystem())` followed by `tab.SftpPane?.LoadAsync(CancellationToken.None)`. The collapsed state and the drawer height stay as they were.
+- Replace every `tab.Content as TerminalControl` with `tab.Terminal`. There are ten such sites in `MainWindow.axaml.cs`; `tab.Content` is now a `SshSessionView` for SSH tabs, so the casts would silently return null and break the terminal focus, the detach/reattach flow and the double-click detach window. Every tab that holds a terminal names it in `TerminalTab.Terminal`, not only the tabs of an SSH session.
+- The two places that put the focus back on the tab after the tab was detached or attached again focus the terminal when there is one, so that the terminal of an SSH session gets the keyboard.
+- In `RestartSshSessionAsync`, use `tab.Terminal` instead of `tab.Content as TerminalControl`, and after the new connection is attached call `tab.SftpPane?.SetRemoteFactory(() => connection.CreateSftpFileSystem())`. The method loads the listing itself, so a second load would read the directory twice. The collapsed state and the drawer height stay as they were.
 - In `AttachSshTransport`, extend the tab `CloseAction` with `tab.SftpPane?.CancelTransfer()` before the connection is disposed, so closing the tab during a transfer cancels the queue and removes the partially written file instead of leaving a background task running against a dead connection.
 
 - [ ] **Step 6: Run the tests to verify they pass**

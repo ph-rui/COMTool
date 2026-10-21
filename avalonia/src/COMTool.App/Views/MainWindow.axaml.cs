@@ -11,6 +11,7 @@ using COMTool.App.Services;
 using COMTool.App.ViewModels;
 using COMTool.Connections;
 using COMTool.Core.Config;
+using COMTool.Sftp;
 using COMTool.Terminal;
 using COMTool.Zmodem;
 using Iciclecreek.Terminal;
@@ -530,6 +531,7 @@ public partial class MainWindow : Window
             SessionId = session.Port,
             Kind = SessionKind.Serial,
             Content = terminal,
+            Terminal = terminal,
             Connection = connection,
             StatusMessage = $"Connected {session.Port}",
             IsTransportOpen = () => state.IsTransportOpen,
@@ -726,15 +728,25 @@ public partial class MainWindow : Window
         }
 
         var terminal = CreateTerminal();
+        var pane = new SftpPaneViewModel(
+            () => connection.CreateSftpFileSystem(),
+            new SystemLocalFileSystem());
+        var sessionView = new SshSessionView { Terminal = terminal, SftpPane = pane };
         var tab = new TerminalTab
         {
             Title = SshSessionRules.DisplayName(session),
             SessionId = session.Key,
             Kind = SessionKind.Ssh,
-            Content = terminal,
+            Content = sessionView,
+            Terminal = terminal,
+            SftpPane = pane,
             StatusMessage = $"Connected {SshSessionRules.Detail(session)}",
         };
         AttachSshTransport(tab, terminal, connection);
+
+        // The first listing of the remote side runs in the background, so
+        // that the shell of the session is ready right away.
+        _ = pane.LoadAsync(CancellationToken.None);
 
         var stoppedBehavior = new SessionStoppedBehavior(
             terminal,
@@ -842,6 +854,10 @@ public partial class MainWindow : Window
         tab.IsTransportOpen = () => connection.IsConnected;
         tab.CloseAction = () =>
         {
+            // A transfer that runs when the tab is closed would write
+            // against a connection that is about to die.
+            tab.SftpPane?.CancelTransfer();
+
             try
             {
                 terminal.DetachConnection();
@@ -880,7 +896,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var terminal = tab.Content as TerminalControl;
+        var terminal = tab.Terminal;
         SshConnection? connection = null;
         try
         {
@@ -938,6 +954,10 @@ public partial class MainWindow : Window
             {
                 // The old transport is already gone.
             }
+
+            // The drawer of the session talks to the new connection now.
+            // Whether it is open and how high it is stay as they are.
+            tab.SftpPane?.SetRemoteFactory(() => connection.CreateSftpFileSystem());
 
             terminal.ClearScreen();
             terminal.AttachConnection(connection.Pty);
@@ -1092,6 +1112,7 @@ public partial class MainWindow : Window
             SessionId = session.Key,
             Kind = SessionKind.Telnet,
             Content = terminal,
+            Terminal = terminal,
             StatusMessage = $"Connected {TelnetSessionRules.Detail(session)}",
         };
         AttachTelnetTransport(tab, terminal, connection);
@@ -1208,7 +1229,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var terminal = tab.Content as TerminalControl;
+        var terminal = tab.Terminal;
         TelnetConnection? connection = null;
         try
         {
@@ -1357,6 +1378,7 @@ public partial class MainWindow : Window
             SessionId = key,
             Kind = SessionKind.Tcp,
             Content = terminal,
+            Terminal = terminal,
             Connection = connection,
             StatusMessage = status,
             IsTransportOpen = () => connection.IsConnected,
@@ -1754,6 +1776,7 @@ public partial class MainWindow : Window
             SessionId = $"terminal:{Guid.NewGuid():N}",
             Kind = SessionKind.Local,
             Content = terminal,
+            Terminal = terminal,
             StatusMessage = "Connected terminal",
             CloseAction = () => terminal.Kill(),
         };
@@ -1851,11 +1874,11 @@ public partial class MainWindow : Window
         // Removing the control from the visual tree must not be treated as the
         // end of its process. The terminal library has an explicit reparent
         // handshake for exactly this case.
-        (tab.Content as TerminalControl)?.BeginReparent();
+        tab.Terminal?.BeginReparent();
         var index = viewModel.RemoveTabForDetach(tab);
         if (index < 0)
         {
-            (tab.Content as TerminalControl)?.EndReparent();
+            tab.Terminal?.EndReparent();
             return;
         }
 
@@ -1871,7 +1894,7 @@ public partial class MainWindow : Window
         {
             // The connection can drop between the double-click and this post.
             // Keep the tab in the strip instead of losing it.
-            (tab.Content as TerminalControl)?.EndReparent();
+            tab.Terminal?.EndReparent();
             if (DataContext is MainViewModel deadViewModel)
             {
                 deadViewModel.InsertDetachedTab(tab, index);
@@ -1902,7 +1925,7 @@ public partial class MainWindow : Window
             // Closing fires while the terminal is still in this window's visual
             // tree, before Avalonia detaches it. Suppress the terminal library's
             // implicit process cleanup for the trip back to the main window.
-            window.Closing += (_, _) => (tab.Content as TerminalControl)?.BeginReparent();
+            window.Closing += (_, _) => tab.Terminal?.BeginReparent();
             window.Closed += (_, _) => OnDetachedTabClosed(tab, state);
             window.Show();
             // Multiple detached windows otherwise land exactly on top of each
@@ -1916,8 +1939,8 @@ public partial class MainWindow : Window
                     window.Position.Y + (offset * cascade));
             }
 
-            (tab.Content as TerminalControl)?.EndReparent();
-            tab.Content.Focus();
+            tab.Terminal?.EndReparent();
+            (tab.Terminal ?? (Control)tab.Content).Focus();
         }
         catch (Exception ex)
         {
@@ -1928,7 +1951,7 @@ public partial class MainWindow : Window
                 window.Close();
             }
 
-            (tab.Content as TerminalControl)?.EndReparent();
+            tab.Terminal?.EndReparent();
             if (DataContext is MainViewModel viewModel)
             {
                 viewModel.InsertDetachedTab(tab, index);
@@ -1951,13 +1974,13 @@ public partial class MainWindow : Window
             return;
         }
 
-        (tab.Content as TerminalControl)?.BeginReparent();
+        tab.Terminal?.BeginReparent();
         state.Window.Content = null;
         if (DataContext is MainViewModel viewModel)
         {
             viewModel.InsertDetachedTab(tab, state.Index);
-            (tab.Content as TerminalControl)?.EndReparent();
-            tab.Content.Focus();
+            tab.Terminal?.EndReparent();
+            (tab.Terminal ?? (Control)tab.Content).Focus();
         }
 
         UpdateConnectionStates();

@@ -4,6 +4,7 @@ using Avalonia.Media;
 using COMTool.App.Services;
 using COMTool.Core.Config;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Iciclecreek.Terminal;
 
 namespace COMTool.App.ViewModels;
 
@@ -67,6 +68,24 @@ public sealed partial class TerminalTab : ObservableObject
     public IDisposable? Connection { get; set; }
     public Action? CloseAction { get; set; }
     public Func<bool>? IsTransportOpen { get; set; }
+
+    /// <summary>
+    /// The terminal of the tab. The content of an SSH tab is the session
+    /// view that holds the terminal and the SFTP drawer, so the terminal
+    /// is named here as well.
+    /// </summary>
+    public TerminalControl? Terminal { get; init; }
+
+    /// <summary>
+    /// The SFTP drawer of an SSH tab. It is null for every other kind of
+    /// tab.
+    /// </summary>
+    public SftpPaneViewModel? SftpPane { get; init; }
+
+    /// <summary>
+    /// True for a tab of an SSH session.
+    /// </summary>
+    public bool IsSshTab => Kind == SessionKind.Ssh;
 
     [ObservableProperty]
     private bool _isSelected;
