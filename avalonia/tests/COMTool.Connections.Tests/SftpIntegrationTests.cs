@@ -550,6 +550,53 @@ public sealed class SftpIntegrationTests : IClassFixture<SshdFixture>
             () => sftp.ListAsync(home, CancellationToken.None));
     }
 
+    [Fact]
+    public async Task DownloadsAFileThroughTheTransferEngine()
+    {
+        if (!_fixture.IsAvailable)
+        {
+            return;
+        }
+
+        using var connection = SshConnection.Connect(Options());
+        var sftp = connection.CreateSftpFileSystem();
+        var work = await CreateWorkDirectoryAsync(sftp);
+
+        try
+        {
+            var source = Path.Combine(work, "payload.bin");
+            await using (var write = await sftp.OpenWriteAsync(source, CancellationToken.None))
+            {
+                await write.WriteAsync("SFTP_ENGINE_PAYLOAD"u8.ToArray());
+            }
+
+            // The engine asks whether an entry is a directory by listing
+            // it. The server has to answer that a file is not a directory,
+            // otherwise the whole transfer fails.
+            await Assert.ThrowsAsync<DirectoryNotFoundException>(
+                () => sftp.ListAsync(source, CancellationToken.None));
+
+            var engine = new SftpTransferEngine(sftp, new SystemLocalFileSystem());
+            var request = new SftpTransferRequest(
+                SftpTransferDirection.Download,
+                new[] { source },
+                _fixture.WorkDirectory,
+                new SftpTransferOptions());
+
+            var result = await engine.RunAsync(request, null, CancellationToken.None);
+
+            Assert.Equal(1, result.Succeeded);
+            Assert.Equal(0, result.Failed);
+            Assert.Equal(
+                "SFTP_ENGINE_PAYLOAD",
+                await File.ReadAllTextAsync(Path.Combine(_fixture.WorkDirectory, "payload.bin")));
+        }
+        finally
+        {
+            await RemoveWorkDirectoryAsync(sftp, work);
+        }
+    }
+
     /// <summary>
     /// Every test works in a directory of its own, so that a rerun does not
     /// run into the leftovers of an earlier run.

@@ -29,6 +29,7 @@ E2E_TESTS=(
     TERM15_DoubleClickMaximizeE2E
     TELNET01_AutoLoginE2E
     TELNET02_RestartStoppedSessionE2E
+    SFTP01_BrowserTransferE2E
 )
 SSH_TEST_IDS=(
     UI01_TitleBarDoubleClickMaximizeE2E
@@ -39,6 +40,7 @@ SSH_TEST_IDS=(
     SSH06_MultipleConnectionsE2E
     UI05_TabSwitchTypingBothDirections
     TERM15_DoubleClickMaximizeE2E
+    SFTP01_BrowserTransferE2E
 )
 TELNET_TEST_IDS=(
     TELNET01_AutoLoginE2E
@@ -704,6 +706,104 @@ run_ui01_title_bar_double_click_maximize() {
     pass "$test_id"
 }
 
+run_sftp01_browser_transfer() {
+    local test_id="SFTP01_BrowserTransferE2E"
+    local remote_dir="$SFTP_REMOTE_TEST_DIR"
+    local local_up_dir="$TMP_ROOT/home/sftp01-up"
+    local local_down_dir="$TMP_ROOT/home/sftp01-down"
+    local upload_name="upload.txt"
+    local download_name="server.txt"
+
+    log "Running $test_id"
+
+    # The drawer of a new SSH tab asks the server for the sftp subsystem
+    # on its own, without a click.
+    ensure_first_shell "$test_id"
+
+    if ! wait_for_sshd_log "subsystem 'sftp'" 20; then
+        fail "$test_id" "the drawer did not ask the server for the sftp subsystem"
+    fi
+
+    rm -rf -- "$remote_dir"
+    mkdir -p "$remote_dir" "$local_up_dir" "$local_down_dir"
+    printf 'SFTP01_SERVER' >"$remote_dir/$download_name"
+    printf 'SFTP01_LOCAL_V1' >"$local_up_dir/$upload_name"
+
+    # The drawer has to have its place before the first click: the
+    # sidebar shifts the whole content when it retracts.
+    collapse_sidebar_for_tabs || fail "$test_id" "could not collapse the sidebar"
+
+    # 1. The remote pane walks into the directory of the test.
+    click_window "$SFTP_REMOTE_PATH_X" "$SFTP_REMOTE_PATH_Y" \
+        || fail "$test_id" "could not click the path box of the remote pane"
+    select_all_text
+    type_text "$remote_dir"
+    press_enter
+    sleep 2
+
+    # 2. The local pane walks into the directory that receives the
+    #    download.
+    click_window "$SFTP_LOCAL_PATH_X" "$SFTP_LOCAL_PATH_Y" \
+        || fail "$test_id" "could not click the path box of the local pane"
+    select_all_text
+    type_text "$local_down_dir"
+    press_enter
+    sleep 2
+
+    # 3. The only file of the remote pane comes down.
+    click_window "$SFTP_REMOTE_ITEM_X" "$SFTP_REMOTE_ITEM_Y" \
+        || fail "$test_id" "could not click the file of the remote pane"
+    sleep 0.5
+    click_window "$SFTP_DOWNLOAD_X" "$SFTP_TOOLBAR_Y" \
+        || fail "$test_id" "could not click the download button"
+    if ! wait_for_file_content "$local_down_dir/$download_name" "SFTP01_SERVER" 25; then
+        fail "$test_id" "the file of the server did not arrive in the local directory"
+    fi
+
+    # 4. The only file of the local pane goes up.
+    click_window "$SFTP_LOCAL_PATH_X" "$SFTP_LOCAL_PATH_Y" \
+        || fail "$test_id" "could not click the path box of the local pane again"
+    select_all_text
+    type_text "$local_up_dir"
+    press_enter
+    sleep 2
+    click_window "$SFTP_LOCAL_ITEM_X" "$SFTP_LOCAL_ITEM_Y" \
+        || fail "$test_id" "could not click the file of the local pane"
+    sleep 0.5
+    click_window "$SFTP_UPLOAD_X" "$SFTP_TOOLBAR_Y" \
+        || fail "$test_id" "could not click the upload button"
+    if ! wait_for_file_content "$remote_dir/$upload_name" "SFTP01_LOCAL_V1" 25; then
+        fail "$test_id" "the local file did not arrive on the server"
+    fi
+
+    # 5. The same file again. The target exists now, so the drawer has to
+    #    ask what to do with it.
+    printf 'SFTP01_LOCAL_V2' >"$local_up_dir/$upload_name"
+    click_window "$SFTP_LOCAL_ITEM_X" "$SFTP_LOCAL_ITEM_Y" \
+        || fail "$test_id" "could not mark the file of the local pane again"
+    sleep 0.5
+    click_window "$SFTP_UPLOAD_X" "$SFTP_TOOLBAR_Y" \
+        || fail "$test_id" "could not click the upload button a second time"
+    if ! wait_for_window_color \
+        "$SFTP_CONFLICT_COLOR" \
+        "$SFTP_CONFLICT_PROBE_X" \
+        "$SFTP_CONFLICT_PROBE_Y" \
+        "$SFTP_CONFLICT_PROBE_W" \
+        "$SFTP_CONFLICT_PROBE_H" 20; then
+        fail "$test_id" "the drawer did not ask what to do with the file that exists"
+    fi
+    click_window "$SFTP_CONFLICT_OVERWRITE_X" "$SFTP_CONFLICT_OVERWRITE_Y" \
+        || fail "$test_id" "could not click the overwrite button of the question"
+    if ! wait_for_file_content "$remote_dir/$upload_name" "SFTP01_LOCAL_V2" 25; then
+        fail "$test_id" "the file that exists was not overwritten"
+    fi
+
+    capture_screenshot "$TMP_ROOT/sftp01-browser.png" || true
+    rm -rf -- "$remote_dir"
+
+    pass "$test_id"
+}
+
 run_term15_double_click_maximize() {
     local test_id="TERM15_DoubleClickMaximizeE2E"
     local before
@@ -797,6 +897,9 @@ if [[ -n "$SSH_TEST_ID" ]]; then
     fi
     if matches_filter "TERM15_DoubleClickMaximizeE2E"; then
         run_term15_double_click_maximize
+    fi
+    if matches_filter "SFTP01_BrowserTransferE2E"; then
+        run_sftp01_browser_transfer
     fi
 
     close_app_window "$SSH_TEST_ID"

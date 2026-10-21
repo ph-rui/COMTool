@@ -49,25 +49,36 @@ public sealed class SshSftpFileSystem : ISftpFileSystem
         var requested = SftpPath.Normalize(path);
         var entries = new List<SftpEntry>();
 
-        foreach (var file in ListEntries(requested))
+        try
         {
-            entries.Add(new SftpEntry(
-                file.Name,
-                SftpPath.Combine(requested, file.Name),
-                file.IsDirectory,
-                file.IsSymbolicLink,
-                file.Length,
-                file.LastWriteTimeUtc,
-                new SftpPermission(
-                    file.OwnerCanRead,
-                    file.OwnerCanWrite,
-                    file.OwnerCanExecute,
-                    file.GroupCanRead,
-                    file.GroupCanWrite,
-                    file.GroupCanExecute,
-                    file.OthersCanRead,
-                    file.OthersCanWrite,
-                    file.OthersCanExecute)));
+            foreach (var file in ListEntries(requested))
+            {
+                entries.Add(new SftpEntry(
+                    file.Name,
+                    SftpPath.Combine(requested, file.Name),
+                    file.IsDirectory,
+                    file.IsSymbolicLink,
+                    file.Length,
+                    file.LastWriteTimeUtc,
+                    new SftpPermission(
+                        file.OwnerCanRead,
+                        file.OwnerCanWrite,
+                        file.OwnerCanExecute,
+                        file.GroupCanRead,
+                        file.GroupCanWrite,
+                        file.GroupCanExecute,
+                        file.OthersCanRead,
+                        file.OthersCanWrite,
+                        file.OthersCanExecute)));
+            }
+        }
+        catch (SftpException ex)
+        {
+            // The server answers with "no such file" when the path is a
+            // file and not a directory. The transfer engine asks with a
+            // listing whether an entry is a directory, so the answer has
+            // to look like a path that is not there.
+            throw new DirectoryNotFoundException(ex.Message, ex);
         }
 
         return Task.FromResult<IReadOnlyList<SftpEntry>>(entries);
