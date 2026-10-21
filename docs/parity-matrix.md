@@ -11,13 +11,13 @@
 | ID | 功能 | 优先级 | 状态 | 验收要点 |
 |---|---|---|---|---|
 | UI-01 | 自定义标题栏、Logo、窗口按钮 | P0 | 部分 | 无原生边框/白条，Material Design 最小化/最大化/还原/关闭图标，自定义 5px 边缘缩放与光标，拖拽/最小化/最大化/关闭，标题栏双击最大化/还原已自动化并由 Xvfb E2E 验证，Xvfb 基准截图通过；Windows 白条、拖拽和边缘缩放实机确认待用户启动新 exe |
-| UI-02 | 左侧 `User sessions` 侧栏 | P0 | 完成 | 展开/折叠、按会话列表框红/绿边动态触发（指针移到红边左侧自动展开，移到绿边右侧自动收起，框内不收起；首次指针移动即生效，无需先悬停侧栏；标题栏移动不触发；侧栏宽度变化后触发点同步变化）、250ms 右移自动收起、350ms 点击保护、宽度、空状态；按用户要求，启动时始终自动展开（即使上次关闭前为折叠），宽度仍恢复；自动收起不改写 `sessionSidebar`，手动切换持久化但下次启动仍展开；见 `session-sidebar-expanded-on-launch-1000x650.png` |
+| UI-02 | 左侧 `User sessions` 侧栏 | P0 | 完成 | 展开/折叠、按会话列表框红/绿边动态触发（指针移到红边左侧自动展开，移到绿边右侧自动收起，框内不收起；首次指针移动即生效，无需先悬停侧栏；标题栏移动不触发；侧栏宽度变化后触发点同步变化）、250ms 右移自动收起、350ms 点击保护、宽度、空状态；侧栏标题 `+` 悬停和新建会话菜单展开期间保持展开，避免鼠标移入菜单时侧栏收回；按用户要求，启动时始终自动展开（即使上次关闭前为折叠），宽度仍恢复；自动收起不改写 `sessionSidebar`，手动切换持久化但下次启动仍展开；见 `session-sidebar-expanded-on-launch-1000x650.png`、`sidebar-add-session-menu-stays-open-850x500.png` |
 | UI-03 | 串口/SSH/Telnet 分组与状态图标 | P0 | 部分 | 连接状态原地更新；Windows `--ports` 已输出 COM97/99 等 SetupAPI 描述 |
 | UI-04 | 侧栏右键菜单 | P0 | 部分 | Open、Edit session、Remove session；Edit session 可在未打开连接时回填已保存主机/端口/用户；确认框、真实桌面右键和配置持久化仍需核对 |
 | UI-05 | 标签页与标题 | P0 | 完成 | 多标签新增/关闭/切换、标题规则、选中样式、状态圆点和双击分离/回接已完成；分离后命令可继续执行，关闭分离窗口无重复缓冲；切换标签前对旧终端调用 `BeginReparent`，避免内容宿主移除旧控件时清理 PTY 读取器，切换后直接输入即可继续执行，两个方向均已在打包版实测；见 `tab-switch-input-second-1000x650.png`、`tab-switch-input-first-1000x650.png` |
 | UI-06 | `+` 新建会话类型选择器 | P0 | 完成（MobaXterm 方向） | 按用户要求移除 Python 插件占位项（Send Receive/protocol/Graph/Load plugin）；空状态和侧栏标题两个 `+` 入口统一为 Serial/SSH/Telnet/TCP/Local terminal，选择后预选对应设置页或创建本地终端；菜单项使用与 MobaXterm 相近的类型图标（串口插头、SSH 服务器、Telnet 终端、TCP 网络、本地桌面），标题栏/窗口图标为深蓝终端图标；右上角 Functional 箭头按钮及 `Load config` / `Share config` 面板已按用户要求删除；Telnet 已作为 MobaXterm 会话类型接入，后续类型按阶段扩展，未实现类型不显示 |
 | UI-07 | 空状态 | P0 | 完成 | 无标签时显示 `Select a session from the left` / `or click + to add a session`，空状态和侧栏标题两个 `+` 入口提示 `New session`；headless 测试覆盖 |
-| UI-08 | 设置按钮与设置面板 | P0 | 完成 | 串口/SSH/Telnet 参数、SSH 密钥、记住密码、打开/关闭、侧栏同步已实现 |
+| UI-08 | 设置按钮与设置面板 | P0 | 完成 | 串口/SSH/Telnet 参数、SSH 密钥、记住密码、打开/关闭、侧栏同步已实现；连接设置齿轮位于选中标签页内，明确编辑该标签对应的会话，不再在标签栏左侧放全局齿轮；见 `tab-settings-gear-850x500.png` |
 | UI-09 | 主题切换（浅色/深色） | P0 | 部分 | 标题栏右键菜单可切换浅/深色，`skin` 持久化并重启生效 |
 | UI-10 | 语言切换 | P1 | 未开始 | 英文/简中/繁中/日文，文案一致 |
 | UI-11 | 帮助、关于、捐赠、更新提示 | P1 | 部分 | `About COMTool` 已包含版本、说明、配置路径、License、GitHub/Releases/Issues/捐赠链接；插件帮助和更新检测待补 |

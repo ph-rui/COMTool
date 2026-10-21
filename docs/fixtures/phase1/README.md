@@ -18,6 +18,8 @@ geometry. These are functional evidence images, not final pixel baselines.
 | `titlebar-terminal-icon-850x500.png` | The title-bar/window icon is the deep-blue rounded terminal mark with a white `>_` prompt at a 28px display size; the bright outer rim that produced a white sawtooth fringe is gone. |
 | `new-session-icons-850x500.png` | The `+` flyout shows MobaXterm-style type icons: green plug (Serial), blue server (SSH), teal terminal (Telnet), orange network (TCP), slate desktop (Local terminal). |
 | `sidebar-add-session-850x500.png` | The `+` new-session button now lives at the right of the `User sessions` sidebar header; its flyout opens next to the sidebar with Serial, SSH, Telnet, TCP and Local terminal. The toolbar encoding selector remains, and the Functional arrow/panel is gone. |
+| `sidebar-add-session-menu-stays-open-850x500.png` | Pointer hover on the sidebar `+` and its open new-session menu no longer retracts the sidebar; the menu stays open while moving onto its items. |
+| `tab-settings-gear-850x500.png` | The connection-settings gear now appears inside the selected tab, next to its close button, so it is unambiguous which tab it edits; unselected tabs show only their close button. |
 | `sessions-850x500.png` | Config-backed sidebar shows remembered SSH sessions and no tabs after restart. |
 | `two-tabs-850x500.png` | Multiple SSH tabs are open; `win-ssh` is selected, `local-ssh` is not. Sidebar status dots reflect open sessions. |
 | `switch-tab-850x500.png` | Clicking the `local-ssh` tab switches the terminal content back without reconnecting. |
@@ -73,9 +75,9 @@ geometry. These are functional evidence images, not final pixel baselines.
 
 `docs/testing/feature-test-matrix.md` now maps all parity rows, including the
 Telnet rows. The gate passes in `verify` and `package` phases on Linux, and the
-structure also passes for Windows/macOS. The suite is 234 tests:
+structure also passes for Windows/macOS. The suite is 236 tests:
 
-- Core 45, Connections 45, Terminal 11, ZMODEM 32, TestGate 49, App 52.
+- Core 45, Connections 45, Terminal 11, ZMODEM 32, TestGate 49, App 54.
 - Linux Xvfb E2E: `APP01_SmokeLaunchE2E`,
   `UI01_TitleBarDoubleClickMaximizeE2E`,
   `UI02_SidebarExpandsOnLaunchE2E`, `UI02_SidebarAutoHideE2E`,

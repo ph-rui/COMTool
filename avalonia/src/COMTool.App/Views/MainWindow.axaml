@@ -205,31 +205,9 @@
           <Grid Name="TabHost"
                 IsVisible="{Binding HasTabs}"
                 RowDefinitions="36,*">
-            <Grid Grid.Row="0" Height="36" ColumnDefinitions="27,*,Auto">
-              <Button Grid.Column="0"
-                      Width="27" Height="27"
-                      MinWidth="0" MinHeight="0"
-                      Padding="0"
-                      Margin="0,3,0,0"
-                      Background="{DynamicResource AccentBrush}"
-                      BorderThickness="0"
-                      CornerRadius="5"
-                      Focusable="False"
-                      HorizontalAlignment="Left"
-                      VerticalAlignment="Top"
-                      HorizontalContentAlignment="Center"
-                      VerticalContentAlignment="Center"
-                      ToolTip.Tip="Settings"
-                      Click="OnSettingsClick">
-                <TextBlock Text="&#xf013;"
-                           FontFamily="{DynamicResource IconFontAwesome}"
-                           FontSize="16"
-                           Foreground="White" />
-              </Button>
-
-              <ItemsControl Grid.Column="1"
+            <Grid Grid.Row="0" Height="36" ColumnDefinitions="*,Auto">
+              <ItemsControl Grid.Column="0"
                             ItemsSource="{Binding Tabs}"
-                            Margin="10,0,0,0"
                             VerticalAlignment="Top"
                             HorizontalAlignment="Left">
                 <ItemsControl.ItemsPanel>
@@ -255,6 +233,20 @@
                         <TextBlock Classes="TabTitle"
                                    Text="{Binding Title}"
                                    VerticalAlignment="Center" />
+                        <Button Name="TabSettingsButton"
+                                Classes="TabSettingsButton"
+                                Width="16" Height="16"
+                                MinWidth="0" MinHeight="0"
+                                Padding="0"
+                                IsVisible="{Binding IsSelected}"
+                                Tag="{Binding}"
+                                ToolTip.Tip="Connection settings for this tab"
+                                Click="OnTabSettingsClick">
+                          <TextBlock Text="&#xf013;"
+                                     FontFamily="{DynamicResource IconFontAwesome}"
+                                     FontSize="12"
+                                     Foreground="White" />
+                        </Button>
                         <Button Classes="TabCloseButton"
                                 Width="16" Height="16"
                                 MinWidth="0" MinHeight="0"
@@ -270,7 +262,7 @@
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
 
-              <StackPanel Grid.Column="2"
+              <StackPanel Grid.Column="1"
                           Orientation="Horizontal"
                           Spacing="0"
                           Margin="0,3,0,0"
