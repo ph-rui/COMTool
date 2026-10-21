@@ -53,6 +53,12 @@ public sealed class InMemoryFileSystem : ISftpFileSystem, ILocalFileSystem
     public string HomeDirectory { get; }
 
     /// <summary>
+    /// When this is set, a listing also holds the two entries of the
+    /// directory itself, the way the sftp server of OpenSSH sends them.
+    /// </summary>
+    public bool IncludeDotEntries { get; set; }
+
+    /// <summary>
     /// Adds a file with the given text content.
     /// </summary>
     public void AddFile(string path, string content)
@@ -155,6 +161,26 @@ public sealed class InMemoryFileSystem : ISftpFileSystem, ILocalFileSystem
         }
 
         var entries = new List<SftpEntry>();
+        if (IncludeDotEntries)
+        {
+            entries.Add(new SftpEntry(
+                ".",
+                SftpPath.Combine(requested, "."),
+                true,
+                false,
+                0,
+                DateTime.UtcNow,
+                SftpPermission.FromOctal(493)));
+            entries.Add(new SftpEntry(
+                "..",
+                SftpPath.Combine(requested, ".."),
+                true,
+                false,
+                0,
+                DateTime.UtcNow,
+                SftpPermission.FromOctal(493)));
+        }
+
         foreach (var childPath in ChildrenOf(node.Path))
         {
             var child = _nodes[childPath];

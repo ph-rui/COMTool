@@ -229,6 +229,11 @@ public sealed class SftpTransferEngine
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            if (IsSelfReference(entry.Name))
+            {
+                continue;
+            }
+
             if (entry.IsSymbolicLink && !request.Options.FollowSymbolicLinks)
             {
                 scan.SkippedPaths.Add(entry.Path);
@@ -284,6 +289,12 @@ public sealed class SftpTransferEngine
     }
 
     /// <summary>
+    /// The two entries of the directory itself are not part of its content.
+    /// A server may send them, the way the sftp server of OpenSSH does.
+    /// </summary>
+    private static bool IsSelfReference(string name) => name is "." or "..";
+
+    /// <summary>
     /// Walks a branch that is not transferred and reports every file below
     /// it as skipped.
     /// </summary>
@@ -311,6 +322,11 @@ public sealed class SftpTransferEngine
         foreach (var entry in entries)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            if (IsSelfReference(entry.Name))
+            {
+                continue;
+            }
 
             if (scan.SkippedPaths.Count >= request.Options.MaxFiles)
             {
