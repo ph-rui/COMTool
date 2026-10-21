@@ -224,6 +224,25 @@ A later direct deployment on 2026-10-21 replaced both copies with commit
   visual confirmation of the sidebar `+` and removed Functional panel remains
   pending.
 
+A follow-up direct deployment on 2026-10-21 replaced both copies with commit
+`c7b4bc4`, which keeps the sidebar open while the pointer is over its new-session
+`+` or the open new-session menu, and moves the connection-settings gear into
+the selected tab so it is clear which tab it edits:
+
+- size: 174,551,472 bytes;
+- SHA256: `9C0C6D6930F02171282096A3DEA8B17183E48BB2A82ED1AA58B7944EE4D9484B`;
+- both remote copies matched that hash via `Get-FileHash`;
+- no `COMTool-Avalonia.exe.bak-*` files were created (`BAK_COUNT=0`);
+- a Windows process smoke test started the deployed working copy, observed it
+  `Running` and `Responding=True`, then stopped it; this does not replace the
+  interactive GUI check;
+- the automated suite passes 236 tests and Linux Xvfb E2E passes 10/10;
+- the Linux visual fixtures are
+  `docs/fixtures/phase1/sidebar-add-session-menu-stays-open-850x500.png` and
+  `docs/fixtures/phase1/tab-settings-gear-850x500.png`; interactive Windows
+  visual confirmation of the hover/menu behavior and per-tab gear remains
+  pending.
+
 This was a direct executable deployment over the existing working and desktop
 copies, not a formal packaged release. No new candidate zip was created or
 signed off for this build.
