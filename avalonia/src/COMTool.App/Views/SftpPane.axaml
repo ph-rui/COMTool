@@ -1,0 +1,131 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:COMTool.App.ViewModels"
+             xmlns:views="using:COMTool.App.Views"
+             xmlns:sftp="using:COMTool.Sftp"
+             x:Class="COMTool.App.Views.SftpPane"
+             x:DataType="vm:SftpPaneViewModel">
+  <Grid RowDefinitions="Auto,*,Auto">
+    <!-- The toolbar of the drawer. The remote side is the side that is
+         worked on, the local side is the source of an upload and the
+         target of a download. -->
+    <Border Grid.Row="0"
+            Background="#f4f4f4"
+            BorderBrush="#d4d4d4"
+            BorderThickness="0,0,0,1"
+            Padding="3">
+      <WrapPanel Orientation="Horizontal">
+        <Button Name="UpButton" Content="Up" Margin="0,0,4,0" Click="OnUpClick" />
+        <Button Name="RefreshButton" Content="Refresh" Margin="0,0,8,0" Click="OnRefreshClick" />
+        <Button Name="NewFolderButton" Content="New folder" Margin="0,0,4,0" Click="OnNewFolderClick" />
+        <Button Name="DeleteButton" Content="Delete" Margin="0,0,4,0" Click="OnDeleteClick" />
+        <Button Name="RenameButton" Content="Rename" Margin="0,0,4,0" Click="OnRenameClick" />
+        <Button Name="ChmodButton" Content="chmod" Margin="0,0,8,0" Click="OnChmodClick" />
+        <Button Name="UploadButton" Content="Upload" Margin="0,0,4,0" Click="OnUploadClick" />
+        <Button Name="DownloadButton" Content="Download" Margin="0,0,8,0" Click="OnDownloadClick" />
+        <CheckBox Name="FollowLinksCheckBox"
+                  Content="Follow symbolic links"
+                  Margin="0,0,8,0"
+                  VerticalAlignment="Center"
+                  IsChecked="{Binding FollowSymbolicLinks}" />
+        <CheckBox Name="ShowHiddenCheckBox"
+                  Content="Show hidden"
+                  VerticalAlignment="Center"
+                  IsChecked="{Binding ShowHidden}" />
+      </WrapPanel>
+    </Border>
+
+    <!-- The remote side on the left, the local side on the right. -->
+    <Grid Grid.Row="1" ColumnDefinitions="*,*">
+      <Grid Grid.Column="0" RowDefinitions="Auto,*" Margin="0,0,2,0">
+        <TextBox Name="RemotePathBox"
+                 Grid.Row="0"
+                 Margin="3"
+                 Text="{Binding RemotePath, Mode=TwoWay}"
+                 KeyDown="OnRemotePathKeyDown" />
+        <ListBox Name="RemoteList"
+                 Grid.Row="1"
+                 ItemsSource="{Binding RemoteEntries}"
+                 SelectedItem="{Binding SelectedRemoteEntry}"
+                 DoubleTapped="OnRemoteListDoubleTapped">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="sftp:SftpEntry">
+              <Grid ColumnDefinitions="*,70,110,80">
+                <TextBlock Grid.Column="0"
+                           Text="{Binding Converter={x:Static views:SftpEntryNameConverter.Instance}}"
+                           VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1"
+                           Text="{Binding Converter={x:Static views:SftpEntrySizeConverter.Instance}}"
+                           VerticalAlignment="Center" />
+                <TextBlock Grid.Column="2"
+                           Text="{Binding Converter={x:Static views:SftpEntryTimeConverter.Instance}}"
+                           VerticalAlignment="Center" />
+                <TextBlock Grid.Column="3"
+                           Text="{Binding Converter={x:Static views:SftpEntryPermissionConverter.Instance}}"
+                           VerticalAlignment="Center" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </Grid>
+
+      <Grid Grid.Column="1" RowDefinitions="Auto,*">
+        <TextBox Name="LocalPathBox"
+                 Grid.Row="0"
+                 Margin="3"
+                 Text="{Binding LocalPath, Mode=TwoWay}"
+                 KeyDown="OnLocalPathKeyDown" />
+        <ListBox Name="LocalList"
+                 Grid.Row="1"
+                 ItemsSource="{Binding LocalEntries}"
+                 SelectedItem="{Binding SelectedLocalEntry}"
+                 DoubleTapped="OnLocalListDoubleTapped">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="sftp:SftpEntry">
+              <Grid ColumnDefinitions="*,70,110,80">
+                <TextBlock Grid.Column="0"
+                           Text="{Binding Converter={x:Static views:SftpEntryNameConverter.Instance}}"
+                           VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1"
+                           Text="{Binding Converter={x:Static views:SftpEntrySizeConverter.Instance}}"
+                           VerticalAlignment="Center" />
+                <TextBlock Grid.Column="2"
+                           Text="{Binding Converter={x:Static views:SftpEntryTimeConverter.Instance}}"
+                           VerticalAlignment="Center" />
+                <TextBlock Grid.Column="3"
+                           Text="{Binding Converter={x:Static views:SftpEntryPermissionConverter.Instance}}"
+                           VerticalAlignment="Center" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </Grid>
+    </Grid>
+
+    <!-- The line that tells what happened, and the progress of a
+         transfer that runs. -->
+    <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto">
+      <TextBlock Grid.Column="0"
+                 Name="StatusText"
+                 Text="{Binding StatusMessage}"
+                 Margin="6,0"
+                 VerticalAlignment="Center"
+                 TextTrimming="CharacterEllipsis" />
+      <ProgressBar Grid.Column="1"
+                   Name="TransferProgressBar"
+                   Width="120"
+                   Height="12"
+                   Minimum="0"
+                   Maximum="100"
+                   Value="{Binding TransferProgress}"
+                   IsVisible="{Binding IsTransferring}"
+                   VerticalAlignment="Center" />
+      <Button Grid.Column="2"
+              Name="CancelTransferButton"
+              Content="Cancel"
+              Margin="4,0,4,0"
+              IsVisible="{Binding IsTransferring}"
+              Click="OnCancelClick" />
+    </Grid>
+  </Grid>
+</UserControl>

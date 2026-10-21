@@ -2417,6 +2417,25 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Folds the drawer of the SSH session away or opens it again. The
+    /// button lives in the tab strip, so its context is the view model of
+    /// the window and not the tab.
+    /// </summary>
+    private void OnSftpToggleClick(object? sender, RoutedEventArgs e)
+    {
+        var pane = (sender as Button)?.DataContext is MainViewModel viewModel
+            ? viewModel.SelectedTab?.SftpPane
+            : null;
+
+        if (pane is null)
+        {
+            return;
+        }
+
+        pane.IsExpanded = !pane.IsExpanded;
+    }
+
     private void OnEncodingChanged(object? sender, SelectionChangedEventArgs e)
     {
         if (_applyingEncoding

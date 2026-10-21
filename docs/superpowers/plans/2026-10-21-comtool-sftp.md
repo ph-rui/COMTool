@@ -1224,13 +1224,15 @@ Expected: build failure with `CS0246: The type or namespace name 'SftpPane' coul
 
 Name the two lists `RemoteList` and `LocalList`, the two path boxes `RemotePathBox` and `LocalPathBox`, and the progress bar `TransferProgressBar`, so the tests can find them.
 
-The remote name column shows a `@` marker for a symbolic link: bind a `TextBlock` to the entry name and append `@` when `IsSymbolicLink` is true, using a `MultiBinding` or a small `IValueConverter` in `MainWindow.axaml.cs`. The permissions column shows `Permission.ToRwxString()`.
+The remote name column shows a `@` marker for a symbolic link and the permissions column shows `Permission.ToRwxString()`. Both are small `IValueConverter` types that live in `avalonia/src/COMTool.App/Views/SftpConverters.cs`: the name, the size, the time, the permissions and the tip of the toggle button. The local list shows the same four columns; the permission of a local entry is the read-only attribute of the file.
 
-`SftpPane.axaml.cs` holds the `ViewModel` property; setting it assigns the `DataContext`, so every binding inside the drawer resolves against the view model. The drawer also handles the double click on the remote list: it calls `ViewModel.EnterRemoteAsync(entry)` for a directory and for a symlink to a directory, and does nothing for a plain file.
+`SftpPane.axaml.cs` holds the `ViewModel` property; setting it assigns the `DataContext`, so every binding inside the drawer resolves against the view model. The drawer also handles the double click on the remote list: it calls `ViewModel.EnterRemoteAsync(entry)` for a directory and for a symlink to a directory, and does nothing for a plain file. The double click on the local list calls `ViewModel.EnterLocalAsync(entry)`, and the path boxes read the path that was typed when the enter key is pressed.
+
+The `Up` button of the toolbar moves the pane that was worked on last: the local pane when only a local entry is marked, otherwise the remote pane. The remote side is the side that is worked on, and the local side has to be marked for the local pane to move.
 
 - [ ] **Step 4: Put the drawer into the session view**
 
-In `avalonia/src/COMTool.App/Views/SshSessionView.axaml.cs`, replace the `SftpHost` placeholder with a real `SftpPane` whose `ViewModel` is the `SftpPane` property. The row height follows `SftpPane.PaneHeight` and the visibility follows `SftpPane.IsExpanded`; the splitter writes the dragged height back into `SftpPane.PaneHeight`.
+In `avalonia/src/COMTool.App/Views/SshSessionView.axaml.cs`, replace the `SftpHost` placeholder with a real `SftpPane` whose `ViewModel` is the `SftpPane` property. The name of the view is the same as the name of the property, so the view is named with its whole path (`new COMTool.App.Views.SftpPane { ... }`). The row height follows `SftpPane.PaneHeight` and the visibility follows `SftpPane.IsExpanded`; the splitter writes the dragged height back into `SftpPane.PaneHeight`.
 
 - [ ] **Step 5: Add the tab strip toggle button**
 

@@ -64,7 +64,9 @@ public partial class SshSessionView : UserControl
                 value.PropertyChanged += OnSftpPanePropertyChanged;
             }
 
-            SftpHost.Content = value is null ? null : new Border();
+            SftpHost.Content = value is null
+                ? null
+                : new COMTool.App.Views.SftpPane { ViewModel = value };
             ApplyPaneState();
         }
     }
