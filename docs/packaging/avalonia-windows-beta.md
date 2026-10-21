@@ -169,6 +169,19 @@ logged in without retyping it. Evidence:
 `telnet-remembered-password-restart-windows-1280x800.png`. The Python app and
 its config were not touched.
 
+A later direct deployment on 2026-10-21 replaced both copies with commit
+`829609e`, which adds the square deep-blue title-bar/window icon, the
+MobaXterm-style new-session type icons, and broader Telnet login-prompt
+matching (`User name:`, `>>`-prefixed and Chinese prompts):
+
+- size: 174,596,528 bytes;
+- SHA256: `7FB067E724F968752C77CC1862E3F72A60AC199C779E0C73032D8553E0B39077`;
+- both remote copies matched that hash via `Get-FileHash`;
+- no `COMTool-Avalonia.exe.bak-*` files were created, and the old process was
+  not running when the copies were replaced;
+- automated Linux Xvfb and headless checks pass, while the Windows GUI visual
+  check and a real-device Telnet prompt check for this build are still pending.
+
 This was a direct executable deployment over the existing working and desktop
 copies, not a formal packaged release. No new candidate zip was created or
 signed off for this build.
