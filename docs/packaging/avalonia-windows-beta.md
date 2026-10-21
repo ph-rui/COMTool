@@ -205,6 +205,25 @@ reduces the title-bar icon to 28px:
 - Windows visual confirmation of the 28px rim-free title-bar icon and the
   `Edit session` menu remains pending.
 
+A later direct deployment on 2026-10-21 replaced both copies with commit
+`a7f7229`, which moves the new-session `+` button from the top toolbar into the
+`User sessions` sidebar header and removes the Functional arrow button and its
+`Load config` / `Share config` panel:
+
+- size: 174,543,280 bytes;
+- SHA256: `D7C4CB201BBE1CFBA5DC248CBA7148F766536CEBA47428843710885C2443CB56`;
+- both remote copies matched that hash via `Get-FileHash`;
+- no `COMTool-Avalonia.exe.bak-*` files were created (`BAK_COUNT=0`);
+- a Windows process smoke test started the deployed working copy, observed it
+  `Running` and `Responding=True`, then stopped it; this does not replace the
+  interactive GUI check;
+- the automated suite passes 234 tests, including the sidebar-entry and
+  Functional-panel-removal checks, and Linux Xvfb E2E passes 10/10;
+- the Linux visual fixture is
+  `docs/fixtures/phase1/sidebar-add-session-850x500.png`; interactive Windows
+  visual confirmation of the sidebar `+` and removed Functional panel remains
+  pending.
+
 This was a direct executable deployment over the existing working and desktop
 copies, not a formal packaged release. No new candidate zip was created or
 signed off for this build.
