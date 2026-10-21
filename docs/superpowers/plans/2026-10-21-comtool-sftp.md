@@ -1219,7 +1219,7 @@ Expected: build failure with `CS0246: The type or namespace name 'SftpPane' coul
 `avalonia/src/COMTool.App/Views/SftpPane.axaml`, a `UserControl` with a `Grid` of three rows:
 
 - Row 0: the toolbar, with buttons `Up`, `Refresh`, `New folder`, `Delete`, `Rename`, `chmod`, `Upload`, `Download` and the checkboxes `Follow symbolic links` and `Show hidden`.
-- Row 1: a two-column grid, column 0 the remote pane, column 1 the local pane. Each pane is a `Grid` with a path `TextBox` on top and a `ListBox` below. The remote `ListBox` shows `Name`, `Size`, `Modified` and `Permissions` in four columns through an `ItemTemplate` with a `Grid`; the local `ListBox` shows `Name`, `Size` and `Modified`.
+- Row 1: a two-column grid, column 0 the remote pane, column 1 the local pane. Each pane is a `Grid` with a path `TextBox` on top and a `ListBox` below. The remote `ListBox` shows `Name`, `Size`, `Modified` and `Permissions` in four columns through an `ItemTemplate` with a `Grid`; the local `ListBox` shows the same four columns, the permission of a local entry being its read-only attribute.
 - Row 2: the status area, with a `TextBlock` bound to `StatusMessage`, a `ProgressBar` bound to `TransferProgress` and a `Cancel` button that is visible only while `IsTransferring` is true.
 
 Name the two lists `RemoteList` and `LocalList`, the two path boxes `RemotePathBox` and `LocalPathBox`, and the progress bar `TransferProgressBar`, so the tests can find them.
@@ -1370,24 +1370,24 @@ Expected: build failure with `CS0246: The type or namespace name 'SftpPermission
 
 - [ ] **Step 3: Create the permissions window**
 
-`avalonia/src/COMTool.App/Views/SftpPermissionsWindow.axaml`: a `Window` with `Title="Permissions"`, `SizeToContent="WidthAndHeight"`, a three-by-three grid of checkboxes (rows: owner, group, others; columns: read, write, execute) named `OwnerReadBox`, `OwnerWriteBox`, `OwnerExecuteBox`, `GroupReadBox`, `GroupWriteBox`, `GroupExecuteBox`, `OthersReadBox`, `OthersWriteBox`, `OthersExecuteBox`, a read-only `TextBox` named `OctalBox`, and an `Apply` button named `ApplyButton`.
+`avalonia/src/COMTool.App/Views/SftpPermissionsWindow.axaml`: a `Window` with `Title="Permissions"`, `SizeToContent="Height"`, a three-by-three grid of checkboxes (rows: owner, group, others; columns: read, write, execute) named `OwnerReadBox`, `OwnerWriteBox`, `OwnerExecuteBox`, `GroupReadBox`, `GroupWriteBox`, `GroupExecuteBox`, `OthersReadBox`, `OthersWriteBox`, `OthersExecuteBox`, an editable `TextBox` named `OctalBox`, and an `Apply` button named `ApplyButton`. Avalonia 12 has one event for the state of a `CheckBox`, `IsCheckedChanged`, so every box listens to it.
 
-`SftpPermissionsWindow.axaml.cs` keeps the two representations in sync: any checkbox change recomputes `Permission` and refreshes `OctalText` as three octal digits; a change of `OctalText` to a valid three-digit octal value recomputes the checkboxes. `Apply` raises `PermissionApplied` with the current `Permission` and closes the window. `Permission` is a plain property with a change notification so the panel can read it.
+`SftpPermissionsWindow.axaml.cs` keeps the two representations in sync: any checkbox change recomputes `Permission` and refreshes `OctalText` as three octal digits; a change of `OctalText` to a valid three-digit octal value recomputes the checkboxes. A value that is not written in octal is ignored, so the boxes keep the mode they had. `Apply` raises `PermissionApplied` with the current `Permission` and closes the window. `Permission` and `OctalText` are plain properties; the markup of the window does not bind to them, so the window needs no change notification.
 
 - [ ] **Step 4: Add the file management controls to the drawer**
 
 In `avalonia/src/COMTool.App/Views/SftpPane.axaml`:
 
-- Add a `TextBox` named `NewFolderNameBox` and a `TextBox` named `RenameNameBox` to the toolbar area, each visible only while the matching action is pending.
+- Add a `TextBox` named `NewFolderNameBox` and a `TextBox` named `RenameNameBox` to the toolbar area, each next to its button.
 - Add buttons named `NewFolderButton`, `RenameButton`, `DeleteButton` and `ChmodButton`. They are enabled only when `SelectedRemoteEntry` is not null, except `NewFolderButton`, which is enabled when `NewFolderNameBox` has text.
 - The delete button asks for a confirmation through a two-step inline confirm: the first click changes the button content to `Confirm delete`, the second click deletes. This keeps the panel free of modal dialogs.
 
 In `avalonia/src/COMTool.App/Views/SftpPane.axaml.cs`, wire the buttons to the view model:
 
 - `NewFolderButton` calls `ViewModel.NewRemoteFolderAsync(NewFolderNameBox.Text)` and clears the box.
-- `RenameButton` calls `ViewModel.RenameRemoteAsync(RenameNameBox.Text)`.
+- `RenameButton` calls `ViewModel.RenameRemoteAsync(RenameNameBox.Text)`. The field is filled with the name of the marked entry; a name that is the same as the old one only puts the cursor into the field.
 - `DeleteButton` calls `ViewModel.DeleteRemoteAsync()`.
-- `ChmodButton` opens a `SftpPermissionsWindow` with the selected entry's permission, and on `PermissionApplied` calls `ViewModel.SetRemotePermissionsAsync(permission.ToOctal())`. The window is shown with `Show()` (not `ShowDialog`) so the terminal stays usable.
+- `ChmodButton` opens a `SftpPermissionsWindow` with the selected entry's permission, and on `PermissionApplied` calls `ViewModel.SetRemotePermissionsAsync(permission.ToOctal())`. The window is shown with `Show()` (not `ShowDialog`) so the terminal stays usable. The drawer keeps the window in `PermissionsWindow` while it is open, so a test can reach it.
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
