@@ -42,6 +42,7 @@ public partial class MainWindow : Window
     private readonly Dictionary<TerminalTab, DetachedTabState> _detachedTabs = new();
     private readonly Dictionary<TerminalTab, SerialTabState> _serialTabs = new();
     private readonly HashSet<TerminalTab> _sshRestarts = new();
+    private readonly HashSet<TerminalTab> _telnetRestarts = new();
 
     internal Func<SerialConnectionConfig, ISerialConnection> SerialConnectionFactory { get; set; } =
         config => SerialConnection.Open(config);
@@ -223,6 +224,8 @@ public partial class MainWindow : Window
     internal void OpenSerialSessionForTests(string port) => OpenSerialSession(port);
 
     internal Task ActivateSessionForTests(SessionItem item) => ActivateSessionAsync(item);
+
+    internal Task OpenTelnetSessionForTests(string key) => OpenTelnetSessionAsync(key);
 
     internal void StopPortTimerForTests() => _portTimer?.Stop();
 
@@ -1081,23 +1084,7 @@ public partial class MainWindow : Window
             throw new InvalidOperationException($"Telnet session {key} was not found.");
         }
 
-        var password = _config.PasswordCache.Get(session.Key);
-        if (string.IsNullOrEmpty(password))
-        {
-            password = SecretProtector.Unprotect(session.EncryptedPassword);
-        }
-
-        var connection = await TelnetConnection.ConnectAsync(
-            new TelnetConnectionOptions(
-                session.Host,
-                session.Port,
-                session.User,
-                password));
-        if (!string.IsNullOrEmpty(password))
-        {
-            _config.PasswordCache.Set(session.Key, password);
-        }
-
+        var connection = await ConnectTelnetSessionAsync(session);
         var terminal = CreateTerminal();
         var tab = new TerminalTab
         {
@@ -1105,25 +1092,20 @@ public partial class MainWindow : Window
             SessionId = session.Key,
             Kind = SessionKind.Telnet,
             Content = terminal,
-            Connection = connection,
             StatusMessage = $"Connected {TelnetSessionRules.Detail(session)}",
-            IsTransportOpen = () => connection.IsConnected,
-            CloseAction = () =>
-            {
-                try
-                {
-                    terminal.DetachConnection();
-                }
-                catch
-                {
-                    // The template may not have been applied if opening failed.
-                }
-
-                connection.Dispose();
-            },
         };
+        AttachTelnetTransport(tab, terminal, connection);
 
-        SubscribeZmodem(tab, connection.Pty.Zmodem);
+        // Telnet uses the same MobaXterm-style stopped screen as SSH:
+        // Enter closes the tab, R reconnects and S saves the output.
+        var stoppedBehavior = new SessionStoppedBehavior(
+            terminal,
+            tab,
+            () => CloseTab(tab),
+            () => RestartTelnetSessionAsync(tab),
+            () => SaveStoppedTerminalOutputAsync(tab));
+        stoppedBehavior.Attach();
+
         var terminalAttached = false;
         terminal.AttachedToVisualTree += (_, _) =>
             Dispatcher.UIThread.Post(
@@ -1141,17 +1123,182 @@ public partial class MainWindow : Window
                     FocusTerminalWhenSelected(tab, terminal);
                 },
                 DispatcherPriority.Loaded);
+
+        viewModel.AddTab(tab);
+        UpdateConnectionStates();
+    }
+
+    /// <summary>
+    /// Opens a Telnet transport for a saved session. The password comes from
+    /// the in-memory cache first and from the DPAPI token second. A session
+    /// without a stored password reconnects without auto-login so the server
+    /// prompt stays in the terminal instead of blocking on a dialog.
+    /// </summary>
+    private async Task<TelnetConnection> ConnectTelnetSessionAsync(TelnetSession session)
+    {
+        if (_config is null)
+        {
+            throw new InvalidOperationException("The configuration is not loaded.");
+        }
+
+        var password = _config.PasswordCache.Get(session.Key);
+        if (string.IsNullOrEmpty(password))
+        {
+            password = SecretProtector.Unprotect(session.EncryptedPassword);
+        }
+
+        var connection = await TelnetConnection.ConnectAsync(
+            new TelnetConnectionOptions(
+                session.Host,
+                session.Port,
+                session.User,
+                password));
+        if (!string.IsNullOrEmpty(password))
+        {
+            _config.PasswordCache.Set(session.Key, password);
+        }
+
+        return connection;
+    }
+
+    private void AttachTelnetTransport(
+        TerminalTab tab,
+        TerminalControl terminal,
+        TelnetConnection connection)
+    {
+        tab.Connection = connection;
+        tab.IsTransportOpen = () => connection.IsConnected;
+        tab.CloseAction = () =>
+        {
+            try
+            {
+                terminal.DetachConnection();
+            }
+            catch
+            {
+                // The template may not have been applied if opening failed.
+            }
+
+            connection.Dispose();
+        };
+
+        SubscribeZmodem(tab, connection.Pty.Zmodem);
         connection.Pty.ProcessExited += (_, _) => Dispatcher.UIThread.Post(() =>
         {
+            if (!ReferenceEquals(tab.Connection, connection))
+            {
+                return;
+            }
+
             tab.IsAlive = false;
-            tab.StatusMessage = "Connection lose";
+            tab.IsSessionStopped = true;
+            tab.StatusMessage = "Session stopped";
             tab.StatusBrush = StatusWarningBrush;
             tab.TabDotBrush = StatusWarningBrush;
             UpdateConnectionStates();
         });
+    }
 
-        viewModel.AddTab(tab);
-        UpdateConnectionStates();
+    private async Task RestartTelnetSessionAsync(TerminalTab tab)
+    {
+        if (_config is null
+            || tab.Kind != SessionKind.Telnet
+            || !_telnetRestarts.Add(tab))
+        {
+            return;
+        }
+
+        var terminal = tab.Content as TerminalControl;
+        TelnetConnection? connection = null;
+        try
+        {
+            if (!IsTabOpen(tab))
+            {
+                return;
+            }
+
+            var session = _config.TelnetSessions.Get(tab.SessionId);
+            if (session is null)
+            {
+                tab.StatusMessage = "Telnet session not found";
+                tab.StatusBrush = StatusErrorBrush;
+                return;
+            }
+
+            tab.StatusMessage = $"Restarting {TelnetSessionRules.Detail(session)}...";
+            tab.StatusBrush = StatusProgressBrush;
+
+            connection = await ConnectTelnetSessionAsync(session);
+            if (!_telnetRestarts.Contains(tab) || !IsTabOpen(tab) || terminal is null)
+            {
+                connection.Dispose();
+                return;
+            }
+
+            var previousClose = tab.CloseAction;
+            AttachTelnetTransport(tab, terminal, connection);
+            try
+            {
+                terminal.DetachConnection();
+            }
+            catch
+            {
+                // The old transport may already have torn down its view.
+            }
+
+            try
+            {
+                previousClose?.Invoke();
+            }
+            catch
+            {
+                // The old transport is already gone.
+            }
+
+            terminal.ClearScreen();
+            terminal.AttachConnection(connection.Pty);
+            tab.IsAlive = true;
+            tab.IsSessionStopped = false;
+            tab.StatusMessage = $"Connected {TelnetSessionRules.Detail(session)}";
+            tab.StatusBrush = StatusInfoBrush;
+            tab.TabDotBrush = StatusInfoBrush;
+            UpdateConnectionStates();
+            RestoreStoppedTerminalFocus(tab, terminal);
+        }
+        catch (Exception ex)
+        {
+            if (connection is not null && ReferenceEquals(tab.Connection, connection))
+            {
+                try
+                {
+                    terminal?.DetachConnection();
+                }
+                catch
+                {
+                    // The new transport may already have failed during attach.
+                }
+
+                connection.Dispose();
+                tab.Connection = null;
+                tab.CloseAction = null;
+                tab.IsTransportOpen = null;
+            }
+
+            tab.IsAlive = false;
+            tab.IsSessionStopped = true;
+            tab.StatusMessage = $"Restart failed: {ex.Message}";
+            tab.StatusBrush = StatusErrorBrush;
+            tab.TabDotBrush = StatusWarningBrush;
+            AppLog.Error($"Telnet restart failed for {tab.SessionId}", ex);
+            if (terminal is not null)
+            {
+                RestoreStoppedTerminalFocus(tab, terminal);
+            }
+        }
+        finally
+        {
+            _telnetRestarts.Remove(tab);
+        }
     }
 
     private async Task OpenTcpSessionAsync(string key)

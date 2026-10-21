@@ -75,7 +75,7 @@
 | SSH-08 | PTY 尺寸 | P0 | 完成 | Linux `stty size` = 40x100 验证通过 |
 | SSH-09 | Shell 输出与终端 | P0 | 完成 | SSH shell 已接入多标签终端并通过 UI 验证 |
 | SSH-10 | 连接速度 | P0 | 部分 | 首次 187-446ms，重连 33ms |
-| SSH-11 | 停止会话界面 | P1 | 完成 | Shell 退出后显示 MobaXterm 风格 “Session stopped”；Enter 关闭标签、R 在同一标签内重连、S 保存完整回滚输出；TCP/串口保持原退出提示；由 headless 测试和 Linux Xvfb `SSH11_RestartStoppedSessionE2E` 覆盖 |
+| SSH-11 | 停止会话界面 | P1 | 完成 | Shell 退出后显示 MobaXterm 风格 “Session stopped”；Enter 关闭标签、R 在同一标签内重连、S 保存完整回滚输出；TCP/串口保持原退出提示；Telnet 使用同一停止界面与动作（见 TELNET-06）；由 headless 测试和 Linux Xvfb `SSH11_RestartStoppedSessionE2E` 覆盖 |
 
 ## 5. Telnet
 
@@ -86,6 +86,7 @@
 | TELNET-03 | 自动登录 | P0 | 完成 | 去掉 ANSI 后匹配末尾 `login`/`username`/`user`/`User name`/`Login name`/`Login ID`/`Account name`/中文账号提示、`Please enter …` 前缀、`>>` 前缀及主机名前缀（如 `SonnePower_070_Ax login:`），密码支持 `password`/`passwd`/`passphrase`/`passcode`/`PIN`/`Password for …`/中文密码提示，用户名/密码各发送一次；无匹配提示不发送；Linux Xvfb E2E 验证用户名自动登录和终端输入；Windows RDP 实机验证用户名/密码分阶段发送和 `PING`→`PONG` |
 | TELNET-04 | 会话保存与记住密码 | P0 | 完成 | 独立 `telnetSessions`、稳定 key、`passwd_enc` 持久化和内存缓存；非 Windows 仅内存；Windows 10 实机保存密码后 `passwd_enc` 长度 208、配置无明文，重启应用后由 DPAPI 密码自动重连成功；证据见 `docs/fixtures/phase1/telnet-windows-dpapi-2026-10-21.md` |
 | TELNET-05 | 分享/导入配置 | P1 | 完成 | 分享去除 `passwd_enc` 和未知字段，导入不写入密码；不读取 Python `config.json` |
+| TELNET-06 | 断连停止界面与 R 重连 | P1 | 完成 | 连接断开后标签进入与 SSH 相同的 MobaXterm 风格停止界面（状态 `Session stopped`），Enter 关闭标签、R 在同一标签内重连、S 保存完整回滚输出；重连复用已保存的主机/端口/用户与密码（内存缓存 → DPAPI `passwd_enc`），没有已存密码时直接以无自动登录方式重连，服务器提示留在终端里由用户手输，不弹窗；重连失败时状态显示 `Restart failed: …` 并保留停止界面可再次按 R；由 headless 测试和 Linux Xvfb `TELNET02_RestartStoppedSessionE2E` 覆盖；见 `telnet-stopped-screen-1000x650.png`、`telnet-restarted-after-r-1000x650.png` |
 
 ## 6. TCP/UDP
 

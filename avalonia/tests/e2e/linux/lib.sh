@@ -30,6 +30,8 @@ TELNET_PORT="${TELNET_PORT:-}"
 TELNET_FIXTURE_DIR="${TELNET_FIXTURE_DIR:-}"
 TELNET_LOGIN_MARKER="${TELNET_LOGIN_MARKER:-}"
 TELNET_INPUT_MARKER="${TELNET_INPUT_MARKER:-}"
+TELNET_DROPPED_MARKER="${TELNET_DROPPED_MARKER:-}"
+TELNET_RECONNECT_MARKER="${TELNET_RECONNECT_MARKER:-}"
 DISPLAY_NUM="${DISPLAY_NUM:-}"
 WINDOW_ID="${WINDOW_ID:-}"
 KEEP_TEMP="${KEEP_TEMP:-0}"
@@ -486,7 +488,10 @@ start_telnet_fixture() {
     TELNET_PORT="$(find_free_tcp_port)" || return 1
     TELNET_LOGIN_MARKER="$TMP_ROOT/telnet-login.ready"
     TELNET_INPUT_MARKER="$TMP_ROOT/telnet-input.ready"
-    rm -f -- "$TELNET_LOGIN_MARKER" "$TELNET_INPUT_MARKER"
+    TELNET_DROPPED_MARKER="$TMP_ROOT/telnet-dropped.ready"
+    TELNET_RECONNECT_MARKER="$TMP_ROOT/telnet-reconnect.ready"
+    rm -f -- "$TELNET_LOGIN_MARKER" "$TELNET_INPUT_MARKER" \
+        "$TELNET_DROPPED_MARKER" "$TELNET_RECONNECT_MARKER"
 
     cat >"$TELNET_FIXTURE_DIR/server.py" <<'PY'
 import pathlib
@@ -496,8 +501,13 @@ import sys
 port = int(sys.argv[1])
 login_marker = pathlib.Path(sys.argv[2])
 input_marker = pathlib.Path(sys.argv[3])
+dropped_marker = pathlib.Path(sys.argv[4])
+reconnect_marker = pathlib.Path(sys.argv[5])
+
+logins = 0
 
 def serve(conn):
+    global logins
     conn.settimeout(60)
     conn.sendall(b"Welcome to COMTool Telnet E2E\r\nlogin: ")
     buffer = b""
@@ -509,7 +519,15 @@ def serve(conn):
         buffer += data
         while b"\n" in buffer:
             line, buffer = buffer.split(b"\n", 1)
+            if b"DROP" in line:
+                # Hang up on the client to simulate a lost connection.
+                dropped_marker.write_text("TELNET_DROPPED")
+                return
             if not logged_in and b"e2e" in line:
+                logins += 1
+                if logins >= 2:
+                    # The app reconnected and logged in again.
+                    reconnect_marker.write_text("TELNET_RECONNECT_READY")
                 login_marker.write_text("TELNET_E2E_READY")
                 conn.sendall(b"\r\nTELNET_E2E_READY\r\n$ ")
                 logged_in = True
@@ -534,6 +552,7 @@ PY
     : >"$TELNET_FIXTURE_DIR/server.log"
     python3 "$TELNET_FIXTURE_DIR/server.py" "$TELNET_PORT" \
         "$TELNET_LOGIN_MARKER" "$TELNET_INPUT_MARKER" \
+        "$TELNET_DROPPED_MARKER" "$TELNET_RECONNECT_MARKER" \
         >>"$TELNET_FIXTURE_DIR/server.log" 2>&1 &
     TELNET_PID=$!
 

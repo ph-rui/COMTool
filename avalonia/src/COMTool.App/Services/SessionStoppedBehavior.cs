@@ -6,10 +6,11 @@ using Iciclecreek.Terminal;
 namespace COMTool.App.Services;
 
 /// <summary>
-/// Presents the MobaXterm-style stopped-session screen for SSH tabs and maps
-/// its three actions to the host window. The terminal library keeps writing
-/// its own "Process exited" line unless a WritingMessage handler replaces it,
-/// so the text has to be rewritten rather than appended afterwards.
+/// Presents the MobaXterm-style stopped-session screen for SSH and Telnet
+/// tabs and maps its three actions to the host window. The terminal library
+/// keeps writing its own "Process exited" line unless a WritingMessage
+/// handler replaces it, so the text has to be rewritten rather than appended
+/// afterwards.
 /// </summary>
 internal sealed class SessionStoppedBehavior
 {
@@ -18,6 +19,13 @@ internal sealed class SessionStoppedBehavior
         + "Press <return> to exit tab\r\n"
         + "Press R to restart session\r\n"
         + "Press S to save terminal output to file\r\n";
+
+    /// <summary>
+    /// Session kinds that get the stopped screen. TCP and serial keep the
+    /// default "Process exited" text of the terminal library.
+    /// </summary>
+    internal static bool SupportsStoppedScreen(SessionKind kind) =>
+        kind is SessionKind.Ssh or SessionKind.Telnet;
 
     private readonly TerminalControl _terminal;
     private readonly TerminalTab _tab;
@@ -61,7 +69,7 @@ internal sealed class SessionStoppedBehavior
 
     private void OnWritingMessage(object? sender, TerminalMessageEventArgs e)
     {
-        if (_tab.Kind != SessionKind.Ssh
+        if (!SupportsStoppedScreen(_tab.Kind)
             || e.Kind != TerminalMessageKind.ProcessExited)
         {
             return;

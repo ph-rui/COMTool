@@ -70,6 +70,8 @@ geometry. These are functional evidence images, not final pixel baselines.
 | `dpi-200-1736x1036.png` | At 200% scaling on a 2560x1600 Xvfb display the 850x500 logical window is 1700x1000 client pixels; title bar, tabs, terminal text and prompt are all crisp and unclipped. |
 | `telnet-autologin-windows-1280x800.png` | Windows 10 RDP with the fake Telnet server: the saved session sent the user name at `login:`, sent the password only after `Password:`, and terminal `PING` returned `PONG`. |
 | `telnet-remembered-password-restart-windows-1280x800.png` | After restarting the app, clicking the saved Telnet entry decrypted the DPAPI `passwd_enc` and logged in without opening settings or retyping the password; the config contains no plaintext password. See `telnet-windows-dpapi-2026-10-21.md`. |
+| `telnet-restarted-after-r-1000x650.png` | Pressing `R` on the stopped Telnet session reconnects inside the same tab; the fixture server logged a second connection. |
+| `telnet-stopped-screen-1000x650.png` | A dropped Telnet session shows the MobaXterm-style stopped screen (`Session stopped`, `Press <return> to exit tab`, `Press R to restart session`, `Press S to save terminal output to file`) instead of only a status line. |
 | `telnet-windows-dpapi-2026-10-21.md` | Sanitized Windows Telnet fixture log, binary SHA256, DPAPI token length, and plaintext-absence check for the remembered-password restart. |
 | `performance-2026-10-20.md` | Startup, terminal parsing, SSH 10 MB throughput, R2R packaging and Native AOT experiment measurements. |
 
@@ -77,9 +79,9 @@ geometry. These are functional evidence images, not final pixel baselines.
 
 `docs/testing/feature-test-matrix.md` now maps all parity rows, including the
 Telnet rows. The gate passes in `verify` and `package` phases on Linux, and the
-structure also passes for Windows/macOS. The suite is 237 tests:
+structure also passes for Windows/macOS. The suite is 241 tests:
 
-- Core 45, Connections 45, Terminal 11, ZMODEM 32, TestGate 49, App 55.
+- Core 45, Connections 45, Terminal 11, ZMODEM 32, TestGate 49, App 59.
 - Linux Xvfb E2E: `APP01_SmokeLaunchE2E`,
   `UI01_TitleBarDoubleClickMaximizeE2E`,
   `UI02_SidebarExpandsOnLaunchE2E`, `UI02_SidebarAutoHideE2E`,
