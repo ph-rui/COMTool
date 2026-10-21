@@ -191,6 +191,12 @@
     <Setter Property="Foreground" Value="{DynamicResource SessionDetailBrush}" />
   </Style>
 
+  <Style Selector="TextBlock.SessionConnecting">
+    <Setter Property="FontSize" Value="10" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="#1565c0" />
+  </Style>
+
   <Style Selector="TextBlock.SectionHeader">
     <Setter Property="Height" Value="26" />
     <Setter Property="FontSize" Value="11" />

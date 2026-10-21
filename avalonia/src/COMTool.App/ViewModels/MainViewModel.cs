@@ -27,6 +27,10 @@ public sealed partial class SessionItem : ObservableObject
     [ObservableProperty]
     private bool _isConnected;
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IconBrush))]
+    private bool _isConnecting;
+
     public bool IsSsh => Kind == SessionKind.Ssh;
 
     public string IconGlyph => Kind switch
@@ -37,9 +41,11 @@ public sealed partial class SessionItem : ObservableObject
         _ => "\uf1e6",
     };
 
-    public IBrush IconBrush => IsConnected
-        ? new SolidColorBrush(Color.Parse("#43a047"))
-        : new SolidColorBrush(Color.Parse("#90a4ae"));
+    public IBrush IconBrush => IsConnecting
+        ? new SolidColorBrush(Color.Parse("#1565c0"))
+        : IsConnected
+            ? new SolidColorBrush(Color.Parse("#43a047"))
+            : new SolidColorBrush(Color.Parse("#90a4ae"));
 
     partial void OnIsConnectedChanged(bool value) =>
         OnPropertyChanged(nameof(IconBrush));
