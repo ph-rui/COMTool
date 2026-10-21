@@ -243,6 +243,24 @@ the selected tab so it is clear which tab it edits:
   visual confirmation of the hover/menu behavior and per-tab gear remains
   pending.
 
+A follow-up direct deployment on 2026-10-21 replaced both copies with commit
+`9c37848`, which keeps the selected tab uncluttered at rest and reveals its
+connection-settings gear only while the pointer is over that selected tab;
+unselected tabs never show the gear:
+
+- size: 174,555,568 bytes;
+- SHA256: `0A2F1E2CCD022407F5F063155E47DFD1C7191BB7FD6FC5F9D3273FE2F02FEF77`;
+- both remote copies matched that hash via `Get-FileHash`;
+- no `COMTool-Avalonia.exe.bak-*` files were created (`BAK_COUNT=0`);
+- a Windows process smoke test started the deployed working copy, observed it
+  `Running` and `Responding=True`, then stopped it; this does not replace the
+  interactive GUI check;
+- the automated suite passes 236 tests and Linux Xvfb E2E passes 10/10;
+- the Linux visual fixtures are
+  `docs/fixtures/phase1/tab-settings-gear-at-rest-850x500.png` and
+  `docs/fixtures/phase1/tab-settings-gear-850x500.png`; interactive Windows
+  confirmation of the hover-only gear remains pending.
+
 This was a direct executable deployment over the existing working and desktop
 copies, not a formal packaged release. No new candidate zip was created or
 signed off for this build.
