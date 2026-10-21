@@ -15,7 +15,7 @@
 | UI-03 | 串口/SSH/Telnet 分组与状态图标 | P0 | 部分 | 连接状态原地更新；Windows `--ports` 已输出 COM97/99 等 SetupAPI 描述 |
 | UI-04 | 侧栏右键菜单 | P0 | 部分 | Open、Remove session、确认框、配置持久化已验证 |
 | UI-05 | 标签页与标题 | P0 | 完成 | 多标签新增/关闭/切换、标题规则、选中样式、状态圆点和双击分离/回接已完成；分离后命令可继续执行，关闭分离窗口无重复缓冲；切换标签前对旧终端调用 `BeginReparent`，避免内容宿主移除旧控件时清理 PTY 读取器，切换后直接输入即可继续执行，两个方向均已在打包版实测；见 `tab-switch-input-second-1000x650.png`、`tab-switch-input-first-1000x650.png` |
-| UI-06 | `+` 新建会话类型选择器 | P0 | 完成（MobaXterm 方向） | 按用户要求移除 Python 插件占位项（Send Receive/protocol/Graph/Load plugin）；两个 `+` 入口统一为 Serial/SSH/Telnet/TCP/Local terminal，选择后预选对应设置页或创建本地终端；Telnet 已作为 MobaXterm 会话类型接入，后续类型按阶段扩展，未实现类型不显示 |
+| UI-06 | `+` 新建会话类型选择器 | P0 | 完成（MobaXterm 方向） | 按用户要求移除 Python 插件占位项（Send Receive/protocol/Graph/Load plugin）；两个 `+` 入口统一为 Serial/SSH/Telnet/TCP/Local terminal，选择后预选对应设置页或创建本地终端；菜单项使用与 MobaXterm 相近的类型图标（串口插头、SSH 服务器、Telnet 终端、TCP 网络、本地桌面），标题栏/窗口图标为深蓝终端图标；Telnet 已作为 MobaXterm 会话类型接入，后续类型按阶段扩展，未实现类型不显示 |
 | UI-07 | 空状态 | P0 | 完成 | 无标签时显示 `Select a session from the left` / `or click + to add a session`，两个 `+` 入口提示 `New session`；headless 测试覆盖 |
 | UI-08 | 设置按钮与设置面板 | P0 | 完成 | 串口/SSH/Telnet 参数、SSH 密钥、记住密码、打开/关闭、侧栏同步已实现 |
 | UI-09 | 主题切换（浅色/深色） | P0 | 部分 | 标题栏右键菜单可切换浅/深色，`skin` 持久化并重启生效 |
@@ -83,7 +83,7 @@
 |---|---|---|---|---|
 | TELNET-01 | 主机/端口/用户/别名 | P0 | 完成 | 设置页默认端口 23，保存 `telnet:{user}@{host}:{port}`，侧栏 Telnet 分组和连接状态；用户可留空以手动登录 |
 | TELNET-02 | Telnet 协议协商 | P0 | 完成 | IAC 解析与转义、TTYPE `XTERM-256COLOR`、NAWS 及 resize 更新、SGA/ECHO/BINARY 接受、未知选项/LINEMODE 拒绝；Linux 回环测试覆盖 |
-| TELNET-03 | 自动登录 | P0 | 完成 | 去掉 ANSI 后匹配末尾 `login`/`username`/`user` 和 `password` 提示，用户名/密码各发送一次；无匹配提示不发送；Linux Xvfb E2E 验证用户名自动登录和终端输入；Windows RDP 实机验证用户名/密码分阶段发送和 `PING`→`PONG` |
+| TELNET-03 | 自动登录 | P0 | 完成 | 去掉 ANSI 后匹配末尾 `login`/`username`/`user`/`User name`/`Login name`/`account`/中文账号提示及 `>>` 前缀，密码支持 `password`/`passwd`/`Password for …`/中文密码提示，用户名/密码各发送一次；无匹配提示不发送；Linux Xvfb E2E 验证用户名自动登录和终端输入；Windows RDP 实机验证用户名/密码分阶段发送和 `PING`→`PONG` |
 | TELNET-04 | 会话保存与记住密码 | P0 | 完成 | 独立 `telnetSessions`、稳定 key、`passwd_enc` 持久化和内存缓存；非 Windows 仅内存；Windows 10 实机保存密码后 `passwd_enc` 长度 208、配置无明文，重启应用后由 DPAPI 密码自动重连成功；证据见 `docs/fixtures/phase1/telnet-windows-dpapi-2026-10-21.md` |
 | TELNET-05 | 分享/导入配置 | P1 | 完成 | 分享去除 `passwd_enc` 和未知字段，导入不写入密码；不读取 Python `config.json` |
 

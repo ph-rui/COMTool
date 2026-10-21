@@ -42,6 +42,7 @@
       </Border.ContextMenu>
       <Grid ColumnDefinitions="40,104,40,35,*,35,35,35">
         <Image Grid.Column="0"
+               Name="TitleBarLogo"
                Source="/Assets/logo.png"
                Width="35" Height="35"
                Margin="5,0,0,0"
@@ -145,11 +146,51 @@
                     ToolTip.Tip="New session">
               <Button.Flyout>
                 <MenuFlyout Placement="BottomEdgeAlignedLeft">
-                  <MenuItem Header="Serial" Tag="Serial" Click="OnNewSessionClick" />
-                  <MenuItem Header="SSH" Tag="SSH" Click="OnNewSessionClick" />
-                  <MenuItem Header="Telnet" Tag="Telnet" Click="OnNewSessionClick" />
-                  <MenuItem Header="TCP" Tag="TCP" Click="OnNewSessionClick" />
-                  <MenuItem Header="Local terminal" Tag="Local" Click="OnNewSessionClick" />
+                  <MenuItem Header="Serial" Tag="Serial" Click="OnNewSessionClick">
+                    <MenuItem.Icon>
+                      <TextBlock Text="&#xf1e6;"
+                                 FontFamily="{DynamicResource IconFontAwesome}"
+                                 FontSize="14"
+                                 Foreground="#43a047"
+                                 VerticalAlignment="Center" />
+                    </MenuItem.Icon>
+                  </MenuItem>
+                  <MenuItem Header="SSH" Tag="SSH" Click="OnNewSessionClick">
+                    <MenuItem.Icon>
+                      <TextBlock Text="&#xf233;"
+                                 FontFamily="{DynamicResource IconFontAwesome}"
+                                 FontSize="14"
+                                 Foreground="#1976d2"
+                                 VerticalAlignment="Center" />
+                    </MenuItem.Icon>
+                  </MenuItem>
+                  <MenuItem Header="Telnet" Tag="Telnet" Click="OnNewSessionClick">
+                    <MenuItem.Icon>
+                      <TextBlock Text="&#xf120;"
+                                 FontFamily="{DynamicResource IconFontAwesome}"
+                                 FontSize="14"
+                                 Foreground="#00897b"
+                                 VerticalAlignment="Center" />
+                    </MenuItem.Icon>
+                  </MenuItem>
+                  <MenuItem Header="TCP" Tag="TCP" Click="OnNewSessionClick">
+                    <MenuItem.Icon>
+                      <TextBlock Text="&#xf0ac;"
+                                 FontFamily="{DynamicResource IconFontAwesome}"
+                                 FontSize="14"
+                                 Foreground="#f57c00"
+                                 VerticalAlignment="Center" />
+                    </MenuItem.Icon>
+                  </MenuItem>
+                  <MenuItem Header="Local terminal" Tag="Local" Click="OnNewSessionClick">
+                    <MenuItem.Icon>
+                      <TextBlock Text="&#xf108;"
+                                 FontFamily="{DynamicResource IconFontAwesome}"
+                                 FontSize="14"
+                                 Foreground="#607d8b"
+                                 VerticalAlignment="Center" />
+                    </MenuItem.Icon>
+                  </MenuItem>
                 </MenuFlyout>
               </Button.Flyout>
               <TextBlock Text="&#xf067;"
@@ -245,11 +286,51 @@
                         ToolTip.Tip="New session">
                   <Button.Flyout>
                     <MenuFlyout Placement="BottomEdgeAlignedRight">
-                      <MenuItem Header="Serial" Tag="Serial" Click="OnNewSessionClick" />
-                      <MenuItem Header="SSH" Tag="SSH" Click="OnNewSessionClick" />
-                      <MenuItem Header="Telnet" Tag="Telnet" Click="OnNewSessionClick" />
-                      <MenuItem Header="TCP" Tag="TCP" Click="OnNewSessionClick" />
-                      <MenuItem Header="Local terminal" Tag="Local" Click="OnNewSessionClick" />
+                      <MenuItem Header="Serial" Tag="Serial" Click="OnNewSessionClick">
+                        <MenuItem.Icon>
+                          <TextBlock Text="&#xf1e6;"
+                                     FontFamily="{DynamicResource IconFontAwesome}"
+                                     FontSize="14"
+                                     Foreground="#43a047"
+                                     VerticalAlignment="Center" />
+                        </MenuItem.Icon>
+                      </MenuItem>
+                      <MenuItem Header="SSH" Tag="SSH" Click="OnNewSessionClick">
+                        <MenuItem.Icon>
+                          <TextBlock Text="&#xf233;"
+                                     FontFamily="{DynamicResource IconFontAwesome}"
+                                     FontSize="14"
+                                     Foreground="#1976d2"
+                                     VerticalAlignment="Center" />
+                        </MenuItem.Icon>
+                      </MenuItem>
+                      <MenuItem Header="Telnet" Tag="Telnet" Click="OnNewSessionClick">
+                        <MenuItem.Icon>
+                          <TextBlock Text="&#xf120;"
+                                     FontFamily="{DynamicResource IconFontAwesome}"
+                                     FontSize="14"
+                                     Foreground="#00897b"
+                                     VerticalAlignment="Center" />
+                        </MenuItem.Icon>
+                      </MenuItem>
+                      <MenuItem Header="TCP" Tag="TCP" Click="OnNewSessionClick">
+                        <MenuItem.Icon>
+                          <TextBlock Text="&#xf0ac;"
+                                     FontFamily="{DynamicResource IconFontAwesome}"
+                                     FontSize="14"
+                                     Foreground="#f57c00"
+                                     VerticalAlignment="Center" />
+                        </MenuItem.Icon>
+                      </MenuItem>
+                      <MenuItem Header="Local terminal" Tag="Local" Click="OnNewSessionClick">
+                        <MenuItem.Icon>
+                          <TextBlock Text="&#xf108;"
+                                     FontFamily="{DynamicResource IconFontAwesome}"
+                                     FontSize="14"
+                                     Foreground="#607d8b"
+                                     VerticalAlignment="Center" />
+                        </MenuItem.Icon>
+                      </MenuItem>
                     </MenuFlyout>
                   </Button.Flyout>
                   <TextBlock Text="&#xf067;"

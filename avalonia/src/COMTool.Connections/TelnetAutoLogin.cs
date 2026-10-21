@@ -17,11 +17,11 @@ internal sealed class TelnetAutoLogin
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex UserPrompt = new(
-        @"(?i)(?:^|[\r\n])\s*(?:login(?:\s+as)?|username|user)\s*[:：]\s*\z",
+        @"(?i)(?:^|[\r\n])\s*(?:>>?\s*)?(?:login(?:\s+as)?|login\s+name|user\s*name|user|account|用户名|账号|登录名|登录)\s*[:：]\s*\z",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex PasswordPrompt = new(
-        @"(?i)(?:^|[\r\n])\s*(?:password|passwd)(?:\s+for\s+[^\r\n:]+)?\s*[:：]\s*\z",
+        @"(?i)(?:^|[\r\n])\s*(?:>>?\s*)?(?:password|passwd|密码|口令)(?:\s+for\s+[^\r\n:]+)?\s*[:：]\s*\z",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private readonly string _user;
