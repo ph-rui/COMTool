@@ -133,9 +133,10 @@ ReadyToRun release and copied to:
 - `C:\Users\zhangrui\COMTool-Avalonia.exe` (working copy)
 - `D:\Users\zhangrui\Desktop\COMTool-Avalonia.exe` (desktop copy)
 
-- build commit: `4b1f1cf`;
-- size: 175,858,096 bytes;
-- SHA256: `6C9B1196B70A71526FE14E4DC4E95A26AC56B13355E907E4DD4DFF9E35728236`;
+- build commit: `adc338d` (deployed 2026-10-21; the previous working-copy
+  build was `4b1f1cf`);
+- size: 175,952,304 bytes;
+- SHA256: `6D6659E3251697A6D2D22ACB4843F8152FBFBDE0F521A078C2C2AC2399B5B213`;
 - both remote copies matched that hash via `Get-FileHash`.
 
 The old `COMTool-Avalonia` process was stopped before the copies were replaced.
@@ -154,8 +155,19 @@ defaults; the screenshot is
 `docs/fixtures/phase1/terminal-palette-windows-1280x800.png`. A previous build
 also passed a real `sz` receive over SSH with the full `win-zm.bin` label and a
 readable `22%`; the status-row crop is
-`docs/fixtures/phase1/zmodem-active-windows-1280x800.png`. The desktop copy
-must be launched again to exercise this build interactively.
+`docs/fixtures/phase1/zmodem-active-windows-1280x800.png`.
+
+The `adc338d` desktop copy was then launched in the interactive RDP session and
+checked against a local fake Telnet server. It auto-sent the user name at
+`login:`, waited for `Password:`, logged in with the remembered password, and
+returned `PONG` for terminal input `PING`. The saved `passwd_enc` was 208
+characters and `config.json` contained no plaintext password. After a forced
+app restart, clicking the saved Telnet session decrypted the DPAPI password and
+logged in without retyping it. Evidence:
+`docs/fixtures/phase1/telnet-windows-dpapi-2026-10-21.md`,
+`telnet-autologin-windows-1280x800.png`, and
+`telnet-remembered-password-restart-windows-1280x800.png`. The Python app and
+its config were not touched.
 
 This was a direct executable deployment over the existing working and desktop
 copies, not a formal packaged release. No new candidate zip was created or
