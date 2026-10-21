@@ -270,6 +270,28 @@
                           Spacing="0"
                           Margin="0,3,0,0"
                           VerticalAlignment="Top">
+                <Button Name="SftpToggleButton"
+                        Width="28" Height="31"
+                        MinWidth="0" MinHeight="0"
+                        Padding="0"
+                        Margin="0,0,4,0"
+                        VerticalAlignment="Top"
+                        IsVisible="{Binding SelectedTab.IsSshTab}"
+                        Click="OnSftpToggleClick"
+                        ToolTip.Tip="{Binding SelectedTab.SftpPane.IsExpanded, Converter={x:Static views:SftpToggleToolTipConverter.Instance}}">
+                  <Panel>
+                    <TextBlock Text="&#xf07b;"
+                               FontFamily="{DynamicResource IconFontAwesome}"
+                               FontSize="13"
+                               Foreground="White"
+                               IsVisible="{Binding !SelectedTab.SftpPane.IsExpanded}" />
+                    <TextBlock Text="&#xf07c;"
+                               FontFamily="{DynamicResource IconFontAwesome}"
+                               FontSize="13"
+                               Foreground="White"
+                               IsVisible="{Binding SelectedTab.SftpPane.IsExpanded}" />
+                  </Panel>
+                </Button>
                 <ComboBox Name="EncodingCombo"
                           Classes="EncodingCombo"
                           Width="97" Height="31"
