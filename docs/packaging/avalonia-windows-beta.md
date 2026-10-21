@@ -284,6 +284,29 @@ This was a direct executable deployment over the existing working and desktop
 copies, not a formal packaged release. No new candidate zip was created or
 signed off for this build.
 
+A fourth direct deployment on 2026-10-21 replaced both copies with commit
+`7ee78b7`, which widens the gap between the hovered connection-settings gear
+and the tab close button from 8px to 16px so the two icons no longer look
+glued together:
+
+- size: 174,584,240 bytes;
+- SHA256: `1E31AAD8C4F437B048DFE1AE7F763F10D73B56BAA8FCB86D5DE34B883A21634B`;
+- both remote copies matched that hash via `Get-FileHash`;
+- no `COMTool-Avalonia.exe.bak-*` files were created (`BAK_COUNT=0`);
+- a Windows process smoke test started the deployed working copy, observed it
+  `Running` and `Responding=True`, then stopped it; this does not replace the
+  interactive GUI check;
+- the automated suite passes 242 tests and Linux Xvfb E2E passes 11/11;
+- the headless layout regression
+  `SessionEditTests.UI08_TabSettingsGearKeepsClearanceFromCloseButton` measures
+  the real button gap, and the cropped screenshot
+  `docs/fixtures/phase1/tab-gear-close-spacing.png` shows the result; the
+  interactive Windows check of the tab strip remains pending.
+
+This was a direct executable deployment over the existing working and desktop
+copies, not a formal packaged release. No new candidate zip was created or
+signed off for this build.
+
 A third direct deployment on 2026-10-21 replaced both copies with commit
 `8261fff`, which gives Telnet sessions the same MobaXterm-style stopped
 screen as SSH: a dropped connection shows `Session stopped` with the
