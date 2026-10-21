@@ -21,6 +21,7 @@ geometry. These are functional evidence images, not final pixel baselines.
 | `sidebar-add-session-menu-stays-open-850x500.png` | Pointer hover on the sidebar `+` and its open new-session menu no longer retracts the sidebar; the menu stays open while moving onto its items. |
 | `tab-settings-gear-at-rest-850x500.png` | Two tabs at rest: the selected tab shows only its title and close button, so the tab strip is not crowded. |
 | `tab-settings-gear-850x500.png` | Hovering the selected tab reveals the connection-settings gear inside that tab, next to its close button, so it is unambiguous which tab it edits; unselected tabs never show the gear. |
+| `session-connecting-feedback-1000x650.png` | Clicking an unreachable Telnet session immediately shows a blue `Connecting...` state on that sidebar row instead of leaving the click with no feedback; the state clears when the attempt succeeds, fails, or is cancelled. |
 | `sessions-850x500.png` | Config-backed sidebar shows remembered SSH sessions and no tabs after restart. |
 | `two-tabs-850x500.png` | Multiple SSH tabs are open; `win-ssh` is selected, `local-ssh` is not. Sidebar status dots reflect open sessions. |
 | `switch-tab-850x500.png` | Clicking the `local-ssh` tab switches the terminal content back without reconnecting. |
@@ -76,9 +77,9 @@ geometry. These are functional evidence images, not final pixel baselines.
 
 `docs/testing/feature-test-matrix.md` now maps all parity rows, including the
 Telnet rows. The gate passes in `verify` and `package` phases on Linux, and the
-structure also passes for Windows/macOS. The suite is 236 tests:
+structure also passes for Windows/macOS. The suite is 237 tests:
 
-- Core 45, Connections 45, Terminal 11, ZMODEM 32, TestGate 49, App 54.
+- Core 45, Connections 45, Terminal 11, ZMODEM 32, TestGate 49, App 55.
 - Linux Xvfb E2E: `APP01_SmokeLaunchE2E`,
   `UI01_TitleBarDoubleClickMaximizeE2E`,
   `UI02_SidebarExpandsOnLaunchE2E`, `UI02_SidebarAutoHideE2E`,

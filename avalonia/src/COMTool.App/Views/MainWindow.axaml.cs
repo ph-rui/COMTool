@@ -45,6 +45,8 @@ public partial class MainWindow : Window
 
     internal Func<SerialConnectionConfig, ISerialConnection> SerialConnectionFactory { get; set; } =
         config => SerialConnection.Open(config);
+
+    internal Func<SessionItem, Task>? SessionActivationOverrideForTests { get; set; }
     private static readonly IBrush StatusInfoBrush =
         new SolidColorBrush(Color.Parse("#008200"));
     private static readonly IBrush StatusWarningBrush =
@@ -220,6 +222,8 @@ public partial class MainWindow : Window
 
     internal void OpenSerialSessionForTests(string port) => OpenSerialSession(port);
 
+    internal Task ActivateSessionForTests(SessionItem item) => ActivateSessionAsync(item);
+
     internal void StopPortTimerForTests() => _portTimer?.Stop();
 
     private (HashSet<string> Serial, HashSet<string> Ssh, HashSet<string> Telnet, HashSet<string> Tcp)
@@ -299,9 +303,14 @@ public partial class MainWindow : Window
         viewModel.LoadSessions(_config, serial, ssh, tcp, telnet);
     }
 
-    private async void OnSessionActivated(object? sender, SessionItem item)
+    private async void OnSessionActivated(object? sender, SessionItem item) =>
+        await ActivateSessionAsync(item);
+
+    internal async Task ActivateSessionAsync(SessionItem item)
     {
-        if (DataContext is not MainViewModel viewModel || _config is null)
+        if (DataContext is not MainViewModel viewModel
+            || _config is null
+            || item.IsConnecting)
         {
             return;
         }
@@ -365,9 +374,14 @@ public partial class MainWindow : Window
             }
         }
 
+        item.IsConnecting = true;
         try
         {
-            if (item.Kind == SessionKind.Serial)
+            if (SessionActivationOverrideForTests is { } activate)
+            {
+                await activate(item);
+            }
+            else if (item.Kind == SessionKind.Serial)
             {
                 OpenSerialSession(item.SessionId);
             }
@@ -386,11 +400,16 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
+            item.IsConnecting = false;
             var action = item.Kind == SessionKind.Serial
                 || (item.Kind == SessionKind.Tcp && IsTcpServerSession(item.SessionId))
                 ? "Open Failed"
                 : "Connect Failed";
             await ShowErrorAsync($"{action}\n{ex.Message}");
+        }
+        finally
+        {
+            item.IsConnecting = false;
         }
     }
 
@@ -784,14 +803,15 @@ public partial class MainWindow : Window
 
             try
             {
-                var connection = SshConnection.Connect(new SshConnectionOptions(
-                    session.Host,
-                    session.Port,
-                    session.User,
-                    Password: password,
-                    KeyFile: session.SshKey,
-                    Columns: 100,
-                    Rows: 30));
+                var connection = await Task.Run(() => SshConnection.Connect(
+                    new SshConnectionOptions(
+                        session.Host,
+                        session.Port,
+                        session.User,
+                        Password: password,
+                        KeyFile: session.SshKey,
+                        Columns: 100,
+                        Rows: 30)));
                 _config.PasswordCache.Set(session.Key, password);
                 if (remember && !string.IsNullOrEmpty(password))
                 {
