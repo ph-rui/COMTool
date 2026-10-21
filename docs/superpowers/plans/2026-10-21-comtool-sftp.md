@@ -738,14 +738,15 @@ Expected: build failure with `CS1061: 'SshConnection' does not contain a definit
 `avalonia/src/COMTool.Connections/SshSftpFileSystem.cs`.
 
 - The constructor takes the `ConnectionInfo`, creates `new SftpClient(connectionInfo)`, calls `Connect()`, and stores `HomeDirectory = client.WorkingDirectory` (the server side home directory).
-- `ListAsync(path)` calls `client.ListDirectory(path)`. For every `ISftpFile` it builds an `SftpEntry` with `Name = file.Name`, `Path = SftpPath.Combine(requestedPath, file.Name)`, `IsDirectory = file.IsDirectory`, `IsSymbolicLink = file.IsSymbolicLink`, `Size = file.Length`, `LastWriteTimeUtc = file.LastWriteTimeUtc` and the permission bits from `file.OwnerCanRead` and friends. The entry path is always rebuilt from the requested path, never taken from `file.FullName`, because following a symlink makes the server report the resolved path.
+- `ListAsync(path)` calls `client.ListDirectory(path)`. The two entries of the directory itself, `.` and `..`, are left out: the server of OpenSSH sends them and they are not part of the content of the directory. For every `ISftpFile` it builds an `SftpEntry` with `Name = file.Name`, `Path = SftpPath.Combine(requestedPath, file.Name)`, `IsDirectory = file.IsDirectory`, `IsSymbolicLink = file.IsSymbolicLink`, `Size = file.Length`, `LastWriteTimeUtc = file.LastWriteTimeUtc` and the permission bits from `file.OwnerCanRead` and friends. The entry path is always rebuilt from the requested path, never taken from `file.FullName`, because following a symlink makes the server report the resolved path.
 - `OpenReadAsync(path)` returns `client.Open(path)`.
 - `OpenWriteAsync(path)` returns `client.Open(path, FileMode.Create)`, which truncates an existing target.
 - `CreateDirectoryAsync(path)` calls `client.CreateDirectory(path)`.
 - `RenameAsync(oldPath, newPath)` calls `client.RenameFile(oldPath, newPath)`.
 - `DeleteFileAsync(path)` calls `client.DeleteFile(path)`.
-- `DeleteDirectoryAsync(path, recursive)` calls `client.DeleteDirectory(path)` when `recursive` is false. When `recursive` is true it lists the children, deletes the files and then the directories deepest first, and finally calls `client.DeleteDirectory(path)`.
-- `SetPermissionsAsync(path, octalMode)` calls `client.ChangePermissions(path, (short)octalMode)`.
+- `DeleteDirectoryAsync(path, recursive)` calls `client.DeleteDirectory(path)` when `recursive` is false. When `recursive` is true it empties the tree first: it lists the children, removes the files and the links, removes the directories deepest first, and finally calls `client.DeleteDirectory(path)`. The server refuses to remove a directory that is not empty, so the files below it have to go as well.
+- `SetPermissionsAsync(path, octalMode)` calls `client.ChangePermissions(path, mode)`. The protocol carries the mode as the decimal number whose digits are the octal digits, so the mode 0644 goes over the wire as 644 and not as 420. The kernel keeps the numeric mode, the SSH layer converts it.
+- `DeleteFileAsync(path)` and `RenameAsync(oldPath, newPath)` remove or rename a symbolic link itself. The library resolves a link to its target before it sends the request, so its public API would delete the target of the link and leave the link behind. The request of the protocol is sent directly for a link. The library keeps its session for itself, so it is reached by reflection; when it is not there, the caller gets a clear error instead of a deleted target.
 - `ExistsAsync(path)` calls `client.Exists(path)`.
 - Every SSH.NET call is synchronous, so each member runs its body on `Task.Run` and passes the `CancellationToken` down to the SSH.NET overload that accepts one where one exists.
 - `DisposeAsync` disposes the client exactly once and is safe to call twice.
@@ -784,7 +785,7 @@ Expected: the 7 new tests plus the existing SSH integration test pass.
 
 ```bash
 cd /tmp/opencode/COMTool
-git add avalonia/src/COMTool.Connections avalonia/tests/COMTool.Connections.Tests
+git add avalonia/src/COMTool.Connections avalonia/tests/COMTool.Connections.Tests avalonia/src/COMTool.Sftp avalonia/tests/COMTool.Sftp.Tests docs/superpowers/plans/2026-10-21-comtool-sftp.md
 git commit -m "feat(avalonia): expose the SFTP file system over a second SSH connection"
 ```
 

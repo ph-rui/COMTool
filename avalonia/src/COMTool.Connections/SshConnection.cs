@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using COMTool.Sftp;
 using Renci.SshNet;
 using Renci.SshNet.Common;
 
@@ -24,6 +25,8 @@ public sealed class SshConnection : IDisposable
 {
     private readonly SshClient _client;
     private readonly ShellStream _shell;
+    private readonly ConnectionInfo _connectionInfo;
+    private SshSftpFileSystem? _sftp;
     private int _disposed;
     private int _transportFaulted;
 
@@ -31,10 +34,12 @@ public sealed class SshConnection : IDisposable
         SshClient client,
         ShellStream shell,
         PtyStreamConnection pty,
-        TimeSpan connectTime)
+        TimeSpan connectTime,
+        ConnectionInfo connectionInfo)
     {
         _client = client;
         _shell = shell;
+        _connectionInfo = connectionInfo;
         Pty = pty;
         ConnectTime = connectTime;
         _shell.Closed += (_, _) => OnTransportFaulted();
@@ -163,7 +168,7 @@ public sealed class SshConnection : IDisposable
                     }
                 },
                 ownsStreams: false);
-            return new SshConnection(client, shell, pty, started.Elapsed);
+            return new SshConnection(client, shell, pty, started.Elapsed, connectionInfo);
         }
         catch
         {
@@ -171,6 +176,27 @@ public sealed class SshConnection : IDisposable
             client.Dispose();
             throw;
         }
+    }
+
+    /// <summary>
+    /// Creates the SFTP subsystem client. SSH.NET cannot share the channel
+    /// of an open shell with the sftp subsystem, so this authenticates a
+    /// second SSH connection with the same credentials. The client is
+    /// created once and disposed together with the connection.
+    /// </summary>
+    public ISftpFileSystem CreateSftpFileSystem()
+    {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+
+        var existing = _sftp;
+        if (existing is not null)
+        {
+            return existing;
+        }
+
+        var created = new SshSftpFileSystem(_connectionInfo);
+        _sftp = created;
+        return created;
     }
 
     /// <summary>
@@ -209,6 +235,15 @@ public sealed class SshConnection : IDisposable
 
         Pty.Close();
         _shell.Dispose();
+
+        // The sftp client holds a second SSH connection of its own.
+        var sftp = _sftp;
+        _sftp = null;
+        if (sftp is not null)
+        {
+            sftp.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
+
         _client.Dispose();
     }
 }

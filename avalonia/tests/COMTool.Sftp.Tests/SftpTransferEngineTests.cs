@@ -350,6 +350,50 @@ public sealed class SftpTransferEngineTests
     }
 
     [Fact]
+    public async Task SkipsTheTwoEntriesOfTheDirectoryItself()
+    {
+        var (remote, local) = NewSides();
+
+        // A server may send the two entries of the directory itself.
+        remote.IncludeDotEntries = true;
+        local.IncludeDotEntries = true;
+
+        local.AddDirectory("/local/tree");
+        local.AddFile("/local/tree/a.txt", "a");
+        local.AddDirectory("/local/tree/sub");
+        local.AddFile("/local/tree/sub/b.txt", "b");
+
+        var result = await new SftpTransferEngine(remote, local)
+            .RunAsync(Upload("/remote", "/local/tree"), null, CancellationToken.None);
+
+        Assert.Equal(2, result.Succeeded);
+        Assert.Equal("a", remote.ReadFile("/remote/tree/a.txt"));
+        Assert.Equal("b", remote.ReadFile("/remote/tree/sub/b.txt"));
+    }
+
+    [Fact]
+    public async Task SkipsTheTwoEntriesOfTheDirectoryItselfWhenNothingIsFollowed()
+    {
+        var (remote, local) = NewSides();
+
+        remote.IncludeDotEntries = true;
+        local.IncludeDotEntries = true;
+
+        local.AddDirectory("/local/tree");
+        local.AddFile("/local/tree/a.txt", "a");
+
+        var request = WithOptions(
+            Upload("/remote", "/local/tree"),
+            new SftpTransferOptions(FollowSymbolicLinks: false));
+
+        var result = await new SftpTransferEngine(remote, local)
+            .RunAsync(request, null, CancellationToken.None);
+
+        Assert.Equal(1, result.Succeeded);
+        Assert.Equal(0, result.Skipped);
+    }
+
+    [Fact]
     public async Task OneFailingFileDoesNotStopTheQueue()
     {
         var (remote, local) = NewSides();
