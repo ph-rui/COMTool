@@ -81,9 +81,6 @@ public sealed partial class TerminalTab : ObservableObject
     private IBrush _tabDotBrush = new SolidColorBrush(Color.Parse("#4caf50"));
 
     [ObservableProperty]
-    private bool _isFunctionalVisible;
-
-    [ObservableProperty]
     private bool _isZmodemActive;
 
     [ObservableProperty]

@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -84,6 +83,7 @@ public partial class MainWindow : Window
         Sidebar.SessionActivated += OnSessionActivated;
         Sidebar.EditRequested += OnSessionEditRequested;
         Sidebar.RemoveRequested += OnSessionRemoveRequested;
+        Sidebar.NewSessionRequested += OnSidebarNewSessionRequested;
         Opened += OnOpened;
     }
 
@@ -2745,7 +2745,18 @@ public partial class MainWindow : Window
 
     private void OnNewSessionClick(object? sender, RoutedEventArgs e)
     {
-        var kind = (sender as MenuItem)?.Tag?.ToString() switch
+        if (sender is MenuItem { Tag: string tag })
+        {
+            OpenNewSession(tag);
+        }
+    }
+
+    private void OnSidebarNewSessionRequested(object? sender, string tag) =>
+        OpenNewSession(tag);
+
+    private void OpenNewSession(string tag)
+    {
+        var kind = tag switch
         {
             "SSH" => SessionKind.Ssh,
             "Telnet" => SessionKind.Telnet,
@@ -2922,192 +2933,6 @@ public partial class MainWindow : Window
         RefreshSidebar();
     }
 
-    private void OnFunctionalClick(object? sender, RoutedEventArgs e)
-    {
-        if (DataContext is MainViewModel { SelectedTab: { } tab })
-        {
-            tab.IsFunctionalVisible = !tab.IsFunctionalVisible;
-        }
-    }
-
-    private async void OnShareConfigClick(object? sender, RoutedEventArgs e)
-    {
-        if (_config is null || DataContext is not MainViewModel { SelectedTab: { } tab })
-        {
-            return;
-        }
-
-        try
-        {
-            object? payload = null;
-            var suggestedName = "comtool.session.json";
-            if (tab.Kind == SessionKind.Serial)
-            {
-                payload = _config.SerialSessions.Get(tab.SessionId);
-                suggestedName = "comtool.serial.json";
-            }
-            else if (tab.Kind == SessionKind.Ssh)
-            {
-                var session = _config.SshSessions.Get(tab.SessionId);
-                if (session is not null)
-                {
-                    // Never export the DPAPI token. Copy the non-secret fields
-                    // so sharing a config cannot clear the remembered password.
-                    payload = new SshSession
-                    {
-                        Key = session.Key,
-                        Host = session.Host,
-                        Port = session.Port,
-                        User = session.User,
-                        Alias = session.Alias,
-                        SshKey = session.SshKey,
-                        Updated = session.Updated,
-                    };
-                }
-
-                suggestedName = "comtool.ssh.json";
-            }
-            else if (tab.Kind == SessionKind.Telnet)
-            {
-                var session = _config.TelnetSessions.Get(tab.SessionId);
-                if (session is not null)
-                {
-                    payload = TelnetSessionRules.ForShare(session);
-                }
-
-                suggestedName = "comtool.telnet.json";
-            }
-            else if (tab.Kind == SessionKind.Tcp)
-            {
-                payload = _config.TcpSessions.Get(tab.SessionId);
-                suggestedName = "comtool.tcp.json";
-            }
-
-            if (payload is null)
-            {
-                throw new InvalidOperationException("This tab has no shareable session config.");
-            }
-
-            var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
-            {
-                Title = "Share config",
-                SuggestedFileName = suggestedName,
-                DefaultExtension = "json",
-            });
-            if (file is null)
-            {
-                return;
-            }
-
-            await using var stream = await file.OpenWriteAsync();
-            await JsonSerializer.SerializeAsync(
-                stream,
-                payload,
-                payload.GetType(),
-                new JsonSerializerOptions { WriteIndented = true });
-        }
-        catch (Exception ex)
-        {
-            await ShowErrorAsync(ex.Message);
-        }
-    }
-
-    private async void OnLoadConfigClick(object? sender, RoutedEventArgs e)
-    {
-        if (_config is null)
-        {
-            return;
-        }
-
-        try
-        {
-            var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
-            {
-                Title = "Load config",
-                AllowMultiple = false,
-            });
-            if (files.Count == 0)
-            {
-                return;
-            }
-
-            await using var stream = await files[0].OpenReadAsync();
-            using var document = await JsonDocument.ParseAsync(stream);
-            var root = document.RootElement;
-            if (root.TryGetProperty("transport", out var transport)
-                && string.Equals(
-                    transport.GetString(),
-                    TelnetSessionRules.Transport,
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                var session = root.Deserialize<TelnetSession>()
-                    ?? throw new InvalidOperationException("Invalid Telnet session config.");
-                if (session.Host.Trim().Length == 0)
-                {
-                    throw new InvalidOperationException("Telnet config has no host.");
-                }
-
-                if (_config.TelnetSessions.Upsert(
-                        session.Host,
-                        session.Port,
-                        session.User,
-                        session.Alias) is null)
-                {
-                    throw new InvalidOperationException("Telnet config has an invalid host or port.");
-                }
-            }
-            else if (root.TryGetProperty("serial", out _))
-            {
-                var session = root.Deserialize<SerialSession>()
-                    ?? throw new InvalidOperationException("Invalid serial session config.");
-                if (session.Port.Trim().Length == 0)
-                {
-                    throw new InvalidOperationException("Serial config has no port.");
-                }
-
-                _config.SerialSessions.Upsert(session.Port, session.Serial, session.Name);
-            }
-            else if (root.TryGetProperty("mode", out _)
-                     && (root.TryGetProperty("target", out _) || root.TryGetProperty("port", out _)))
-            {
-                var session = root.Deserialize<TcpSession>()
-                    ?? throw new InvalidOperationException("Invalid TCP session config.");
-                if (_config.TcpSessions.Upsert(
-                        session.Protocol,
-                        session.Mode,
-                        session.Target,
-                        session.Port,
-                        session.AutoReconnect,
-                        session.ReconnectInterval) is null)
-                {
-                    throw new InvalidOperationException("TCP config has an invalid target or port.");
-                }
-            }
-            else if (root.TryGetProperty("host", out _))
-            {
-                var session = root.Deserialize<SshSession>()
-                    ?? throw new InvalidOperationException("Invalid SSH session config.");
-                _config.SshSessions.Upsert(
-                    session.Host,
-                    session.Port,
-                    session.User,
-                    alias: session.Alias,
-                    sshKey: session.SshKey);
-            }
-            else
-            {
-                throw new InvalidOperationException("Unrecognized session config file.");
-            }
-
-            _config.Save();
-            RefreshSidebar();
-        }
-        catch (Exception ex)
-        {
-            await ShowErrorAsync(ex.Message);
-        }
-    }
-
     private async void OnTerminalPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (sender is not TerminalControl terminal)
@@ -3207,6 +3032,7 @@ public partial class MainWindow : Window
         Sidebar.SessionActivated -= OnSessionActivated;
         Sidebar.EditRequested -= OnSessionEditRequested;
         Sidebar.RemoveRequested -= OnSessionRemoveRequested;
+        Sidebar.NewSessionRequested -= OnSidebarNewSessionRequested;
 
         foreach (var state in _detachedTabs.Values.ToList())
         {

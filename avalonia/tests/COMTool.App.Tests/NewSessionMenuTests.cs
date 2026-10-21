@@ -8,6 +8,7 @@ using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Platform;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using COMTool.App.Services;
 using COMTool.App.ViewModels;
 using COMTool.App.Views;
@@ -32,7 +33,7 @@ public sealed class NewSessionMenuTests
                 Dispatcher.UIThread.RunJobs();
 
                 AssertSessionMenuIcons(window.FindControl<Button>("EmptyAddSessionButton")!);
-                AssertSessionMenuIcons(window.FindControl<Button>("ToolbarAddSessionButton")!);
+                AssertSessionMenuIcons(FindSidebarAddButton(window));
             });
         }
         finally
@@ -129,7 +130,71 @@ public sealed class NewSessionMenuTests
                 Dispatcher.UIThread.RunJobs();
 
                 AssertSessionMenu(window.FindControl<Button>("EmptyAddSessionButton")!);
-                AssertSessionMenu(window.FindControl<Button>("ToolbarAddSessionButton")!);
+                AssertSessionMenu(FindSidebarAddButton(window));
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public void UI06_AddSessionMovedToSidebarAndFunctionalPanelRemoved()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                window = new MainWindow { DataContext = new MainViewModel() };
+                window.Show();
+                Dispatcher.UIThread.RunJobs();
+
+                var add = FindSidebarAddButton(window);
+                Assert.Equal("New session", ToolTip.GetTip(add)?.ToString());
+                Assert.Equal(24, add.Width);
+                Assert.Equal(24, add.Height);
+                AssertSessionMenu(add);
+
+                Assert.Null(window.FindControl<Button>("ToolbarAddSessionButton"));
+                Assert.Null(window.FindControl<Border>("FunctionalPanel"));
+                Assert.DoesNotContain(
+                    window.GetVisualDescendants().OfType<Button>(),
+                    button => ToolTip.GetTip(button)?.ToString() == "Functional");
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public void UI06_SidebarNewSessionMenuAddsLocalTab()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                var viewModel = new MainViewModel();
+                window = new MainWindow { DataContext = viewModel };
+
+                var local = ((MenuFlyout)FindSidebarAddButton(window).Flyout!).Items
+                    .OfType<MenuItem>()
+                    .Single(item => item.Tag?.ToString() == "Local");
+
+                local.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+                Dispatcher.UIThread.RunJobs();
+
+                var tab = Assert.Single(viewModel.Tabs);
+                Assert.Equal(SessionKind.Local, tab.Kind);
             });
         }
         finally
@@ -242,7 +307,7 @@ public sealed class NewSessionMenuTests
                     ToolTip.GetTip(window.FindControl<Button>("EmptyAddSessionButton")!)?.ToString());
                 Assert.Equal(
                     "New session",
-                    ToolTip.GetTip(window.FindControl<Button>("ToolbarAddSessionButton")!)?.ToString());
+                    ToolTip.GetTip(FindSidebarAddButton(window))?.ToString());
             });
         }
         finally
@@ -250,6 +315,12 @@ public sealed class NewSessionMenuTests
             window?.Close();
             Dispatcher.UIThread.RunJobs();
         }
+    }
+
+    private static Button FindSidebarAddButton(MainWindow window)
+    {
+        var sidebar = Assert.IsType<SessionSidebar>(window.FindControl<SessionSidebar>("Sidebar"));
+        return Assert.IsType<Button>(sidebar.FindControl<Button>("SidebarAddSessionButton"));
     }
 
     private static void AssertSessionMenu(Button button)

@@ -15,14 +15,14 @@
 | UI-03 | 串口/SSH/Telnet 分组与状态图标 | P0 | 部分 | 连接状态原地更新；Windows `--ports` 已输出 COM97/99 等 SetupAPI 描述 |
 | UI-04 | 侧栏右键菜单 | P0 | 部分 | Open、Edit session、Remove session；Edit session 可在未打开连接时回填已保存主机/端口/用户；确认框、真实桌面右键和配置持久化仍需核对 |
 | UI-05 | 标签页与标题 | P0 | 完成 | 多标签新增/关闭/切换、标题规则、选中样式、状态圆点和双击分离/回接已完成；分离后命令可继续执行，关闭分离窗口无重复缓冲；切换标签前对旧终端调用 `BeginReparent`，避免内容宿主移除旧控件时清理 PTY 读取器，切换后直接输入即可继续执行，两个方向均已在打包版实测；见 `tab-switch-input-second-1000x650.png`、`tab-switch-input-first-1000x650.png` |
-| UI-06 | `+` 新建会话类型选择器 | P0 | 完成（MobaXterm 方向） | 按用户要求移除 Python 插件占位项（Send Receive/protocol/Graph/Load plugin）；两个 `+` 入口统一为 Serial/SSH/Telnet/TCP/Local terminal，选择后预选对应设置页或创建本地终端；菜单项使用与 MobaXterm 相近的类型图标（串口插头、SSH 服务器、Telnet 终端、TCP 网络、本地桌面），标题栏/窗口图标为深蓝终端图标；Telnet 已作为 MobaXterm 会话类型接入，后续类型按阶段扩展，未实现类型不显示 |
-| UI-07 | 空状态 | P0 | 完成 | 无标签时显示 `Select a session from the left` / `or click + to add a session`，两个 `+` 入口提示 `New session`；headless 测试覆盖 |
+| UI-06 | `+` 新建会话类型选择器 | P0 | 完成（MobaXterm 方向） | 按用户要求移除 Python 插件占位项（Send Receive/protocol/Graph/Load plugin）；空状态和侧栏标题两个 `+` 入口统一为 Serial/SSH/Telnet/TCP/Local terminal，选择后预选对应设置页或创建本地终端；菜单项使用与 MobaXterm 相近的类型图标（串口插头、SSH 服务器、Telnet 终端、TCP 网络、本地桌面），标题栏/窗口图标为深蓝终端图标；右上角 Functional 箭头按钮及 `Load config` / `Share config` 面板已按用户要求删除；Telnet 已作为 MobaXterm 会话类型接入，后续类型按阶段扩展，未实现类型不显示 |
+| UI-07 | 空状态 | P0 | 完成 | 无标签时显示 `Select a session from the left` / `or click + to add a session`，空状态和侧栏标题两个 `+` 入口提示 `New session`；headless 测试覆盖 |
 | UI-08 | 设置按钮与设置面板 | P0 | 完成 | 串口/SSH/Telnet 参数、SSH 密钥、记住密码、打开/关闭、侧栏同步已实现 |
 | UI-09 | 主题切换（浅色/深色） | P0 | 部分 | 标题栏右键菜单可切换浅/深色，`skin` 持久化并重启生效 |
 | UI-10 | 语言切换 | P1 | 未开始 | 英文/简中/繁中/日文，文案一致 |
 | UI-11 | 帮助、关于、捐赠、更新提示 | P1 | 部分 | `About COMTool` 已包含版本、说明、配置路径、License、GitHub/Releases/Issues/捐赠链接；插件帮助和更新检测待补 |
 | UI-12 | 状态栏、错误/成功提示 | P0 | 部分 | 连接/断线/ZMODEM 进度/取消/成功/错误颜色和 `Connection lose` 实测；2026-10-20 Windows 实测 ZMODEM 22% 时进度文字可读、文件名不再被进度条覆盖；Python 无状态超时自动清除 |
-| UI-13 | 快捷键与鼠标行为 | P0 | 部分 | 终端选择/右键复制粘贴、Ctrl+V/Ctrl+Shift+V、终端功能键、编码下拉关闭后回焦终端、点击 SSH 会话后自动聚焦新终端（本地终端同样验证，串口共用同一附加路径，无需再点终端区域）、标题栏/工具栏按钮不抢焦点、设置/插件/功能按钮图标居中、F11 全屏（标题栏整行收起、内容贴顶、再按恢复）、双击终端面板最大化/还原且不丢焦点均已验证；插件编辑器内部快捷键随插件另行实现 |
+| UI-13 | 快捷键与鼠标行为 | P0 | 部分 | 终端选择/右键复制粘贴、Ctrl+V/Ctrl+Shift+V、终端功能键、编码下拉关闭后回焦终端、点击 SSH 会话后自动聚焦新终端（本地终端同样验证，串口共用同一附加路径，无需再点终端区域）、标题栏/工具栏按钮不抢焦点、设置/侧栏按钮图标居中、F11 全屏（标题栏整行收起、内容贴顶、再按恢复）、双击终端面板最大化/还原且不丢焦点均已验证；插件编辑器内部快捷键随插件另行实现 |
 | UI-14 | 高 DPI | P1 | 部分 | Linux X11 `Xft.dpi=144`（150%）和 192（200%，2560x1600）下窗口、侧栏、标签、编码下拉和终端均无裁切；Windows 150%/200% 待测 |
 | UI-15 | 窗口尺寸/位置/分栏恢复 | P1 | 完成（Avalonia 增强） | Python 每次以 850x500 居中启动，不持久化窗口位置；Avalonia 按用户要求新增窗口尺寸记忆：关闭时保存 `window.width/height`，启动时先应用再居中显示；最大化/最小化/全屏关闭时保存最后一次普通窗口尺寸，不保存位置或最大化状态。侧栏宽度会恢复；可见性按 UI-02 在每次启动时强制展开 |
 
