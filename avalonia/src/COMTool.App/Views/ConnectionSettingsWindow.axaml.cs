@@ -33,6 +33,9 @@ public partial class ConnectionSettingsWindow : Window
     private readonly AppConfigService _config;
     private readonly TerminalTab? _currentTab;
     private readonly SessionKind _initialKind;
+    private readonly string? _sessionId;
+    private readonly SessionKind _sessionKind;
+    private readonly string? _sessionTitle;
     private readonly Func<string, TerminalTab?, Task> _openSerial;
     private readonly Func<string, TerminalTab?, Task> _openSsh;
     private readonly Func<string, TerminalTab?, Task> _openTelnet;
@@ -58,11 +61,16 @@ public partial class ConnectionSettingsWindow : Window
         Func<string, TerminalTab?, Task> openTelnet,
         Func<string, TerminalTab?, Task> openTcp,
         Func<string, Task> showError,
-        SessionKind initialKind = SessionKind.Serial)
+        SessionKind initialKind = SessionKind.Serial,
+        string? editSessionId = null,
+        string? editTitle = null)
     {
         _config = config;
         _currentTab = currentTab;
         _initialKind = initialKind;
+        _sessionId = currentTab?.SessionId ?? editSessionId;
+        _sessionKind = currentTab?.Kind ?? initialKind;
+        _sessionTitle = currentTab?.Title ?? editTitle;
         _openSerial = openSerial;
         _openSsh = openSsh;
         _openTelnet = openTelnet;
@@ -132,7 +140,7 @@ public partial class ConnectionSettingsWindow : Window
 
     private void PopulateCurrentSession()
     {
-        if (_currentTab is null)
+        if (_sessionId is null)
         {
             ConnectionTypeCombo.SelectedIndex = _initialKind switch
             {
@@ -146,7 +154,7 @@ public partial class ConnectionSettingsWindow : Window
             return;
         }
 
-        ConnectionTypeCombo.SelectedIndex = _currentTab.Kind switch
+        ConnectionTypeCombo.SelectedIndex = _sessionKind switch
         {
             SessionKind.Ssh => 1,
             SessionKind.Telnet => 2,
@@ -154,11 +162,11 @@ public partial class ConnectionSettingsWindow : Window
             _ => 0,
         };
         UpdateConnectionPanels();
-        Title = $"{_currentTab.Title} - Connection settings";
+        Title = $"{_sessionTitle ?? _sessionId} - Connection settings";
 
-        if (_currentTab.Kind == SessionKind.Serial)
+        if (_sessionKind == SessionKind.Serial)
         {
-            var session = _config.SerialSessions.Get(_currentTab.SessionId);
+            var session = _config.SerialSessions.Get(_sessionId);
             if (session is not null)
             {
                 var ports = (PortCombo.ItemsSource as IList<SerialPortInfo>)?.ToList()
@@ -182,9 +190,9 @@ public partial class ConnectionSettingsWindow : Window
                 DtrCheck.IsChecked = session.Serial.Dtr;
             }
         }
-        else if (_currentTab.Kind == SessionKind.Ssh)
+        else if (_sessionKind == SessionKind.Ssh)
         {
-            var session = _config.SshSessions.Get(_currentTab.SessionId);
+            var session = _config.SshSessions.Get(_sessionId);
             if (session is not null)
             {
                 HostBox.Text = session.Host;
@@ -194,9 +202,9 @@ public partial class ConnectionSettingsWindow : Window
                 KeyFileBox.Text = session.SshKey;
             }
         }
-        else if (_currentTab.Kind == SessionKind.Telnet)
+        else if (_sessionKind == SessionKind.Telnet)
         {
-            var session = _config.TelnetSessions.Get(_currentTab.SessionId);
+            var session = _config.TelnetSessions.Get(_sessionId);
             if (session is not null)
             {
                 TelnetHostBox.Text = session.Host;
@@ -205,9 +213,9 @@ public partial class ConnectionSettingsWindow : Window
                 TelnetAliasBox.Text = session.Alias;
             }
         }
-        else if (_currentTab.Kind == SessionKind.Tcp)
+        else if (_sessionKind == SessionKind.Tcp)
         {
-            var session = _config.TcpSessions.Get(_currentTab.SessionId);
+            var session = _config.TcpSessions.Get(_sessionId);
             if (session is not null)
             {
                 TcpProtocolCombo.SelectedIndex =
@@ -224,7 +232,7 @@ public partial class ConnectionSettingsWindow : Window
                 TcpReconnectIntervalBox.Text = session.ReconnectInterval.ToString("0.###");
             }
 
-            if (_currentTab.Connection is ITcpSession tcp)
+            if (_currentTab?.Connection is ITcpSession tcp)
             {
                 _tcpSession = tcp;
                 tcp.ClientsChanged += OnTcpClientsChanged;

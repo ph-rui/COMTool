@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.IO.Compression;
 using System.Text;
 using Avalonia;
 using Avalonia.Controls;
@@ -57,12 +58,19 @@ public sealed class NewSessionMenuTests
 
                 var image = Assert.IsType<Image>(window.FindControl<Image>("TitleBarLogo"));
                 Assert.NotNull(image.Source);
-                Assert.Equal(35, image.Width);
-                Assert.Equal(35, image.Height);
+                Assert.Equal(28, image.Width);
+                Assert.Equal(28, image.Height);
+                Assert.Equal(6, image.Margin.Left);
+                Assert.Equal(3, image.Margin.Top);
+                Assert.Equal(0, image.Margin.Right);
+                Assert.Equal(4, image.Margin.Bottom);
 
                 using var png = AssetLoader.Open(
                     new Uri("avares://COMTool.App/Assets/logo.png"));
-                using var pngReader = new BinaryReader(png);
+                using var pngCopy = new MemoryStream();
+                png.CopyTo(pngCopy);
+                var pngBytes = pngCopy.ToArray();
+                using var pngReader = new BinaryReader(new MemoryStream(pngBytes));
                 Assert.Equal(
                     new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 },
                     pngReader.ReadBytes(8));
@@ -72,6 +80,7 @@ public sealed class NewSessionMenuTests
                 var height = BinaryPrimitives.ReadInt32BigEndian(pngReader.ReadBytes(4));
                 Assert.Equal(512, width);
                 Assert.Equal(width, height);
+                AssertNoBrightOuterFringe(pngBytes);
 
                 using var ico = AssetLoader.Open(
                     new Uri("avares://COMTool.App/Assets/logo.ico"));
@@ -281,4 +290,134 @@ public sealed class NewSessionMenuTests
             Assert.Equal(icon.Color, brush.Color);
         }
     }
+
+    private static void AssertNoBrightOuterFringe(byte[] png)
+    {
+        var (width, height, pixels) = DecodeRgbaPng(png);
+        var stride = width * 4;
+        for (var y = 0; y < height; y++)
+        {
+            for (var x = 0; x < width; x++)
+            {
+                var offset = y * stride + x * 4;
+                if (pixels[offset + 3] < 16 || !IsBoundary(pixels, width, height, x, y))
+                {
+                    continue;
+                }
+
+                var max = Math.Max(
+                    pixels[offset],
+                    Math.Max(pixels[offset + 1], pixels[offset + 2]));
+                Assert.True(
+                    max < 150,
+                    $"bright opaque edge pixel at {x},{y}: {pixels[offset]},{pixels[offset + 1]},{pixels[offset + 2]}");
+            }
+        }
+    }
+
+    private static bool IsBoundary(byte[] pixels, int width, int height, int x, int y)
+    {
+        if (x < 2 || y < 2 || x >= width - 2 || y >= height - 2)
+        {
+            return true;
+        }
+
+        for (var dy = -2; dy <= 2; dy++)
+        {
+            for (var dx = -2; dx <= 2; dx++)
+            {
+                var offset = ((y + dy) * width + x + dx) * 4;
+                if (pixels[offset + 3] < 16)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static (int Width, int Height, byte[] Pixels) DecodeRgbaPng(byte[] png)
+    {
+        Assert.Equal(
+            new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 },
+            png[..8]);
+        var position = 8;
+        var width = 0;
+        var height = 0;
+        using var compressed = new MemoryStream();
+        while (position + 8 <= png.Length)
+        {
+            var length = BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(position, 4));
+            position += 4;
+            var type = Encoding.ASCII.GetString(png, position, 4);
+            position += 4;
+            var data = png.AsSpan(position, length);
+            position += length + 4;
+            if (type == "IHDR")
+            {
+                width = BinaryPrimitives.ReadInt32BigEndian(data[..4]);
+                height = BinaryPrimitives.ReadInt32BigEndian(data.Slice(4, 4));
+                Assert.Equal(8, data[8]);
+                Assert.Equal(6, data[9]);
+                Assert.Equal(0, data[10]);
+                Assert.Equal(0, data[11]);
+                Assert.Equal(0, data[12]);
+            }
+            else if (type == "IDAT")
+            {
+                compressed.Write(data);
+            }
+            else if (type == "IEND")
+            {
+                break;
+            }
+        }
+
+        compressed.Position = 0;
+        using var zlib = new ZLibStream(compressed, CompressionMode.Decompress);
+        using var raw = new MemoryStream();
+        zlib.CopyTo(raw);
+        var filtered = raw.ToArray();
+        var stride = width * 4;
+        var pixels = new byte[stride * height];
+        for (var y = 0; y < height; y++)
+        {
+            var row = y * (stride + 1);
+            var filter = filtered[row];
+            for (var x = 0; x < stride; x++)
+            {
+                var value = (int)filtered[row + 1 + x];
+                var left = x >= 4 ? pixels[y * stride + x - 4] : 0;
+                var up = y > 0 ? pixels[(y - 1) * stride + x] : 0;
+                var upLeft = y > 0 && x >= 4 ? pixels[(y - 1) * stride + x - 4] : 0;
+                value = filter switch
+                {
+                    0 => value,
+                    1 => value + left,
+                    2 => value + up,
+                    3 => value + ((left + up) / 2),
+                    4 => value + Paeth(left, up, upLeft),
+                    _ => throw new InvalidDataException($"unsupported PNG filter {filter}"),
+                };
+                pixels[y * stride + x] = (byte)value;
+            }
+        }
+
+        return (width, height, pixels);
+    }
+
+    private static int Paeth(int left, int up, int upLeft)
+    {
+        var estimate = left + up - upLeft;
+        var leftDistance = Math.Abs(estimate - left);
+        var upDistance = Math.Abs(estimate - up);
+        var upLeftDistance = Math.Abs(estimate - upLeft);
+        return leftDistance <= upDistance && leftDistance <= upLeftDistance
+            ? left
+            : upDistance <= upLeftDistance
+                ? up
+                : upLeft;
+    }
+
 }

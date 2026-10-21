@@ -22,6 +22,8 @@ public partial class SessionSidebar : UserControl
 
     public event EventHandler<SessionItem>? SessionActivated;
 
+    public event EventHandler<SessionItem>? EditRequested;
+
     public event EventHandler<SessionItem>? RemoveRequested;
 
     public bool HasOpenContextMenu => _contextMenu?.IsOpen == true;
@@ -56,12 +58,22 @@ public partial class SessionSidebar : UserControl
         }
 
         e.Handled = true;
+        var menu = CreateSessionContextMenu(item);
+        _contextMenu = menu;
+        menu.Open(control);
+    }
+
+    internal ContextMenu CreateSessionContextMenu(SessionItem item)
+    {
         var menu = new ContextMenu();
         var open = new MenuItem { Header = "Open" };
         open.Click += (_, _) => SessionActivated?.Invoke(this, item);
+        var edit = new MenuItem { Header = "Edit session" };
+        edit.Click += (_, _) => EditRequested?.Invoke(this, item);
         var remove = new MenuItem { Header = "Remove session" };
         remove.Click += (_, _) => RemoveRequested?.Invoke(this, item);
         menu.Items.Add(open);
+        menu.Items.Add(edit);
         menu.Items.Add(remove);
         menu.Closed += (_, _) =>
         {
@@ -70,7 +82,6 @@ public partial class SessionSidebar : UserControl
                 _contextMenu = null;
             }
         };
-        _contextMenu = menu;
-        menu.Open(control);
+        return menu;
     }
 }

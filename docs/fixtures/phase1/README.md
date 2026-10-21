@@ -15,7 +15,7 @@ geometry. These are functional evidence images, not final pixel baselines.
 | `window-size-restored-1000x650.png` | The window was resized to 1000x650, closed, and reopened at 1000x650; closing it while maximized still saved the previous normal size instead of the full-screen size. |
 | `about-version-0.01-1280x800.png` | The About dialog reports `v0.01` with the Beta config path and existing project links. |
 | `new-session-selector-linux.png` | The empty-state `+` menu now lists Serial, SSH, TCP and Local terminal; the Python plugin placeholders are gone. |
-| `titlebar-terminal-icon-850x500.png` | The title-bar/window icon is the deep-blue rounded terminal mark with a white `>_` prompt, replacing the squeezed horizontal wordmark. |
+| `titlebar-terminal-icon-850x500.png` | The title-bar/window icon is the deep-blue rounded terminal mark with a white `>_` prompt at a 28px display size; the bright outer rim that produced a white sawtooth fringe is gone. |
 | `new-session-icons-850x500.png` | The `+` flyout shows MobaXterm-style type icons: green plug (Serial), blue server (SSH), teal terminal (Telnet), orange network (TCP), slate desktop (Local terminal). |
 | `sessions-850x500.png` | Config-backed sidebar shows remembered SSH sessions and no tabs after restart. |
 | `two-tabs-850x500.png` | Multiple SSH tabs are open; `win-ssh` is selected, `local-ssh` is not. Sidebar status dots reflect open sessions. |
@@ -25,7 +25,8 @@ geometry. These are functional evidence images, not final pixel baselines.
 | `password-dialog-850x500.png` | A password-only SSH session prompts on first open; the password field is masked and "Remember password" defaults on. |
 | `windows-ssh-850x500.png` | Password-authenticated SSH to the Windows test host renders the shell output, including CJK wide characters. |
 | `password-cache-850x500.png` | Closing `win-ssh` and clicking the remembered sidebar session reopens it without a password prompt (in-memory cache). |
-| `context-menu-850x500.png` | Right-clicking a session shows `Open` / `Remove session`. |
+| `context-menu-850x500.png` | Right-clicking a session shows `Open` / `Edit session` / `Remove session`; editing works without opening the connection first. |
+| `session-edit-settings-850x500.png` | `Edit session` on a saved Telnet entry opens the settings dialog with host, port and user populated; the password stays blank by design and saved credentials are used by auto-login. |
 | `remove-confirm-850x500.png` | Removing an SSH session asks for confirmation and names the exact session. |
 | `session-removed-850x500.png` | Confirming removal updates the sidebar and persists only the remaining session. |
 | `dark-theme-850x500.png` | `skin: "dark"` in the Beta config selects the dark resource set on startup. |
@@ -71,9 +72,9 @@ geometry. These are functional evidence images, not final pixel baselines.
 
 `docs/testing/feature-test-matrix.md` now maps all parity rows, including the
 Telnet rows. The gate passes in `verify` and `package` phases on Linux, and the
-structure also passes for Windows/macOS. The suite is 230 tests:
+structure also passes for Windows/macOS. The suite is 232 tests:
 
-- Core 45, Connections 45, Terminal 11, ZMODEM 32, TestGate 49, App 48.
+- Core 45, Connections 45, Terminal 11, ZMODEM 32, TestGate 49, App 50.
 - Linux Xvfb E2E: `APP01_SmokeLaunchE2E`,
   `UI01_TitleBarDoubleClickMaximizeE2E`,
   `UI02_SidebarExpandsOnLaunchE2E`, `UI02_SidebarAutoHideE2E`,

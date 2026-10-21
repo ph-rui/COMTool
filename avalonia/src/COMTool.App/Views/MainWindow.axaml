@@ -44,8 +44,10 @@
         <Image Grid.Column="0"
                Name="TitleBarLogo"
                Source="/Assets/logo.png"
-               Width="35" Height="35"
-               Margin="5,0,0,0"
+               Width="28" Height="28"
+               Margin="6,3,0,4"
+               HorizontalAlignment="Left"
+               VerticalAlignment="Center"
                Stretch="Uniform" />
         <TextBlock Grid.Column="1"
                    Text="COMTool v0.01"

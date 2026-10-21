@@ -173,6 +173,7 @@ public sealed class TelnetConnectionTests
         var prompts = new[]
         {
             ("User name: ", "Password: "),
+            ("SonnePower_070_Ax login: ", "SonnePower_070_Ax password: "),
             (">>User Name: ", "Password for admin: "),
             ("Login name: ", "Passwd: "),
             ("Login ID: ", "PIN: "),
