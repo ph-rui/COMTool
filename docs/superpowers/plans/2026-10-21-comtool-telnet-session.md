@@ -253,3 +253,21 @@ git add avalonia/tests/e2e/linux/lib.sh \
   docs/superpowers/specs/2026-10-20-comtool-mobaxterm-session-selector-design.md
 git commit -m "test(avalonia): cover telnet session end to end"
 ```
+
+## Post-gate Windows verification (2026-10-21)
+
+The Linux gate cannot exercise Windows DPAPI. After the gate, the `adc338d`
+build was deployed to the Windows 10 test host and checked over RDP against a
+local fake Telnet server:
+
+- The saved session sent the user name at `login:` and the password only after
+  `Password:`; `PING` returned `PONG`.
+- **Remember password** wrote a 208-character `passwd_enc`; `config.json`
+  contained no plaintext password.
+- After restarting the app, clicking the saved session decrypted the DPAPI
+  password and logged in without retyping it.
+
+Evidence: `docs/fixtures/phase1/telnet-windows-dpapi-2026-10-21.md`,
+`telnet-autologin-windows-1280x800.png`, and
+`telnet-remembered-password-restart-windows-1280x800.png`. `TELNET-04` is now
+complete; no Python files or Python config were modified.

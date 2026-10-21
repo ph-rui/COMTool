@@ -60,21 +60,24 @@ geometry. These are functional evidence images, not final pixel baselines.
 | `connect-error-850x500.png` | Clicking a remembered SSH session while the server is down shows the Python-style `Error` dialog with `Connect Failed` and the underlying `Connection refused` detail. |
 | `dpi-150-1280x800.png` | At 150% X11 scaling (`Xft.dpi=144`) the sidebar, tabs, encoding selector, terminal prompt and status line remain unclipped and readable. |
 | `dpi-200-1736x1036.png` | At 200% scaling on a 2560x1600 Xvfb display the 850x500 logical window is 1700x1000 client pixels; title bar, tabs, terminal text and prompt are all crisp and unclipped. |
+| `telnet-autologin-windows-1280x800.png` | Windows 10 RDP with the fake Telnet server: the saved session sent the user name at `login:`, sent the password only after `Password:`, and terminal `PING` returned `PONG`. |
+| `telnet-remembered-password-restart-windows-1280x800.png` | After restarting the app, clicking the saved Telnet entry decrypted the DPAPI `passwd_enc` and logged in without opening settings or retyping the password; the config contains no plaintext password. See `telnet-windows-dpapi-2026-10-21.md`. |
+| `telnet-windows-dpapi-2026-10-21.md` | Sanitized Windows Telnet fixture log, binary SHA256, DPAPI token length, and plaintext-absence check for the remembered-password restart. |
 | `performance-2026-10-20.md` | Startup, terminal parsing, SSH 10 MB throughput, R2R packaging and Native AOT experiment measurements. |
 
-## Automated test-gate coverage (2026-10-20)
+## Automated test-gate coverage (2026-10-21)
 
-`docs/testing/feature-test-matrix.md` now maps all 90 parity rows. The gate
-passes in `verify` and `package` phases on Linux, and the structure also passes
-for Windows/macOS. The suite is 217 tests:
+`docs/testing/feature-test-matrix.md` now maps all parity rows, including the
+Telnet rows. The gate passes in `verify` and `package` phases on Linux, and the
+structure also passes for Windows/macOS. The suite is 227 tests:
 
-- Core 42, Connections 39, Terminal 11, ZMODEM 32, TestGate 49, App 44.
+- Core 45, Connections 44, Terminal 11, ZMODEM 32, TestGate 49, App 46.
 - Linux Xvfb E2E: `APP01_SmokeLaunchE2E`,
   `UI01_TitleBarDoubleClickMaximizeE2E`,
   `UI02_SidebarExpandsOnLaunchE2E`, `UI02_SidebarAutoHideE2E`,
   `E2E01_OpenSshSession`, `SSH11_RestartStoppedSessionE2E`,
   `SSH06_MultipleConnectionsE2E`, `UI05_TabSwitchTypingBothDirections`,
-  `TERM15_DoubleClickMaximizeE2E`.
+  `TERM15_DoubleClickMaximizeE2E`, `TELNET01_AutoLoginE2E`.
 - Candidate package smoke: `PKG01_CandidateSmoke`.
 
 The images below remain the manual evidence for `WIN-*` items such as the

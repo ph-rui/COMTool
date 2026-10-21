@@ -83,8 +83,8 @@
 |---|---|---|---|---|
 | TELNET-01 | 主机/端口/用户/别名 | P0 | 完成 | 设置页默认端口 23，保存 `telnet:{user}@{host}:{port}`，侧栏 Telnet 分组和连接状态；用户可留空以手动登录 |
 | TELNET-02 | Telnet 协议协商 | P0 | 完成 | IAC 解析与转义、TTYPE `XTERM-256COLOR`、NAWS 及 resize 更新、SGA/ECHO/BINARY 接受、未知选项/LINEMODE 拒绝；Linux 回环测试覆盖 |
-| TELNET-03 | 自动登录 | P0 | 完成 | 去掉 ANSI 后匹配末尾 `login`/`username`/`user` 和 `password` 提示，用户名/密码各发送一次；无匹配提示不发送；Linux Xvfb E2E 验证用户名自动登录和终端输入 |
-| TELNET-04 | 会话保存与记住密码 | P0 | 部分 | 独立 `telnetSessions`、稳定 key、`passwd_enc` 持久化和内存缓存；非 Windows 仅内存；Windows 实机 Telnet 记住密码重连待复核 |
+| TELNET-03 | 自动登录 | P0 | 完成 | 去掉 ANSI 后匹配末尾 `login`/`username`/`user` 和 `password` 提示，用户名/密码各发送一次；无匹配提示不发送；Linux Xvfb E2E 验证用户名自动登录和终端输入；Windows RDP 实机验证用户名/密码分阶段发送和 `PING`→`PONG` |
+| TELNET-04 | 会话保存与记住密码 | P0 | 完成 | 独立 `telnetSessions`、稳定 key、`passwd_enc` 持久化和内存缓存；非 Windows 仅内存；Windows 10 实机保存密码后 `passwd_enc` 长度 208、配置无明文，重启应用后由 DPAPI 密码自动重连成功；证据见 `docs/fixtures/phase1/telnet-windows-dpapi-2026-10-21.md` |
 | TELNET-05 | 分享/导入配置 | P1 | 完成 | 分享去除 `passwd_enc` 和未知字段，导入不写入密码；不读取 Python `config.json` |
 
 ## 6. TCP/UDP
