@@ -30,6 +30,8 @@ public partial class SessionSidebar : UserControl
 
     public bool HasOpenContextMenu => _contextMenu?.IsOpen == true;
 
+    public bool HasOpenNewSessionMenu => SidebarAddSessionButton.Flyout is { IsOpen: true };
+
     internal Border SessionListFrameControl => SessionListFrame;
 
     private void OnNewSessionMenuItemClick(object? sender, RoutedEventArgs e)

@@ -137,6 +137,63 @@ public sealed class SidebarHoverTests
         }
     }
 
+    [AvaloniaFact]
+    public void UI02_AddSessionHoverAndOpenMenuKeepSidebarVisible()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                var config = new ComtoolConfig();
+                config.SessionSidebar.Visible = true;
+                config.SessionSidebar.Width = 220;
+                env.SeedConfig(config);
+
+                window = new MainWindow { DataContext = new MainViewModel() };
+                window.Show();
+                window.StopPortTimerForTests();
+                window.StopSidebarHoverTimerForTests();
+                RunJobs(window);
+
+                var sidebar = window.FindControl<SessionSidebar>("Sidebar")!;
+                var add = sidebar.FindControl<Button>("SidebarAddSessionButton")!;
+                var addCenter = add.TranslatePoint(
+                    new Point(add.Bounds.Width / 2, add.Bounds.Height / 2),
+                    window);
+                Assert.NotNull(addCenter);
+
+                window.MouseMove(addCenter!.Value);
+                RunJobs(window);
+                window.CheckSidebarAutoHideForTests();
+                RunJobs(window);
+                Assert.True(sidebar.IsVisible);
+
+                var flyout = Assert.IsType<MenuFlyout>(add.Flyout);
+                flyout.ShowAt(add);
+                RunJobs(window);
+                Assert.True(sidebar.HasOpenNewSessionMenu);
+
+                // The menu opens to the right of the sidebar. Moving onto its
+                // items must not retract the panel and dismiss the menu.
+                window.MouseMove(new Point(700, 300));
+                window.CheckSidebarAutoHideForTests();
+                RunJobs(window);
+                Assert.True(sidebar.IsVisible);
+
+                flyout.Hide();
+                RunJobs(window);
+                Assert.False(sidebar.HasOpenNewSessionMenu);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
     private static void RunJobs(MainWindow window)
     {
         Dispatcher.UIThread.RunJobs();

@@ -2394,7 +2394,8 @@ public partial class MainWindow : Window
         var dx = _lastSessionPointerX - _lastSessionTimerX;
         _lastSessionTimerX = _lastSessionPointerX;
 
-        var inside = IsInSessionSidebarArea()
+        var inside = Sidebar.IsPointerOver
+            || IsInSessionSidebarArea()
             || SessionHandle.IsPointerOver
             || SessionHoverStrip.IsPointerOver
             || IsInSessionSidebarApproach();
@@ -2417,9 +2418,12 @@ public partial class MainWindow : Window
             return;
         }
 
-        // Do not collapse while dragging the splitter, selecting text, or using a
-        // context menu.
-        if (_windowPointerPressed || Sidebar.HasOpenContextMenu)
+        // Do not collapse while dragging the splitter, selecting text, or using
+        // a sidebar menu/flyout. The new-session flyout opens to the right of
+        // the sidebar, so moving onto its items must not retract the panel.
+        if (_windowPointerPressed
+            || Sidebar.HasOpenContextMenu
+            || Sidebar.HasOpenNewSessionMenu)
         {
             return;
         }
@@ -2774,13 +2778,20 @@ public partial class MainWindow : Window
         ShowConnectionSettings(null, kind);
     }
 
-    private async void OnSettingsClick(object? sender, RoutedEventArgs e)
+    private async void OnTabSettingsClick(object? sender, RoutedEventArgs e)
     {
-        if (DataContext is not MainViewModel { SelectedTab: { } tab })
+        if (sender is not Button { Tag: TerminalTab tab }
+            || DataContext is not MainViewModel viewModel)
         {
             return;
         }
 
+        viewModel.SelectedTab = tab;
+        await ShowTabSettingsAsync(tab);
+    }
+
+    private async Task ShowTabSettingsAsync(TerminalTab tab)
+    {
         if (tab.Kind == SessionKind.Local)
         {
             await ShowErrorAsync("This development terminal has no saved connection settings.");

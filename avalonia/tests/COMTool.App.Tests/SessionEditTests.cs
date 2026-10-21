@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using COMTool.App.Services;
 using COMTool.App.ViewModels;
 using COMTool.App.Views;
@@ -87,6 +88,74 @@ public sealed class SessionEditTests
                     settings.FindControl<TextBox>("TelnetHostBox")!.Text);
                 Assert.Equal("23", settings.FindControl<TextBox>("TelnetPortBox")!.Text);
                 Assert.Equal("root", settings.FindControl<TextBox>("TelnetUserBox")!.Text);
+            });
+        }
+        finally
+        {
+            settings?.Close();
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public void UI08_TabSettingsGearTargetsSelectedTab()
+    {
+        using var env = new TestEnvironment();
+        env.SeedConfig(new ComtoolConfig());
+        MainWindow? window = null;
+        ConnectionSettingsWindow? settings = null;
+        try
+        {
+            env.Run(() =>
+            {
+                var first = new TerminalTab
+                {
+                    Title = "First tab",
+                    SessionId = "first.example",
+                    Kind = SessionKind.Ssh,
+                    Content = new Border(),
+                };
+                var second = new TerminalTab
+                {
+                    Title = "Second tab",
+                    SessionId = "second.example",
+                    Kind = SessionKind.Ssh,
+                    Content = new Border(),
+                };
+                var viewModel = new MainViewModel();
+                window = new MainWindow { DataContext = viewModel };
+                window.Show();
+                window.StopPortTimerForTests();
+                window.StopSidebarHoverTimerForTests();
+                viewModel.AddTab(first);
+                viewModel.AddTab(second);
+                Dispatcher.UIThread.RunJobs();
+                window.UpdateLayout();
+                Dispatcher.UIThread.RunJobs();
+
+                var gears = window.GetVisualDescendants()
+                    .OfType<Button>()
+                    .Where(button => button.Name == "TabSettingsButton")
+                    .ToList();
+                Assert.Equal(2, gears.Count);
+                var firstGear = gears.Single(button =>
+                    ReferenceEquals(button.DataContext, first));
+                var secondGear = gears.Single(button =>
+                    ReferenceEquals(button.DataContext, second));
+                Assert.False(firstGear.IsVisible);
+                Assert.True(secondGear.IsVisible);
+                Assert.Contains(
+                    "settings",
+                    ToolTip.GetTip(secondGear)?.ToString(),
+                    StringComparison.OrdinalIgnoreCase);
+
+                secondGear.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Dispatcher.UIThread.RunJobs();
+
+                settings = window.SettingsWindowForTests;
+                Assert.NotNull(settings);
+                Assert.Equal("Second tab - Connection settings", settings.Title);
             });
         }
         finally
