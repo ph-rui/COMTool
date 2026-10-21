@@ -3,9 +3,9 @@
              xmlns:vm="using:COMTool.App.ViewModels"
              x:Class="COMTool.App.Views.SessionSidebar"
              x:DataType="vm:MainViewModel">
-  <Grid RowDefinitions="24,5,*" Margin="0,5,0,0">
+  <Grid RowDefinitions="28,5,*" Margin="0,5,0,0">
     <!-- Header mirrors session_sidebar.py: star + user + "User sessions". -->
-    <Grid Grid.Row="0" Margin="10,1,8,1" ColumnDefinitions="Auto,6,Auto,6,*">
+    <Grid Grid.Row="0" Margin="10,2,8,2" ColumnDefinitions="Auto,6,Auto,6,*,6,Auto">
       <TextBlock Grid.Column="0"
                  Text="&#xf005;"
                  FontFamily="{DynamicResource IconFontAwesome}"
@@ -21,6 +21,64 @@
       <TextBlock Grid.Column="4"
                  Classes="SidebarTitle"
                  Text="User sessions" />
+      <Button Grid.Column="6"
+              Name="SidebarAddSessionButton"
+              Classes="SidebarAddButton"
+              ToolTip.Tip="New session">
+        <Button.Flyout>
+          <MenuFlyout Placement="BottomEdgeAlignedRight">
+            <MenuItem Header="Serial" Tag="Serial" Click="OnNewSessionMenuItemClick">
+              <MenuItem.Icon>
+                <TextBlock Text="&#xf1e6;"
+                           FontFamily="{DynamicResource IconFontAwesome}"
+                           FontSize="14"
+                           Foreground="#43a047"
+                           VerticalAlignment="Center" />
+              </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Header="SSH" Tag="SSH" Click="OnNewSessionMenuItemClick">
+              <MenuItem.Icon>
+                <TextBlock Text="&#xf233;"
+                           FontFamily="{DynamicResource IconFontAwesome}"
+                           FontSize="14"
+                           Foreground="#1976d2"
+                           VerticalAlignment="Center" />
+              </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Header="Telnet" Tag="Telnet" Click="OnNewSessionMenuItemClick">
+              <MenuItem.Icon>
+                <TextBlock Text="&#xf120;"
+                           FontFamily="{DynamicResource IconFontAwesome}"
+                           FontSize="14"
+                           Foreground="#00897b"
+                           VerticalAlignment="Center" />
+              </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Header="TCP" Tag="TCP" Click="OnNewSessionMenuItemClick">
+              <MenuItem.Icon>
+                <TextBlock Text="&#xf0ac;"
+                           FontFamily="{DynamicResource IconFontAwesome}"
+                           FontSize="14"
+                           Foreground="#f57c00"
+                           VerticalAlignment="Center" />
+              </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Header="Local terminal" Tag="Local" Click="OnNewSessionMenuItemClick">
+              <MenuItem.Icon>
+                <TextBlock Text="&#xf108;"
+                           FontFamily="{DynamicResource IconFontAwesome}"
+                           FontSize="14"
+                           Foreground="#607d8b"
+                           VerticalAlignment="Center" />
+              </MenuItem.Icon>
+            </MenuItem>
+          </MenuFlyout>
+        </Button.Flyout>
+        <TextBlock Text="&#xf067;"
+                   FontFamily="{DynamicResource IconFontAwesome}"
+                   FontSize="13"
+                   Foreground="White" />
+      </Button>
     </Grid>
 
     <Grid Grid.Row="2" Margin="16,0,0,0">

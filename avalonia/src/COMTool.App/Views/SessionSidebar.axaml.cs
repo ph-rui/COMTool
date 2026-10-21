@@ -26,9 +26,19 @@ public partial class SessionSidebar : UserControl
 
     public event EventHandler<SessionItem>? RemoveRequested;
 
+    public event EventHandler<string>? NewSessionRequested;
+
     public bool HasOpenContextMenu => _contextMenu?.IsOpen == true;
 
     internal Border SessionListFrameControl => SessionListFrame;
+
+    private void OnNewSessionMenuItemClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem { Tag: string tag })
+        {
+            NewSessionRequested?.Invoke(this, tag);
+        }
+    }
 
     private void OnSessionTapped(object? sender, TappedEventArgs e)
     {

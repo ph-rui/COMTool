@@ -11,12 +11,13 @@ geometry. These are functional evidence images, not final pixel baselines.
 | `sidebar-auto-hide-850x500.png` | The sidebar auto-collapsed after the pointer moved into the content area; the left hover strip and manual handle remain available. |
 | `encoding-focus-850x500.png` | Selecting UTF-8 from the encoding drop-down returns keyboard focus to the terminal; `echo FOCUS-MOUSE` is accepted immediately. |
 | `version-focus-0.01-1280x800.png` | The title bar reports `COMTool v0.01`; after maximize, settings close, plugin-menu close, tab click and encoding selection, the terminal still accepts `echo ...` and Enter. |
-| `chrome-icons-centered-850x500.png` | The settings gear, plugin plus and functional arrow icons are centered inside their blue/transparent controls instead of sticking to the top-left corner; `echo ALIGN-OK` still works. |
+| `chrome-icons-centered-850x500.png` | Historical: the settings gear, plugin plus and functional arrow icons were centered inside their blue/transparent controls instead of sticking to the top-left corner; the functional arrow was removed on 2026-10-21. |
 | `window-size-restored-1000x650.png` | The window was resized to 1000x650, closed, and reopened at 1000x650; closing it while maximized still saved the previous normal size instead of the full-screen size. |
 | `about-version-0.01-1280x800.png` | The About dialog reports `v0.01` with the Beta config path and existing project links. |
 | `new-session-selector-linux.png` | The empty-state `+` menu now lists Serial, SSH, TCP and Local terminal; the Python plugin placeholders are gone. |
 | `titlebar-terminal-icon-850x500.png` | The title-bar/window icon is the deep-blue rounded terminal mark with a white `>_` prompt at a 28px display size; the bright outer rim that produced a white sawtooth fringe is gone. |
 | `new-session-icons-850x500.png` | The `+` flyout shows MobaXterm-style type icons: green plug (Serial), blue server (SSH), teal terminal (Telnet), orange network (TCP), slate desktop (Local terminal). |
+| `sidebar-add-session-850x500.png` | The `+` new-session button now lives at the right of the `User sessions` sidebar header; its flyout opens next to the sidebar with Serial, SSH, Telnet, TCP and Local terminal. The toolbar encoding selector remains, and the Functional arrow/panel is gone. |
 | `sessions-850x500.png` | Config-backed sidebar shows remembered SSH sessions and no tabs after restart. |
 | `two-tabs-850x500.png` | Multiple SSH tabs are open; `win-ssh` is selected, `local-ssh` is not. Sidebar status dots reflect open sessions. |
 | `switch-tab-850x500.png` | Clicking the `local-ssh` tab switches the terminal content back without reconnecting. |
@@ -33,7 +34,7 @@ geometry. These are functional evidence images, not final pixel baselines.
 | `main-light-1176x552.png` | Main window at the Python reference geometry: 36px tab bar, 9px terminal inset, 30px status bar, hidden native scrollbar. |
 | `connection-settings-serial-1176x552.png` | Serial settings panel with Python-matched field widths and editable baud rate. |
 | `connection-settings-ssh-1176x552.png` | SSH settings panel with key path, password and remember-password controls. |
-| `functional-panel-1176x552.png` | `Load config` / `Share config` functional panel opened from `arrow-right.png`. |
+| `functional-panel-1176x552.png` | Historical: `Load config` / `Share config` functional panel opened from `arrow-right.png`; the arrow and panel were removed on 2026-10-21. |
 | `titlebar-context-menu-1176x552.png` | Theme selector and About entry on the title-bar context menu. |
 | `dark-theme-menu-1176x552.png` | Live dark-theme switch; `skin` persists in the independent Beta config. |
 | `moba-keyword-highlighting-1176x552.png` | Error red, success green, warning yellow, IP magenta, and URL underline on a live SSH session; ANSI colors take precedence. |
@@ -72,9 +73,9 @@ geometry. These are functional evidence images, not final pixel baselines.
 
 `docs/testing/feature-test-matrix.md` now maps all parity rows, including the
 Telnet rows. The gate passes in `verify` and `package` phases on Linux, and the
-structure also passes for Windows/macOS. The suite is 232 tests:
+structure also passes for Windows/macOS. The suite is 234 tests:
 
-- Core 45, Connections 45, Terminal 11, ZMODEM 32, TestGate 49, App 50.
+- Core 45, Connections 45, Terminal 11, ZMODEM 32, TestGate 49, App 52.
 - Linux Xvfb E2E: `APP01_SmokeLaunchE2E`,
   `UI01_TitleBarDoubleClickMaximizeE2E`,
   `UI02_SidebarExpandsOnLaunchE2E`, `UI02_SidebarAutoHideE2E`,
