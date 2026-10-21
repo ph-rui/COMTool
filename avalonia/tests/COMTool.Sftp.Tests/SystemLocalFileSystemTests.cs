@@ -115,6 +115,31 @@ public sealed class SystemLocalFileSystemTests
     }
 
     [Fact]
+    public async Task ListingAFileIsNotADirectory()
+    {
+        var root = NewRoot();
+        try
+        {
+            var fs = new SystemLocalFileSystem();
+            var file = Path.Combine(root, "a.txt");
+            await File.WriteAllTextAsync(file, "hello");
+
+            // The transfer engine asks whether an entry is a directory by
+            // listing it, so a path that is a file has to look like a path
+            // that is not there.
+            var exception = await Assert.ThrowsAnyAsync<IOException>(
+                () => fs.ListAsync(file, CancellationToken.None));
+            Assert.True(
+                exception is FileNotFoundException or DirectoryNotFoundException,
+                $"A file path has to look like a path that is not there, but it was {exception.GetType().Name}.");
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task PermissionMapsToTheReadOnlyAttribute()
     {
         var root = NewRoot();

@@ -61,6 +61,39 @@ SESSIONS_TOGGLE_Y="${SESSIONS_TOGGLE_Y:-18}"
 SIDEBAR_PROBE_X="${SIDEBAR_PROBE_X:-200}"
 SIDEBAR_PROBE_Y="${SIDEBAR_PROBE_Y:-300}"
 
+# The SFTP drawer of an SSH tab. In the 1000x650 test window the drawer is
+# the bottom row of the session view: it starts at y=334 and is 260px high.
+# Its first row is the toolbar, its second row holds the two panes (the
+# remote one on the left, the local one on the right) and its last row
+# holds the status line. The coordinates below assume that the sidebar is
+# collapsed, because an expanded sidebar shifts the whole content 223px to
+# the right.
+SFTP_TOOLBAR_Y="${SFTP_TOOLBAR_Y:-352}"
+SFTP_UPLOAD_X="${SFTP_UPLOAD_X:-710}"
+SFTP_DOWNLOAD_X="${SFTP_DOWNLOAD_X:-784}"
+SFTP_REMOTE_PATH_X="${SFTP_REMOTE_PATH_X:-100}"
+SFTP_REMOTE_PATH_Y="${SFTP_REMOTE_PATH_Y:-424}"
+SFTP_LOCAL_PATH_X="${SFTP_LOCAL_PATH_X:-560}"
+SFTP_LOCAL_PATH_Y="${SFTP_LOCAL_PATH_Y:-424}"
+SFTP_REMOTE_ITEM_X="${SFTP_REMOTE_ITEM_X:-60}"
+SFTP_REMOTE_ITEM_Y="${SFTP_REMOTE_ITEM_Y:-460}"
+SFTP_LOCAL_ITEM_X="${SFTP_LOCAL_ITEM_X:-530}"
+SFTP_LOCAL_ITEM_Y="${SFTP_LOCAL_ITEM_Y:-460}"
+# The strip that asks what to do with a target that already exists. Its
+# background is a fixed light yellow, and the "Overwrite" button sits at
+# the right end of the first row of the strip.
+SFTP_CONFLICT_OVERWRITE_X="${SFTP_CONFLICT_OVERWRITE_X:-707}"
+SFTP_CONFLICT_OVERWRITE_Y="${SFTP_CONFLICT_OVERWRITE_Y:-501}"
+SFTP_CONFLICT_COLOR="${SFTP_CONFLICT_COLOR:-#fff4ce}"
+SFTP_CONFLICT_PROBE_X="${SFTP_CONFLICT_PROBE_X:-60}"
+SFTP_CONFLICT_PROBE_Y="${SFTP_CONFLICT_PROBE_Y:-485}"
+SFTP_CONFLICT_PROBE_W="${SFTP_CONFLICT_PROBE_W:-300}"
+SFTP_CONFLICT_PROBE_H="${SFTP_CONFLICT_PROBE_H:-25}"
+# The directory that the SFTP test writes into on the server. It lives in
+# the home of the user that runs the suite, because the SSH fixture runs
+# as the same user.
+SFTP_REMOTE_TEST_DIR="${SFTP_REMOTE_TEST_DIR:-$HOME/sftp01-e2e}"
+
 log() {
     local line
     line="[e2e $(date +%H:%M:%S)] $*"
@@ -445,6 +478,7 @@ LogLevel VERBOSE
 AllowUsers $SSH_USER
 PrintMotd no
 X11Forwarding no
+Subsystem sftp internal-sftp
 EOF
 
     log "Starting SSH fixture on 127.0.0.1:$SSH_PORT as $SSH_USER"
@@ -822,6 +856,12 @@ clear_input_line() {
     xdotool key --clearmodifiers ctrl+u >/dev/null 2>&1 || true
 }
 
+# Select the whole text of the focused text box, so that the next
+# characters replace it.
+select_all_text() {
+    xdotool key --clearmodifiers ctrl+a >/dev/null 2>&1 || true
+}
+
 click_sidebar_session() {
     click_window "$SIDEBAR_SESSION_X" "$SIDEBAR_SESSION_Y"
 }
@@ -856,6 +896,70 @@ window_pixel_is_dark() {
     g=$((16#${pixel:2:2}))
     b=$((16#${pixel:4:2}))
     ((r + g + b < 300))
+}
+
+# Read a region of the window and tell whether it holds the given color.
+# The picture is only used to wait for a strip that has a fixed background;
+# the result of a transfer is always checked on the disk.
+window_region_has_color() {
+    local hex="$1"
+    local x="$2"
+    local y="$3"
+    local w="$4"
+    local h="$5"
+    local geometry
+    local win_x
+    local win_y
+    local image="$TMP_ROOT/color-probe.png"
+    local colors
+
+    geometry="$(xdotool getwindowgeometry --shell "$WINDOW_ID" 2>/dev/null)" || return 2
+    win_x="$(printf '%s\n' "$geometry" | sed -n 's/^X=//p' | sed -n '1p')"
+    win_y="$(printf '%s\n' "$geometry" | sed -n 's/^Y=//p' | sed -n '1p')"
+    [[ "$win_x" =~ ^-?[0-9]+$ && "$win_y" =~ ^-?[0-9]+$ ]] || return 2
+
+    capture_screenshot "$image" || return 2
+    colors="$(convert "$image" -crop "${w}x${h}+$((win_x + x))+$((win_y + y))" +repage \
+        -unique-colors txt:- 2>/dev/null || true)"
+    printf '%s\n' "$colors" | grep -qi "${hex}"
+}
+
+# Wait until the given region of the window holds the given color.
+wait_for_window_color() {
+    local hex="$1"
+    local x="$2"
+    local y="$3"
+    local w="$4"
+    local h="$5"
+    local timeout_s="${6:-10}"
+    local attempt
+    local iterations=$((timeout_s * 4))
+
+    for ((attempt = 0; attempt < iterations; attempt++)); do
+        if window_region_has_color "$hex" "$x" "$y" "$w" "$h"; then
+            return 0
+        fi
+        sleep 0.25
+    done
+    return 1
+}
+
+# Wait until the SSH server wrote the given text into its log. The drawer
+# asks for the sftp subsystem as soon as an SSH tab is open.
+wait_for_sshd_log() {
+    local pattern="$1"
+    local timeout_s="${2:-20}"
+    local attempt
+    local iterations=$((timeout_s * 4))
+
+    for ((attempt = 0; attempt < iterations; attempt++)); do
+        if [[ -f "${SSH_FIXTURE_DIR:-}/sshd.log" ]] \
+            && grep -q -- "$pattern" "$SSH_FIXTURE_DIR/sshd.log" 2>/dev/null; then
+            return 0
+        fi
+        sleep 0.25
+    done
+    return 1
 }
 
 # Wait until the sidebar probe reports the collapsed (dark terminal) state.
@@ -1275,6 +1379,12 @@ cleanup() {
     stop_sshd || true
     stop_wm || true
     stop_xvfb || true
+
+    # The SFTP test writes into the home of the user that runs the
+    # suite. The directory has to go even when the test failed.
+    if [[ -n "${SFTP_REMOTE_TEST_DIR:-}" ]]; then
+        rm -rf -- "$SFTP_REMOTE_TEST_DIR"
+    fi
 
     if [[ -n "${TMP_ROOT:-}" ]]; then
         if ((status == 0)) && [[ "${KEEP_TEMP:-0}" != "1" ]]; then
