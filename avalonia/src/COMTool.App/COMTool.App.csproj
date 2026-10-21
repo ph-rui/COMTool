@@ -27,6 +27,7 @@
   <ItemGroup>
     <ProjectReference Include="..\COMTool.Core\COMTool.Core.csproj" />
     <ProjectReference Include="..\COMTool.Connections\COMTool.Connections.csproj" />
+    <ProjectReference Include="..\COMTool.Sftp\COMTool.Sftp.csproj" />
     <ProjectReference Include="..\COMTool.Terminal\COMTool.Terminal.csproj" />
     <ProjectReference Include="..\COMTool.Zmodem\COMTool.Zmodem.csproj" />
   </ItemGroup>
