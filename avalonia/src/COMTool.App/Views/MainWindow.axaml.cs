@@ -82,6 +82,7 @@ public partial class MainWindow : Window
             RoutingStrategies.Tunnel,
             handledEventsToo: true);
         Sidebar.SessionActivated += OnSessionActivated;
+        Sidebar.EditRequested += OnSessionEditRequested;
         Sidebar.RemoveRequested += OnSessionRemoveRequested;
         Opened += OnOpened;
     }
@@ -391,6 +392,23 @@ public partial class MainWindow : Window
                 : "Connect Failed";
             await ShowErrorAsync($"{action}\n{ex.Message}");
         }
+    }
+
+    private void OnSessionEditRequested(object? sender, SessionItem item)
+    {
+        if (item.Kind == SessionKind.Local || DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        var openTab = viewModel.FindTab(item.SessionId, item.Kind);
+        if (openTab is not null)
+        {
+            ShowConnectionSettings(openTab);
+            return;
+        }
+
+        ShowConnectionSettings(null, item.Kind, item.SessionId, item.Name);
     }
 
     private async void OnSessionRemoveRequested(object? sender, SessionItem item)
@@ -2363,6 +2381,8 @@ public partial class MainWindow : Window
 
     internal void StopSidebarHoverTimerForTests() => _sessionHoverTimer.Stop();
 
+    internal ConnectionSettingsWindow? SettingsWindowForTests => _settingsWindow;
+
     private void CheckSessionSidebarAutoHide()
     {
         if (!_sidebarVisible)
@@ -2760,7 +2780,11 @@ public partial class MainWindow : Window
         ShowConnectionSettings(tab);
     }
 
-    private void ShowConnectionSettings(TerminalTab? tab, SessionKind initialKind = SessionKind.Serial)
+    private void ShowConnectionSettings(
+        TerminalTab? tab,
+        SessionKind initialKind = SessionKind.Serial,
+        string? editSessionId = null,
+        string? editTitle = null)
     {
         if (_config is null)
         {
@@ -2781,7 +2805,9 @@ public partial class MainWindow : Window
             OpenTelnetFromSettingsAsync,
             OpenTcpFromSettingsAsync,
             ShowErrorAsync,
-            initialKind);
+            initialKind,
+            editSessionId,
+            editTitle);
         _settingsWindow = window;
         window.Closed += (_, _) =>
         {
@@ -3179,6 +3205,7 @@ public partial class MainWindow : Window
         _portTimer = null;
         SizeChanged -= OnWindowSizeChanged;
         Sidebar.SessionActivated -= OnSessionActivated;
+        Sidebar.EditRequested -= OnSessionEditRequested;
         Sidebar.RemoveRequested -= OnSessionRemoveRequested;
 
         foreach (var state in _detachedTabs.Values.ToList())

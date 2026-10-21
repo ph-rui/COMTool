@@ -17,11 +17,11 @@ internal sealed class TelnetAutoLogin
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex UserPrompt = new(
-        @"(?i)(?:^|[\r\n])\s*(?:>>?\s*)?(?:(?:please|enter|input|your)\s+)*(?:login(?:\s+as)?|login\s+(?:name|id)|user(?:\s*(?:name|id))?|account(?:\s*name)?|用户名|账号|登录名|登录|用户)\s*[:：][\s\x00]*\z",
+        @"(?i)(?:^|[\r\n])[^\r\n:]{0,80}?(?:>>?\s*)?(?:(?:please|enter|input|your)\s+)*(?:login(?:\s+as)?|login\s+(?:name|id)|user(?:\s*(?:name|id))?|account(?:\s*name)?|用户名|账号|登录名|登录|用户)\s*[:：][\s\x00]*\z",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex PasswordPrompt = new(
-        @"(?i)(?:^|[\r\n])\s*(?:>>?\s*)?(?:(?:please|enter|input|your)\s+)*(?:password|passwd|passphrase|passcode|pin|密码|口令)(?:\s+for\s+[^\r\n:]+)?\s*[:：][\s\x00]*\z",
+        @"(?i)(?:^|[\r\n])[^\r\n:]{0,80}?(?:>>?\s*)?(?:(?:please|enter|input|your)\s+)*(?:password|passwd|passphrase|passcode|pin|密码|口令)(?:\s+for\s+[^\r\n:]+)?\s*[:：][\s\x00]*\z",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private readonly string _user;
