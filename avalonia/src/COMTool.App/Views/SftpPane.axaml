@@ -18,8 +18,18 @@
         <Button Name="UpButton" Content="Up" Margin="0,0,4,0" Click="OnUpClick" />
         <Button Name="RefreshButton" Content="Refresh" Margin="0,0,8,0" Click="OnRefreshClick" />
         <Button Name="NewFolderButton" Content="New folder" Margin="0,0,4,0" Click="OnNewFolderClick" />
+        <TextBox Name="NewFolderNameBox"
+                 Width="110"
+                 Margin="0,0,8,0"
+                 PlaceholderText="new folder"
+                 TextChanged="OnNewFolderNameChanged" />
         <Button Name="DeleteButton" Content="Delete" Margin="0,0,4,0" Click="OnDeleteClick" />
         <Button Name="RenameButton" Content="Rename" Margin="0,0,4,0" Click="OnRenameClick" />
+        <TextBox Name="RenameNameBox"
+                 Width="110"
+                 Margin="0,0,8,0"
+                 PlaceholderText="new name"
+                 KeyDown="OnRenameNameKeyDown" />
         <Button Name="ChmodButton" Content="chmod" Margin="0,0,8,0" Click="OnChmodClick" />
         <Button Name="UploadButton" Content="Upload" Margin="0,0,4,0" Click="OnUploadClick" />
         <Button Name="DownloadButton" Content="Download" Margin="0,0,8,0" Click="OnDownloadClick" />
@@ -37,7 +47,7 @@
 
     <!-- The remote side on the left, the local side on the right. -->
     <Grid Grid.Row="1" ColumnDefinitions="*,*">
-      <Grid Grid.Column="0" RowDefinitions="Auto,*" Margin="0,0,2,0">
+      <Grid Name="RemotePaneGrid" Grid.Column="0" RowDefinitions="Auto,*" Margin="0,0,2,0">
         <TextBox Name="RemotePathBox"
                  Grid.Row="0"
                  Margin="3"
@@ -69,7 +79,7 @@
         </ListBox>
       </Grid>
 
-      <Grid Grid.Column="1" RowDefinitions="Auto,*">
+      <Grid Name="LocalPaneGrid" Grid.Column="1" RowDefinitions="Auto,*">
         <TextBox Name="LocalPathBox"
                  Grid.Row="0"
                  Margin="3"
