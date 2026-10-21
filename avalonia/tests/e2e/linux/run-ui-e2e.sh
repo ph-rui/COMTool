@@ -28,6 +28,7 @@ E2E_TESTS=(
     UI05_TabSwitchTypingBothDirections
     TERM15_DoubleClickMaximizeE2E
     TELNET01_AutoLoginE2E
+    TELNET02_RestartStoppedSessionE2E
 )
 SSH_TEST_IDS=(
     UI01_TitleBarDoubleClickMaximizeE2E
@@ -41,6 +42,7 @@ SSH_TEST_IDS=(
 )
 TELNET_TEST_IDS=(
     TELNET01_AutoLoginE2E
+    TELNET02_RestartStoppedSessionE2E
 )
 
 usage() {
@@ -476,6 +478,46 @@ run_telnet01_auto_login() {
     pass "$test_id"
 }
 
+run_telnet02_restart_stopped_session() {
+    local test_id="TELNET02_RestartStoppedSessionE2E"
+    local login_marker="$TELNET_LOGIN_MARKER"
+    local dropped_marker="$TELNET_DROPPED_MARKER"
+    local reconnect_marker="$TELNET_RECONNECT_MARKER"
+
+    log "Running $test_id"
+    # TELNET01 may already have opened the session. Open it only when it is
+    # missing so this test also runs on its own.
+    if [[ ! -s "$login_marker" ]]; then
+        click_sidebar_session \
+            || fail "$test_id" "could not click the saved Telnet row"
+        if ! wait_for_file_content "$login_marker" "TELNET_E2E_READY" 20; then
+            fail "$test_id" "Telnet auto-login did not send the user name after login:"
+        fi
+    fi
+
+    # The fixture hangs up on DROP. The tab has to stay open with the
+    # MobaXterm-style stopped screen instead of closing the app.
+    click_window 600 300 || fail "$test_id" "could not focus the Telnet terminal"
+    type_text "DROP" || fail "$test_id" "could not type DROP into the Telnet terminal"
+    press_enter || fail "$test_id" "could not submit the Telnet terminal input"
+    if ! wait_for_file_content "$dropped_marker" "TELNET_DROPPED" 15; then
+        fail "$test_id" "the Telnet fixture did not drop the connection"
+    fi
+
+    # Click the terminal to guarantee focus, then press R without Enter. If
+    # the stopped-screen handler is missing this is delivered to the dead PTY
+    # and no second connection appears.
+    click_window 600 300 || fail "$test_id" "could not focus the stopped Telnet terminal"
+    type_text "r" || fail "$test_id" "could not press R"
+
+    if ! wait_for_file_content "$reconnect_marker" "TELNET_RECONNECT_READY" 20; then
+        fail "$test_id" "R did not restart the stopped Telnet session"
+    fi
+    log "Telnet reconnect marker: $reconnect_marker"
+
+    pass "$test_id"
+}
+
 run_ssh11_restart_stopped_session() {
     local test_id="SSH11_RestartStoppedSessionE2E"
     local old_pid
@@ -773,6 +815,9 @@ if [[ -n "$TELNET_TEST_ID" ]]; then
 
     if matches_filter "TELNET01_AutoLoginE2E"; then
         run_telnet01_auto_login
+    fi
+    if matches_filter "TELNET02_RestartStoppedSessionE2E"; then
+        run_telnet02_restart_stopped_session
     fi
 
     close_app_window "$TELNET_TEST_ID"

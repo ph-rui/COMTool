@@ -60,7 +60,7 @@ public sealed class SessionStoppedTests
     }
 
     [AvaloniaFact]
-    public void SSH11_NonSshProcessExitKeepsDefaultMessage()
+    public void SSH11_TcpProcessExitKeepsDefaultMessage()
     {
         var terminal = new TerminalControl { Process = string.Empty };
         var window = new Window
@@ -101,6 +101,94 @@ public sealed class SessionStoppedTests
             pty.Dispose();
             Dispatcher.UIThread.RunJobs();
         }
+    }
+
+    [AvaloniaFact]
+    public void TELNET06_StoppedMessageMatchesMobaxterm()
+    {
+        var terminal = new TerminalControl { Process = string.Empty };
+        var window = new Window
+        {
+            Width = 800,
+            Height = 600,
+            Content = terminal,
+        };
+        var pty = new InMemoryPty();
+        var tab = TestTab.Create(terminal, kind: SessionKind.Telnet);
+        try
+        {
+            window.Show();
+            terminal.ApplyTemplate();
+            var behavior = new SessionStoppedBehavior(
+                terminal,
+                tab,
+                () => { },
+                () => Task.CompletedTask,
+                () => Task.CompletedTask);
+            behavior.Attach();
+
+            var exited = false;
+            terminal.ProcessExited += (_, _) => exited = true;
+            terminal.AttachConnection(pty);
+            pty.Close();
+
+            WaitUntil(() => exited, "terminal process exit");
+            Dispatcher.UIThread.RunJobs();
+
+            var text = TerminalTranscript.Capture(terminal);
+            Assert.Contains("Session stopped", text, StringComparison.Ordinal);
+            Assert.Contains("Press <return> to exit tab", text, StringComparison.Ordinal);
+            Assert.Contains("Press R to restart session", text, StringComparison.Ordinal);
+            Assert.Contains("Press S to save terminal output to file", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("Process exited with code", text, StringComparison.Ordinal);
+        }
+        finally
+        {
+            window.Close();
+            pty.Dispose();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public void TELNET06_StoppedKeysInvokeMobaxtermActions()
+    {
+        var terminal = new TerminalControl { Process = string.Empty };
+        var tab = TestTab.Create(terminal, kind: SessionKind.Telnet);
+        var closed = 0;
+        var restarted = 0;
+        var saved = 0;
+        var behavior = new SessionStoppedBehavior(
+            terminal,
+            tab,
+            () => closed++,
+            () =>
+            {
+                restarted++;
+                return Task.CompletedTask;
+            },
+            () =>
+            {
+                saved++;
+                return Task.CompletedTask;
+            });
+        behavior.Attach();
+
+        // A live session keeps the keys for the terminal.
+        Press(terminal, Key.R);
+        Press(terminal, Key.S);
+        Press(terminal, Key.Enter);
+        Assert.Equal(0, restarted);
+        Assert.Equal(0, saved);
+        Assert.Equal(0, closed);
+
+        tab.IsSessionStopped = true;
+        Press(terminal, Key.R);
+        Press(terminal, Key.S);
+        Press(terminal, Key.Enter);
+        Assert.Equal(1, restarted);
+        Assert.Equal(1, saved);
+        Assert.Equal(1, closed);
     }
 
     [AvaloniaFact]
