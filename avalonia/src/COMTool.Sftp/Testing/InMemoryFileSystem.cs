@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace COMTool.Sftp.Testing;
 
 /// <summary>
@@ -6,11 +8,11 @@ namespace COMTool.Sftp.Testing;
 /// build a remote tree and a local tree and compare them.
 /// </summary>
 /// <remarks>
-/// The double mirrors the behaviour of the real SSH.NET client that the
-/// transfer engine has to survive: listing a symbolic link to a directory
-/// returns the children of the target, but the paths are rebuilt from the
-/// requested path, and listing a symbolic link to a file fails the way the
-/// server fails.
+/// The double behaves like a real file system. A symbolic link is followed
+/// in every part of a path, so the file behind "/tree/link/inner.txt" is
+/// the file behind "/tree/real/inner.txt". Listing a directory that is
+/// reached through a link returns the children of the target, but the
+/// paths are rebuilt from the requested path, the way the server does it.
 /// </remarks>
 public sealed class InMemoryFileSystem : ISftpFileSystem, ILocalFileSystem
 {
@@ -43,6 +45,7 @@ public sealed class InMemoryFileSystem : ISftpFileSystem, ILocalFileSystem
 
     public InMemoryFileSystem(string homeDirectory)
     {
+        EnsureRoot();
         HomeDirectory = SftpPath.Normalize(homeDirectory);
         AddDirectory(HomeDirectory);
     }
@@ -56,15 +59,17 @@ public sealed class InMemoryFileSystem : ISftpFileSystem, ILocalFileSystem
     {
         var normalized = SftpPath.Normalize(path);
         EnsureParentDirectory(normalized);
-        var node = new Node
+        var parent = ResolveParent(normalized);
+        var physical = Join(parent.Path, SftpPath.GetFileName(normalized));
+
+        _nodes[physical] = new Node
         {
-            Path = normalized,
+            Path = physical,
             Kind = NodeKind.File,
-            Content = System.Text.Encoding.UTF8.GetBytes(content ?? string.Empty),
+            Content = Encoding.UTF8.GetBytes(content ?? string.Empty),
         };
 
-        _nodes[normalized] = node;
-        Link(normalized, SftpPath.GetParent(normalized));
+        Link(physical, parent.Path);
     }
 
     /// <summary>
@@ -73,13 +78,22 @@ public sealed class InMemoryFileSystem : ISftpFileSystem, ILocalFileSystem
     public void AddDirectory(string path)
     {
         var normalized = SftpPath.Normalize(path);
-        EnsureParentDirectory(normalized);
-        if (!_nodes.ContainsKey(normalized))
+        if (normalized == SftpPath.Root)
         {
-            _nodes[normalized] = new Node { Path = normalized, Kind = NodeKind.Directory };
+            EnsureRoot();
+            return;
         }
 
-        Link(normalized, SftpPath.GetParent(normalized));
+        EnsureParentDirectory(normalized);
+        var parent = ResolveParent(normalized);
+        var physical = Join(parent.Path, SftpPath.GetFileName(normalized));
+
+        if (!_nodes.ContainsKey(physical))
+        {
+            _nodes[physical] = new Node { Path = physical, Kind = NodeKind.Directory };
+        }
+
+        Link(physical, parent.Path);
     }
 
     /// <summary>
@@ -90,14 +104,17 @@ public sealed class InMemoryFileSystem : ISftpFileSystem, ILocalFileSystem
     {
         var normalized = SftpPath.Normalize(path);
         EnsureParentDirectory(normalized);
-        _nodes[normalized] = new Node
+        var parent = ResolveParent(normalized);
+        var physical = Join(parent.Path, SftpPath.GetFileName(normalized));
+
+        _nodes[physical] = new Node
         {
-            Path = normalized,
+            Path = physical,
             Kind = NodeKind.Symlink,
             Target = targetPath,
         };
 
-        Link(normalized, SftpPath.GetParent(normalized));
+        Link(physical, parent.Path);
     }
 
     /// <summary>
@@ -105,15 +122,9 @@ public sealed class InMemoryFileSystem : ISftpFileSystem, ILocalFileSystem
     /// </summary>
     public string? ReadFile(string path)
     {
-        var normalized = SftpPath.Normalize(path);
-        if (!_nodes.TryGetValue(normalized, out var node))
-        {
-            return null;
-        }
-
-        var resolved = Resolve(node);
-        return resolved.Kind == NodeKind.File
-            ? System.Text.Encoding.UTF8.GetString(resolved.Content)
+        var node = ResolvePath(SftpPath.Normalize(path));
+        return node is not null && node.Kind == NodeKind.File
+            ? Encoding.UTF8.GetString(node.Content)
             : null;
     }
 
@@ -122,7 +133,7 @@ public sealed class InMemoryFileSystem : ISftpFileSystem, ILocalFileSystem
     /// </summary>
     public bool HasEntry(string path)
     {
-        return _nodes.ContainsKey(SftpPath.Normalize(path));
+        return ResolvePath(SftpPath.Normalize(path)) is not null;
     }
 
     public Task<IReadOnlyList<SftpEntry>> ListAsync(string path, CancellationToken cancellationToken)
@@ -130,7 +141,12 @@ public sealed class InMemoryFileSystem : ISftpFileSystem, ILocalFileSystem
         cancellationToken.ThrowIfCancellationRequested();
 
         var requested = SftpPath.Normalize(path);
-        var node = Resolve(RequireNode(requested));
+        var node = ResolvePath(requested);
+        if (node is null)
+        {
+            throw new DirectoryNotFoundException($"The path '{requested}' was not found.");
+        }
+
         if (node.Kind != NodeKind.Directory)
         {
             throw new FileNotFoundException(
@@ -161,15 +177,15 @@ public sealed class InMemoryFileSystem : ISftpFileSystem, ILocalFileSystem
         cancellationToken.ThrowIfCancellationRequested();
 
         var normalized = SftpPath.Normalize(path);
-        var resolved = Resolve(RequireNode(normalized));
-        if (resolved.Kind != NodeKind.File)
+        var node = ResolvePath(normalized);
+        if (node is null || node.Kind != NodeKind.File)
         {
             throw new FileNotFoundException(
                 $"The path '{normalized}' is not a file.",
                 normalized);
         }
 
-        return Task.FromResult<Stream>(new MemoryStream(resolved.Content, writable: false));
+        return Task.FromResult<Stream>(new MemoryStream(node.Content, writable: false));
     }
 
     public Task<Stream> OpenWriteAsync(string path, CancellationToken cancellationToken)
@@ -178,11 +194,14 @@ public sealed class InMemoryFileSystem : ISftpFileSystem, ILocalFileSystem
 
         var normalized = SftpPath.Normalize(path);
         EnsureParentDirectory(normalized);
-        if (!_nodes.TryGetValue(normalized, out var node))
+        var parent = ResolveParent(normalized);
+        var physical = Join(parent.Path, SftpPath.GetFileName(normalized));
+
+        if (!_nodes.TryGetValue(physical, out var node))
         {
-            node = new Node { Path = normalized, Kind = NodeKind.File };
-            _nodes[normalized] = node;
-            Link(normalized, SftpPath.GetParent(normalized));
+            node = new Node { Path = physical, Kind = NodeKind.File };
+            _nodes[physical] = node;
+            Link(physical, parent.Path);
         }
 
         return Task.FromResult<Stream>(new CommitStream(bytes => node.Content = bytes));
@@ -199,14 +218,25 @@ public sealed class InMemoryFileSystem : ISftpFileSystem, ILocalFileSystem
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var source = SftpPath.Normalize(oldPath);
-        var target = SftpPath.Normalize(newPath);
-        RequireNode(source);
+        var source = ResolvePath(SftpPath.Normalize(oldPath));
+        if (source is null)
+        {
+            throw new FileNotFoundException(
+                $"The path '{oldPath}' was not found.",
+                oldPath);
+        }
 
-        var moved = new List<string> { source };
+        var normalizedTarget = SftpPath.Normalize(newPath);
+        EnsureParentDirectory(normalizedTarget);
+        var newParent = ResolveParent(normalizedTarget);
+        var physical = Join(newParent.Path, SftpPath.GetFileName(normalizedTarget));
+
+        var sourcePath = source.Path;
+        var moved = new List<string> { sourcePath };
         foreach (var key in _nodes.Keys.ToList())
         {
-            if (key.Length > source.Length && key.StartsWith(source + "/", StringComparison.Ordinal))
+            if (key.Length > sourcePath.Length
+                && key.StartsWith(sourcePath + "/", StringComparison.Ordinal))
             {
                 moved.Add(key);
             }
@@ -215,7 +245,7 @@ public sealed class InMemoryFileSystem : ISftpFileSystem, ILocalFileSystem
         foreach (var key in moved.OrderByDescending(value => value.Length))
         {
             var current = _nodes[key];
-            var newKey = target + key[source.Length..];
+            var newKey = physical + key[sourcePath.Length..];
             _nodes.Remove(key);
             _nodes[newKey] = new Node
             {
@@ -230,7 +260,7 @@ public sealed class InMemoryFileSystem : ISftpFileSystem, ILocalFileSystem
             Unlink(key);
         }
 
-        Link(target, SftpPath.GetParent(target));
+        Link(physical, newParent.Path);
         return Task.CompletedTask;
     }
 
@@ -238,16 +268,19 @@ public sealed class InMemoryFileSystem : ISftpFileSystem, ILocalFileSystem
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var normalized = SftpPath.Normalize(path);
-        var node = RequireNode(normalized);
-        if (node.Kind == NodeKind.Directory)
+        var node = ResolvePath(SftpPath.Normalize(path));
+        if (node is null)
         {
-            throw new InvalidOperationException(
-                $"The path '{normalized}' is a directory.");
+            throw new FileNotFoundException($"The path '{path}' was not found.", path);
         }
 
-        _nodes.Remove(normalized);
-        Unlink(normalized);
+        if (node.Kind == NodeKind.Directory)
+        {
+            throw new InvalidOperationException($"The path '{path}' is a directory.");
+        }
+
+        _nodes.Remove(node.Path);
+        Unlink(node.Path);
         return Task.CompletedTask;
     }
 
@@ -255,24 +288,27 @@ public sealed class InMemoryFileSystem : ISftpFileSystem, ILocalFileSystem
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var normalized = SftpPath.Normalize(path);
-        var node = RequireNode(normalized);
-        if (node.Kind != NodeKind.Directory)
+        var node = ResolvePath(SftpPath.Normalize(path));
+        if (node is null)
         {
-            throw new InvalidOperationException(
-                $"The path '{normalized}' is not a directory.");
+            throw new DirectoryNotFoundException($"The path '{path}' was not found.");
         }
 
+        if (node.Kind != NodeKind.Directory)
+        {
+            throw new InvalidOperationException($"The path '{path}' is not a directory.");
+        }
+
+        var directoryPath = node.Path;
         var descendants = _nodes.Keys
-            .Where(key => key.Length > normalized.Length
-                && key.StartsWith(normalized + "/", StringComparison.Ordinal))
+            .Where(key => key.Length > directoryPath.Length
+                && key.StartsWith(directoryPath + "/", StringComparison.Ordinal))
             .OrderByDescending(value => value.Length)
             .ToList();
 
         if (!recursive && descendants.Count > 0)
         {
-            throw new InvalidOperationException(
-                $"The directory '{normalized}' is not empty.");
+            throw new InvalidOperationException($"The directory '{path}' is not empty.");
         }
 
         foreach (var key in descendants)
@@ -281,8 +317,8 @@ public sealed class InMemoryFileSystem : ISftpFileSystem, ILocalFileSystem
             Unlink(key);
         }
 
-        _nodes.Remove(normalized);
-        Unlink(normalized);
+        _nodes.Remove(directoryPath);
+        Unlink(directoryPath);
         return Task.CompletedTask;
     }
 
@@ -290,7 +326,12 @@ public sealed class InMemoryFileSystem : ISftpFileSystem, ILocalFileSystem
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var node = RequireNode(SftpPath.Normalize(path));
+        var node = ResolvePath(SftpPath.Normalize(path));
+        if (node is null)
+        {
+            throw new FileNotFoundException($"The path '{path}' was not found.", path);
+        }
+
         node.Mode = octalMode & 0b111_111_111;
         return Task.CompletedTask;
     }
@@ -298,51 +339,87 @@ public sealed class InMemoryFileSystem : ISftpFileSystem, ILocalFileSystem
     public Task<bool> ExistsAsync(string path, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(_nodes.ContainsKey(SftpPath.Normalize(path)));
+        return Task.FromResult(ResolvePath(SftpPath.Normalize(path)) is not null);
     }
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 
-    private Node RequireNode(string path)
-    {
-        if (!_nodes.TryGetValue(path, out var node))
-        {
-            throw new DirectoryNotFoundException($"The path '{path}' was not found.");
-        }
-
-        return node;
-    }
-
     /// <summary>
-    /// Follows a chain of symbolic links. A link that points at nothing
-    /// resolves to itself.
+    /// Resolves a path to the node it points at. Every component of the
+    /// path is followed, the way a real file system follows a symbolic link
+    /// that is part of a longer path.
     /// </summary>
-    private Node Resolve(Node node)
+    private Node? ResolvePath(string path, int hops = 0)
     {
-        var current = node;
-        for (var hop = 0; hop < MaxSymlinkHops && current.Kind == NodeKind.Symlink; hop++)
-        {
-            var target = current.Target ?? string.Empty;
-            var resolved = target.StartsWith('/')
-                ? SftpPath.Normalize(target)
-                : SftpPath.Normalize(SftpPath.Combine(SftpPath.GetParent(current.Path), target));
+        var current = string.Empty;
+        var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
 
-            if (!_nodes.TryGetValue(resolved, out var next))
+        for (var index = 0; index < segments.Length; index++)
+        {
+            var segment = segments[index];
+            if (segment == ".")
             {
-                return current;
+                continue;
             }
 
-            current = next;
+            if (segment == "..")
+            {
+                current = SftpPath.GetParent(current);
+                continue;
+            }
+
+            var candidate = Join(current, segment);
+            if (!_nodes.TryGetValue(candidate, out var node))
+            {
+                return null;
+            }
+
+            if (node.Kind != NodeKind.Symlink)
+            {
+                current = candidate;
+                continue;
+            }
+
+            if (hops >= MaxSymlinkHops)
+            {
+                return null;
+            }
+
+            var target = node.Target ?? string.Empty;
+            var resolved = target.StartsWith('/')
+                ? SftpPath.Normalize(target)
+                : SftpPath.Normalize(SftpPath.Combine(SftpPath.GetParent(candidate), target));
+
+            var rest = segments.Skip(index + 1);
+            var combined = rest.Any()
+                ? resolved + "/" + string.Join("/", rest)
+                : resolved;
+
+            return ResolvePath(combined, hops + 1);
         }
 
-        return current;
+        var last = current.Length == 0 ? SftpPath.Root : current;
+        return _nodes.TryGetValue(last, out var result) ? result : null;
     }
 
-    private IReadOnlyList<string> ChildrenOf(string directoryPath)
+    private Node ResolveParent(string path)
     {
-        return _children.TryGetValue(directoryPath, out var children)
-            ? children.ToList()
-            : Array.Empty<string>();
+        var parentPath = SftpPath.GetParent(path);
+        var parent = ResolvePath(parentPath);
+        if (parent is null || parent.Kind != NodeKind.Directory)
+        {
+            throw new DirectoryNotFoundException($"The path '{parentPath}' was not found.");
+        }
+
+        return parent;
+    }
+
+    private void EnsureRoot()
+    {
+        if (!_nodes.ContainsKey(SftpPath.Root))
+        {
+            _nodes[SftpPath.Root] = new Node { Path = SftpPath.Root, Kind = NodeKind.Directory };
+        }
     }
 
     private void EnsureParentDirectory(string path)
@@ -353,7 +430,27 @@ public sealed class InMemoryFileSystem : ISftpFileSystem, ILocalFileSystem
             return;
         }
 
-        AddDirectory(parent);
+        if (ResolvePath(parent) is null)
+        {
+            AddDirectory(parent);
+        }
+    }
+
+    private IReadOnlyList<string> ChildrenOf(string directoryPath)
+    {
+        return _children.TryGetValue(directoryPath, out var children)
+            ? children.ToList()
+            : Array.Empty<string>();
+    }
+
+    private static string Join(string directory, string name)
+    {
+        if (directory.Length == 0)
+        {
+            return "/" + name;
+        }
+
+        return directory.EndsWith('/') ? directory + name : directory + "/" + name;
     }
 
     private void Link(string path, string parent)
