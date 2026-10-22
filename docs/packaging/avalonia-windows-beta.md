@@ -296,7 +296,7 @@ glued together:
 - a Windows process smoke test started the deployed working copy, observed it
   `Running` and `Responding=True`, then stopped it; this does not replace the
   interactive GUI check;
-- the automated suite passes 335 tests and Linux Xvfb E2E passes 12/12;
+- the automated suite passes 336 tests and Linux Xvfb E2E passes 12/12;
 - the headless layout regression
   `SessionEditTests.UI08_TabSettingsGearKeepsClearanceFromCloseButton` measures
   the real button gap, and the cropped screenshot
