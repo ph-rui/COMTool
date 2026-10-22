@@ -286,15 +286,27 @@ else
     record_step app-tests "SKIP (build failed)"
 fi
 
-# Produce the test list consumed by TestGate. This remains solution-wide so
+# Produce the test list consumed by TestGate. It covers every test project, so
 # headless App tests are included alongside core/terminal/connections tests.
 # Stale build outputs must never be listed after a failed build.
 test_list="$results/test-list.txt"
 if ((build_ok)); then
     printf '[verify] test-list\n'
+    # A solution-wide list runs the test projects in parallel and their output
+    # is merged into one pipe, which glues the end of one project's name to the
+    # start of the next one. Every project is listed on its own so each test
+    # name keeps its own line.
     set +e
-    "$dotnet" test "$sln" -c Release --no-build --list-tests >"$test_list" 2>&1
-    list_status=$?
+    : >"$test_list"
+    list_status=0
+    for entry in "${unit_projects[@]}"; do
+        "$dotnet" test "${entry#*:}" -c Release --no-build --list-tests >>"$test_list" 2>&1
+        status=$?
+        ((status == 0)) || list_status=$status
+    done
+    "$dotnet" test "$app_tests_project" -c Release --no-build --list-tests >>"$test_list" 2>&1
+    status=$?
+    ((status == 0)) || list_status=$status
     set -e
     app_test_count=0
     if [[ -s "$test_list" ]]; then
