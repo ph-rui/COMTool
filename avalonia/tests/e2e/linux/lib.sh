@@ -406,12 +406,29 @@ find_free_tcp_port() {
     return 1
 }
 
+# Count the interactive shells of the fixture. A plain socket count would also
+# match the SFTP subsystem channel that an SSH tab opens next to its shell, so
+# a single session would look like two and SSH06 would type into the wrong
+# terminal.
 ssh_connection_count() {
-    local output
+    local listener="${SSHD_PID:-}"
+    local child
+    local count=0
+
+    if [[ -n "$listener" ]]; then
+        while read -r child; do
+            [[ -n "$child" ]] || continue
+            if ps -o args= -p "$child" 2>/dev/null | grep -q '@pts/'; then
+                count=$((count + 1))
+            fi
+        done <<<"$(descendant_pids "$listener" || true)"
+        printf '%s\n' "$count"
+        return 0
+    fi
 
     [[ -n "${SSH_PORT:-}" ]] || { printf '0\n'; return 0; }
-    output="$(ss -Htn state established "sport = :$SSH_PORT" 2>/dev/null || true)"
-    printf '%s\n' "$output" | sed '/^[[:space:]]*$/d' | wc -l
+    ss -Htn state established "sport = :$SSH_PORT" 2>/dev/null \
+        | sed '/^[[:space:]]*$/d' | wc -l
 }
 
 wait_for_ssh_connections() {
@@ -898,6 +915,34 @@ window_pixel_is_dark() {
     ((r + g + b < 300))
 }
 
+# The same test over a small square instead of one pixel. Terminal glyphs are
+# light on the dark background, so a single pixel can land on a letter and
+# report an expanded sidebar. The mean of a square stays dark as long as the
+# terminal is visible.
+window_region_is_dark() {
+    local rel_x="$1"
+    local rel_y="$2"
+    local width="${3:-24}"
+    local height="${4:-24}"
+    local geometry
+    local win_x
+    local win_y
+    local image="$TMP_ROOT/region-probe.png"
+    local mean
+
+    geometry="$(xdotool getwindowgeometry --shell "$WINDOW_ID" 2>/dev/null)" || return 2
+    win_x="$(printf '%s\n' "$geometry" | sed -n 's/^X=//p' | sed -n '1p')"
+    win_y="$(printf '%s\n' "$geometry" | sed -n 's/^Y=//p' | sed -n '1p')"
+    [[ "$win_x" =~ ^-?[0-9]+$ && "$win_y" =~ ^-?[0-9]+$ ]] || return 2
+
+    capture_screenshot "$image" || return 2
+    mean="$(convert "$image" \
+        -crop "${width}x${height}+$((win_x + rel_x))+$((win_y + rel_y))" \
+        +repage -colorspace Gray -format "%[fx:mean]" info: 2>/dev/null)"
+    [[ "$mean" =~ ^[0-9]+(\.[0-9]+)?$ ]] || return 2
+    awk -v mean="$mean" 'BEGIN { exit !(mean < 0.45) }'
+}
+
 # Read a region of the window and tell whether it holds the given color.
 # The picture is only used to wait for a strip that has a fixed background;
 # the result of a transfer is always checked on the disk.
@@ -1015,7 +1060,7 @@ collapse_sidebar_for_tabs() {
     local probe_status
 
     for ((attempt = 0; attempt < 4; attempt++)); do
-        if window_pixel_is_dark "$SIDEBAR_PROBE_X" "$SIDEBAR_PROBE_Y"; then
+        if window_region_is_dark "$SIDEBAR_PROBE_X" "$SIDEBAR_PROBE_Y"; then
             probe_status=0
         else
             probe_status=$?
@@ -1031,7 +1076,7 @@ collapse_sidebar_for_tabs() {
         sleep 0.3
     done
 
-    window_pixel_is_dark "$SIDEBAR_PROBE_X" "$SIDEBAR_PROBE_Y"
+    window_region_is_dark "$SIDEBAR_PROBE_X" "$SIDEBAR_PROBE_Y"
 }
 
 click_first_tab() {
