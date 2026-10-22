@@ -23,6 +23,7 @@ geometry. These are functional evidence images, not final pixel baselines.
 | `tab-settings-gear-850x500.png` | Hovering the selected tab reveals the connection-settings gear inside that tab, next to its close button, so it is unambiguous which tab it edits; unselected tabs never show the gear. |
 | `tab-gear-close-spacing.png` | 5x crop of the hovered tab strip: the connection-settings gear and the close button keep 16px of clearance between them, so the two icons no longer look glued together. |
 | `session-connecting-feedback-1000x650.png` | Clicking an unreachable Telnet session immediately shows a blue `Connecting...` state on that sidebar row instead of leaving the click with no feedback; the state clears when the attempt succeeds, fails, or is cancelled. |
+| `sftp-drawer-1000x650.png` | The SFTP drawer inside an SSH tab at 1000x650: the remote pane on the left and the local pane on the right, both path boxes, the toolbar with New folder / Delete / Rename / chmod / Upload / Download, the `Up` and `Refresh` buttons and the status line `1 uploaded` after an upload of the local `upload.txt`. Captured by `SFTP01_BrowserTransferE2E`. |
 | `sessions-850x500.png` | Config-backed sidebar shows remembered SSH sessions and no tabs after restart. |
 | `two-tabs-850x500.png` | Multiple SSH tabs are open; `win-ssh` is selected, `local-ssh` is not. Sidebar status dots reflect open sessions. |
 | `switch-tab-850x500.png` | Clicking the `local-ssh` tab switches the terminal content back without reconnecting. |
@@ -79,17 +80,17 @@ geometry. These are functional evidence images, not final pixel baselines.
 ## Automated test-gate coverage (2026-10-21)
 
 `docs/testing/feature-test-matrix.md` now maps all parity rows, including the
-Telnet rows. The gate passes in `verify` and `package` phases on Linux, and the
-structure also passes for Windows/macOS. The suite is 242 tests:
+Telnet and SFTP rows. The gate passes in `verify` and `package` phases on Linux,
+and the structure also passes for Windows/macOS. The suite is 335 tests:
 
-- Core 45, Connections 45, Terminal 11, ZMODEM 32, TestGate 49, App 60.
+- Core 45, SFTP 40, Connections 55, Terminal 11, ZMODEM 32, TestGate 49, App 103.
 - Linux Xvfb E2E: `APP01_SmokeLaunchE2E`,
   `UI01_TitleBarDoubleClickMaximizeE2E`,
   `UI02_SidebarExpandsOnLaunchE2E`, `UI02_SidebarAutoHideE2E`,
   `E2E01_OpenSshSession`, `SSH11_RestartStoppedSessionE2E`,
   `SSH06_MultipleConnectionsE2E`, `UI05_TabSwitchTypingBothDirections`,
-  `TERM15_DoubleClickMaximizeE2E`, `TELNET01_AutoLoginE2E`,
-  `TELNET02_RestartStoppedSessionE2E`.
+  `TERM15_DoubleClickMaximizeE2E`, `SFTP01_BrowserTransferE2E`,
+  `TELNET01_AutoLoginE2E`, `TELNET02_RestartStoppedSessionE2E`.
 - Candidate package smoke: `PKG01_CandidateSmoke`.
 
 The images below remain the manual evidence for `WIN-*` items such as the
