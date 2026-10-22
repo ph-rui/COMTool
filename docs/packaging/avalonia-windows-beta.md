@@ -379,6 +379,31 @@ This was a direct executable deployment over the existing working and desktop
 copies, not a formal packaged release. No new candidate zip was created or
 signed off for this build.
 
+A follow-up direct deployment on 2026-10-22 replaced both copies with commit
+`f2a5119`, which redesigned the SFTP panel to match MobaXterm: a single remote
+list (no local pane), an icon-only toolbar with Chinese hover tooltips,
+Chinese sortable column headers (名称 / 大小 (KB) / 最后修改 / 所有权限,
+directories always first), an inline prompt row for new-folder/rename, and
+picker-driven transfers (system file dialog for upload, folder dialog for
+download):
+
+- size: 175,141,708 bytes;
+- SHA256: `8E413C1A94A791FDE68CE83E14BB494EE5C82943927551B82E71090A019C7CE0`;
+- both remote copies matched that hash via `Get-FileHash`
+  (`WORK_SHA256` = `DESKTOP_SHA256` = source hash);
+- no `COMTool-Avalonia.exe.bak-*` files were created (`BAK_COUNT=0`);
+- a Windows process smoke test started the deployed working copy, observed it
+  `Running` and `Responding=True`, then stopped it;
+- the automated suite passes 349 tests (App 117) and Linux Xvfb E2E passes
+  12/12; `SFTP01_BrowserTransferE2E` now drives the upload and download
+  through the scripted pickers (`COMTOOL_E2E_PICK_FILES` /
+  `COMTOOL_E2E_PICK_FOLDER`) and waits for the path box's focus ring before
+  typing, so the keystrokes can no longer leak into the terminal;
+- the Linux fixture `docs/fixtures/phase1/sftp-pane-single.png` supersedes
+  `sftp-panel-1000x650.png` (the dual-pane layout); interactive Windows
+  confirmation of the icon toolbar and Chinese tooltips (`WIN-23`) remains
+  pending.
+
 This was a direct executable deployment over the existing working and desktop
 copies, not a formal packaged release. No new candidate zip was created or
 signed off for this build.
