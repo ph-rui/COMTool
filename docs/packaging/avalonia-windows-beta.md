@@ -333,6 +333,31 @@ This was a direct executable deployment over the existing working and desktop
 copies, not a formal packaged release. No new candidate zip was created or
 signed off for this build.
 
+A later direct deployment on 2026-10-22 replaced both copies with commit
+`f2c8d75`, which adds the embedded SFTP drawer to SSH session tabs (dual
+remote/local panes, transfer queue, conflict prompt, per-session collapsed
+state and height) and disables the upload/download buttons while a transfer is
+running:
+
+- size: 175,129,420 bytes;
+- SHA256: `DFC7ED2E861D047CB65DD2DE90F53C74483692854AB74CA3A858AB10D33C8218`;
+- deployed over SSH (`scp` to `C:\Users\zhangrui\comtool-win-build\COMTool.App-sftp.exe`
+  plus a PowerShell deploy script); both remote copies matched the source hash
+  via `Get-FileHash` (`WORK_SHA256` = `DESKTOP_SHA256` = source hash);
+- no `COMTool-Avalonia.exe.bak-*` files were created (`BAK_COUNT=0`);
+- a Windows process smoke test started the deployed working copy, observed it
+  `Running` and `Responding=True`, then stopped it, and left no running
+  instances; this does not replace the interactive GUI check;
+- the automated suite passes 336 tests (App 104, including the SFTP drawer,
+  transfer-engine and transfer-guard tests) and Linux Xvfb E2E passes 12/12
+  (including `SFTP01_BrowserTransferE2E`);
+- interactive Windows confirmation of the SFTP drawer against a real SSH server
+  (`WIN-23` in `docs/testing/manual-acceptance.md`) remains pending.
+
+This was a direct executable deployment over the existing working and desktop
+copies, not a formal packaged release. No new candidate zip was created or
+signed off for this build.
+
 The previously packaged release zip is 74,795,557 bytes with SHA256:
 
 ```text
