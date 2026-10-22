@@ -433,6 +433,37 @@ This was a direct executable deployment over the existing working and desktop
 copies, not a formal packaged release. No new candidate zip was created or
 signed off for this build.
 
+A follow-up direct deployment on 2026-10-22 replaced both copies with commit
+`5230b76`, addressing two user requests from annotated screenshots:
+(1) the per-tab connection-settings gear is gone (each tab keeps only its
+status dot, title and close button; connection settings stay reachable via
+the sidebar right-click `Edit session`), and (2) pressing R on a stopped
+session now shows an indeterminate "Restarting..." progress bar in the status
+row while reconnecting; when the attempt still fails, a "重连失败" dialog asks
+继续重启 (retry) / 不重连 (give up) — retrying re-enters the restart flow,
+giving up (or closing the dialog) keeps the stopped screen; wired identically
+for SSH and Telnet:
+
+- size: 175,137,612 bytes;
+- SHA256: `9A2F32822A28272EDA9341B1A6687DDB9AAB44B82C07CC42D83232FB8F356CF6`;
+- both remote copies matched that hash via `Get-FileHash`
+  (`WORK_SHA256` = `DESKTOP_SHA256` = source hash);
+- no `COMTool-Avalonia.exe.bak-*` files were created (`BAK_COUNT=0`);
+- a Windows process smoke test started the deployed working copy, observed it
+  `Running` and `Responding=True`, then stopped it;
+- the automated suite passes 351 tests (App 119) and Linux Xvfb E2E passes
+  13/13; new headless coverage: `RestartProgressTests` (the restart
+  progress state machine and both dialog branches) and the extended
+  `TELNET06_FailedRestartKeepsStoppedSessionAndAllowsRetry`, which drives a
+  real failed Telnet restart through the dialog (不重连, then R again,
+  继续重启, which fails and asks a third time, then 不重连);
+- interactive Windows confirmation of the removed gear, the restart progress
+  bar and the 继续重启/不重连 dialog (`WIN-23`) remains pending.
+
+This was a direct executable deployment over the existing working and desktop
+copies, not a formal packaged release. No new candidate zip was created or
+signed off for this build.
+
 The previously packaged release zip is 74,795,557 bytes with SHA256:
 
 ```text
