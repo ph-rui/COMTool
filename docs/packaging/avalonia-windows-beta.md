@@ -408,6 +408,31 @@ This was a direct executable deployment over the existing working and desktop
 copies, not a formal packaged release. No new candidate zip was created or
 signed off for this build.
 
+A follow-up direct deployment on 2026-10-22 replaced both copies with commit
+`4bb8ac5`, addressing the user's review of the single-pane panel on Windows:
+the inline prompt row (new folder / rename) is now a loud full-width blue bar
+with a bold label and 确定/取消 buttons instead of a subtle strip, and the
+tab-strip toggle is now a self-explaining "SFTP" chip (folder icon + label,
+matching the encoding combo's height) with Chinese tooltips (展开/收起 SFTP 面板):
+
+- size: 175,141,708 bytes;
+- SHA256: `C8B9BFE09268E59D3F5DB28EE7F41E9C6F02B3A7DCA2145B8C21E7A3254A4CF9`;
+- both remote copies matched that hash via `Get-FileHash`
+  (`WORK_SHA256` = `DESKTOP_SHA256` = source hash);
+- no `COMTool-Avalonia.exe.bak-*` files were created (`BAK_COUNT=0`);
+- a Windows process smoke test started the deployed working copy, observed it
+  `Running` and `Responding=True`, then stopped it;
+- the automated suite passes 349 tests (App 117) and Linux Xvfb E2E passes
+  13/13; the new `SFTP02_FileManagementE2E` drives + (new folder) / rename /
+  two-step delete through the real UI against the fixture sshd;
+- the toggle chip moved left in the tab strip (e2e coordinate 873 -> 858);
+  interactive Windows confirmation of the chip and the prompt row
+  (`WIN-23`) remains pending.
+
+This was a direct executable deployment over the existing working and desktop
+copies, not a formal packaged release. No new candidate zip was created or
+signed off for this build.
+
 The previously packaged release zip is 74,795,557 bytes with SHA256:
 
 ```text
