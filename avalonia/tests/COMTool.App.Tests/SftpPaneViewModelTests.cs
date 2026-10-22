@@ -116,7 +116,6 @@ public sealed class SftpPaneViewModelTests
         await viewModel.LoadAsync(CancellationToken.None);
 
         Assert.Equal(RemoteHome, viewModel.RemotePath);
-        Assert.Equal(LocalHome, viewModel.LocalPath);
         Assert.Equal(new[] { "a.txt", "b.txt" }, viewModel.RemoteEntries.Select(entry => entry.Name));
     }
 
@@ -250,31 +249,131 @@ public sealed class SftpPaneViewModelTests
     }
 
     [AvaloniaFact]
-    public async Task UploadsTheSelectedLocalEntries()
+    public async Task UploadsTheFilesOfTheSystemDialog()
     {
         var (viewModel, remote, local) = NewViewModel();
         local.AddFile("/local/a.txt", "hello");
         await viewModel.LoadAsync(CancellationToken.None);
 
-        viewModel.SelectedLocalEntry = viewModel.LocalEntries.Single(entry => entry.Name == "a.txt");
-        await viewModel.UploadAsync();
+        await viewModel.UploadAsync(new[] { "/local/a.txt" });
 
         Assert.Equal("hello", remote.ReadFile("/remote/a.txt"));
         Assert.Contains("1 uploaded", viewModel.StatusMessage);
     }
 
     [AvaloniaFact]
-    public async Task DownloadsTheSelectedRemoteEntries()
+    public async Task DownloadTakesTheMarkedEntryIntoTheChosenDirectory()
     {
         var (viewModel, remote, local) = NewViewModel();
         remote.AddFile("/remote/b.txt", "world");
         await viewModel.LoadAsync(CancellationToken.None);
 
         viewModel.SelectedRemoteEntry = viewModel.RemoteEntries.Single(entry => entry.Name == "b.txt");
-        await viewModel.DownloadAsync();
+        await viewModel.DownloadAsync("/local");
 
         Assert.Equal("world", local.ReadFile("/local/b.txt"));
         Assert.Contains("1 downloaded", viewModel.StatusMessage);
+    }
+
+    [AvaloniaFact]
+    public async Task UploadNeedsNoSelectionButDownloadDoes()
+    {
+        var (viewModel, remote, _) = NewViewModel();
+        remote.AddFile("/remote/a.txt", "a");
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        // The files of an upload come from the dialog, so no entry of the
+        // remote list has to be marked.
+        Assert.True(viewModel.CanUpload);
+        Assert.False(viewModel.CanDownload);
+
+        viewModel.SelectedRemoteEntry = viewModel.RemoteEntries.First();
+        Assert.True(viewModel.CanUpload);
+        Assert.True(viewModel.CanDownload);
+
+        viewModel.SelectedRemoteEntry = null;
+        Assert.False(viewModel.CanDownload);
+    }
+
+    [AvaloniaFact]
+    public async Task SortsByNameByDefaultAndTurnsTheOrderAround()
+    {
+        var (viewModel, remote, _) = NewViewModel();
+        remote.AddFile("/remote/b.txt", "b");
+        remote.AddFile("/remote/a.txt", "a");
+        remote.AddFile("/remote/c.txt", "c");
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        Assert.Equal(SftpSortColumn.Name, viewModel.SortColumn);
+        Assert.False(viewModel.SortDescending);
+        Assert.Equal(new[] { "a.txt", "b.txt", "c.txt" }, viewModel.RemoteEntries.Select(entry => entry.Name));
+        Assert.Equal("\u25b2", viewModel.NameSortGlyph);
+
+        viewModel.SortBy(SftpSortColumn.Name);
+
+        Assert.True(viewModel.SortDescending);
+        Assert.Equal(new[] { "c.txt", "b.txt", "a.txt" }, viewModel.RemoteEntries.Select(entry => entry.Name));
+        Assert.Equal("\u25bc", viewModel.NameSortGlyph);
+    }
+
+    [AvaloniaFact]
+    public async Task SortsBySizeAndKeepsTheDirectoriesFirst()
+    {
+        var (viewModel, remote, _) = NewViewModel();
+        remote.AddDirectory("/remote/dir");
+        remote.AddFile("/remote/small.txt", "a");
+        remote.AddFile("/remote/large.txt", new string('x', 4096));
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        viewModel.SortBy(SftpSortColumn.Size);
+
+        Assert.Equal(SftpSortColumn.Size, viewModel.SortColumn);
+        Assert.Equal(
+            new[] { "dir", "small.txt", "large.txt" },
+            viewModel.RemoteEntries.Select(entry => entry.Name));
+        Assert.Equal("\u25b2", viewModel.SizeSortGlyph);
+        Assert.Equal(string.Empty, viewModel.NameSortGlyph);
+    }
+
+    [AvaloniaFact]
+    public async Task SortsByModifiedTimeAndPermissions()
+    {
+        var (viewModel, remote, _) = NewViewModel();
+        remote.AddFile("/remote/old.txt", "a");
+        remote.AddFile("/remote/new.txt", "b");
+        remote.SetLastWriteTimeUtc("/remote/old.txt", new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        remote.SetLastWriteTimeUtc("/remote/new.txt", new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        viewModel.SortBy(SftpSortColumn.Modified);
+
+        Assert.Equal(new[] { "old.txt", "new.txt" }, viewModel.RemoteEntries.Select(entry => entry.Name));
+
+        viewModel.SortBy(SftpSortColumn.Modified);
+
+        Assert.Equal(new[] { "new.txt", "old.txt" }, viewModel.RemoteEntries.Select(entry => entry.Name));
+        Assert.Equal("\u25bc", viewModel.ModifiedSortGlyph);
+
+        viewModel.SortBy(SftpSortColumn.Permissions);
+
+        Assert.Equal(SftpSortColumn.Permissions, viewModel.SortColumn);
+        Assert.Equal("\u25b2", viewModel.PermissionsSortGlyph);
+    }
+
+    [AvaloniaFact]
+    public async Task SortingKeepsTheMarkedEntry()
+    {
+        var (viewModel, remote, _) = NewViewModel();
+        remote.AddFile("/remote/a.txt", "a");
+        remote.AddFile("/remote/b.txt", "b");
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        viewModel.SelectedRemoteEntry = viewModel.RemoteEntries.Single(entry => entry.Name == "a.txt");
+
+        viewModel.SortBy(SftpSortColumn.Name);
+
+        Assert.NotNull(viewModel.SelectedRemoteEntry);
+        Assert.Equal("a.txt", viewModel.SelectedRemoteEntry!.Name);
     }
 
     [AvaloniaFact]
@@ -301,12 +400,10 @@ public sealed class SftpPaneViewModelTests
         local.AddFile("/local/a.txt", "new");
         await viewModel.LoadAsync(CancellationToken.None);
 
-        viewModel.SelectedLocalEntry =
-            viewModel.LocalEntries.Single(entry => entry.Name == "a.txt");
         viewModel.SelectedRemoteEntry =
             viewModel.RemoteEntries.Single(entry => entry.Name == "a.txt");
 
-        var upload = viewModel.UploadAsync();
+        var upload = viewModel.UploadAsync(new[] { "/local/a.txt" });
         await WaitUntil(() => viewModel.IsConflictVisible, "ask about the conflict");
 
         // The spec disables Upload and Download while a transfer runs: two
@@ -317,9 +414,9 @@ public sealed class SftpPaneViewModelTests
         Assert.False(viewModel.CanDownload);
         Assert.False(viewModel.CanTransfer);
 
-        var secondUpload = viewModel.UploadAsync();
+        var secondUpload = viewModel.UploadAsync(new[] { "/local/a.txt" });
         Assert.True(secondUpload.IsCompletedSuccessfully);
-        var secondDownload = viewModel.DownloadAsync();
+        var secondDownload = viewModel.DownloadAsync("/local");
         Assert.True(secondDownload.IsCompletedSuccessfully);
 
         viewModel.ResolveConflict(SftpConflictAction.Overwrite);
@@ -336,8 +433,7 @@ public sealed class SftpPaneViewModelTests
         local.AddFile("/local/a.txt", "new");
         await viewModel.LoadAsync(CancellationToken.None);
 
-        viewModel.SelectedLocalEntry = viewModel.LocalEntries.Single(entry => entry.Name == "a.txt");
-        var upload = viewModel.UploadAsync();
+        var upload = viewModel.UploadAsync(new[] { "/local/a.txt" });
 
         await WaitUntil(() => viewModel.IsConflictVisible, "ask about the conflict");
         Assert.Contains("a (1).txt", viewModel.ConflictRenameText);
@@ -360,8 +456,7 @@ public sealed class SftpPaneViewModelTests
         await viewModel.LoadAsync(CancellationToken.None);
 
         viewModel.ApplyToAll = true;
-        viewModel.SelectedLocalEntry = viewModel.LocalEntries.Single(entry => entry.Name == "batch");
-        var upload = viewModel.UploadAsync();
+        var upload = viewModel.UploadAsync(new[] { "/local/batch" });
 
         await WaitUntil(() => viewModel.IsConflictVisible, "ask about the first conflict");
         viewModel.ResolveConflict(SftpConflictAction.Overwrite);
@@ -381,14 +476,13 @@ public sealed class SftpPaneViewModelTests
         await viewModel.LoadAsync(CancellationToken.None);
 
         viewModel.NeverAskAgain = true;
-        viewModel.SelectedLocalEntry = viewModel.LocalEntries.Single(entry => entry.Name == "a.txt");
-        var first = viewModel.UploadAsync();
+        var first = viewModel.UploadAsync(new[] { "/local/a.txt" });
 
         await WaitUntil(() => viewModel.IsConflictVisible, "ask about the conflict");
         viewModel.ResolveConflict(SftpConflictAction.Overwrite);
         await first.WaitAsync(TimeSpan.FromSeconds(10));
 
-        var second = viewModel.UploadAsync();
+        var second = viewModel.UploadAsync(new[] { "/local/a.txt" });
         await second.WaitAsync(TimeSpan.FromSeconds(10));
 
         Assert.Equal("new", remote.ReadFile("/remote/a.txt"));
@@ -404,8 +498,7 @@ public sealed class SftpPaneViewModelTests
         var viewModel = new SftpPaneViewModel(() => new FailingRemoteFileSystem(remote), local);
         await viewModel.LoadAsync(CancellationToken.None);
 
-        viewModel.SelectedLocalEntry = viewModel.LocalEntries.Single(entry => entry.Name == "a.txt");
-        await viewModel.UploadAsync();
+        await viewModel.UploadAsync(new[] { "/local/a.txt" });
 
         Assert.Contains("failed", viewModel.StatusMessage);
     }
@@ -419,8 +512,7 @@ public sealed class SftpPaneViewModelTests
         var viewModel = new SftpPaneViewModel(() => remote, new SlowLocalFileSystem(local, 20));
         await viewModel.LoadAsync(CancellationToken.None);
 
-        viewModel.SelectedLocalEntry = viewModel.LocalEntries.Single(entry => entry.Name == "big.bin");
-        var upload = viewModel.UploadAsync();
+        var upload = viewModel.UploadAsync(new[] { "/local/big.bin" });
 
         await Task.Delay(60);
         viewModel.CancelTransfer();

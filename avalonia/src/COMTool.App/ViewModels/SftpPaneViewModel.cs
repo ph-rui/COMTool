@@ -6,9 +6,23 @@ using CommunityToolkit.Mvvm.ComponentModel;
 namespace COMTool.App.ViewModels;
 
 /// <summary>
-/// The state of the SFTP drawer of one SSH session: the listing of the
-/// remote side and of the local side, the transfers and the questions
-/// that a transfer asks.
+/// The order in which the remote list is shown, set by the column
+/// headers.
+/// </summary>
+public enum SftpSortColumn
+{
+    Name,
+    Size,
+    Modified,
+    Permissions,
+}
+
+/// <summary>
+/// The state of the SFTP panel of one SSH session: the listing of the
+/// remote side, the transfers and the questions that a transfer asks.
+/// The panel has one pane, like the MobaXterm side panel; the local side of
+/// an upload or a download comes from a system dialog and is not listed
+/// here.
 /// </summary>
 public sealed partial class SftpPaneViewModel : ObservableObject
 {
@@ -24,30 +38,27 @@ public sealed partial class SftpPaneViewModel : ObservableObject
     private TaskCompletionSource<SftpConflictDecision>? _conflictCompletion;
     private SftpConflictDecision? _transferDecision;
     private SftpConflictDecision? _sessionDecision;
+    private IReadOnlyList<SftpEntry> _remoteListing = Array.Empty<SftpEntry>();
 
     private bool _isBusy;
     private bool _isTransferring;
+    private bool _hasRemoteError;
     private string _statusMessage = string.Empty;
     private double _transferProgress;
     private bool _isConflictVisible;
     private string _conflictMessage = string.Empty;
-    private bool _hasRemoteError;
     private double _paneWidth = DefaultPaneWidth;
+    private SftpSortColumn _sortColumn = SftpSortColumn.Name;
+    private bool _sortDescending;
 
     [ObservableProperty]
     private string _remotePath = string.Empty;
-
-    [ObservableProperty]
-    private string _localPath = string.Empty;
 
     [ObservableProperty]
     private bool _isExpanded;
 
     [ObservableProperty]
     private SftpEntry? _selectedRemoteEntry;
-
-    [ObservableProperty]
-    private SftpEntry? _selectedLocalEntry;
 
     [ObservableProperty]
     private bool _followSymbolicLinks = true;
@@ -65,14 +76,15 @@ public sealed partial class SftpPaneViewModel : ObservableObject
     private bool _neverAskAgain;
 
     /// <summary>
-    /// Creates the view model of one drawer. The factory is asked for the
-    /// remote side when the drawer loads, so that creating the view model
+    /// Creates the view model of one panel. The factory is asked for the
+    /// remote side when the panel loads, so that creating the view model
     /// touches no network.
     /// </summary>
     /// <param name="remoteFactory">Hands out the remote file system.</param>
     /// <param name="local">
-    /// The local side. When it is left out the real file system of the
-    /// machine is used.
+    /// The local file system that reads the files of an upload and writes
+    /// the files of a download. When it is left out the real file system
+    /// of the machine is used.
     /// </param>
     public SftpPaneViewModel(Func<ISftpFileSystem> remoteFactory, ILocalFileSystem? local = null)
     {
@@ -81,14 +93,10 @@ public sealed partial class SftpPaneViewModel : ObservableObject
     }
 
     /// <summary>
-    /// The content of the remote directory.
+    /// The content of the remote directory, in the order of the column
+    /// headers.
     /// </summary>
     public ObservableCollection<SftpEntry> RemoteEntries { get; } = new();
-
-    /// <summary>
-    /// The content of the local directory.
-    /// </summary>
-    public ObservableCollection<SftpEntry> LocalEntries { get; } = new();
 
     /// <summary>
     /// The width of the panel in the window. It is kept when the panel is
@@ -108,6 +116,51 @@ public sealed partial class SftpPaneViewModel : ObservableObject
     }
 
     /// <summary>
+    /// The column that the list is ordered by.
+    /// </summary>
+    public SftpSortColumn SortColumn
+    {
+        get => _sortColumn;
+        private set
+        {
+            if (SetProperty(ref _sortColumn, value))
+            {
+                OnPropertyChanged(nameof(NameSortGlyph));
+                OnPropertyChanged(nameof(SizeSortGlyph));
+                OnPropertyChanged(nameof(ModifiedSortGlyph));
+                OnPropertyChanged(nameof(PermissionsSortGlyph));
+            }
+        }
+    }
+
+    /// <summary>
+    /// True when the list is ordered from the largest value to the
+    /// smallest.
+    /// </summary>
+    public bool SortDescending
+    {
+        get => _sortDescending;
+        private set
+        {
+            if (SetProperty(ref _sortDescending, value))
+            {
+                OnPropertyChanged(nameof(NameSortGlyph));
+                OnPropertyChanged(nameof(SizeSortGlyph));
+                OnPropertyChanged(nameof(ModifiedSortGlyph));
+                OnPropertyChanged(nameof(PermissionsSortGlyph));
+            }
+        }
+    }
+
+    public string NameSortGlyph => SortColumn == SftpSortColumn.Name ? DirectionGlyph() : string.Empty;
+
+    public string SizeSortGlyph => SortColumn == SftpSortColumn.Size ? DirectionGlyph() : string.Empty;
+
+    public string ModifiedSortGlyph => SortColumn == SftpSortColumn.Modified ? DirectionGlyph() : string.Empty;
+
+    public string PermissionsSortGlyph => SortColumn == SftpSortColumn.Permissions ? DirectionGlyph() : string.Empty;
+
+    /// <summary>
     /// True when the remote side could not be reached. The panel then
     /// offers the retry button.
     /// </summary>
@@ -118,7 +171,7 @@ public sealed partial class SftpPaneViewModel : ObservableObject
     }
 
     /// <summary>
-    /// True while the drawer reads or writes something.
+    /// True while the panel reads or writes something.
     /// </summary>
     public bool IsBusy
     {
@@ -146,25 +199,23 @@ public sealed partial class SftpPaneViewModel : ObservableObject
     /// <summary>
     /// True when a transfer can be started.
     /// </summary>
-    public bool CanTransfer =>
-        !IsTransferring && (SelectedRemoteEntry is not null || SelectedLocalEntry is not null);
+    public bool CanTransfer => !IsTransferring && SelectedRemoteEntry is not null;
 
     /// <summary>
-    /// True when an upload can be started. An upload takes the entries of
-    /// the local side, so a local entry has to be marked and no transfer
-    /// may be running: two transfers would share one client.
+    /// True when an upload can be started. The files of an upload come
+    /// from the system dialog, so no selection is needed; two transfers
+    /// would share one client, so only one may run.
     /// </summary>
-    public bool CanUpload => !IsTransferring && SelectedLocalEntry is not null;
+    public bool CanUpload => !IsTransferring;
 
     /// <summary>
-    /// True when a download can be started. A download takes the entries of
-    /// the remote side, so a remote entry has to be marked and no transfer
-    /// may be running: two transfers would share one client.
+    /// True when a download can be started. A download takes the marked
+    /// entry of the remote list and no transfer may be running.
     /// </summary>
     public bool CanDownload => !IsTransferring && SelectedRemoteEntry is not null;
 
     /// <summary>
-    /// The last thing that happened, shown under the panes.
+    /// The last thing that happened, shown under the list.
     /// </summary>
     public string StatusMessage
     {
@@ -200,7 +251,7 @@ public sealed partial class SftpPaneViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Loads both sides of the panel. A remote that cannot be reached
+    /// Loads the remote side of the panel. A remote that cannot be reached
     /// leaves the panel usable and tells the reason in the status line.
     /// </summary>
     public async Task LoadAsync(CancellationToken cancellationToken)
@@ -213,14 +264,12 @@ public sealed partial class SftpPaneViewModel : ObservableObject
             _remote = remote;
 
             RemotePath = remote.HomeDirectory;
-            LocalPath = _local.HomeDirectory;
 
             await RefreshRemoteAsync();
-            await RefreshLocalAsync();
 
             HasRemoteError = false;
 
-            if (StatusMessage.Length > 0)
+            if (StatusMessage.Length > 0 && StatusMessage.StartsWith("SFTP unavailable", StringComparison.Ordinal))
             {
                 StatusMessage = string.Empty;
             }
@@ -256,8 +305,7 @@ public sealed partial class SftpPaneViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Loads both sides of the drawer again, after a failure of the
-    /// remote side.
+    /// Loads the remote side again, after a failure.
     /// </summary>
     public async Task RetryAsync()
     {
@@ -278,7 +326,8 @@ public sealed partial class SftpPaneViewModel : ObservableObject
         try
         {
             var entries = await remote.ListAsync(RemotePath, CancellationToken.None);
-            ApplyEntries(RemoteEntries, entries);
+            _remoteListing = entries;
+            ApplyEntries();
         }
         catch (Exception ex)
         {
@@ -287,19 +336,22 @@ public sealed partial class SftpPaneViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Reads the content of the local directory again.
+    /// Orders the list by the given column. A second click on the same
+    /// column turns the order around.
     /// </summary>
-    public async Task RefreshLocalAsync()
+    public void SortBy(SftpSortColumn column)
     {
-        try
+        if (SortColumn == column)
         {
-            var entries = await _local.ListAsync(LocalPath, CancellationToken.None);
-            ApplyEntries(LocalEntries, entries);
+            SortDescending = !SortDescending;
         }
-        catch (Exception ex)
+        else
         {
-            StatusMessage = $"Listing failed: {ex.Message}";
+            SortColumn = column;
+            SortDescending = false;
         }
+
+        ApplyEntries();
     }
 
     /// <summary>
@@ -337,20 +389,6 @@ public sealed partial class SftpPaneViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Goes into the directory of the local entry.
-    /// </summary>
-    public async Task EnterLocalAsync(SftpEntry entry)
-    {
-        if (entry is null || !entry.IsDirectory)
-        {
-            return;
-        }
-
-        LocalPath = entry.Path;
-        await RefreshLocalAsync();
-    }
-
-    /// <summary>
     /// Goes to the parent of the remote directory. The root is not left.
     /// </summary>
     public async Task GoUpRemoteAsync()
@@ -363,21 +401,6 @@ public sealed partial class SftpPaneViewModel : ObservableObject
 
         RemotePath = parent;
         await RefreshRemoteAsync();
-    }
-
-    /// <summary>
-    /// Goes to the parent of the local directory.
-    /// </summary>
-    public async Task GoUpLocalAsync()
-    {
-        var parent = Path.GetDirectoryName(LocalPath);
-        if (string.IsNullOrEmpty(parent))
-        {
-            return;
-        }
-
-        LocalPath = parent;
-        await RefreshLocalAsync();
     }
 
     /// <summary>
@@ -488,31 +511,32 @@ public sealed partial class SftpPaneViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Sends the selected local entry to the remote side.
+    /// Sends the given local files into the directory that the panel
+    /// shows. The files come from the system dialog of the upload button.
     /// </summary>
-    public async Task UploadAsync()
+    public async Task UploadAsync(IReadOnlyList<string> localPaths)
     {
-        var entry = SelectedLocalEntry;
-        if (IsTransferring || entry is null)
+        if (IsTransferring || localPaths.Count == 0)
         {
             return;
         }
 
-        await RunTransferAsync(SftpTransferDirection.Upload, entry.Path, RemotePath);
+        await RunTransferAsync(SftpTransferDirection.Upload, localPaths, RemotePath);
     }
 
     /// <summary>
-    /// Takes the selected remote entry to the local side.
+    /// Takes the selected remote entry into the given local directory.
+    /// The directory comes from the system dialog of the download button.
     /// </summary>
-    public async Task DownloadAsync()
+    public async Task DownloadAsync(string targetDirectory)
     {
         var entry = SelectedRemoteEntry;
-        if (IsTransferring || entry is null)
+        if (IsTransferring || entry is null || string.IsNullOrWhiteSpace(targetDirectory))
         {
             return;
         }
 
-        await RunTransferAsync(SftpTransferDirection.Download, entry.Path, LocalPath);
+        await RunTransferAsync(SftpTransferDirection.Download, new[] { entry.Path }, targetDirectory);
     }
 
     /// <summary>
@@ -558,13 +582,14 @@ public sealed partial class SftpPaneViewModel : ObservableObject
 
     /// <summary>
     /// Puts another remote side in place of the current one, after the
-    /// session was started again. The size and the state of the drawer
+    /// session was started again. The size and the state of the panel
     /// stay as they are.
     /// </summary>
     public void SetRemoteFactory(Func<ISftpFileSystem> remoteFactory)
     {
         _remoteFactory = remoteFactory;
         _remote = null;
+        _remoteListing = Array.Empty<SftpEntry>();
         RemoteEntries.Clear();
         RemotePath = string.Empty;
 
@@ -573,8 +598,7 @@ public sealed partial class SftpPaneViewModel : ObservableObject
 
     partial void OnShowHiddenChanged(bool value)
     {
-        _ = RefreshRemoteAsync();
-        _ = RefreshLocalAsync();
+        ApplyEntries();
     }
 
     partial void OnSelectedRemoteEntryChanged(SftpEntry? value)
@@ -583,29 +607,64 @@ public sealed partial class SftpPaneViewModel : ObservableObject
         OnPropertyChanged(nameof(CanDownload));
     }
 
-    partial void OnSelectedLocalEntryChanged(SftpEntry? value)
-    {
-        OnPropertyChanged(nameof(CanTransfer));
-        OnPropertyChanged(nameof(CanUpload));
-    }
+    private string DirectionGlyph() => SortDescending ? "\u25bc" : "\u25b2";
 
-    private void ApplyEntries(ObservableCollection<SftpEntry> target, IEnumerable<SftpEntry> entries)
+    /// <summary>
+    /// Fills the list from the last listing: hidden entries are filtered,
+    /// directories come first, and the column headers decide the order.
+    /// The marked entry stays marked when it is still there.
+    /// </summary>
+    private void ApplyEntries()
     {
-        target.Clear();
+        var selectedPath = SelectedRemoteEntry?.Path;
 
-        foreach (var entry in entries
+        var entries = _remoteListing
             .Where(entry => ShowHidden || !entry.Name.StartsWith('.'))
-            .OrderByDescending(entry => entry.IsDirectory)
-            .ThenBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase))
+            .ToList();
+
+        entries.Sort(CompareEntries);
+
+        RemoteEntries.Clear();
+        foreach (var entry in entries)
         {
-            target.Add(entry);
+            RemoteEntries.Add(entry);
+        }
+
+        if (selectedPath is not null)
+        {
+            SelectedRemoteEntry = RemoteEntries.FirstOrDefault(entry => entry.Path == selectedPath);
         }
     }
 
-    private async Task RunTransferAsync(SftpTransferDirection direction, string sourcePath, string targetDirectory)
+    private int CompareEntries(SftpEntry left, SftpEntry right)
+    {
+        var byKind = right.IsDirectory.CompareTo(left.IsDirectory);
+        if (byKind != 0)
+        {
+            return byKind;
+        }
+
+        var result = SortColumn switch
+        {
+            SftpSortColumn.Size => left.Size.CompareTo(right.Size),
+            SftpSortColumn.Modified => left.LastWriteTimeUtc.CompareTo(right.LastWriteTimeUtc),
+            SftpSortColumn.Permissions => string.Compare(
+                left.Permission.ToOctalText(),
+                right.Permission.ToOctalText(),
+                StringComparison.Ordinal),
+            _ => string.Compare(left.Name, right.Name, StringComparison.OrdinalIgnoreCase),
+        };
+
+        return SortDescending ? -result : result;
+    }
+
+    private async Task RunTransferAsync(
+        SftpTransferDirection direction,
+        IReadOnlyList<string> sourcePaths,
+        string targetDirectory)
     {
         var remote = _remote;
-        if (IsTransferring || remote is null)
+        if (IsTransferring || remote is null || sourcePaths.Count == 0)
         {
             return;
         }
@@ -622,7 +681,7 @@ public sealed partial class SftpPaneViewModel : ObservableObject
                 FollowSymbolicLinks: FollowSymbolicLinks,
                 ConflictResolver: ResolveConflictAsync);
 
-            var request = new SftpTransferRequest(direction, new[] { sourcePath }, targetDirectory, options);
+            var request = new SftpTransferRequest(direction, sourcePaths, targetDirectory, options);
             var engine = new SftpTransferEngine(remote, _local);
             var progress = new Progress<SftpTransferProgress>(OnProgress);
 
@@ -651,7 +710,6 @@ public sealed partial class SftpPaneViewModel : ObservableObject
         }
 
         await RefreshRemoteAsync();
-        await RefreshLocalAsync();
     }
 
     private void OnProgress(SftpTransferProgress report)

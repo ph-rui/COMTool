@@ -20,6 +20,20 @@ mkdir, chmod).
 > it is opened for the first time, not when the SSH tab is created. The rest
 > of this document describes the panel as it ships after that revision; the
 > sections that still name a "drawer" mean the same panel.
+>
+> **Revision 2026-10-22 (b).** The panel was redesigned to match MobaXterm's
+> file browser one-to-one: it now has a **single remote list** (the local pane
+> is gone), an **icon-only toolbar** whose tooltips are the Chinese hints
+> (返回上级目录 / 刷新当前目录 / 新建文件夹 / 重命名 / 删除 / 修改权限 /
+> 上传到当前文件夹 / 下载到本地 / 跟随符号链接 / 显示隐藏文件), and
+> **sortable column headers** (名称 / 大小 (KB) / 最后修改 / 所有权限) that
+> keep directories first. The local side of a transfer now comes from the
+> **system dialogs** (file picker for upload, folder picker for download),
+> not from a second pane; the e2e run answers those dialogs from the
+> `COMTOOL_E2E_PICK_FILES` / `COMTOOL_E2E_PICK_FOLDER` environment. New
+> folder and rename use an **inline prompt row** instead of always-on text
+> fields, and delete is a two-step icon confirmation (the icon turns red).
+> The "dual pane" wording above and below is superseded by this revision.
 
 ## Scope
 

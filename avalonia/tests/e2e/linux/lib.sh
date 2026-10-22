@@ -63,24 +63,24 @@ SIDEBAR_PROBE_Y="${SIDEBAR_PROBE_Y:-300}"
 
 # The SFTP panel of an SSH tab. In the 1000x650 test window the panel is
 # the left column of the session view, 420px wide, and it is folded away
-# until the folder button of the tab strip opens it. Its first row is the
-# toolbar, the remote side sits above the local side, and the status line
-# is the last row. The coordinates below assume that the sidebar is
-# collapsed, because an expanded sidebar shifts the whole content 223px to
-# the right.
+# until the folder button of the tab strip opens it. The MobaXterm-style
+# layout is a single remote list: an icon-only toolbar (hover tooltips in
+# Chinese), the remote path box, a sortable header row, the list, then the
+# status line and the conflict strip at the bottom. The upload files and
+# the download directory come from the system pickers, which in the e2e
+# run are answered from the COMTOOL_E2E_PICK_FILES / COMTOOL_E2E_PICK_FOLDER
+# environment (set in start_app). The coordinates below assume that the
+# sidebar is collapsed, because an expanded sidebar shifts the whole
+# content 223px to the right.
 SFTP_TOGGLE_X="${SFTP_TOGGLE_X:-873}"
 SFTP_TOGGLE_Y="${SFTP_TOGGLE_Y:-53}"
-SFTP_TOOLBAR_Y="${SFTP_TOOLBAR_Y:-136}"
-SFTP_UPLOAD_X="${SFTP_UPLOAD_X:-329}"
-SFTP_DOWNLOAD_X="${SFTP_DOWNLOAD_X:-400}"
+SFTP_TOOLBAR_Y="${SFTP_TOOLBAR_Y:-96}"
+SFTP_UPLOAD_X="${SFTP_UPLOAD_X:-244}"
+SFTP_DOWNLOAD_X="${SFTP_DOWNLOAD_X:-272}"
 SFTP_REMOTE_PATH_X="${SFTP_REMOTE_PATH_X:-200}"
-SFTP_REMOTE_PATH_Y="${SFTP_REMOTE_PATH_Y:-206}"
-SFTP_LOCAL_PATH_X="${SFTP_LOCAL_PATH_X:-200}"
-SFTP_LOCAL_PATH_Y="${SFTP_LOCAL_PATH_Y:-405}"
+SFTP_REMOTE_PATH_Y="${SFTP_REMOTE_PATH_Y:-130}"
 SFTP_REMOTE_ITEM_X="${SFTP_REMOTE_ITEM_X:-120}"
-SFTP_REMOTE_ITEM_Y="${SFTP_REMOTE_ITEM_Y:-248}"
-SFTP_LOCAL_ITEM_X="${SFTP_LOCAL_ITEM_X:-120}"
-SFTP_LOCAL_ITEM_Y="${SFTP_LOCAL_ITEM_Y:-428}"
+SFTP_REMOTE_ITEM_Y="${SFTP_REMOTE_ITEM_Y:-181}"
 # The strip that asks what to do with a target that already exists. Its
 # background is a fixed light yellow, and the "Overwrite" button sits at
 # the right end of the top row of the strip.
@@ -735,6 +735,8 @@ start_app() {
             XDG_RUNTIME_DIR="$runtime_dir" \
             COMTOOL_AVALONIA_CONFIG_DIR="$avalonia_dir" \
             COMTOOL_PYTHON_CONFIG_DIR="$python_dir" \
+            COMTOOL_E2E_PICK_FILES="$home_dir/sftp01-up/upload.txt" \
+            COMTOOL_E2E_PICK_FOLDER="$home_dir/sftp01-down" \
             DISPLAY="$DISPLAY_NUM" \
             NO_AT_BRIDGE=1 \
             GSETTINGS_BACKEND=memory \
@@ -879,6 +881,37 @@ clear_input_line() {
 # characters replace it.
 select_all_text() {
     xdotool key --clearmodifiers ctrl+a >/dev/null 2>&1 || true
+}
+
+# Name of the window that currently has X input focus.
+x_focus_window() {
+    local wid
+    wid="$(xdotool getwindowfocus 2>/dev/null)" || return 1
+    xdotool getwindowname "$wid" 2>/dev/null || printf '(unknown)'
+}
+
+# Click the SFTP path box and wait until it shows its focus ring (blue
+# border) before the caller types. A click and an immediate keystroke can
+# race the application's focus change: while the app is busy (panel load,
+# list render) the keys are still routed to the previously focused
+# control (the terminal). The focus ring is the observable confirmation
+# that keyboard input will land in the box.
+click_sftp_path_box() {
+    local timeout_s="${1:-6}"
+    local attempt
+    local iterations=$((timeout_s * 4))
+
+    for ((attempt = 0; attempt < iterations; attempt++)); do
+        log "sftp path-box click (attempt $((attempt + 1))), X focus: $(x_focus_window)"
+        click_window "$SFTP_REMOTE_PATH_X" "$SFTP_REMOTE_PATH_Y" || return 1
+        if window_region_has_color "0078d7" "$SFTP_REMOTE_PATH_X" 113 40 6; then
+            log "sftp path box focused"
+            return 0
+        fi
+        sleep 0.25
+    done
+    log "sftp path box never showed its focus ring, X focus: $(x_focus_window)"
+    return 1
 }
 
 click_sidebar_session() {

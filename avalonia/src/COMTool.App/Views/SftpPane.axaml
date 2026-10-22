@@ -5,127 +5,295 @@
              xmlns:sftp="using:COMTool.Sftp"
              x:Class="COMTool.App.Views.SftpPane"
              x:DataType="vm:SftpPaneViewModel">
-  <Grid RowDefinitions="Auto,*,Auto">
-    <!-- The toolbar of the drawer. The remote side is the side that is
-         worked on, the local side is the source of an upload and the
-         target of a download. -->
+  <UserControl.Styles>
+    <!-- The toolbar of the panel is a row of icons, as in MobaXterm. The
+         text of a button lives in its tooltip, so the row stays small in
+         a narrow panel. -->
+    <Style Selector="Button.SftpTool, ToggleButton.SftpTool">
+      <Setter Property="Width" Value="28" />
+      <Setter Property="Height" Value="26" />
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.SftpTool:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#d8e6f5" />
+    </Style>
+    <Style Selector="ToggleButton.SftpTool:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#d8e6f5" />
+    </Style>
+    <Style Selector="Button.SftpTool:disabled /template/ ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ToggleButton.SftpTool:checked /template/ ContentPresenter">
+      <Setter Property="Background" Value="#cfe3f7" />
+    </Style>
+    <Style Selector="TextBlock.SftpIcon">
+      <Setter Property="FontFamily" Value="{DynamicResource IconFontAwesome}" />
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="Foreground" Value="#2b579a" />
+    </Style>
+    <Style Selector="Button.SftpTool:disabled TextBlock.SftpIcon">
+      <Setter Property="Foreground" Value="#a8a8a8" />
+    </Style>
+    <Style Selector="Button.SftpTool.Armed TextBlock.SftpIcon">
+      <Setter Property="Foreground" Value="#c00000" />
+    </Style>
+    <Style Selector="Button.SftpHeader">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Left" />
+      <Setter Property="CornerRadius" Value="0" />
+    </Style>
+    <Style Selector="Button.SftpHeader:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#e4edf7" />
+    </Style>
+    <Style Selector="ListBox.SftpList ListBoxItem">
+      <Setter Property="Padding" Value="6,2" />
+      <Setter Property="MinHeight" Value="0" />
+    </Style>
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto">
+    <!-- The icon toolbar. The buttons work on the remote side, the local
+         side of a transfer comes from a system dialog. -->
     <Border Grid.Row="0"
             Background="#f4f4f4"
             BorderBrush="#d4d4d4"
             BorderThickness="0,0,0,1"
-            Padding="3">
+            Padding="2">
       <WrapPanel Orientation="Horizontal">
-        <Button Name="UpButton" Content="Up" Margin="0,0,4,0" Click="OnUpClick" />
-        <Button Name="RefreshButton" Content="Refresh" Margin="0,0,8,0" Click="OnRefreshClick" />
-        <Button Name="NewFolderButton" Content="New folder" Margin="0,0,4,0" Click="OnNewFolderClick" />
-        <TextBox Name="NewFolderNameBox"
-                 Width="110"
-                 Margin="0,0,8,0"
-                 PlaceholderText="new folder"
-                 TextChanged="OnNewFolderNameChanged" />
-        <Button Name="DeleteButton" Content="Delete" Margin="0,0,4,0" Click="OnDeleteClick" />
-        <Button Name="RenameButton" Content="Rename" Margin="0,0,4,0" Click="OnRenameClick" />
-        <TextBox Name="RenameNameBox"
-                 Width="110"
-                 Margin="0,0,8,0"
-                 PlaceholderText="new name"
-                 KeyDown="OnRenameNameKeyDown" />
-        <Button Name="ChmodButton" Content="chmod" Margin="0,0,8,0" Click="OnChmodClick" />
+        <Button Name="UpButton"
+                Classes="SftpTool"
+                ToolTip.Tip="返回上级目录"
+                Click="OnUpClick">
+          <TextBlock Classes="SftpIcon" Text="&#xf148;" />
+        </Button>
+        <Button Name="RefreshButton"
+                Classes="SftpTool"
+                ToolTip.Tip="刷新当前目录"
+                Click="OnRefreshClick">
+          <TextBlock Classes="SftpIcon" Text="&#xf021;" />
+        </Button>
+        <Rectangle Width="1"
+                   Height="16"
+                   Margin="4,0"
+                   Fill="#d4d4d4"
+                   VerticalAlignment="Center" />
+        <Button Name="NewFolderButton"
+                Classes="SftpTool"
+                ToolTip.Tip="新建文件夹"
+                Click="OnNewFolderClick">
+          <TextBlock Classes="SftpIcon" Text="&#xf067;" />
+        </Button>
+        <Button Name="RenameButton"
+                Classes="SftpTool"
+                ToolTip.Tip="重命名"
+                IsEnabled="False"
+                Click="OnRenameClick">
+          <TextBlock Classes="SftpIcon" Text="&#xf044;" />
+        </Button>
+        <Button Name="DeleteButton"
+                Classes="SftpTool"
+                ToolTip.Tip="删除"
+                IsEnabled="False"
+                Click="OnDeleteClick">
+          <TextBlock Classes="SftpIcon" Text="&#xf014;" />
+        </Button>
+        <Button Name="ChmodButton"
+                Classes="SftpTool"
+                ToolTip.Tip="修改权限"
+                IsEnabled="False"
+                Click="OnChmodClick">
+          <TextBlock Classes="SftpIcon" Text="&#xf084;" />
+        </Button>
+        <Rectangle Width="1"
+                   Height="16"
+                   Margin="4,0"
+                   Fill="#d4d4d4"
+                   VerticalAlignment="Center" />
         <Button Name="UploadButton"
-                Content="Upload"
-                Margin="0,0,4,0"
+                Classes="SftpTool"
+                ToolTip.Tip="上传到当前文件夹"
                 IsEnabled="{Binding CanUpload}"
-                Click="OnUploadClick" />
+                Click="OnUploadClick">
+          <TextBlock Classes="SftpIcon" Text="&#xf093;" />
+        </Button>
         <Button Name="DownloadButton"
-                Content="Download"
-                Margin="0,0,8,0"
+                Classes="SftpTool"
+                ToolTip.Tip="下载到本地"
                 IsEnabled="{Binding CanDownload}"
-                Click="OnDownloadClick" />
-        <CheckBox Name="FollowLinksCheckBox"
-                  Content="Follow symbolic links"
-                  Margin="0,0,8,0"
-                  VerticalAlignment="Center"
-                  IsChecked="{Binding FollowSymbolicLinks}" />
-        <CheckBox Name="ShowHiddenCheckBox"
-                  Content="Show hidden"
-                  VerticalAlignment="Center"
-                  IsChecked="{Binding ShowHidden}" />
+                Click="OnDownloadClick">
+          <TextBlock Classes="SftpIcon" Text="&#xf019;" />
+        </Button>
+        <Rectangle Width="1"
+                   Height="16"
+                   Margin="4,0"
+                   Fill="#d4d4d4"
+                   VerticalAlignment="Center" />
+        <ToggleButton Name="FollowLinksButton"
+                      Classes="SftpTool"
+                      ToolTip.Tip="跟随符号链接"
+                      IsChecked="{Binding FollowSymbolicLinks, Mode=TwoWay}">
+          <TextBlock Classes="SftpIcon" Text="&#xf0c1;" />
+        </ToggleButton>
+        <ToggleButton Name="ShowHiddenButton"
+                      Classes="SftpTool"
+                      ToolTip.Tip="显示隐藏文件"
+                      IsChecked="{Binding ShowHidden, Mode=TwoWay}">
+          <TextBlock Classes="SftpIcon" Text="&#xf06e;" />
+        </ToggleButton>
       </WrapPanel>
     </Border>
 
-    <!-- The remote side above, the local side below: the panel is narrow,
-         so the two sides share the height instead of the width. -->
-    <Grid Grid.Row="1" RowDefinitions="*,*">
-      <Grid Name="RemotePaneGrid" Grid.Row="0" RowDefinitions="Auto,*" Margin="0,0,0,2">
-        <TextBox Name="RemotePathBox"
-                 Grid.Row="0"
-                 Margin="3"
-                 Text="{Binding RemotePath, Mode=TwoWay}"
-                 KeyDown="OnRemotePathKeyDown" />
-        <ListBox Name="RemoteList"
-                 Grid.Row="1"
-                 ItemsSource="{Binding RemoteEntries}"
-                 SelectedItem="{Binding SelectedRemoteEntry}"
-                 DoubleTapped="OnRemoteListDoubleTapped">
-          <ListBox.ItemTemplate>
-            <DataTemplate x:DataType="sftp:SftpEntry">
-              <Grid ColumnDefinitions="*,64,112,80">
-                <TextBlock Grid.Column="0"
-                           Text="{Binding Converter={x:Static views:SftpEntryNameConverter.Instance}}"
-                           VerticalAlignment="Center" />
-                <TextBlock Grid.Column="1"
-                           Text="{Binding Converter={x:Static views:SftpEntrySizeConverter.Instance}}"
-                           VerticalAlignment="Center" />
-                <TextBlock Grid.Column="2"
-                           Text="{Binding Converter={x:Static views:SftpEntryTimeConverter.Instance}}"
-                           VerticalAlignment="Center" />
-                <TextBlock Grid.Column="3"
-                           Text="{Binding Converter={x:Static views:SftpEntryPermissionConverter.Instance}}"
-                           Margin="8,0,0,0"
-                           VerticalAlignment="Center" />
-              </Grid>
-            </DataTemplate>
-          </ListBox.ItemTemplate>
-        </ListBox>
+    <!-- The name of a new folder or of the rename. It is shown while the
+         toolbar asks for it and takes the place of a small dialog. -->
+    <Border Grid.Row="1"
+            Name="PromptRow"
+            Background="#eef4fb"
+            BorderBrush="#c5d9ef"
+            BorderThickness="0,0,0,1"
+            Padding="4"
+            IsVisible="False">
+      <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+        <TextBlock Grid.Column="0"
+                   Name="PromptLabel"
+                   Margin="0,0,6,0"
+                   VerticalAlignment="Center"
+                   Text="新建文件夹" />
+        <TextBox Grid.Column="1"
+                 Name="PromptBox"
+                 Height="24"
+                 KeyDown="OnPromptKeyDown" />
+        <Button Grid.Column="2"
+                Name="PromptOkButton"
+                Content="确定"
+                Margin="4,0,0,0"
+                Click="OnPromptOkClick" />
+        <Button Grid.Column="3"
+                Name="PromptCancelButton"
+                Content="取消"
+                Margin="4,0,0,0"
+                Click="OnPromptCancelClick" />
       </Grid>
+    </Border>
 
-      <Grid Name="LocalPaneGrid" Grid.Row="1" RowDefinitions="Auto,*">
-        <TextBox Name="LocalPathBox"
-                 Grid.Row="0"
-                 Margin="3"
-                 Text="{Binding LocalPath, Mode=TwoWay}"
-                 KeyDown="OnLocalPathKeyDown" />
-        <ListBox Name="LocalList"
-                 Grid.Row="1"
-                 ItemsSource="{Binding LocalEntries}"
-                 SelectedItem="{Binding SelectedLocalEntry}"
-                 DoubleTapped="OnLocalListDoubleTapped">
-          <ListBox.ItemTemplate>
-            <DataTemplate x:DataType="sftp:SftpEntry">
-              <Grid ColumnDefinitions="*,64,112,80">
-                <TextBlock Grid.Column="0"
-                           Text="{Binding Converter={x:Static views:SftpEntryNameConverter.Instance}}"
-                           VerticalAlignment="Center" />
-                <TextBlock Grid.Column="1"
-                           Text="{Binding Converter={x:Static views:SftpEntrySizeConverter.Instance}}"
-                           VerticalAlignment="Center" />
-                <TextBlock Grid.Column="2"
-                           Text="{Binding Converter={x:Static views:SftpEntryTimeConverter.Instance}}"
-                           VerticalAlignment="Center" />
-                <TextBlock Grid.Column="3"
-                           Text="{Binding Converter={x:Static views:SftpEntryPermissionConverter.Instance}}"
-                           Margin="8,0,0,0"
-                           VerticalAlignment="Center" />
-              </Grid>
-            </DataTemplate>
-          </ListBox.ItemTemplate>
-        </ListBox>
+    <TextBox Grid.Row="2"
+             Name="RemotePathBox"
+             Margin="3"
+             Text="{Binding RemotePath, Mode=TwoWay}"
+             KeyDown="OnRemotePathKeyDown" />
+
+    <!-- The headers of the list order it. The arrows show the column and
+         the direction that is in use. -->
+    <Border Grid.Row="3"
+            Background="#f7f7f7"
+            BorderBrush="#d4d4d4"
+            BorderThickness="0,0,0,1"
+            Padding="6,2">
+      <Grid ColumnDefinitions="18,*,64,112,80">
+        <Button Grid.Column="1"
+                Name="NameHeaderButton"
+                Classes="SftpHeader"
+                Click="OnSortNameClick">
+          <StackPanel Orientation="Horizontal" Spacing="2">
+            <TextBlock Text="名称" />
+            <TextBlock Name="NameSortGlyph"
+                       Text="{Binding NameSortGlyph}"
+                       FontSize="9"
+                       Foreground="#2b579a"
+                       VerticalAlignment="Center" />
+          </StackPanel>
+        </Button>
+        <Button Grid.Column="2"
+                Name="SizeHeaderButton"
+                Classes="SftpHeader"
+                Click="OnSortSizeClick">
+          <StackPanel Orientation="Horizontal" Spacing="2">
+            <TextBlock Text="大小 (KB)" />
+            <TextBlock Name="SizeSortGlyph"
+                       Text="{Binding SizeSortGlyph}"
+                       FontSize="9"
+                       Foreground="#2b579a"
+                       VerticalAlignment="Center" />
+          </StackPanel>
+        </Button>
+        <Button Grid.Column="3"
+                Name="ModifiedHeaderButton"
+                Classes="SftpHeader"
+                Click="OnSortModifiedClick">
+          <StackPanel Orientation="Horizontal" Spacing="2">
+            <TextBlock Text="最后修改" />
+            <TextBlock Name="ModifiedSortGlyph"
+                       Text="{Binding ModifiedSortGlyph}"
+                       FontSize="9"
+                       Foreground="#2b579a"
+                       VerticalAlignment="Center" />
+          </StackPanel>
+        </Button>
+        <Button Grid.Column="4"
+                Name="PermissionsHeaderButton"
+                Classes="SftpHeader"
+                Click="OnSortPermissionsClick">
+          <StackPanel Orientation="Horizontal" Spacing="2">
+            <TextBlock Text="所有权限" />
+            <TextBlock Name="PermissionsSortGlyph"
+                       Text="{Binding PermissionsSortGlyph}"
+                       FontSize="9"
+                       Foreground="#2b579a"
+                       VerticalAlignment="Center" />
+          </StackPanel>
+        </Button>
       </Grid>
-    </Grid>
+    </Border>
+
+    <!-- The one list of the panel: the entries of the remote directory.
+         A double click enters a directory. -->
+    <ListBox Grid.Row="4"
+             Name="RemoteList"
+             Classes="SftpList"
+             Padding="0"
+             ItemsSource="{Binding RemoteEntries}"
+             SelectedItem="{Binding SelectedRemoteEntry}"
+             DoubleTapped="OnRemoteListDoubleTapped">
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="sftp:SftpEntry">
+          <Grid ColumnDefinitions="18,*,64,112,80">
+            <TextBlock Grid.Column="0"
+                       Text="{Binding Converter={x:Static views:SftpEntryIconConverter.Instance}}"
+                       Foreground="{Binding Converter={x:Static views:SftpEntryIconBrushConverter.Instance}}"
+                       FontFamily="{DynamicResource IconFontAwesome}"
+                       FontSize="12"
+                       VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1"
+                       Text="{Binding Converter={x:Static views:SftpEntryNameConverter.Instance}}"
+                       VerticalAlignment="Center"
+                       TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="2"
+                       Text="{Binding Converter={x:Static views:SftpEntrySizeConverter.Instance}}"
+                       VerticalAlignment="Center" />
+            <TextBlock Grid.Column="3"
+                       Text="{Binding Converter={x:Static views:SftpEntryTimeConverter.Instance}}"
+                       VerticalAlignment="Center" />
+            <TextBlock Grid.Column="4"
+                       Text="{Binding Converter={x:Static views:SftpEntryPermissionConverter.Instance}}"
+                       VerticalAlignment="Center" />
+          </Grid>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
 
     <!-- The line that tells what happened, the progress of a transfer that
          runs and the question about a target that already exists. -->
-    <Grid Grid.Row="2" RowDefinitions="Auto,Auto">
+    <Grid Grid.Row="5" RowDefinitions="Auto,Auto">
       <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto">
         <TextBlock Grid.Column="0"
                    Name="StatusText"

@@ -59,6 +59,18 @@ public sealed class InMemoryFileSystem : ISftpFileSystem, ILocalFileSystem
     public bool IncludeDotEntries { get; set; }
 
     /// <summary>
+    /// Sets the write time of a file or directory.
+    /// </summary>
+    public void SetLastWriteTimeUtc(string path, DateTime timeUtc)
+    {
+        var normalized = SftpPath.Normalize(path);
+        if (_nodes.TryGetValue(normalized, out var node))
+        {
+            node.LastWriteTimeUtc = timeUtc;
+        }
+    }
+
+    /// <summary>
     /// Adds a file with the given text content.
     /// </summary>
     public void AddFile(string path, string content)
