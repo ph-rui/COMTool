@@ -464,6 +464,32 @@ This was a direct executable deployment over the existing working and desktop
 copies, not a formal packaged release. No new candidate zip was created or
 signed off for this build.
 
+A follow-up direct deployment on 2026-10-23 replaced both copies with commit
+`20dc26d`, fixing the user-reported uneven text in mixed Chinese/English
+terminal output: the terminal font is now the bundled Noto Sans Mono CJK SC
+(Regular + Bold, OFL-licensed avares assets), so latin and CJK are shaped
+from one face grid and a mixed-language line keeps a single baseline — no
+more system-font fallback with different line metrics (the old per-run CJK
+fallback sat ~5px below the latin glyphs on Windows):
+
+- size: 208,491,340 bytes (+33.4 MB for the two font faces);
+- SHA256: `CE9A88C0582B287FC7FCAE573C98389339AA5166F9CCAB2C4C771C7CCC7203E5`;
+- both remote copies matched that hash via `Get-FileHash`
+  (`WORK_SHA256` = `DESKTOP_SHA256` = source hash);
+- no `COMTool-Avalonia.exe.bak-*` files were created (`BAK_COUNT=0`);
+- a Windows process smoke test started the deployed working copy, observed it
+  `Running` and `Responding=True`, then stopped it;
+- the automated suite passes 354 tests (App 122) and Linux Xvfb E2E passes
+  13/13; new headless coverage: `CjkTerminalFontTests` (bundled font source
+  and weight resolution, CJK glyph coverage in the primary face map so no
+  fallback is possible, identical line metrics for latin/CJK/mixed runs);
+- interactive Windows confirmation of the mixed-language baseline
+  (WIN-20) remains pending.
+
+This was a direct executable deployment over the existing working and desktop
+copies, not a formal packaged release. No new candidate zip was created or
+signed off for this build.
+
 The previously packaged release zip is 74,795,557 bytes with SHA256:
 
 ```text
