@@ -72,15 +72,28 @@ SIDEBAR_PROBE_Y="${SIDEBAR_PROBE_Y:-300}"
 # environment (set in start_app). The coordinates below assume that the
 # sidebar is collapsed, because an expanded sidebar shifts the whole
 # content 223px to the right.
-SFTP_TOGGLE_X="${SFTP_TOGGLE_X:-873}"
-SFTP_TOGGLE_Y="${SFTP_TOGGLE_Y:-53}"
+SFTP_TOGGLE_X="${SFTP_TOGGLE_X:-858}"
+SFTP_TOGGLE_Y="${SFTP_TOGGLE_Y:-51}"
 SFTP_TOOLBAR_Y="${SFTP_TOOLBAR_Y:-96}"
+SFTP_NEWFOLDER_X="${SFTP_NEWFOLDER_X:-122}"
+SFTP_RENAME_X="${SFTP_RENAME_X:-151}"
+SFTP_DELETE_X="${SFTP_DELETE_X:-178}"
 SFTP_UPLOAD_X="${SFTP_UPLOAD_X:-244}"
 SFTP_DOWNLOAD_X="${SFTP_DOWNLOAD_X:-272}"
 SFTP_REMOTE_PATH_X="${SFTP_REMOTE_PATH_X:-200}"
 SFTP_REMOTE_PATH_Y="${SFTP_REMOTE_PATH_Y:-130}"
 SFTP_REMOTE_ITEM_X="${SFTP_REMOTE_ITEM_X:-120}"
 SFTP_REMOTE_ITEM_Y="${SFTP_REMOTE_ITEM_Y:-181}"
+# The inline prompt row (new folder / rename). Its light-blue background is
+# the observable "the row is up" signal; the input and the ok/cancel
+# buttons sit in the middle of the row.
+SFTP_PROMPT_COLOR="${SFTP_PROMPT_COLOR:-#dbeafe}"
+SFTP_PROMPT_PROBE_X="${SFTP_PROMPT_PROBE_X:-50}"
+SFTP_PROMPT_PROBE_Y="${SFTP_PROMPT_PROBE_Y:-116}"
+SFTP_PROMPT_PROBE_W="${SFTP_PROMPT_PROBE_W:-300}"
+SFTP_PROMPT_PROBE_H="${SFTP_PROMPT_PROBE_H:-30}"
+SFTP_PROMPT_INPUT_X="${SFTP_PROMPT_INPUT_X:-230}"
+SFTP_PROMPT_INPUT_Y="${SFTP_PROMPT_INPUT_Y:-132}"
 # The strip that asks what to do with a target that already exists. Its
 # background is a fixed light yellow, and the "Overwrite" button sits at
 # the right end of the top row of the strip.
@@ -1289,6 +1302,21 @@ wait_for_file() {
 
     for ((attempt = 0; attempt < iterations; attempt++)); do
         if [[ -e "$path" ]]; then
+            return 0
+        fi
+        sleep 0.1
+    done
+    return 1
+}
+
+wait_for_file_absent() {
+    local path="$1"
+    local timeout_s="${2:-15}"
+    local attempt
+    local iterations=$((timeout_s * 10))
+
+    for ((attempt = 0; attempt < iterations; attempt++)); do
+        if [[ ! -e "$path" ]]; then
             return 0
         fi
         sleep 0.1

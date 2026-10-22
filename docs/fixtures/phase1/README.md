@@ -91,6 +91,7 @@ and the structure also passes for Windows/macOS. The suite is 349 tests:
   `E2E01_OpenSshSession`, `SSH11_RestartStoppedSessionE2E`,
   `SSH06_MultipleConnectionsE2E`, `UI05_TabSwitchTypingBothDirections`,
   `TERM15_DoubleClickMaximizeE2E`, `SFTP01_BrowserTransferE2E`,
+  `SFTP02_FileManagementE2E`,
   `TELNET01_AutoLoginE2E`, `TELNET02_RestartStoppedSessionE2E`.
 - Candidate package smoke: `PKG01_CandidateSmoke`.
 

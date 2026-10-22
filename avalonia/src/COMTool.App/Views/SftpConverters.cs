@@ -161,7 +161,7 @@ public sealed class SftpEntryIconBrushConverter : IValueConverter
 }
 
 /// <summary>
-/// The text of the tip of the button that folds the drawer away.
+/// The text of the tip of the button that folds the SFTP panel away.
 /// </summary>
 public sealed class SftpToggleToolTipConverter : IValueConverter
 {
@@ -169,7 +169,7 @@ public sealed class SftpToggleToolTipConverter : IValueConverter
 
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
-        return value is true ? "Hide SFTP browser" : "SFTP browser";
+        return value is true ? "收起 SFTP 面板" : "展开 SFTP 面板";
     }
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)

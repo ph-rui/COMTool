@@ -155,33 +155,40 @@
     </Border>
 
     <!-- The name of a new folder or of the rename. It is shown while the
-         toolbar asks for it and takes the place of a small dialog. -->
+         toolbar asks for it and takes the place of a small dialog. It is
+         deliberately loud: a full-width accent bar, not a subtle strip, so
+         a click on the icon always has a visible answer. -->
     <Border Grid.Row="1"
             Name="PromptRow"
-            Background="#eef4fb"
-            BorderBrush="#c5d9ef"
-            BorderThickness="0,0,0,1"
-            Padding="4"
+            Background="#dbeafe"
+            BorderBrush="#60a5fa"
+            BorderThickness="1"
+            CornerRadius="3"
+            Margin="4,2,4,4"
+            Padding="6,4"
             IsVisible="False">
       <Grid ColumnDefinitions="Auto,*,Auto,Auto">
         <TextBlock Grid.Column="0"
                    Name="PromptLabel"
-                   Margin="0,0,6,0"
+                   Margin="0,0,8,0"
+                   FontSize="13"
+                   FontWeight="600"
+                   Foreground="#1d4ed8"
                    VerticalAlignment="Center"
                    Text="新建文件夹" />
         <TextBox Grid.Column="1"
                  Name="PromptBox"
-                 Height="24"
+                 Height="26"
                  KeyDown="OnPromptKeyDown" />
         <Button Grid.Column="2"
                 Name="PromptOkButton"
                 Content="确定"
-                Margin="4,0,0,0"
+                Margin="6,0,0,0"
                 Click="OnPromptOkClick" />
         <Button Grid.Column="3"
                 Name="PromptCancelButton"
                 Content="取消"
-                Margin="4,0,0,0"
+                Margin="6,0,0,0"
                 Click="OnPromptCancelClick" />
       </Grid>
     </Border>
