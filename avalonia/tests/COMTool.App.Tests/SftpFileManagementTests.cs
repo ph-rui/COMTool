@@ -93,18 +93,23 @@ public sealed class SftpFileManagementTests
         var (pane, window) = NewDrawer(viewModel);
         try
         {
-            Assert.False(pane.NewFolderButtonControl.IsEnabled);
-
-            pane.NewFolderNameBoxControl.Text = "folder";
-            Dispatcher.UIThread.RunJobs();
-
-            Assert.True(pane.NewFolderButtonControl.IsEnabled);
+            Assert.False(pane.PromptRowControl.IsVisible);
 
             pane.NewFolderButtonControl.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Dispatcher.UIThread.RunJobs();
 
+            // The icon button opens the inline prompt row asking for the
+            // new folder name.
+            Assert.True(pane.PromptRowControl.IsVisible);
+            Assert.Equal("新建文件夹", pane.PromptLabelControl.Text);
+
+            pane.PromptBoxControl.Text = "folder";
+            pane.PromptOkButtonControl.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Dispatcher.UIThread.RunJobs();
+
             Assert.True(remote.HasEntry("/remote/folder"));
             Assert.Equal("Created folder", viewModel.StatusMessage);
+            Assert.False(pane.PromptRowControl.IsVisible);
         }
         finally
         {
@@ -128,17 +133,24 @@ public sealed class SftpFileManagementTests
             viewModel.SelectedRemoteEntry = viewModel.RemoteEntries.Single(entry => entry.Name == "a.txt");
             Dispatcher.UIThread.RunJobs();
 
-            // The field follows the entry that was marked.
-            Assert.Equal("a.txt", pane.RenameNameBoxControl.Text);
             Assert.True(pane.RenameButtonControl.IsEnabled);
 
-            pane.RenameNameBoxControl.Text = "b.txt";
             pane.RenameButtonControl.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Dispatcher.UIThread.RunJobs();
+
+            // The prompt is prefilled with the current name.
+            Assert.True(pane.PromptRowControl.IsVisible);
+            Assert.Equal("重命名", pane.PromptLabelControl.Text);
+            Assert.Equal("a.txt", pane.PromptBoxControl.Text);
+
+            pane.PromptBoxControl.Text = "b.txt";
+            pane.PromptOkButtonControl.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Dispatcher.UIThread.RunJobs();
 
             Assert.True(remote.HasEntry("/remote/b.txt"));
             Assert.False(remote.HasEntry("/remote/a.txt"));
             Assert.Equal("Renamed to b.txt", viewModel.StatusMessage);
+            Assert.False(pane.PromptRowControl.IsVisible);
         }
         finally
         {
@@ -165,16 +177,16 @@ public sealed class SftpFileManagementTests
             pane.DeleteButtonControl.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Dispatcher.UIThread.RunJobs();
 
-            // The first click only asks.
+            // The first click only arms, the second one deletes.
             Assert.True(remote.HasEntry("/remote/a.txt"));
-            Assert.Equal("Confirm delete", pane.DeleteButtonControl.Content);
+            Assert.True(pane.IsDeleteArmed);
 
             pane.DeleteButtonControl.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Dispatcher.UIThread.RunJobs();
 
             Assert.False(remote.HasEntry("/remote/a.txt"));
             Assert.Equal("Deleted a.txt", viewModel.StatusMessage);
-            Assert.Equal("Delete", pane.DeleteButtonControl.Content);
+            Assert.False(pane.IsDeleteArmed);
         }
         finally
         {
@@ -184,7 +196,7 @@ public sealed class SftpFileManagementTests
     }
 
     [AvaloniaFact]
-    public void LocalPaneHasNoDestructiveCommands()
+    public void PanelHasNoLocalPane()
     {
         using var env = new TestEnvironment();
         env.Run(() =>
@@ -195,12 +207,13 @@ public sealed class SftpFileManagementTests
             var (pane, window) = NewDrawer(viewModel);
             try
             {
-                var buttons = pane.LocalPaneGridControl
-                    .GetVisualDescendants()
-                    .OfType<Button>()
-                    .ToList();
-
-                Assert.Empty(buttons);
+                // The redesign is a single remote list: no local list, no
+                // local path box, no second pane.
+                Assert.Null(pane.FindControl<Control>("LocalList"));
+                Assert.Null(pane.FindControl<Control>("LocalPathBox"));
+                Assert.Null(pane.FindControl<Control>("LocalPaneGrid"));
+                Assert.NotNull(pane.FindControl<Control>("RemoteList"));
+                Assert.NotNull(pane.FindControl<Control>("RemotePathBox"));
             }
             finally
             {

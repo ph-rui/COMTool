@@ -1,24 +1,34 @@
 using System.ComponentModel;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using COMTool.App.Services;
 using COMTool.App.ViewModels;
 using COMTool.Sftp;
 
 namespace COMTool.App.Views;
 
 /// <summary>
-/// The drawer of an SSH session: the remote side on the left, the local
-/// side on the right, a toolbar above and the state of the transfer
-/// below.
+/// The panel of an SSH session: the entries of the remote directory, the
+/// icon toolbar above them and the state of the transfer below. The panel
+/// has one list, like the side panel of MobaXterm; the local side of an
+/// upload or a download comes from a system dialog.
 /// </summary>
 public sealed partial class SftpPane : UserControl
 {
-    private const string ConfirmDeleteText = "Confirm delete";
+    private enum PromptMode
+    {
+        None,
+        NewFolder,
+        Rename,
+    }
 
     private SftpPaneViewModel? _viewModel;
     private SftpPermissionsWindow? _permissionsWindow;
-    private string? _lastSelectedRemotePath;
+    private ILocalPickers? _pickers;
+    private PromptMode _promptMode;
+    private bool _deleteArmed;
 
     public SftpPane()
     {
@@ -28,8 +38,8 @@ public sealed partial class SftpPane : UserControl
     }
 
     /// <summary>
-    /// The state of the drawer. It becomes the context of the view, so
-    /// that every binding inside the drawer finds it.
+    /// The state of the panel. It becomes the context of the view, so that
+    /// every binding inside the panel finds it.
     /// </summary>
     public SftpPaneViewModel? ViewModel
     {
@@ -54,18 +64,25 @@ public sealed partial class SftpPane : UserControl
                 value.PropertyChanged += OnViewModelPropertyChanged;
             }
 
-            _lastSelectedRemotePath = null;
+            HidePrompt();
+            DisarmDelete();
             UpdateCommandState();
         }
     }
 
+    /// <summary>
+    /// The dialogs of the upload and of the download. A test puts its own
+    /// answer here; when nothing is put, the system dialogs are asked.
+    /// </summary>
+    public ILocalPickers? Pickers
+    {
+        get => _pickers;
+        set => _pickers = value;
+    }
+
     internal ListBox RemoteListControl => RemoteList;
 
-    internal ListBox LocalListControl => LocalList;
-
     internal TextBox RemotePathBoxControl => RemotePathBox;
-
-    internal TextBox LocalPathBoxControl => LocalPathBox;
 
     internal Button UpButtonControl => UpButton;
 
@@ -79,17 +96,39 @@ public sealed partial class SftpPane : UserControl
 
     internal Button ChmodButtonControl => ChmodButton;
 
-    internal TextBox NewFolderNameBoxControl => NewFolderNameBox;
-
-    internal TextBox RenameNameBoxControl => RenameNameBox;
-
-    internal Grid RemotePaneGridControl => RemotePaneGrid;
-
-    internal Grid LocalPaneGridControl => LocalPaneGrid;
-
     internal Button UploadButtonControl => UploadButton;
 
     internal Button DownloadButtonControl => DownloadButton;
+
+    internal ToggleButton FollowLinksButtonControl => FollowLinksButton;
+
+    internal ToggleButton ShowHiddenButtonControl => ShowHiddenButton;
+
+    internal Border PromptRowControl => PromptRow;
+
+    internal TextBlock PromptLabelControl => PromptLabel;
+
+    internal TextBox PromptBoxControl => PromptBox;
+
+    internal Button PromptOkButtonControl => PromptOkButton;
+
+    internal Button PromptCancelButtonControl => PromptCancelButton;
+
+    internal Button NameHeaderButtonControl => NameHeaderButton;
+
+    internal Button SizeHeaderButtonControl => SizeHeaderButton;
+
+    internal Button ModifiedHeaderButtonControl => ModifiedHeaderButton;
+
+    internal Button PermissionsHeaderButtonControl => PermissionsHeaderButton;
+
+    internal TextBlock NameSortGlyphControl => NameSortGlyph;
+
+    internal TextBlock SizeSortGlyphControl => SizeSortGlyph;
+
+    internal TextBlock ModifiedSortGlyphControl => ModifiedSortGlyph;
+
+    internal TextBlock PermissionsSortGlyphControl => PermissionsSortGlyph;
 
     internal Button CancelButtonControl => CancelButton;
 
@@ -106,6 +145,12 @@ public sealed partial class SftpPane : UserControl
     internal CheckBox NeverAskAgainBoxControl => NeverAskAgainBox;
 
     /// <summary>
+    /// True after the first click on the delete button: the next click
+    /// removes the marked entry.
+    /// </summary>
+    internal bool IsDeleteArmed => _deleteArmed;
+
+    /// <summary>
     /// The window that changes the permissions, while it is open.
     /// </summary>
     internal SftpPermissionsWindow? PermissionsWindow => _permissionsWindow;
@@ -114,13 +159,13 @@ public sealed partial class SftpPane : UserControl
     {
         if (e.PropertyName == nameof(SftpPaneViewModel.SelectedRemoteEntry))
         {
+            DisarmDelete();
             UpdateCommandState();
         }
     }
 
     /// <summary>
-    /// The commands that work on the remote side need a marked entry. The
-    /// new folder needs a name in its field.
+    /// The commands that work on an entry need a marked entry.
     /// </summary>
     private void UpdateCommandState()
     {
@@ -129,56 +174,22 @@ public sealed partial class SftpPane : UserControl
         DeleteButton.IsEnabled = entry is not null;
         RenameButton.IsEnabled = entry is not null;
         ChmodButton.IsEnabled = entry is not null;
-        NewFolderButton.IsEnabled = !string.IsNullOrWhiteSpace(NewFolderNameBox.Text);
-
-        if (entry is null)
-        {
-            // A delete that waits for a second click does not wait
-            // forever.
-            DeleteButton.Content = "Delete";
-            _lastSelectedRemotePath = null;
-            return;
-        }
-
-        if (string.Equals(_lastSelectedRemotePath, entry.Path, StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        // The field of the rename follows the entry that was marked.
-        _lastSelectedRemotePath = entry.Path;
-        RenameNameBox.Text = entry.Name;
     }
 
-    private async void OnUpClick(object? sender, RoutedEventArgs e)
+    private void OnUpClick(object? sender, RoutedEventArgs e)
     {
-        var viewModel = ViewModel;
-        if (viewModel is null)
+        if (ViewModel is { } viewModel)
         {
-            return;
+            _ = viewModel.GoUpRemoteAsync();
         }
-
-        // The pane that was worked on last is the one that goes up. The
-        // remote side is the one that counts when both are marked.
-        if (viewModel.SelectedLocalEntry is not null && viewModel.SelectedRemoteEntry is null)
-        {
-            await viewModel.GoUpLocalAsync();
-            return;
-        }
-
-        await viewModel.GoUpRemoteAsync();
     }
 
-    private async void OnRefreshClick(object? sender, RoutedEventArgs e)
+    private void OnRefreshClick(object? sender, RoutedEventArgs e)
     {
-        var viewModel = ViewModel;
-        if (viewModel is null)
+        if (ViewModel is { } viewModel)
         {
-            return;
+            _ = viewModel.RefreshRemoteAsync();
         }
-
-        await viewModel.RefreshRemoteAsync();
-        await viewModel.RefreshLocalAsync();
     }
 
     private async void OnRemoteListDoubleTapped(object? sender, TappedEventArgs e)
@@ -191,18 +202,6 @@ public sealed partial class SftpPane : UserControl
         }
 
         await viewModel.EnterRemoteAsync(entry);
-    }
-
-    private async void OnLocalListDoubleTapped(object? sender, TappedEventArgs e)
-    {
-        var viewModel = ViewModel;
-        var entry = viewModel?.SelectedLocalEntry;
-        if (viewModel is null || entry is null)
-        {
-            return;
-        }
-
-        await viewModel.EnterLocalAsync(entry);
     }
 
     private async void OnRemotePathKeyDown(object? sender, KeyEventArgs e)
@@ -222,87 +221,127 @@ public sealed partial class SftpPane : UserControl
         await viewModel.RefreshRemoteAsync();
     }
 
-    private async void OnLocalPathKeyDown(object? sender, KeyEventArgs e)
+    private void OnSortNameClick(object? sender, RoutedEventArgs e)
+        => ViewModel?.SortBy(SftpSortColumn.Name);
+
+    private void OnSortSizeClick(object? sender, RoutedEventArgs e)
+        => ViewModel?.SortBy(SftpSortColumn.Size);
+
+    private void OnSortModifiedClick(object? sender, RoutedEventArgs e)
+        => ViewModel?.SortBy(SftpSortColumn.Modified);
+
+    private void OnSortPermissionsClick(object? sender, RoutedEventArgs e)
+        => ViewModel?.SortBy(SftpSortColumn.Permissions);
+
+    /// <summary>
+    /// Puts the name of a new folder in front of the user.
+    /// </summary>
+    private void OnNewFolderClick(object? sender, RoutedEventArgs e)
     {
-        if (e.Key != Key.Enter)
+        ShowPrompt(PromptMode.NewFolder, "新建文件夹", string.Empty);
+    }
+
+    /// <summary>
+    /// Puts the name of the marked entry in front of the user, so that it
+    /// can be changed.
+    /// </summary>
+    private void OnRenameClick(object? sender, RoutedEventArgs e)
+    {
+        var entry = ViewModel?.SelectedRemoteEntry;
+        if (entry is null)
         {
             return;
         }
 
+        ShowPrompt(PromptMode.Rename, "重命名", entry.Name);
+    }
+
+    private void OnPromptKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            _ = ApplyPromptAsync();
+        }
+        else if (e.Key == Key.Escape)
+        {
+            HidePrompt();
+        }
+    }
+
+    private void OnPromptOkClick(object? sender, RoutedEventArgs e)
+    {
+        _ = ApplyPromptAsync();
+    }
+
+    private void OnPromptCancelClick(object? sender, RoutedEventArgs e)
+    {
+        HidePrompt();
+    }
+
+    private async Task ApplyPromptAsync()
+    {
         var viewModel = ViewModel;
         if (viewModel is null)
         {
             return;
         }
 
-        viewModel.LocalPath = LocalPathBox.Text ?? string.Empty;
-        await viewModel.RefreshLocalAsync();
-    }
-
-    private void OnNewFolderNameChanged(object? sender, TextChangedEventArgs e)
-    {
-        NewFolderButton.IsEnabled = !string.IsNullOrWhiteSpace(NewFolderNameBox.Text);
-    }
-
-    private async void OnNewFolderClick(object? sender, RoutedEventArgs e)
-    {
-        var viewModel = ViewModel;
-        var name = NewFolderNameBox.Text;
-        if (viewModel is null || string.IsNullOrWhiteSpace(name))
+        var name = (PromptBox.Text ?? string.Empty).Trim();
+        if (name.Length == 0)
         {
+            PromptBox.Focus();
             return;
         }
 
-        await viewModel.NewRemoteFolderAsync(name.Trim());
-        NewFolderNameBox.Text = string.Empty;
-    }
-
-    private async void OnRenameClick(object? sender, RoutedEventArgs e)
-    {
-        await RenameSelectedRemoteAsync();
-    }
-
-    private async void OnRenameNameKeyDown(object? sender, KeyEventArgs e)
-    {
-        if (e.Key != Key.Enter)
+        if (_promptMode == PromptMode.NewFolder)
         {
+            HidePrompt();
+            await viewModel.NewRemoteFolderAsync(name);
             return;
         }
 
-        await RenameSelectedRemoteAsync();
+        if (_promptMode == PromptMode.Rename)
+        {
+            var entry = viewModel.SelectedRemoteEntry;
+            if (entry is null)
+            {
+                HidePrompt();
+                return;
+            }
+
+            if (string.Equals(name, entry.Name, StringComparison.Ordinal))
+            {
+                // Nothing to rename to yet: keep the field in front.
+                PromptBox.Focus();
+                PromptBox.SelectAll();
+                return;
+            }
+
+            HidePrompt();
+            await viewModel.RenameRemoteAsync(name);
+        }
+    }
+
+    private void ShowPrompt(PromptMode mode, string label, string text)
+    {
+        _promptMode = mode;
+        PromptLabel.Text = label;
+        PromptBox.Text = text;
+        PromptRow.IsVisible = true;
+        PromptBox.Focus();
+        PromptBox.SelectAll();
+    }
+
+    private void HidePrompt()
+    {
+        _promptMode = PromptMode.None;
+        PromptRow.IsVisible = false;
+        PromptBox.Text = string.Empty;
     }
 
     /// <summary>
-    /// Renames the marked remote entry to the name in the field. As long
-    /// as the name is the name of the entry, the field is only put in
-    /// front of the user, so that the name can be changed.
+    /// The first click only asks, the second one deletes.
     /// </summary>
-    private async Task RenameSelectedRemoteAsync()
-    {
-        var viewModel = ViewModel;
-        var entry = viewModel?.SelectedRemoteEntry;
-        if (viewModel is null || entry is null)
-        {
-            return;
-        }
-
-        var name = (RenameNameBox.Text ?? string.Empty).Trim();
-        if (name.Length == 0)
-        {
-            RenameNameBox.Text = entry.Name;
-            return;
-        }
-
-        if (string.Equals(name, entry.Name, StringComparison.Ordinal))
-        {
-            RenameNameBox.Focus();
-            RenameNameBox.SelectAll();
-            return;
-        }
-
-        await viewModel.RenameRemoteAsync(name);
-    }
-
     private async void OnDeleteClick(object? sender, RoutedEventArgs e)
     {
         var viewModel = ViewModel;
@@ -311,20 +350,28 @@ public sealed partial class SftpPane : UserControl
             return;
         }
 
-        if (sender is not Button button)
+        if (!_deleteArmed)
         {
+            ArmDelete();
             return;
         }
 
-        if (!string.Equals(button.Content as string, ConfirmDeleteText, StringComparison.Ordinal))
-        {
-            // The first click only asks, the second one deletes.
-            button.Content = ConfirmDeleteText;
-            return;
-        }
-
-        button.Content = "Delete";
+        DisarmDelete();
         await viewModel.DeleteRemoteAsync();
+    }
+
+    private void ArmDelete()
+    {
+        _deleteArmed = true;
+        ToolTip.SetTip(DeleteButton, "再次点击确认删除");
+        DeleteButton.Classes.Set("Armed", true);
+    }
+
+    private void DisarmDelete()
+    {
+        _deleteArmed = false;
+        ToolTip.SetTip(DeleteButton, "删除");
+        DeleteButton.Classes.Set("Armed", false);
     }
 
     private void OnChmodClick(object? sender, RoutedEventArgs e)
@@ -347,26 +394,49 @@ public sealed partial class SftpPane : UserControl
         window.Show();
     }
 
+    /// <summary>
+    /// Asks the system dialog for local files and sends them into the
+    /// directory that the panel shows.
+    /// </summary>
     private async void OnUploadClick(object? sender, RoutedEventArgs e)
     {
         var viewModel = ViewModel;
-        if (viewModel is null)
+        var pickers = Pickers ?? LocalPickers.Create(this);
+        if (viewModel is null || pickers is null)
         {
             return;
         }
 
-        await viewModel.UploadAsync();
+        var files = await pickers.PickFilesAsync("上传到当前文件夹");
+        if (files.Count == 0)
+        {
+            return;
+        }
+
+        await viewModel.UploadAsync(files);
     }
 
+    /// <summary>
+    /// Asks the system dialog for a local directory and takes the marked
+    /// entry into it.
+    /// </summary>
     private async void OnDownloadClick(object? sender, RoutedEventArgs e)
     {
         var viewModel = ViewModel;
-        if (viewModel is null)
+        var pickers = Pickers ?? LocalPickers.Create(this);
+        var entry = viewModel?.SelectedRemoteEntry;
+        if (viewModel is null || pickers is null || entry is null)
         {
             return;
         }
 
-        await viewModel.DownloadAsync();
+        var folder = await pickers.PickFolderAsync("下载到本地");
+        if (string.IsNullOrEmpty(folder))
+        {
+            return;
+        }
+
+        await viewModel.DownloadAsync(folder);
     }
 
     private void OnCancelClick(object? sender, RoutedEventArgs e)

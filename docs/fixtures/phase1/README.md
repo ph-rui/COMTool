@@ -23,7 +23,8 @@ geometry. These are functional evidence images, not final pixel baselines.
 | `tab-settings-gear-850x500.png` | Hovering the selected tab reveals the connection-settings gear inside that tab, next to its close button, so it is unambiguous which tab it edits; unselected tabs never show the gear. |
 | `tab-gear-close-spacing.png` | 5x crop of the hovered tab strip: the connection-settings gear and the close button keep 16px of clearance between them, so the two icons no longer look glued together. |
 | `session-connecting-feedback-1000x650.png` | Clicking an unreachable Telnet session immediately shows a blue `Connecting...` state on that sidebar row instead of leaving the click with no feedback; the state clears when the attempt succeeds, fails, or is cancelled. |
-| `sftp-panel-1000x650.png` | The SFTP panel inside an SSH tab at 1000x650 after the folder button of the tab strip opened it: the panel sits on the left of the terminal, the remote pane is the upper side and the local pane the lower side, both with their path box; the toolbar shows New folder / Delete / Rename / chmod / Upload / Download and the `Up` and `Refresh` buttons, and the status line reads `1 uploaded` after an upload of the local `upload.txt`. Captured by `SFTP01_BrowserTransferE2E`. |
+| `sftp-panel-1000x650.png` | Historical (dual-pane layout, replaced 2026-10-22): the SFTP panel inside an SSH tab at 1000x650 with the remote pane above and the local pane below. |
+| `sftp-pane-single.png` | The SFTP panel inside an SSH tab at 1000x650 after the folder button of the tab strip opened it: a single remote list (MobaXterm-style) with the icon-only toolbar (hover shows Chinese tooltips), the Chinese column headers 名称/大小 (KB)/最后修改/所有权限 and folders-first sorting, then the status line. The local side of transfers comes from system pickers, answered in the e2e run from `COMTOOL_E2E_PICK_FILES` / `COMTOOL_E2E_PICK_FOLDER`. Captured by `SFTP01_BrowserTransferE2E`. |
 | `sessions-850x500.png` | Config-backed sidebar shows remembered SSH sessions and no tabs after restart. |
 | `two-tabs-850x500.png` | Multiple SSH tabs are open; `win-ssh` is selected, `local-ssh` is not. Sidebar status dots reflect open sessions. |
 | `switch-tab-850x500.png` | Clicking the `local-ssh` tab switches the terminal content back without reconnecting. |
@@ -81,9 +82,9 @@ geometry. These are functional evidence images, not final pixel baselines.
 
 `docs/testing/feature-test-matrix.md` now maps all parity rows, including the
 Telnet and SFTP rows. The gate passes in `verify` and `package` phases on Linux,
-and the structure also passes for Windows/macOS. The suite is 336 tests:
+and the structure also passes for Windows/macOS. The suite is 349 tests:
 
-- Core 45, SFTP 40, Connections 55, Terminal 11, ZMODEM 32, TestGate 49, App 104.
+- Core 45, SFTP 40, Connections 55, Terminal 11, ZMODEM 32, TestGate 49, App 117.
 - Linux Xvfb E2E: `APP01_SmokeLaunchE2E`,
   `UI01_TitleBarDoubleClickMaximizeE2E`,
   `UI02_SidebarExpandsOnLaunchE2E`, `UI02_SidebarAutoHideE2E`,

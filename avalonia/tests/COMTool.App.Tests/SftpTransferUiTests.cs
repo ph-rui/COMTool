@@ -1,7 +1,9 @@
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using COMTool.App.Services;
 using COMTool.App.ViewModels;
 using COMTool.App.Views;
 using COMTool.Sftp;
@@ -50,7 +52,7 @@ public sealed class SftpTransferUiTests
     }
 
     [AvaloniaFact]
-    public async Task UploadAndDownloadAreDisabledWithoutASelection()
+    public async Task UploadIsAlwaysEnabledDownloadNeedsASelection()
     {
         using var env = new TestEnvironment();
         var (viewModel, remote, local) = NewViewModel();
@@ -61,27 +63,79 @@ public sealed class SftpTransferUiTests
         var (pane, window) = NewDrawer(viewModel);
         try
         {
-            Assert.False(pane.UploadButtonControl.IsEnabled);
-            Assert.False(pane.DownloadButtonControl.IsEnabled);
-
-            // A local entry is what an upload needs.
-            viewModel.SelectedLocalEntry = viewModel.LocalEntries.Single(entry => entry.Name == "a.txt");
-            Dispatcher.UIThread.RunJobs();
-
+            // The upload files come from the system dialog, so the upload
+            // button does not need any selection; the download needs the
+            // marked remote entry.
             Assert.True(pane.UploadButtonControl.IsEnabled);
             Assert.False(pane.DownloadButtonControl.IsEnabled);
 
-            // A remote entry is what a download needs.
             viewModel.SelectedRemoteEntry = viewModel.RemoteEntries.Single(entry => entry.Name == "a.txt");
             Dispatcher.UIThread.RunJobs();
 
+            Assert.True(pane.UploadButtonControl.IsEnabled);
             Assert.True(pane.DownloadButtonControl.IsEnabled);
+
+            viewModel.SelectedRemoteEntry = null;
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.False(pane.DownloadButtonControl.IsEnabled);
         }
         finally
         {
             window.Close();
             Dispatcher.UIThread.RunJobs();
         }
+    }
+
+    [AvaloniaFact]
+    public async Task UploadDownloadUseTheSystemPickerDialogs()
+    {
+        using var env = new TestEnvironment();
+        var (viewModel, remote, local) = NewViewModel();
+        local.AddFile("/local/a.txt", "hello");
+        remote.AddFile("/remote/b.txt", "world");
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        var (pane, window) = NewDrawer(viewModel);
+        try
+        {
+            // The pane hands the pickers the dialog answers: the upload
+            // sends the picked files, the download takes the marked entry
+            // into the picked folder.
+            pane.Pickers = new FakePickers(new[] { "/local/a.txt" }, "/local");
+            pane.UploadButtonControl.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            await WaitUntil(() => remote.HasEntry("/remote/a.txt"), "upload through the picker");
+            Assert.Equal("hello", remote.ReadFile("/remote/a.txt"));
+
+            viewModel.SelectedRemoteEntry = viewModel.RemoteEntries.Single(entry => entry.Name == "b.txt");
+            Dispatcher.UIThread.RunJobs();
+            pane.DownloadButtonControl.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            await WaitUntil(() => local.HasEntry("/local/b.txt"), "download through the picker");
+            Assert.Equal("world", local.ReadFile("/local/b.txt"));
+        }
+        finally
+        {
+            window.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    private sealed class FakePickers : ILocalPickers
+    {
+        private readonly string[] _files;
+        private readonly string _folder;
+
+        public FakePickers(string[] files, string folder)
+        {
+            _files = files;
+            _folder = folder;
+        }
+
+        public Task<IReadOnlyList<string>> PickFilesAsync(string title)
+            => Task.FromResult<IReadOnlyList<string>>(_files);
+
+        public Task<string?> PickFolderAsync(string title)
+            => Task.FromResult<string?>(_folder);
     }
 
     [AvaloniaFact]
@@ -195,8 +249,7 @@ public sealed class SftpTransferUiTests
         var (pane, window) = NewDrawer(viewModel);
         try
         {
-            viewModel.SelectedLocalEntry = viewModel.LocalEntries.Single(entry => entry.Name == "a.txt");
-            var upload = viewModel.UploadAsync();
+            var upload = viewModel.UploadAsync(new[] { "/local/a.txt" });
 
             await WaitUntil(() => viewModel.IsConflictVisible, "ask about the conflict");
             Dispatcher.UIThread.RunJobs();
@@ -231,8 +284,7 @@ public sealed class SftpTransferUiTests
 
         try
         {
-            viewModel.SelectedLocalEntry = viewModel.LocalEntries.Single(entry => entry.Name == "a.txt");
-            var upload = viewModel.UploadAsync();
+            var upload = viewModel.UploadAsync(new[] { "/local/a.txt" });
 
             await WaitUntil(() => viewModel.IsConflictVisible, "ask about the conflict");
             Dispatcher.UIThread.RunJobs();

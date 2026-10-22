@@ -726,26 +726,26 @@ run_sftp01_browser_transfer() {
     printf 'SFTP01_LOCAL_V1' >"$local_up_dir/$upload_name"
 
 
-    # 1. The remote pane walks into the directory of the test.
-    click_window "$SFTP_REMOTE_PATH_X" "$SFTP_REMOTE_PATH_Y" \
-        || fail "$test_id" "could not click the path box of the remote pane"
+    # 1. The remote pane walks into the directory of the test. The click
+    #    helper waits for the focus ring, so the typed path cannot race
+    #    the app's focus change and leak into the terminal.
+    click_sftp_path_box 6 \
+        || fail "$test_id" "the path box never took keyboard focus"
+    if [[ -n "${SFTP01_DBG:-}" ]]; then
+        capture_screenshot "$TMP_ROOT/sftp01-after-path-click.png" || true
+    fi
     select_all_text
     type_text "$remote_dir"
     press_enter
     sleep 2
+    if [[ -n "${SFTP01_DBG:-}" ]]; then
+        capture_screenshot "$TMP_ROOT/sftp01-after-path-typed.png" || true
+    fi
 
-    # 2. The local pane walks into the directory that receives the
-    #    download.
-    click_window "$SFTP_LOCAL_PATH_X" "$SFTP_LOCAL_PATH_Y" \
-        || fail "$test_id" "could not click the path box of the local pane"
-    select_all_text
-    type_text "$local_down_dir"
-    press_enter
-    sleep 2
-
-    # 3. The only file of the remote pane comes down.
+    # 2. The only file of the remote list comes down. The download
+    #    directory is answered by the (scripted) system picker.
     click_window "$SFTP_REMOTE_ITEM_X" "$SFTP_REMOTE_ITEM_Y" \
-        || fail "$test_id" "could not click the file of the remote pane"
+        || fail "$test_id" "could not click the file of the remote list"
     sleep 0.5
     click_window "$SFTP_DOWNLOAD_X" "$SFTP_TOOLBAR_Y" \
         || fail "$test_id" "could not click the download button"
@@ -753,28 +753,16 @@ run_sftp01_browser_transfer() {
         fail "$test_id" "the file of the server did not arrive in the local directory"
     fi
 
-    # 4. The only file of the local pane goes up.
-    click_window "$SFTP_LOCAL_PATH_X" "$SFTP_LOCAL_PATH_Y" \
-        || fail "$test_id" "could not click the path box of the local pane again"
-    select_all_text
-    type_text "$local_up_dir"
-    press_enter
-    sleep 2
-    click_window "$SFTP_LOCAL_ITEM_X" "$SFTP_LOCAL_ITEM_Y" \
-        || fail "$test_id" "could not click the file of the local pane"
-    sleep 0.5
+    # 3. The upload file (answered by the scripted system picker) goes up.
     click_window "$SFTP_UPLOAD_X" "$SFTP_TOOLBAR_Y" \
         || fail "$test_id" "could not click the upload button"
     if ! wait_for_file_content "$remote_dir/$upload_name" "SFTP01_LOCAL_V1" 25; then
         fail "$test_id" "the local file did not arrive on the server"
     fi
 
-    # 5. The same file again. The target exists now, so the drawer has to
+    # 4. The same file again. The target exists now, so the drawer has to
     #    ask what to do with it.
     printf 'SFTP01_LOCAL_V2' >"$local_up_dir/$upload_name"
-    click_window "$SFTP_LOCAL_ITEM_X" "$SFTP_LOCAL_ITEM_Y" \
-        || fail "$test_id" "could not mark the file of the local pane again"
-    sleep 0.5
     click_window "$SFTP_UPLOAD_X" "$SFTP_TOOLBAR_Y" \
         || fail "$test_id" "could not click the upload button a second time"
     if ! wait_for_window_color \
