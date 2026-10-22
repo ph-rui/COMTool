@@ -228,6 +228,18 @@ public partial class MainWindow : Window
 
     internal Task OpenTelnetSessionForTests(string key) => OpenTelnetSessionAsync(key);
 
+    /// <summary>
+    /// Test seam: runs the same restart path the stopped terminal's R key
+    /// uses, so a failed restart (progress bar plus ask dialog) can be
+    /// exercised without a live SSH server.
+    /// </summary>
+    internal Task RestartSshSessionForTests(TerminalTab tab) => RestartSshSessionAsync(tab);
+
+    /// <summary>
+    /// Test seam: the last shown restart-ask dialog (null when closed).
+    /// </summary>
+    internal Window? LastRestartDialogForTests { get; private set; }
+
     internal void StopPortTimerForTests() => _portTimer?.Stop();
 
     private (HashSet<string> Serial, HashSet<string> Ssh, HashSet<string> Telnet, HashSet<string> Tcp)
@@ -911,6 +923,7 @@ public partial class MainWindow : Window
 
             tab.StatusMessage = $"Restarting {SshSessionRules.Detail(session)}...";
             tab.StatusBrush = StatusProgressBrush;
+            tab.IsRestarting = true;
 
             connection = await ConnectSshSessionAsync(session, OwnerFor(tab));
             if (connection is null)
@@ -993,6 +1006,15 @@ public partial class MainWindow : Window
             if (terminal is not null)
             {
                 RestoreStoppedTerminalFocus(tab, terminal);
+            }
+
+            // The attempt is over: drop the progress bar, release the
+            // re-entry guard, then ask whether to keep trying.
+            tab.IsRestarting = false;
+            _sshRestarts.Remove(tab);
+            if (IsTabOpen(tab) && await ShowRestartAskAsync(OwnerFor(tab), ex.Message) && IsTabOpen(tab))
+            {
+                _ = RestartSshSessionAsync(tab);
             }
         }
         finally
@@ -1244,6 +1266,7 @@ public partial class MainWindow : Window
 
             tab.StatusMessage = $"Restarting {TelnetSessionRules.Detail(session)}...";
             tab.StatusBrush = StatusProgressBrush;
+            tab.IsRestarting = true;
 
             connection = await ConnectTelnetSessionAsync(session);
             if (!_telnetRestarts.Contains(tab) || !IsTabOpen(tab) || terminal is null)
@@ -1310,6 +1333,15 @@ public partial class MainWindow : Window
             if (terminal is not null)
             {
                 RestoreStoppedTerminalFocus(tab, terminal);
+            }
+
+            // The attempt is over: drop the progress bar, release the
+            // re-entry guard, then ask whether to keep trying.
+            tab.IsRestarting = false;
+            _telnetRestarts.Remove(tab);
+            if (IsTabOpen(tab) && await ShowRestartAskAsync(OwnerFor(tab), ex.Message) && IsTabOpen(tab))
+            {
+                _ = RestartTelnetSessionAsync(tab);
             }
         }
         finally
@@ -1801,22 +1833,6 @@ public partial class MainWindow : Window
         viewModel.AddTab(tab);
     }
 
-    private void OnTabPointerEntered(object? sender, PointerEventArgs e)
-    {
-        if (sender is Border { Tag: TerminalTab tab })
-        {
-            tab.IsTabHovered = true;
-        }
-    }
-
-    private void OnTabPointerExited(object? sender, PointerEventArgs e)
-    {
-        if (sender is Border { Tag: TerminalTab tab })
-        {
-            tab.IsTabHovered = false;
-        }
-    }
-
     private void OnTabPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (sender is Border { Tag: TerminalTab tab } && DataContext is MainViewModel viewModel)
@@ -2160,6 +2176,81 @@ public partial class MainWindow : Window
             },
         };
         await dialog.ShowDialog(this);
+    }
+
+    /// <summary>
+    /// Asks the user whether to keep retrying after a failed restart.
+    /// Returns true when "继续重启" is chosen, false for "不重连" or closing.
+    /// </summary>
+    internal async Task<bool> ShowRestartAskAsync(Window owner, string reason)
+    {
+        var dialog = new Window
+        {
+            Title = "重连失败",
+            Width = 460,
+            Height = 200,
+            MinWidth = 320,
+            MinHeight = 160,
+            CanResize = false,
+            ShowInTaskbar = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+        };
+        var retry = new Button
+        {
+            Content = "继续重启",
+            Width = 96,
+            MinWidth = 0,
+            MinHeight = 0,
+            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+        };
+        retry.Click += (_, _) =>
+        {
+            dialog.Tag = true;
+            dialog.Close();
+        };
+        var giveUp = new Button
+        {
+            Content = "不重连",
+            Width = 96,
+            MinWidth = 0,
+            MinHeight = 0,
+            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+        };
+        giveUp.Click += (_, _) => dialog.Close();
+        dialog.Content = new StackPanel
+        {
+            Margin = new Thickness(16),
+            Spacing = 12,
+            Children =
+            {
+                new TextBlock
+                {
+                    Text = $"重连失败：{reason}\n是否继续重启？",
+                    TextWrapping = TextWrapping.Wrap,
+                },
+                new StackPanel
+                {
+                    Orientation = Avalonia.Layout.Orientation.Horizontal,
+                    Spacing = 8,
+                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                    Children = { retry, giveUp },
+                },
+            },
+        };
+        LastRestartDialogForTests = dialog;
+        try
+        {
+            await dialog.ShowDialog(owner);
+        }
+        finally
+        {
+            if (ReferenceEquals(LastRestartDialogForTests, dialog))
+            {
+                LastRestartDialogForTests = null;
+            }
+        }
+
+        return Equals(dialog.Tag, true);
     }
 
     private async Task ShowErrorAsync(string message)
@@ -3008,30 +3099,6 @@ public partial class MainWindow : Window
         }
 
         ShowConnectionSettings(null, kind);
-    }
-
-    private async void OnTabSettingsClick(object? sender, RoutedEventArgs e)
-    {
-        if (sender is not Button { Tag: TerminalTab tab }
-            || DataContext is not MainViewModel viewModel)
-        {
-            return;
-        }
-
-        viewModel.SelectedTab = tab;
-        await ShowTabSettingsAsync(tab);
-    }
-
-    private async Task ShowTabSettingsAsync(TerminalTab tab)
-    {
-        if (tab.Kind == SessionKind.Local)
-        {
-            await ShowErrorAsync("This development terminal has no saved connection settings.");
-            RestoreTerminalFocus();
-            return;
-        }
-
-        ShowConnectionSettings(tab);
     }
 
     private void ShowConnectionSettings(

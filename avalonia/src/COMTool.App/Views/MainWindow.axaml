@@ -220,8 +220,6 @@
                     <Border Classes="TabItemBorder"
                             Classes.selected="{Binding IsSelected}"
                             Focusable="False"
-                            PointerEntered="OnTabPointerEntered"
-                            PointerExited="OnTabPointerExited"
                             PointerPressed="OnTabPointerPressed"
                             DoubleTapped="OnTabDoubleTapped"
                             ToolTip.Tip="Double click to detach as a window"
@@ -235,21 +233,6 @@
                         <TextBlock Classes="TabTitle"
                                    Text="{Binding Title}"
                                    VerticalAlignment="Center" />
-                        <Button Name="TabSettingsButton"
-                                Classes="TabSettingsButton"
-                                Width="16" Height="16"
-                                MinWidth="0" MinHeight="0"
-                                Padding="0"
-                                Margin="0,0,8,0"
-                                IsVisible="{Binding ShowTabSettings}"
-                                Tag="{Binding}"
-                                ToolTip.Tip="Connection settings for this tab"
-                                Click="OnTabSettingsClick">
-                          <TextBlock Text="&#xf013;"
-                                     FontFamily="{DynamicResource IconFontAwesome}"
-                                     FontSize="12"
-                                     Foreground="White" />
-                        </Button>
                         <Button Classes="TabCloseButton"
                                 Width="16" Height="16"
                                 MinWidth="0" MinHeight="0"
@@ -340,8 +323,8 @@
                             Orientation="Horizontal"
                             Spacing="6"
                             VerticalAlignment="Center"
-                            IsVisible="{Binding SelectedTab.IsZmodemActive}">
-                  <TextBlock Text="{Binding SelectedTab.ZmodemLabel}"
+                            IsVisible="{Binding SelectedTab.ShowStatusProgress}">
+                  <TextBlock Text="{Binding SelectedTab.StatusProgressLabel}"
                              MaxWidth="220"
                              TextTrimming="CharacterEllipsis"
                              VerticalAlignment="Center" />
@@ -351,8 +334,8 @@
                                Minimum="0"
                                Maximum="100"
                                Value="{Binding SelectedTab.ZmodemProgress}"
-                               IsIndeterminate="{Binding SelectedTab.IsZmodemIndeterminate}"
-                               ShowProgressText="{Binding SelectedTab.IsZmodemProgressTextVisible}"
+                               IsIndeterminate="{Binding SelectedTab.StatusProgressIndeterminate}"
+                               ShowProgressText="{Binding SelectedTab.ShowProgressTextVisible}"
                                VerticalAlignment="Center" />
                   <Button Content="Cancel"
                           Width="90"
@@ -361,6 +344,7 @@
                           Padding="0"
                           HorizontalContentAlignment="Center"
                           IsEnabled="{Binding SelectedTab.IsZmodemCancellable}"
+                          IsVisible="{Binding SelectedTab.IsZmodemActive}"
                           Click="OnZmodemCancelClick" />
                 </StackPanel>
               </Grid>

@@ -91,17 +91,6 @@ public sealed partial class TerminalTab : ObservableObject
     private bool _isSelected;
 
     [ObservableProperty]
-    private bool _isTabHovered;
-
-    public bool ShowTabSettings => IsSelected && IsTabHovered;
-
-    partial void OnIsSelectedChanged(bool value) =>
-        OnPropertyChanged(nameof(ShowTabSettings));
-
-    partial void OnIsTabHoveredChanged(bool value) =>
-        OnPropertyChanged(nameof(ShowTabSettings));
-
-    [ObservableProperty]
     private bool _isAlive = true;
 
     [ObservableProperty]
@@ -122,11 +111,6 @@ public sealed partial class TerminalTab : ObservableObject
     [ObservableProperty]
     private bool _isZmodemIndeterminate;
 
-    public bool IsZmodemProgressTextVisible => !IsZmodemIndeterminate;
-
-    partial void OnIsZmodemIndeterminateChanged(bool value) =>
-        OnPropertyChanged(nameof(IsZmodemProgressTextVisible));
-
     [ObservableProperty]
     private bool _isZmodemCancellable = true;
 
@@ -135,6 +119,64 @@ public sealed partial class TerminalTab : ObservableObject
 
     [ObservableProperty]
     private double _zmodemProgress;
+
+    /// <summary>
+    /// True while a stopped session is being restarted with R. The status
+    /// row shows its progress area with an indeterminate bar and the label
+    /// "Restarting...".
+    /// </summary>
+    [ObservableProperty]
+    private bool _isRestarting;
+
+    /// <summary>
+    /// True while the status row should show its progress area: either a
+    /// ZMODEM transfer or an in-flight session restart.
+    /// </summary>
+    public bool ShowStatusProgress => IsZmodemActive || IsRestarting;
+
+    /// <summary>
+    /// The label next to the progress area. ZMODEM keeps its own label; a
+    /// restart just says it is restarting.
+    /// </summary>
+    public string StatusProgressLabel => IsZmodemActive ? ZmodemLabel : "Restarting...";
+
+    /// <summary>
+    /// A restart cannot report a percentage, so its bar animates until the
+    /// attempt succeeds or fails.
+    /// </summary>
+    public bool StatusProgressIndeterminate =>
+        IsRestarting || (IsZmodemActive && IsZmodemIndeterminate);
+
+    /// <summary>
+    /// The percentage text only makes sense for a ZMODEM transfer with a
+    /// determinate bar.
+    /// </summary>
+    public bool ShowProgressTextVisible => IsZmodemActive && !IsZmodemIndeterminate;
+
+    partial void OnIsRestartingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowStatusProgress));
+        OnPropertyChanged(nameof(StatusProgressLabel));
+        OnPropertyChanged(nameof(StatusProgressIndeterminate));
+        OnPropertyChanged(nameof(ShowProgressTextVisible));
+    }
+
+    partial void OnIsZmodemActiveChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowStatusProgress));
+        OnPropertyChanged(nameof(StatusProgressLabel));
+        OnPropertyChanged(nameof(StatusProgressIndeterminate));
+        OnPropertyChanged(nameof(ShowProgressTextVisible));
+    }
+
+    partial void OnIsZmodemIndeterminateChanged(bool value)
+    {
+        OnPropertyChanged(nameof(StatusProgressIndeterminate));
+        OnPropertyChanged(nameof(ShowProgressTextVisible));
+    }
+
+    partial void OnZmodemLabelChanged(string value) =>
+        OnPropertyChanged(nameof(StatusProgressLabel));
 
     public bool IsSessionTab => Kind is SessionKind.Serial or SessionKind.Ssh or SessionKind.Telnet or SessionKind.Tcp;
 }
