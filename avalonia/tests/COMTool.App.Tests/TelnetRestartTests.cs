@@ -3,7 +3,9 @@ using System.Net.Sockets;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using COMTool.App.Services;
 using COMTool.App.ViewModels;
 using COMTool.App.Views;
@@ -151,14 +153,39 @@ public sealed class TelnetRestartTests
 
                 Assert.False(tab.IsAlive);
                 Assert.True(tab.IsSessionStopped);
+                Assert.False(tab.IsRestarting);
 
-                // The stopped screen stays usable, so R can be pressed again.
+                // A failed attempt pops the ask dialog; "不重连" keeps the
+                // stopped screen without retrying on its own.
+                var first = WaitDialog(window);
+                Assert.Equal("重连失败", first.Title);
+                ClickButton(first, "不重连");
+                WaitUntil(() => window.LastRestartDialogForTests is null, "give-up closed the dialog");
+                Assert.True(tab.IsSessionStopped);
+                Assert.False(tab.IsRestarting);
+
+                // R can still be pressed. The second failure asks again, and
+                // "继续重启" launches a fresh attempt, which fails and asks a
+                // third time; "不重连" ends the loop.
                 Press(terminal, Key.R);
                 WaitUntil(
-                    () => tab.StatusMessage.StartsWith("Restart failed", StringComparison.Ordinal),
-                    "second failed restart status");
+                    () => window.LastRestartDialogForTests is not null
+                        && !ReferenceEquals(window.LastRestartDialogForTests, first),
+                    "second ask dialog");
+                var second = window.LastRestartDialogForTests!;
+                ClickButton(second, "继续重启");
+                WaitUntil(
+                    () => window.LastRestartDialogForTests is not null
+                        && !ReferenceEquals(window.LastRestartDialogForTests, second),
+                    "retry ask dialog");
+                var third = window.LastRestartDialogForTests!;
+                ClickButton(third, "不重连");
+                WaitUntil(() => window.LastRestartDialogForTests is null, "final dialog closed");
                 RunJobs(window);
+
                 Assert.True(tab.IsSessionStopped);
+                Assert.False(tab.IsRestarting);
+                Assert.StartsWith("Restart failed", tab.StatusMessage, StringComparison.Ordinal);
             });
         }
         finally
@@ -176,6 +203,21 @@ public sealed class TelnetRestartTests
             Key = key,
             PhysicalKey = key == Key.R ? PhysicalKey.R : PhysicalKey.None,
         });
+    }
+
+    private static Window WaitDialog(MainWindow window)
+    {
+        WaitUntil(() => window.LastRestartDialogForTests is not null, "restart ask dialog");
+        return window.LastRestartDialogForTests!;
+    }
+
+    private static void ClickButton(Window dialog, string label)
+    {
+        var button = dialog.GetVisualDescendants()
+            .OfType<Button>()
+            .Single(b => string.Equals(b.Content?.ToString(), label, StringComparison.Ordinal));
+        button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Dispatcher.UIThread.RunJobs();
     }
 
     private static void RunJobs(Window window)

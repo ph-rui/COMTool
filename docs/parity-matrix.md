@@ -17,7 +17,7 @@
 | UI-05 | 标签页与标题 | P0 | 完成 | 多标签新增/关闭/切换、标题规则、选中样式、状态圆点和双击分离/回接已完成；分离后命令可继续执行，关闭分离窗口无重复缓冲；切换标签前对旧终端调用 `BeginReparent`，避免内容宿主移除旧控件时清理 PTY 读取器，切换后直接输入即可继续执行，两个方向均已在打包版实测；见 `tab-switch-input-second-1000x650.png`、`tab-switch-input-first-1000x650.png` |
 | UI-06 | `+` 新建会话类型选择器 | P0 | 完成（MobaXterm 方向） | 按用户要求移除 Python 插件占位项（Send Receive/protocol/Graph/Load plugin）；空状态和侧栏标题两个 `+` 入口统一为 Serial/SSH/Telnet/TCP/Local terminal，选择后预选对应设置页或创建本地终端；菜单项使用与 MobaXterm 相近的类型图标（串口插头、SSH 服务器、Telnet 终端、TCP 网络、本地桌面），标题栏/窗口图标为深蓝终端图标；右上角 Functional 箭头按钮及 `Load config` / `Share config` 面板已按用户要求删除；Telnet 已作为 MobaXterm 会话类型接入，后续类型按阶段扩展，未实现类型不显示 |
 | UI-07 | 空状态 | P0 | 完成 | 无标签时显示 `Select a session from the left` / `or click + to add a session`，空状态和侧栏标题两个 `+` 入口提示 `New session`；headless 测试覆盖 |
-| UI-08 | 设置按钮与设置面板 | P0 | 完成 | 串口/SSH/Telnet 参数、SSH 密钥、记住密码、打开/关闭、侧栏同步已实现；连接设置齿轮位于选中标签页内，默认隐藏，仅在鼠标悬停该选中标签时出现，明确编辑该标签对应的会话且不挤占标签标题；不再在标签栏左侧放全局齿轮；见 `tab-settings-gear-850x500.png` |
+| UI-08 | 设置按钮与设置面板 | P0 | 完成 | 串口/SSH/Telnet 参数、SSH 密钥、记住密码、打开/关闭、侧栏同步已实现；2026-10-22 按用户要求去掉标签页内的连接设置齿轮（标签只留状态点+标题+关闭按钮），连接设置改由侧栏右键 `Edit session` 进入；齿轮时代的截图在 fixtures README 中标为 Historical |
 | UI-09 | 主题切换（浅色/深色） | P0 | 部分 | 标题栏右键菜单可切换浅/深色，`skin` 持久化并重启生效 |
 | UI-10 | 语言切换 | P1 | 未开始 | 英文/简中/繁中/日文，文案一致 |
 | UI-11 | 帮助、关于、捐赠、更新提示 | P1 | 部分 | `About COMTool` 已包含版本、说明、配置路径、License、GitHub/Releases/Issues/捐赠链接；插件帮助和更新检测待补 |
@@ -75,7 +75,7 @@
 | SSH-08 | PTY 尺寸 | P0 | 完成 | Linux `stty size` = 40x100 验证通过 |
 | SSH-09 | Shell 输出与终端 | P0 | 完成 | SSH shell 已接入多标签终端并通过 UI 验证 |
 | SSH-10 | 连接速度 | P0 | 部分 | 首次 187-446ms，重连 33ms |
-| SSH-11 | 停止会话界面 | P1 | 完成 | Shell 退出后显示 MobaXterm 风格 “Session stopped”；Enter 关闭标签、R 在同一标签内重连、S 保存完整回滚输出；TCP/串口保持原退出提示；Telnet 使用同一停止界面与动作（见 TELNET-06）；由 headless 测试和 Linux Xvfb `SSH11_RestartStoppedSessionE2E` 覆盖 |
+| SSH-11 | 停止会话界面 | P1 | 完成 | Shell 退出后显示 MobaXterm 风格 “Session stopped”；Enter 关闭标签、R 在同一标签内重连、S 保存完整回滚输出；重连进行中状态行显示不定长 “Restarting...” 进度条，连接失败后弹 “重连失败” 对话框询问 继续重启/不重连；TCP/串口保持原退出提示；Telnet 使用同一停止界面与动作（见 TELNET-06）；由 headless 测试（含进度条状态与对话框两分支）和 Linux Xvfb `SSH11_RestartStoppedSessionE2E` 覆盖 |
 
 ## 5. Telnet
 
@@ -86,7 +86,7 @@
 | TELNET-03 | 自动登录 | P0 | 完成 | 去掉 ANSI 后匹配末尾 `login`/`username`/`user`/`User name`/`Login name`/`Login ID`/`Account name`/中文账号提示、`Please enter …` 前缀、`>>` 前缀及主机名前缀（如 `SonnePower_070_Ax login:`），密码支持 `password`/`passwd`/`passphrase`/`passcode`/`PIN`/`Password for …`/中文密码提示，用户名/密码各发送一次；无匹配提示不发送；Linux Xvfb E2E 验证用户名自动登录和终端输入；Windows RDP 实机验证用户名/密码分阶段发送和 `PING`→`PONG` |
 | TELNET-04 | 会话保存与记住密码 | P0 | 完成 | 独立 `telnetSessions`、稳定 key、`passwd_enc` 持久化和内存缓存；非 Windows 仅内存；Windows 10 实机保存密码后 `passwd_enc` 长度 208、配置无明文，重启应用后由 DPAPI 密码自动重连成功；证据见 `docs/fixtures/phase1/telnet-windows-dpapi-2026-10-21.md` |
 | TELNET-05 | 分享/导入配置 | P1 | 完成 | 分享去除 `passwd_enc` 和未知字段，导入不写入密码；不读取 Python `config.json` |
-| TELNET-06 | 断连停止界面与 R 重连 | P1 | 完成 | 连接断开后标签进入与 SSH 相同的 MobaXterm 风格停止界面（状态 `Session stopped`），Enter 关闭标签、R 在同一标签内重连、S 保存完整回滚输出；重连复用已保存的主机/端口/用户与密码（内存缓存 → DPAPI `passwd_enc`），没有已存密码时直接以无自动登录方式重连，服务器提示留在终端里由用户手输，不弹窗；重连失败时状态显示 `Restart failed: …` 并保留停止界面可再次按 R；由 headless 测试和 Linux Xvfb `TELNET02_RestartStoppedSessionE2E` 覆盖；见 `telnet-stopped-screen-1000x650.png`、`telnet-restarted-after-r-1000x650.png` |
+| TELNET-06 | 断连停止界面与 R 重连 | P1 | 完成 | 连接断开后标签进入与 SSH 相同的 MobaXterm 风格停止界面（状态 `Session stopped`），Enter 关闭标签、R 在同一标签内重连、S 保存完整回滚输出；重连复用已保存的主机/端口/用户与密码（内存缓存 → DPAPI `passwd_enc`），没有已存密码时直接以无自动登录方式重连，服务器提示留在终端里由用户手输，不弹窗；重连失败时状态显示 `Restart failed: …` 并弹 “重连失败” 对话框（与 SSH 相同，继续重启/不重连），不重连保留停止界面可再次按 R；由 headless 测试和 Linux Xvfb `TELNET02_RestartStoppedSessionE2E` 覆盖；见 `telnet-stopped-screen-1000x650.png`、`telnet-restarted-after-r-1000x650.png` |
 
 ## 6. SFTP
 

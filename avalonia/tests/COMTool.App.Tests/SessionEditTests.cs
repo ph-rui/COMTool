@@ -99,12 +99,11 @@ public sealed class SessionEditTests
     }
 
     [AvaloniaFact]
-    public void UI08_TabSettingsGearTargetsSelectedTab()
+    public void UI08_TabHasNoSettingsGear()
     {
         using var env = new TestEnvironment();
         env.SeedConfig(new ComtoolConfig());
         MainWindow? window = null;
-        ConnectionSettingsWindow? settings = null;
         try
         {
             env.Run(() =>
@@ -130,103 +129,27 @@ public sealed class SessionEditTests
                 window.StopSidebarHoverTimerForTests();
                 viewModel.AddTab(first);
                 viewModel.AddTab(second);
+                viewModel.SelectedTab = second;
                 Dispatcher.UIThread.RunJobs();
                 window.UpdateLayout();
                 Dispatcher.UIThread.RunJobs();
 
+                // Per user request the per-tab settings gear is gone: each tab
+                // keeps only its status dot, title and close button.
+                // Connection settings stay reachable from the sidebar's
+                // "Edit session" menu.
                 var gears = window.GetVisualDescendants()
                     .OfType<Button>()
                     .Where(button => button.Name == "TabSettingsButton")
                     .ToList();
-                Assert.Equal(2, gears.Count);
-                var firstGear = gears.Single(button =>
-                    ReferenceEquals(button.DataContext, first));
-                var secondGear = gears.Single(button =>
-                    ReferenceEquals(button.DataContext, second));
-                Assert.False(firstGear.IsVisible);
-                Assert.False(secondGear.IsVisible);
-                Assert.Contains(
-                    "settings",
-                    ToolTip.GetTip(secondGear)?.ToString(),
-                    StringComparison.OrdinalIgnoreCase);
+                Assert.Empty(gears);
 
-                // Hovering a tab does not reveal settings until that tab is selected.
-                first.IsTabHovered = true;
-                Dispatcher.UIThread.RunJobs();
-                Assert.False(firstGear.IsVisible);
-
-                viewModel.SelectedTab = first;
-                Dispatcher.UIThread.RunJobs();
-                Assert.True(firstGear.IsVisible);
-                Assert.False(secondGear.IsVisible);
-
-                viewModel.SelectedTab = second;
-                Dispatcher.UIThread.RunJobs();
-                Assert.False(firstGear.IsVisible);
-                Assert.False(secondGear.IsVisible);
-
-                // The selected tab reveals its settings gear while hovered.
-                second.IsTabHovered = true;
-                Dispatcher.UIThread.RunJobs();
-                Assert.True(secondGear.IsVisible);
-
-                secondGear.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                Dispatcher.UIThread.RunJobs();
-
-                settings = window.SettingsWindowForTests;
-                Assert.NotNull(settings);
-                Assert.Equal("Second tab - Connection settings", settings.Title);
-            });
-        }
-        finally
-        {
-            settings?.Close();
-            window?.Close();
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
-
-    [AvaloniaFact]
-    public void UI08_TabSettingsGearKeepsClearanceFromCloseButton()
-    {
-        using var env = new TestEnvironment();
-        env.SeedConfig(new ComtoolConfig());
-        MainWindow? window = null;
-        try
-        {
-            env.Run(() =>
-            {
-                var tab = new TerminalTab
-                {
-                    Title = "First tab",
-                    SessionId = "first.example",
-                    Kind = SessionKind.Ssh,
-                    Content = new Border(),
-                };
-                var viewModel = new MainViewModel();
-                window = new MainWindow { DataContext = viewModel };
-                window.Show();
-                window.StopPortTimerForTests();
-                window.StopSidebarHoverTimerForTests();
-                viewModel.AddTab(tab);
-                viewModel.SelectedTab = tab;
-                tab.IsTabHovered = true;
-                Dispatcher.UIThread.RunJobs();
-                window.UpdateLayout();
-                Dispatcher.UIThread.RunJobs();
-
-                var buttons = window.GetVisualDescendants().OfType<Button>().ToList();
-                var gear = buttons.Single(button => button.Name == "TabSettingsButton");
-                var close = buttons.Single(button => button.Classes.Contains("TabCloseButton"));
-                Assert.True(gear.IsVisible);
-                Assert.True(close.IsVisible);
-
-                // Both buttons share the tab StackPanel as their parent, so
-                // their bounds are in the same coordinate space.
-                var gap = close.Bounds.Left - (gear.Bounds.Left + gear.Bounds.Width);
-                Assert.True(
-                    gap >= 16,
-                    $"expected at least 16px between the gear and the close button, got {gap}px");
+                var closes = window.GetVisualDescendants()
+                    .OfType<Button>()
+                    .Where(button => button.Classes.Contains("TabCloseButton"))
+                    .ToList();
+                Assert.Equal(2, closes.Count);
+                Assert.All(closes, button => Assert.True(button.IsVisible));
             });
         }
         finally
