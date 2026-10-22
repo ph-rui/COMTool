@@ -309,13 +309,8 @@ ensure_first_shell() {
         [[ -n "$SHELL_A_PID" ]] && return 0
     fi
 
-    if ! run_command_until_marker \
-        "echo \$\$ > $SHELL_A_PID_FILE && touch $SHELL_A_PID_FILE.ready" \
-        "$SHELL_A_PID_FILE.ready" 20; then
-        fail "$test_id" "first SSH shell did not accept the PID marker command"
-    fi
-    SHELL_A_PID="$(read_pid_file "$SHELL_A_PID_FILE")" \
-        || fail "$test_id" "first SSH shell PID marker is empty"
+    SHELL_A_PID="$(run_pid_command_until_pid_file "$SHELL_A_PID_FILE" 20)" \
+        || fail "$test_id" "first SSH shell did not accept the PID marker command"
     [[ -n "$SHELL_A_PID" ]] || fail "$test_id" "first SSH shell PID marker is empty"
 }
 
@@ -524,7 +519,6 @@ run_ssh11_restart_stopped_session() {
     local test_id="SSH11_RestartStoppedSessionE2E"
     local old_pid
     local new_pid
-    local marker="$TMP_ROOT/ssh11-restarted"
     local attempt
 
     log "Running $test_id"
@@ -553,14 +547,8 @@ run_ssh11_restart_stopped_session() {
     click_window 600 300 || fail "$test_id" "could not focus the stopped terminal"
     type_text "r" || fail "$test_id" "could not press R"
 
-    rm -f -- "$marker"
-    if ! run_command_until_marker \
-        "echo \$\$ > $SHELL_A_PID_FILE && touch $marker" \
-        "$marker" 20; then
-        fail "$test_id" "R did not restart the stopped SSH session"
-    fi
-
-    new_pid="$(read_pid_file "$SHELL_A_PID_FILE")"
+    new_pid="$(run_pid_command_until_pid_file "$SHELL_A_PID_FILE" 20)" \
+        || fail "$test_id" "R did not restart the stopped SSH session"
     [[ -n "$new_pid" ]] || fail "$test_id" "restarted shell PID is empty"
     [[ "$new_pid" != "$old_pid" ]] \
         || fail "$test_id" "restart reused the stopped shell PID $old_pid"
