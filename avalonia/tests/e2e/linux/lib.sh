@@ -1091,6 +1091,40 @@ click_second_tab() {
 # attached/focused its terminal when the click returns, so a lost keystroke is
 # retried after clearing the line. The marker remains the assertion; a timeout
 # is always a failure. Commands used here are idempotent.
+# The first keystrokes of a freshly attached terminal can be dropped while the
+# shell prints its login banner: a command that loses its prefix still leaves
+# the files of its redirections behind, so a marker file alone does not prove
+# that the shell ran anything. This types the PID command again until the file
+# holds a number.
+run_pid_command_until_pid_file() {
+    local pid_file="$1"
+    local timeout_s="${2:-20}"
+    local marker="$pid_file.ready"
+    local attempt
+    local wait_attempt
+    local iterations=$((timeout_s * 2))
+    local value=""
+
+    for ((attempt = 0; attempt < iterations; attempt++)); do
+        # A file that a previous shell wrote still holds a number, so it is
+        # removed before every attempt.
+        rm -f -- "$pid_file" "$marker"
+        clear_input_line
+        type_text "echo \$\$ > $pid_file && touch $marker" >/dev/null 2>&1 || true
+        press_enter >/dev/null 2>&1 || true
+        for ((wait_attempt = 0; wait_attempt < 5; wait_attempt++)); do
+            value="$(cat -- "$pid_file" 2>/dev/null || true)"
+            if [[ "$value" =~ ^[0-9]+$ ]]; then
+                printf '%s\n' "$value"
+                return 0
+            fi
+            sleep 0.1
+        done
+    done
+
+    return 1
+}
+
 run_command_until_marker() {
     local command="$1"
     local marker="$2"
