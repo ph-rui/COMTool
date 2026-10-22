@@ -126,6 +126,8 @@ public sealed partial class SftpPaneViewModel : ObservableObject
             if (SetProperty(ref _isTransferring, value))
             {
                 OnPropertyChanged(nameof(CanTransfer));
+                OnPropertyChanged(nameof(CanUpload));
+                OnPropertyChanged(nameof(CanDownload));
             }
         }
     }
@@ -138,15 +140,17 @@ public sealed partial class SftpPaneViewModel : ObservableObject
 
     /// <summary>
     /// True when an upload can be started. An upload takes the entries of
-    /// the local side, so a local entry has to be marked.
+    /// the local side, so a local entry has to be marked and no transfer
+    /// may be running: two transfers would share one client.
     /// </summary>
-    public bool CanUpload => SelectedLocalEntry is not null;
+    public bool CanUpload => !IsTransferring && SelectedLocalEntry is not null;
 
     /// <summary>
     /// True when a download can be started. A download takes the entries of
-    /// the remote side, so a remote entry has to be marked.
+    /// the remote side, so a remote entry has to be marked and no transfer
+    /// may be running: two transfers would share one client.
     /// </summary>
-    public bool CanDownload => SelectedRemoteEntry is not null;
+    public bool CanDownload => !IsTransferring && SelectedRemoteEntry is not null;
 
     /// <summary>
     /// The last thing that happened, shown under the panes.
@@ -460,7 +464,7 @@ public sealed partial class SftpPaneViewModel : ObservableObject
     public async Task UploadAsync()
     {
         var entry = SelectedLocalEntry;
-        if (entry is null)
+        if (IsTransferring || entry is null)
         {
             return;
         }
@@ -474,7 +478,7 @@ public sealed partial class SftpPaneViewModel : ObservableObject
     public async Task DownloadAsync()
     {
         var entry = SelectedRemoteEntry;
-        if (entry is null)
+        if (IsTransferring || entry is null)
         {
             return;
         }
@@ -572,7 +576,7 @@ public sealed partial class SftpPaneViewModel : ObservableObject
     private async Task RunTransferAsync(SftpTransferDirection direction, string sourcePath, string targetDirectory)
     {
         var remote = _remote;
-        if (remote is null)
+        if (IsTransferring || remote is null)
         {
             return;
         }

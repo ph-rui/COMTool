@@ -243,6 +243,41 @@ public sealed class SftpPaneViewModelTests
     }
 
     [AvaloniaFact]
+    public async Task DisablesTheTransferButtonsWhileATransferRuns()
+    {
+        var (viewModel, remote, local) = NewViewModel();
+        remote.AddFile("/remote/a.txt", "old");
+        local.AddFile("/local/a.txt", "new");
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        viewModel.SelectedLocalEntry =
+            viewModel.LocalEntries.Single(entry => entry.Name == "a.txt");
+        viewModel.SelectedRemoteEntry =
+            viewModel.RemoteEntries.Single(entry => entry.Name == "a.txt");
+
+        var upload = viewModel.UploadAsync();
+        await WaitUntil(() => viewModel.IsConflictVisible, "ask about the conflict");
+
+        // The spec disables Upload and Download while a transfer runs: two
+        // transfers would share one client and the second one would take
+        // the cancellation token of the first.
+        Assert.True(viewModel.IsTransferring);
+        Assert.False(viewModel.CanUpload);
+        Assert.False(viewModel.CanDownload);
+        Assert.False(viewModel.CanTransfer);
+
+        var secondUpload = viewModel.UploadAsync();
+        Assert.True(secondUpload.IsCompletedSuccessfully);
+        var secondDownload = viewModel.DownloadAsync();
+        Assert.True(secondDownload.IsCompletedSuccessfully);
+
+        viewModel.ResolveConflict(SftpConflictAction.Overwrite);
+        await upload.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.False(viewModel.IsTransferring);
+    }
+
+    [AvaloniaFact]
     public async Task ShowsAConflictPromptAndAppliesTheDecision()
     {
         var (viewModel, remote, local) = NewViewModel();
