@@ -30,6 +30,7 @@ E2E_TESTS=(
     TELNET01_AutoLoginE2E
     TELNET02_RestartStoppedSessionE2E
     SFTP01_BrowserTransferE2E
+    SFTP02_FileManagementE2E
 )
 SSH_TEST_IDS=(
     UI01_TitleBarDoubleClickMaximizeE2E
@@ -41,6 +42,7 @@ SSH_TEST_IDS=(
     UI05_TabSwitchTypingBothDirections
     TERM15_DoubleClickMaximizeE2E
     SFTP01_BrowserTransferE2E
+    SFTP02_FileManagementE2E
 )
 TELNET_TEST_IDS=(
     TELNET01_AutoLoginE2E
@@ -785,6 +787,118 @@ run_sftp01_browser_transfer() {
     pass "$test_id"
 }
 
+run_sftp02_file_management() {
+    local test_id="SFTP02_FileManagementE2E"
+    local remote_dir="$SFTP_REMOTE_TEST_DIR"
+    local folder="e2e_folder"
+    local renamed="${folder}_renamed"
+
+    log "Running $test_id"
+
+    # The SFTP coordinates assume a folded sidebar. SFTP01 leaves the panel
+    # open, and an open panel at x 0..420 makes the sidebar probe at
+    # (200,300) read bright and misread the state. Close the panel first:
+    # (300,300) is bright if and only if the panel is open (the panel always
+    # covers x=300 for any width in 320..640, and the sidebar never does).
+    # If the sidebar is still expanded, the toggle click below misses it and
+    # lands on the empty tab strip, which is harmless.
+    if ! window_region_is_dark 300 300; then
+        click_window "$SFTP_TOGGLE_X" "$SFTP_TOGGLE_Y" || true
+        sleep 0.5
+    fi
+    collapse_sidebar_for_tabs \
+        || fail "$test_id" "could not collapse the sidebar"
+
+    # The panel may be closed (standalone run) or was just closed above;
+    # open it and wait for the sftp subsystem.
+    if window_region_is_dark 300 300; then
+        click_window "$SFTP_TOGGLE_X" "$SFTP_TOGGLE_Y" \
+            || fail "$test_id" "could not click the SFTP button of the tab strip"
+        wait_for_sshd_log "subsystem 'sftp'" 20 \
+            || fail "$test_id" "the panel did not ask the server for the sftp subsystem"
+        sleep 1
+    fi
+
+    rm -rf -- "$remote_dir"
+    mkdir -p -- "$remote_dir"
+
+    # 1. Walk into the test directory.
+    click_sftp_path_box 6 \
+        || fail "$test_id" "the path box never took keyboard focus"
+    select_all_text
+    type_text "$remote_dir"
+    press_enter
+    sleep 2
+
+    # 2. "+" opens the inline prompt row; a name plus Enter creates the
+    #    folder on the server.
+    click_window "$SFTP_NEWFOLDER_X" "$SFTP_TOOLBAR_Y" \
+        || fail "$test_id" "could not click the new-folder button"
+    if ! wait_for_window_color "$SFTP_PROMPT_COLOR" \
+        "$SFTP_PROMPT_PROBE_X" "$SFTP_PROMPT_PROBE_Y" \
+        "$SFTP_PROMPT_PROBE_W" "$SFTP_PROMPT_PROBE_H" 10; then
+        fail "$test_id" "the new-folder prompt row did not appear"
+    fi
+    click_window "$SFTP_PROMPT_INPUT_X" "$SFTP_PROMPT_INPUT_Y" \
+        || fail "$test_id" "could not click the prompt input"
+    select_all_text
+    type_text "$folder"
+    press_enter
+    if ! wait_for_file "$remote_dir/$folder" 15; then
+        fail "$test_id" "the new folder did not appear on the server"
+    fi
+    # wait_for_file only sees the disk; the app's list refresh lags one
+    # SFTP round-trip behind it, so give the refresh room before clicking
+    # the (only) row.
+    sleep 1
+
+    # 3. Rename: mark the folder, open the rename prompt (prefilled with
+    #    the current name), replace it, Enter.
+    click_window "$SFTP_REMOTE_ITEM_X" "$SFTP_REMOTE_ITEM_Y" \
+        || fail "$test_id" "could not mark the new folder"
+    sleep 0.5
+    click_window "$SFTP_RENAME_X" "$SFTP_TOOLBAR_Y" \
+        || fail "$test_id" "could not click the rename button"
+    if ! wait_for_window_color "$SFTP_PROMPT_COLOR" \
+        "$SFTP_PROMPT_PROBE_X" "$SFTP_PROMPT_PROBE_Y" \
+        "$SFTP_PROMPT_PROBE_W" "$SFTP_PROMPT_PROBE_H" 10; then
+        fail "$test_id" "the rename prompt row did not appear"
+    fi
+    click_window "$SFTP_PROMPT_INPUT_X" "$SFTP_PROMPT_INPUT_Y" \
+        || fail "$test_id" "could not click the rename input"
+    select_all_text
+    type_text "$renamed"
+    press_enter
+    if ! wait_for_file "$remote_dir/$renamed" 15; then
+        fail "$test_id" "the folder was not renamed"
+    fi
+    if ! wait_for_file_absent "$remote_dir/$folder" 15; then
+        fail "$test_id" "the old folder name still exists after the rename"
+    fi
+    sleep 1
+
+    # 4. Delete is two-step: the first click only arms, the second removes.
+    click_window "$SFTP_REMOTE_ITEM_X" "$SFTP_REMOTE_ITEM_Y" \
+        || fail "$test_id" "could not mark the renamed folder"
+    sleep 0.5
+    click_window "$SFTP_DELETE_X" "$SFTP_TOOLBAR_Y" \
+        || fail "$test_id" "could not arm the delete button"
+    sleep 0.5
+    if [[ -e "$remote_dir/$renamed" ]]; then
+        log "$test_id: first delete click armed (folder still present, as expected)"
+    fi
+    click_window "$SFTP_DELETE_X" "$SFTP_TOOLBAR_Y" \
+        || fail "$test_id" "could not confirm the delete"
+    if ! wait_for_file_absent "$remote_dir/$renamed" 15; then
+        fail "$test_id" "the folder was not deleted after the confirm click"
+    fi
+
+    capture_screenshot "$TMP_ROOT/sftp02-filemgmt.png" || true
+    rm -rf -- "$remote_dir"
+
+    pass "$test_id"
+}
+
 run_term15_double_click_maximize() {
     local test_id="TERM15_DoubleClickMaximizeE2E"
     local before
@@ -881,6 +995,9 @@ if [[ -n "$SSH_TEST_ID" ]]; then
     fi
     if matches_filter "SFTP01_BrowserTransferE2E"; then
         run_sftp01_browser_transfer
+    fi
+    if matches_filter "SFTP02_FileManagementE2E"; then
+        run_sftp02_file_management
     fi
 
     close_app_window "$SSH_TEST_ID"
