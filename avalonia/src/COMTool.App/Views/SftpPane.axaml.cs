@@ -93,6 +93,8 @@ public sealed partial class SftpPane : UserControl
 
     internal Button CancelButtonControl => CancelButton;
 
+    internal Button RetryButtonControl => RetryButton;
+
     internal ProgressBar TransferProgressBarControl => TransferProgressBar;
 
     internal Border ConflictPanelControl => ConflictPanel;
@@ -370,6 +372,17 @@ public sealed partial class SftpPane : UserControl
     private void OnCancelClick(object? sender, RoutedEventArgs e)
     {
         ViewModel?.CancelTransfer();
+    }
+
+    private async void OnRetryClick(object? sender, RoutedEventArgs e)
+    {
+        var viewModel = ViewModel;
+        if (viewModel is null)
+        {
+            return;
+        }
+
+        await viewModel.EnsureLoadedAsync(CancellationToken.None);
     }
 
     private void OnConflictOverwriteClick(object? sender, RoutedEventArgs e)

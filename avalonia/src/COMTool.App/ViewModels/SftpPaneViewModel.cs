@@ -12,9 +12,9 @@ namespace COMTool.App.ViewModels;
 /// </summary>
 public sealed partial class SftpPaneViewModel : ObservableObject
 {
-    private const double DefaultPaneHeight = 260;
-    private const double MinPaneHeight = 120;
-    private const double MaxPaneHeight = 600;
+    private const double DefaultPaneWidth = 420;
+    private const double MinPaneWidth = 320;
+    private const double MaxPaneWidth = 640;
 
     private Func<ISftpFileSystem> _remoteFactory;
     private readonly ILocalFileSystem _local;
@@ -31,7 +31,8 @@ public sealed partial class SftpPaneViewModel : ObservableObject
     private double _transferProgress;
     private bool _isConflictVisible;
     private string _conflictMessage = string.Empty;
-    private double _paneHeight = DefaultPaneHeight;
+    private bool _hasRemoteError;
+    private double _paneWidth = DefaultPaneWidth;
 
     [ObservableProperty]
     private string _remotePath = string.Empty;
@@ -40,7 +41,7 @@ public sealed partial class SftpPaneViewModel : ObservableObject
     private string _localPath = string.Empty;
 
     [ObservableProperty]
-    private bool _isExpanded = true;
+    private bool _isExpanded;
 
     [ObservableProperty]
     private SftpEntry? _selectedRemoteEntry;
@@ -90,20 +91,30 @@ public sealed partial class SftpPaneViewModel : ObservableObject
     public ObservableCollection<SftpEntry> LocalEntries { get; } = new();
 
     /// <summary>
-    /// The height of the drawer in the window. It is kept when the
-    /// drawer is folded away.
+    /// The width of the panel in the window. It is kept when the panel is
+    /// folded away.
     /// </summary>
-    public double PaneHeight
+    public double PaneWidth
     {
-        get => _paneHeight;
+        get => _paneWidth;
         set
         {
-            var clamped = Math.Clamp(value, MinPaneHeight, MaxPaneHeight);
-            if (SetProperty(ref _paneHeight, clamped))
+            var clamped = Math.Clamp(value, MinPaneWidth, MaxPaneWidth);
+            if (SetProperty(ref _paneWidth, clamped))
             {
-                OnPropertyChanged(nameof(PaneHeight));
+                OnPropertyChanged(nameof(PaneWidth));
             }
         }
+    }
+
+    /// <summary>
+    /// True when the remote side could not be reached. The panel then
+    /// offers the retry button.
+    /// </summary>
+    public bool HasRemoteError
+    {
+        get => _hasRemoteError;
+        private set => SetProperty(ref _hasRemoteError, value);
     }
 
     /// <summary>
@@ -189,8 +200,8 @@ public sealed partial class SftpPaneViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Loads both sides of the drawer. A remote that cannot be reached
-    /// leaves the drawer usable and tells the reason in the status line.
+    /// Loads both sides of the panel. A remote that cannot be reached
+    /// leaves the panel usable and tells the reason in the status line.
     /// </summary>
     public async Task LoadAsync(CancellationToken cancellationToken)
     {
@@ -207,6 +218,8 @@ public sealed partial class SftpPaneViewModel : ObservableObject
             await RefreshRemoteAsync();
             await RefreshLocalAsync();
 
+            HasRemoteError = false;
+
             if (StatusMessage.Length > 0)
             {
                 StatusMessage = string.Empty;
@@ -218,12 +231,28 @@ public sealed partial class SftpPaneViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            HasRemoteError = true;
             StatusMessage = $"SFTP unavailable: {ex.Message}";
         }
         finally
         {
             IsBusy = false;
         }
+    }
+
+    /// <summary>
+    /// Loads the panel when it is shown for the first time, and tries
+    /// again after a failure. A panel that already has its remote side
+    /// keeps it, so folding and opening the panel asks for nothing new.
+    /// </summary>
+    public async Task EnsureLoadedAsync(CancellationToken cancellationToken)
+    {
+        if (IsBusy || _remote is not null)
+        {
+            return;
+        }
+
+        await LoadAsync(cancellationToken);
     }
 
     /// <summary>

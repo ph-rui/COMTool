@@ -18,7 +18,7 @@ public sealed class SshSessionViewTests
     }
 
     [AvaloniaFact]
-    public void SshSessionViewStacksTheTerminalOverTheDrawer()
+    public void SshSessionViewPutsThePanelLeftOfTheTerminal()
     {
         using var env = new TestEnvironment();
         env.Run(() =>
@@ -32,17 +32,14 @@ public sealed class SshSessionViewTests
             Dispatcher.UIThread.RunJobs();
 
             Assert.Same(terminal, view.TerminalHostControl.Content);
-            Assert.Equal(0, Grid.GetRow(view.TerminalHostControl));
-            Assert.Equal(1, Grid.GetRow(view.SftpSplitterControl));
-            Assert.Equal(2, Grid.GetRow(view.SftpHostControl));
-            Assert.Equal(260, view.DrawerHeight);
-            Assert.True(view.SftpHostControl.IsVisible);
-            Assert.True(view.SftpSplitterControl.IsVisible);
+            Assert.Equal(0, Grid.GetColumn(view.SftpHostControl));
+            Assert.Equal(1, Grid.GetColumn(view.SftpSplitterControl));
+            Assert.Equal(2, Grid.GetColumn(view.TerminalHostControl));
         });
     }
 
     [AvaloniaFact]
-    public void SshSessionViewHidesTheDrawerWhenCollapsed()
+    public void SshSessionViewStartsWithThePanelFoldedAway()
     {
         using var env = new TestEnvironment();
         env.Run(() =>
@@ -54,21 +51,61 @@ public sealed class SshSessionViewTests
             var window = new Window { Content = view, Width = 800, Height = 600 };
             window.Show();
             Dispatcher.UIThread.RunJobs();
+            window.UpdateLayout();
+
+            Assert.False(pane.IsExpanded);
+            Assert.Equal(0, view.PanelWidth);
+            Assert.False(view.SftpHostControl.IsVisible);
+            Assert.False(view.SftpSplitterControl.IsVisible);
+
+            // The terminal takes the whole width while the panel is folded
+            // away.
+            Assert.Equal(800, view.TerminalHostControl.Bounds.Width, 0.5);
+        });
+    }
+
+    [AvaloniaFact]
+    public void SshSessionViewGivesThePanelItsWidthAndKeepsItWhenItIsFoldedAway()
+    {
+        using var env = new TestEnvironment();
+        env.Run(() =>
+        {
+            var pane = NewPane();
+            var terminal = new TerminalControl { Process = string.Empty };
+            var view = new SshSessionView { Terminal = terminal, SftpPane = pane };
+
+            var window = new Window { Content = view, Width = 800, Height = 600 };
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+            window.UpdateLayout();
+
+            pane.IsExpanded = true;
+            Dispatcher.UIThread.RunJobs();
+            window.UpdateLayout();
+
+            Assert.Equal(420, view.PanelWidth);
+            Assert.True(view.SftpHostControl.IsVisible);
+            Assert.True(view.SftpSplitterControl.IsVisible);
+            Assert.True(
+                view.TerminalHostControl.Bounds.Width < 800,
+                $"the terminal still takes {view.TerminalHostControl.Bounds.Width}");
 
             pane.IsExpanded = false;
             Dispatcher.UIThread.RunJobs();
+            window.UpdateLayout();
 
+            Assert.Equal(0, view.PanelWidth);
             Assert.False(view.SftpHostControl.IsVisible);
-            Assert.False(view.SftpSplitterControl.IsVisible);
-            Assert.Equal(0, view.DrawerHeight);
+            Assert.Equal(800, view.TerminalHostControl.Bounds.Width, 0.5);
 
-            // The drawer comes back with the height it had.
+            // The panel comes back with the width it had.
+            pane.PaneWidth = 480;
             pane.IsExpanded = true;
-            pane.PaneHeight = 400;
             Dispatcher.UIThread.RunJobs();
+            window.UpdateLayout();
 
+            Assert.Equal(480, view.PanelWidth);
             Assert.True(view.SftpHostControl.IsVisible);
-            Assert.Equal(400, view.DrawerHeight);
         });
     }
 

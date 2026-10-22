@@ -53,9 +53,10 @@
       </WrapPanel>
     </Border>
 
-    <!-- The remote side on the left, the local side on the right. -->
-    <Grid Grid.Row="1" ColumnDefinitions="*,*">
-      <Grid Name="RemotePaneGrid" Grid.Column="0" RowDefinitions="Auto,*" Margin="0,0,2,0">
+    <!-- The remote side above, the local side below: the panel is narrow,
+         so the two sides share the height instead of the width. -->
+    <Grid Grid.Row="1" RowDefinitions="*,*">
+      <Grid Name="RemotePaneGrid" Grid.Row="0" RowDefinitions="Auto,*" Margin="0,0,0,2">
         <TextBox Name="RemotePathBox"
                  Grid.Row="0"
                  Margin="3"
@@ -68,7 +69,7 @@
                  DoubleTapped="OnRemoteListDoubleTapped">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="sftp:SftpEntry">
-              <Grid ColumnDefinitions="*,70,110,80">
+              <Grid ColumnDefinitions="*,64,112,80">
                 <TextBlock Grid.Column="0"
                            Text="{Binding Converter={x:Static views:SftpEntryNameConverter.Instance}}"
                            VerticalAlignment="Center" />
@@ -80,6 +81,7 @@
                            VerticalAlignment="Center" />
                 <TextBlock Grid.Column="3"
                            Text="{Binding Converter={x:Static views:SftpEntryPermissionConverter.Instance}}"
+                           Margin="8,0,0,0"
                            VerticalAlignment="Center" />
               </Grid>
             </DataTemplate>
@@ -87,7 +89,7 @@
         </ListBox>
       </Grid>
 
-      <Grid Name="LocalPaneGrid" Grid.Column="1" RowDefinitions="Auto,*">
+      <Grid Name="LocalPaneGrid" Grid.Row="1" RowDefinitions="Auto,*">
         <TextBox Name="LocalPathBox"
                  Grid.Row="0"
                  Margin="3"
@@ -100,7 +102,7 @@
                  DoubleTapped="OnLocalListDoubleTapped">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="sftp:SftpEntry">
-              <Grid ColumnDefinitions="*,70,110,80">
+              <Grid ColumnDefinitions="*,64,112,80">
                 <TextBlock Grid.Column="0"
                            Text="{Binding Converter={x:Static views:SftpEntryNameConverter.Instance}}"
                            VerticalAlignment="Center" />
@@ -112,6 +114,7 @@
                            VerticalAlignment="Center" />
                 <TextBlock Grid.Column="3"
                            Text="{Binding Converter={x:Static views:SftpEntryPermissionConverter.Instance}}"
+                           Margin="8,0,0,0"
                            VerticalAlignment="Center" />
               </Grid>
             </DataTemplate>
@@ -123,14 +126,20 @@
     <!-- The line that tells what happened, the progress of a transfer that
          runs and the question about a target that already exists. -->
     <Grid Grid.Row="2" RowDefinitions="Auto,Auto">
-      <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto">
+      <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto">
         <TextBlock Grid.Column="0"
                    Name="StatusText"
                    Text="{Binding StatusMessage}"
                    Margin="6,0"
                    VerticalAlignment="Center"
                    TextTrimming="CharacterEllipsis" />
-        <ProgressBar Grid.Column="1"
+        <Button Grid.Column="1"
+                Name="RetryButton"
+                Content="Retry"
+                Margin="4,0,4,0"
+                IsVisible="{Binding HasRemoteError}"
+                Click="OnRetryClick" />
+        <ProgressBar Grid.Column="2"
                      Name="TransferProgressBar"
                      Width="120"
                      Height="12"
@@ -139,7 +148,7 @@
                      Value="{Binding TransferProgress}"
                      IsVisible="{Binding IsTransferring}"
                      VerticalAlignment="Center" />
-        <Button Grid.Column="2"
+        <Button Grid.Column="3"
                 Name="CancelButton"
                 Content="Cancel"
                 Margin="4,0,4,0"

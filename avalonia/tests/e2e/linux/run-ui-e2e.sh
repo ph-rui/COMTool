@@ -704,12 +704,20 @@ run_sftp01_browser_transfer() {
 
     log "Running $test_id"
 
-    # The drawer of a new SSH tab asks the server for the sftp subsystem
-    # on its own, without a click.
+    # The panel of a new SSH tab stays folded away. The button in the tab
+    # strip opens it, and only then does the app ask the server for the
+    # sftp subsystem.
     ensure_first_shell "$test_id"
 
+    # The panel has to have its place before the first click: the
+    # sidebar shifts the whole content when it retracts.
+    collapse_sidebar_for_tabs || fail "$test_id" "could not collapse the sidebar"
+
+    click_window "$SFTP_TOGGLE_X" "$SFTP_TOGGLE_Y" \
+        || fail "$test_id" "could not click the SFTP button of the tab strip"
+
     if ! wait_for_sshd_log "subsystem 'sftp'" 20; then
-        fail "$test_id" "the drawer did not ask the server for the sftp subsystem"
+        fail "$test_id" "the panel did not ask the server for the sftp subsystem"
     fi
 
     rm -rf -- "$remote_dir"
@@ -717,9 +725,6 @@ run_sftp01_browser_transfer() {
     printf 'SFTP01_SERVER' >"$remote_dir/$download_name"
     printf 'SFTP01_LOCAL_V1' >"$local_up_dir/$upload_name"
 
-    # The drawer has to have its place before the first click: the
-    # sidebar shifts the whole content when it retracts.
-    collapse_sidebar_for_tabs || fail "$test_id" "could not collapse the sidebar"
 
     # 1. The remote pane walks into the directory of the test.
     click_window "$SFTP_REMOTE_PATH_X" "$SFTP_REMOTE_PATH_Y" \

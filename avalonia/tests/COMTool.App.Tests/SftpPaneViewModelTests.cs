@@ -35,24 +35,75 @@ public sealed class SftpPaneViewModelTests
     }
 
     [AvaloniaFact]
-    public void StartsExpandedWithTheDefaultHeight()
+    public void StartsCollapsedWithTheDefaultWidth()
     {
         var (viewModel, _, _) = NewViewModel();
 
-        Assert.True(viewModel.IsExpanded);
-        Assert.Equal(260, viewModel.PaneHeight);
+        Assert.False(viewModel.IsExpanded);
+        Assert.Equal(420, viewModel.PaneWidth);
     }
 
     [AvaloniaFact]
-    public void ClampsThePaneHeight()
+    public void ClampsThePaneWidth()
     {
         var (viewModel, _, _) = NewViewModel();
 
-        viewModel.PaneHeight = 10;
-        Assert.Equal(120, viewModel.PaneHeight);
+        viewModel.PaneWidth = 10;
+        Assert.Equal(320, viewModel.PaneWidth);
 
-        viewModel.PaneHeight = 5000;
-        Assert.Equal(600, viewModel.PaneHeight);
+        viewModel.PaneWidth = 5000;
+        Assert.Equal(640, viewModel.PaneWidth);
+    }
+
+    [AvaloniaFact]
+    public async Task EnsureLoadedAsyncAsksForTheRemoteOnlyOnce()
+    {
+        var calls = 0;
+        var remote = new InMemoryFileSystem(RemoteHome);
+        var viewModel = new SftpPaneViewModel(
+            () =>
+            {
+                calls++;
+                return remote;
+            },
+            new InMemoryFileSystem(LocalHome));
+
+        await viewModel.EnsureLoadedAsync(CancellationToken.None);
+        await viewModel.EnsureLoadedAsync(CancellationToken.None);
+
+        Assert.Equal(1, calls);
+        Assert.Equal(RemoteHome, viewModel.RemotePath);
+        Assert.False(viewModel.HasRemoteError);
+    }
+
+    [AvaloniaFact]
+    public async Task EnsureLoadedAsyncTriesAgainAfterAFailure()
+    {
+        var calls = 0;
+        var remote = new InMemoryFileSystem(RemoteHome);
+        var viewModel = new SftpPaneViewModel(
+            () =>
+            {
+                calls++;
+                if (calls == 1)
+                {
+                    throw new InvalidOperationException("the server is away");
+                }
+
+                return remote;
+            },
+            new InMemoryFileSystem(LocalHome));
+
+        await viewModel.EnsureLoadedAsync(CancellationToken.None);
+
+        Assert.True(viewModel.HasRemoteError);
+        Assert.Contains("SFTP unavailable", viewModel.StatusMessage);
+
+        await viewModel.EnsureLoadedAsync(CancellationToken.None);
+
+        Assert.Equal(2, calls);
+        Assert.False(viewModel.HasRemoteError);
+        Assert.Equal(RemoteHome, viewModel.RemotePath);
     }
 
     [AvaloniaFact]
@@ -387,7 +438,7 @@ public sealed class SftpPaneViewModelTests
         await viewModel.LoadAsync(CancellationToken.None);
 
         viewModel.IsExpanded = false;
-        viewModel.PaneHeight = 400;
+        viewModel.PaneWidth = 500;
 
         var other = new InMemoryFileSystem("/other");
         other.AddFile("/other/b.txt", "b");
@@ -398,7 +449,7 @@ public sealed class SftpPaneViewModelTests
             "load the new remote");
         Assert.Equal("/other", viewModel.RemotePath);
         Assert.False(viewModel.IsExpanded);
-        Assert.Equal(400, viewModel.PaneHeight);
+        Assert.Equal(500, viewModel.PaneWidth);
     }
 
     /// <summary>

@@ -6,9 +6,20 @@ Add an embedded SFTP file browser to SSH session tabs so that COMTool can
 manage remote files next to the terminal, at MobaXterm parity for the
 features that MobaXterm actually ships.
 
-The panel is a bottom drawer inside an SSH session tab, not a standalone
-session type. It offers a dual-pane (remote | local) browser, button-driven
-transfers, and remote-side file management (delete, rename, mkdir, chmod).
+The panel sits on the left of an SSH session tab, not as a standalone
+session type. It offers a dual-pane (remote above, local below) browser,
+button-driven transfers, and remote-side file management (delete, rename,
+mkdir, chmod).
+
+> **Revision 2026-10-22.** The panel moved from a bottom drawer that started
+> expanded to a left vertical panel that starts folded away, matching what
+> the user asked for after the first Windows build: the drawer took too much
+> of the tab and MobaXterm keeps its file browser in a folded side panel. The
+> remote list and the local list are now stacked instead of side by side,
+> because the panel is narrow. The panel now asks for the SFTP subsystem when
+> it is opened for the first time, not when the SSH tab is created. The rest
+> of this document describes the panel as it ships after that revision; the
+> sections that still name a "drawer" mean the same panel.
 
 ## Scope
 
@@ -16,11 +27,11 @@ Included:
 
 - Embedded SFTP panel in SSH session tabs only. Serial, Telnet, TCP and local
   terminal tabs never show it.
-- Bottom collapsible drawer, default expanded, toggled by a button in the tab
-  strip next to the encoding combo.
-- Per-session collapsed state and drawer height, kept in memory for the life
-  of the tab.
-- Dual pane: remote (SFTP) on the left, local filesystem on the right.
+- Left collapsible panel, folded away by default, toggled by a button in the
+  tab strip next to the encoding combo.
+- Per-session collapsed state and panel width (default 420px, draggable
+  320..640), kept in memory for the life of the tab.
+- Dual pane: remote (SFTP) above, local filesystem below.
 - Transfers: upload (local to remote), download (remote to local), single file
   or whole directory, button driven.
 - Remote file management: delete, rename, mkdir, chmod. Local pane is upload
@@ -92,8 +103,8 @@ depends on neither, so the kernel stays free of Avalonia and of SSH.NET.
 `avalonia/src/COMTool.App` gains:
 
 - `Views/SftpPane.axaml` and `ViewModels/SftpPaneViewModel.cs`.
-- `Views/SshSessionView.axaml`: the SSH tab content, a vertical grid of the
-  terminal on top and the SFTP drawer at the bottom.
+- `Views/SshSessionView.axaml`: the SSH tab content, a horizontal grid of the
+  SFTP panel on the left and the terminal on the right.
 - `TerminalTab.Terminal` (`TerminalControl?`) and `TerminalTab.SftpPane`
   (`SftpPaneViewModel?`), replacing the `tab.Content as TerminalControl` casts
   in `MainWindow`.
@@ -163,10 +174,12 @@ public ISftpFileSystem CreateSftpFileSystem();
 ```
 
 - The SFTP client is created **lazily**: the shell connect never waits for
-  it. Because the drawer is expanded by default, the first remote listing is
-  requested as soon as the SSH tab is created, in the background, and the
-  SFTP client is created at that moment. A drawer that the user collapses
-  before the first listing completes still finishes the listing.
+  it and neither does opening the tab. The panel starts folded away, so an
+  SSH session that never opens the panel keeps a single connection. The
+  first remote listing is requested when the panel is opened, in the
+  background, and the SFTP client is created at that moment. Folding the
+  panel again does not close the client, so opening it a second time asks
+  for nothing new.
 - The SFTP client authenticates with the **same** `ConnectionInfo`, so the
   same key file or the same password is used. The user is never prompted a
   second time. The password is not written to disk and no new configuration
@@ -174,11 +187,12 @@ public ISftpFileSystem CreateSftpFileSystem();
 - The SFTP client is disposed together with the `SshConnection`, so closing
   the tab releases it.
 - If the connect fails (for example a server without an `sftp` subsystem),
-  the panel shows the reason inline and offers a `Retry` button. The terminal
-  keeps working, and the panel can be used again after a successful retry.
+  the panel shows the reason inline and offers a `Retry` button; folding and
+  opening the panel tries again as well. The terminal keeps working, and the
+  panel can be used again after a successful retry.
 - Restarting a stopped session with `R` creates a new `SshConnection`. The
-  drawer then gets a new SFTP client and reloads the remote listing, while
-  the collapsed state and the drawer height stay as they were.
+  panel then gets a new SFTP client and reloads the remote listing, while the
+  collapsed state and the panel width stay as they were.
 
 This is a deliberate deviation from MobaXterm, WinSCP and FileZilla, which
 multiplex the SFTP channel onto the terminal connection. SSH.NET's public API
@@ -192,33 +206,33 @@ library upgrade.
 The SSH tab content becomes `SshSessionView`:
 
 ```
-+-------------------------------------------+
-| terminal                                  |  row 0, star
-+-------------------------------------------+
-| (grid splitter, 4px, only when expanded)  |  row 1
-+-------------------------------------------+
-| SFTP drawer                               |  row 2, height = PaneHeight
-+-------------------------------------------+
++-----------------------------+----------------------------+
+| SFTP panel                  | terminal                   |
+| width = PaneWidth           | column 2, star             |
+| column 0, 0 when folded     |                            |
++-----------------------------+----------------------------+
+      column 1: grid splitter, 4px, only when expanded
 ```
 
-The drawer itself is a grid:
+The panel itself is a grid:
 
 ```
 +---------------------------------------------------------+
 | toolbar: up | refresh | new folder | delete | rename |   |
 |          chmod | upload | download | follow symlinks |    |
 |          show hidden                                      |
-+---------------------------+-----------------------------+
-| remote pane               | local pane                 |
-| path box                  | path box                    |
-| list                      | list                        |
-+---------------------------+-----------------------------+
++---------------------------------------------------------+
+| remote pane: path box + list                             |
++---------------------------------------------------------+
+| local pane: path box + list                              |
++---------------------------------------------------------+
 | status / progress / conflict prompt                      |
 +---------------------------------------------------------+
 ```
 
-The remote pane is on the left and the local pane on the right, matching the
-MobaXterm SSH browser.
+The remote pane is the upper side and the local pane the lower side: the
+panel is narrow, so the two sides share the height. The layout keeps the
+MobaXterm idea of a file browser next to the terminal.
 
 Each pane shows a path box and a list with the columns `Name`, `Size`,
 `Modified` and `Permissions`. Remote permissions use the `rwxr-xr-x` form.
@@ -241,9 +255,11 @@ visible only when the selected tab is an SSH session.
 
 `SftpPaneViewModel` holds:
 
-- `IsExpanded` (default `true`).
-- `PaneHeight` (default 260). The view model clamps the value to 120..600;
-  the grid splitter writes the dragged height back into it.
+- `IsExpanded` (default `false`, so the terminal owns the tab until the
+  button is pressed).
+- `PaneWidth` (default 420). The view model clamps the value to 320..640;
+  the grid splitter writes the dragged width back into it.
+- `HasRemoteError`, which shows the `Retry` button after a failed connect.
 - The current remote and local paths.
 - The remote and local entry collections, the selection, the transfer state
   and the conflict prompt state.
@@ -427,9 +443,11 @@ adds `Subsystem sftp internal-sftp`.
 
 Avalonia headless, asserting the real layout and the view model.
 
-- The drawer is expanded by default, the toggle button collapses it and a
-  second click restores it.
-- The collapsed state and the height survive a tab switch.
+- The panel is folded away by default (the terminal gets the full width),
+  the toggle button opens it, a second click folds it away again.
+- The collapsed state and the width survive a tab switch.
+- A folded panel never asks for the remote file system; the first opening
+  asks once, and folding and opening again asks nothing new.
 - The remote list is populated after loading and reloaded by `Refresh`.
 - The local list shows the local directory.
 - `Upload` and `Download` are disabled without a selection and enabled with
@@ -450,8 +468,8 @@ One new case, `SFTP01`, on the existing Xvfb harness. The sshd fixture gains
 `Subsystem sftp internal-sftp`.
 
 1. The app logs in with the fixture key.
-2. The SFTP button opens the drawer and the remote pane lists the home
-   directory.
+2. The SFTP button opens the panel, the server logs the `sftp` subsystem
+   request, and the remote pane lists the home directory.
 3. A local file is uploaded and the server side checksum matches.
 4. A server side file is downloaded and the local content matches.
 5. A conflicting upload raises the prompt, `Overwrite` is chosen and the
@@ -474,10 +492,11 @@ cannot fail is not accepted.
 
 ## Risks and Known Deviations
 
-- **Two SSH connections per session.** Caused by the SSH.NET API, not by the
-  design. The cost is one extra handshake and one extra connection on the
-  server, started in the background once the SSH tab exists, because the
-  drawer is expanded by default. The terminal is usable while it happens.
+- **A second SSH connection once the panel is opened.** Caused by the
+  SSH.NET API, not by the design. The cost is one extra handshake and one
+  extra connection on the server, started in the background the first time
+  the panel is opened. A session whose panel stays folded keeps one
+  connection. The terminal is usable while it happens.
 - **Symbolic links are followed, not preserved.** A consequence of the
   Windows target and of the missing `readlink` API in SSH.NET. The
   `Follow symbolic links` checkbox and the depth limit keep it predictable.
