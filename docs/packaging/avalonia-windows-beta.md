@@ -354,6 +354,31 @@ running:
 - interactive Windows confirmation of the SFTP drawer against a real SSH server
   (`WIN-23` in `docs/testing/manual-acceptance.md`) remains pending.
 
+A follow-up direct deployment on 2026-10-22 replaced both copies with commit
+`4e2b6cc`, which keeps the SFTP browser in a folded left panel instead of a
+bottom drawer: the panel starts folded away, the folder button of the tab
+strip opens it on the left of the terminal, the remote list sits above the
+local list, the width (default 420, draggable 320..640) is kept per session,
+and the sftp subsystem is requested the first time the panel is opened:
+
+- size: 175,137,612 bytes;
+- SHA256: `04E8471F3E229B0E357503A62626AAE918B0406D3C74AB5126148FE6A90F5117`;
+- both remote copies matched that hash via `Get-FileHash`
+  (`WORK_SHA256` = `DESKTOP_SHA256` = source hash);
+- no `COMTool-Avalonia.exe.bak-*` files were created (`BAK_COUNT=0`);
+- a Windows process smoke test started the deployed working copy, observed it
+  `Running` and `Responding=True`, then stopped it;
+- the automated suite passes 341 tests (App 109) and Linux Xvfb E2E passes
+  12/12, including `SFTP01_BrowserTransferE2E` with the new left-panel
+  coordinates and the button click that opens the panel;
+- the Linux fixture `docs/fixtures/phase1/sftp-panel-1000x650.png` replaces
+  the old drawer screenshot; interactive Windows confirmation of the folded
+  default and the drag handle (`WIN-23`) remains pending.
+
+This was a direct executable deployment over the existing working and desktop
+copies, not a formal packaged release. No new candidate zip was created or
+signed off for this build.
+
 This was a direct executable deployment over the existing working and desktop
 copies, not a formal packaged release. No new candidate zip was created or
 signed off for this build.
