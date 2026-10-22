@@ -1552,6 +1552,18 @@ git add avalonia/tests/e2e docs/fixtures/phase1/sftp-drawer-1000x650.png
 git commit -m "test(avalonia): add the SFTP drawer end-to-end test"
 ```
 
+**As built (deviations from the plan):**
+
+- The drawer opens expanded, so the test does not click the toggle button. It waits for `subsystem 'sftp'` in the fixture log, which proves that the drawer asked for the subsystem on its own.
+- The panes are reached through the coordinate constants `SFTP_REMOTE_PATH_X/Y`, `SFTP_LOCAL_PATH_X/Y`, `SFTP_REMOTE_ITEM_X/Y`, `SFTP_LOCAL_ITEM_X/Y`, `SFTP_UPLOAD_X`, `SFTP_DOWNLOAD_X` and `SFTP_TOOLBAR_Y`, measured on the 1000x650 fixture window with the sidebar collapsed.
+- The conflict prompt is recognized by the colour of its strip (`SFTP_CONFLICT_COLOR`, `#fff4ce`) through `wait_for_window_color`, and `Overwrite` is clicked by coordinate. The shell of the test cannot read the Avalonia tree.
+- `ssh_connection_count` counts the interactive shells of the fixture instead of the sockets of its port: the drawer's sftp channel made one session look like two, so SSH06 never opened its second connection.
+- The sidebar probe of `collapse_sidebar_for_tabs` averages a 24x24 square (`window_region_is_dark`) instead of reading one pixel, because a pixel of the dark terminal can land on a light glyph.
+- `run_pid_command_until_pid_file` types the PID command again until the file holds a number; the terminal can drop the first keystrokes while the shell prints its login banner, and the redirections still create the files.
+- The screenshot is taken into the root of the run. `docs/fixtures/phase1/sftp-drawer-1000x650.png` is produced in Task 12 together with its README row.
+- Two defects were fixed on the way: `SshSftpFileSystem.ListAsync` translates the `SftpException` of SSH.NET into `DirectoryNotFoundException` (the engine probes a path by listing it, so every real download failed), and every focus site resolves the terminal through `TerminalTab.Terminal` because the content of an SSH tab is the session view.
+- `avalonia/pack/verify.sh` lists the tests of each project separately; the solution-wide list merged the output of parallel projects and glued names together, which made TestGate reject tests that exist.
+
 ---
 
 ### Task 12: Documentation, the parity matrix and the full gate
