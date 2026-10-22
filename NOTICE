@@ -28,3 +28,21 @@ Modifications in this fork:
 This fork remains under LGPL-3.0. The complete corresponding source is
 available in this repository. See the design document at
 docs/superpowers/specs/2026-10-17-comtool-live-port-refresh-design.md.
+
+Avalonia port
+=============
+
+The Avalonia/.NET port under avalonia/ additionally bundles the Noto Sans
+Mono CJK SC font (Simplified Chinese), Regular and Bold:
+
+  avalonia/src/COMTool.App/Assets/Fonts/NotoSansMonoCJKsc-Regular.otf
+  avalonia/src/COMTool.App/Assets/Fonts/NotoSansMonoCJKsc-Bold.otf
+
+  Copyright (c) 2017-2023 The Noto Project authors (Google)
+  Licensed under the SIL Open Font License 1.1 (see the license text at
+  avalonia/src/COMTool.App/Assets/Fonts/OFL-NotoSansMonoCJK-SC.txt).
+
+  https://github.com/notofonts/noto-cjk (Sans/Mono, Simplified Chinese)
+
+It is the terminal font on every platform so that latin and CJK cells are
+shaped from one face grid and mixed-language lines keep one baseline.

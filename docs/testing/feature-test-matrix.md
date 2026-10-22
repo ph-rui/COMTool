@@ -29,7 +29,7 @@
 | TERM-06 | 完成 | TerminalEmulatorTests.TracksBracketedPasteMode | verify | all | dotnet test | - | bracketed paste 模式跟踪测试覆盖 |
 | TERM-07 | 完成 | MobaKeywordHighlighterTests.ErrorKeywordsAreBrightRed,MobaKeywordHighlighterTests.SuccessKeywordsAreBrightGreen,MobaKeywordHighlighterTests.WarningKeywordsAreBrightYellow,MobaKeywordHighlighterTests.UrlsAreUnderlined | verify | all | dotnet test | - | Moba 关键字高亮颜色、URL 和 ANSI 优先级测试覆盖 |
 | TERM-08 | 完成 | TerminalEmulatorTests.TracksCursorVisibilityAndWideCharacterAdvance | verify | all | dotnet test | - | 光标可见性和宽字符步进测试覆盖 |
-| TERM-09 | 部分 | - | manual | all | manual | WIN-20 | 平台等宽字体和 15px 字号需真实桌面视觉核对，无法自动化 |
+| TERM-09 | 部分 | CjkTerminalFontTests.TERM17_TerminalFontIsTheBundledCjkMono,CjkTerminalFontTests.TERM17_OneFontAnswersForBothScripts,CjkTerminalFontTests.TERM17_LatinAndCjkRunsShareTheLineMetrics | verify | all | dotnet test | WIN-20 | 2026-10-23 按用户反馈（中英文混排字体高低不一）：终端字体改为内置 Noto Sans Mono CJK SC（Regular+Bold，OFL，全平台统一），拉丁半宽/CJK 全宽同一字网格，CJK run 不再回退到度量不同的系统字体，混合行共享同一基线；字体来源、字形覆盖（无回退）与行度量一致性由 headless 回归覆盖；实机视觉质量仍由 WIN-20 核对 |
 | TERM-10 | 部分 | UI05_TabSwitchKeepsBothTerminalsLive | verify | all | dotnet test | WIN-20 | 文本输入和切换后立即输入已覆盖；方向键/Home/End/Insert/Delete/F1-F12/Ctrl+V 需真实桌面 cat -v 核对 |
 | TERM-11 | 完成 | SshIntegrationTests.KeyAuthShellOutputResizeAndReconnect | verify | linux | dotnet test | WIN-17 | SSH 断线/重连与 shell 输出由 Linux 集成测试覆盖；Windows 实机重连见 WIN-17 |
 | TERM-12 | 完成 | ZmodemTransferTests.StreamDetectsAndReceivesZmodemSession,ZmodemTransferTests.StreamDetectsAndSendsZmodemSession | verify | all | dotnet test | - | ZMODEM 流双向自动检测测试覆盖 |
