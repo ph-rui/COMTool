@@ -356,7 +356,7 @@ public partial class MainWindow : Window
                 if (IsTabConnected(detached))
                 {
                     _detachedTabs[detached].Window.Activate();
-                    detached.Content.Focus();
+                    (detached.Terminal ?? (Control)detached.Content).Focus();
                     return;
                 }
 
@@ -368,7 +368,7 @@ public partial class MainWindow : Window
             if (existing is not null && IsTabConnected(existing))
             {
                 viewModel.SelectedTab = existing;
-                existing.Content.Focus();
+                (existing.Terminal ?? (Control)existing.Content).Focus();
                 return;
             }
 
@@ -1829,7 +1829,9 @@ public partial class MainWindow : Window
             // The content host swaps its child during the selection change.
             // Focusing immediately can run before the new terminal is in the
             // visual tree, leaving focus on the tab strip or the window.
-            if (tab.Content is TerminalControl terminal)
+            // An SSH tab's content is the session view, so the terminal is
+            // taken from the tab instead of the content.
+            if ((tab.Terminal ?? tab.Content as TerminalControl) is { } terminal)
             {
                 FocusTerminalWhenSelected(tab, terminal);
             }
@@ -1838,7 +1840,8 @@ public partial class MainWindow : Window
 
     private static void OnSelectedTabChanging(TerminalTab? tab)
     {
-        if (tab?.Content is TerminalControl terminal)
+        if (tab is not null
+            && (tab.Terminal ?? tab.Content as TerminalControl) is { } terminal)
         {
             // Tab switching detaches the previous content control. Keep its PTY
             // reader alive until it is selected and attached again.
@@ -3150,7 +3153,7 @@ public partial class MainWindow : Window
                     viewModel.SelectedTab = live;
                 }
 
-                live.Content.Focus();
+                (live.Terminal ?? (Control)live.Content).Focus();
                 RestoreTerminalFocus();
                 return;
             }
