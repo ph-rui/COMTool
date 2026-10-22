@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-21-comtool-sftp-design.md` — read it before starting; this plan implements it and does not restate it.
 
+> **As built, 2026-10-22.** The plan below was executed in full. Afterwards the user asked for the MobaXterm arrangement: the panel is a **left vertical panel that starts folded away**, the remote list sits above the local list, the width (default 420, 320..640) replaces the drawer height, and the SFTP subsystem is requested the first time the panel is opened instead of when the tab is created. The live documents (`docs/parity-matrix.md`, `docs/testing/feature-test-matrix.md`, the design spec) describe the shipped behaviour; the task texts below still speak of a bottom drawer.
+
 ## Global Constraints
 
 - Product version stays `0.01`; the Windows executable stays `COMTool-Avalonia.exe`; the R2R publish command in `docs/packaging/avalonia-windows-beta.md` is unchanged.

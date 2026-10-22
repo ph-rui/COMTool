@@ -51,6 +51,19 @@ public sealed class TestEnvironment : IDisposable
         }
     }
 
+    public async Task RunAsync(Func<Task> action)
+    {
+        try
+        {
+            await action();
+        }
+        catch
+        {
+            KeepForFailure();
+            throw;
+        }
+    }
+
     public void KeepForFailure()
     {
         _keepForFailure = true;

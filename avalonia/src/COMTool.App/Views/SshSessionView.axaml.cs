@@ -7,13 +7,14 @@ using Iciclecreek.Terminal;
 namespace COMTool.App.Views;
 
 /// <summary>
-/// The view of an SSH session: the terminal above the SFTP drawer. The
-/// drawer can be folded away and its height can be dragged, and both
-/// live in the view model of the drawer.
+/// The view of an SSH session: the SFTP panel on the left of the
+/// terminal. The panel can be folded away and its width can be dragged,
+/// and both live in the view model of the panel.
 /// </summary>
 public partial class SshSessionView : UserControl
 {
-    private const int DrawerRow = 2;
+    private const int PanelColumn = 0;
+    private const int SplitterColumn = 1;
 
     private SftpPaneViewModel? _sftpPane;
     private TerminalControl? _terminal;
@@ -39,8 +40,8 @@ public partial class SshSessionView : UserControl
     }
 
     /// <summary>
-    /// The drawer of the session. Its state and its height decide how
-    /// much room the drawer takes.
+    /// The panel of the session. Its state and its width decide how much
+    /// room the panel takes.
     /// </summary>
     public SftpPaneViewModel? SftpPane
     {
@@ -78,23 +79,23 @@ public partial class SshSessionView : UserControl
     internal GridSplitter SftpSplitterControl => SftpSplitter;
 
     /// <summary>
-    /// The height the drawer takes, in pixels.
+    /// The width the panel takes, in pixels. It is zero while the panel is
+    /// folded away.
     /// </summary>
-    internal double DrawerHeight => SessionGrid.RowDefinitions[DrawerRow].Height.Value;
+    internal double PanelWidth => SessionGrid.ColumnDefinitions[PanelColumn].Width.Value;
 
     private void OnSftpPanePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(SftpPaneViewModel.IsExpanded)
-            or nameof(SftpPaneViewModel.PaneHeight))
+            or nameof(SftpPaneViewModel.PaneWidth))
         {
             ApplyPaneState();
         }
     }
 
     /// <summary>
-    /// The drawer and its handle are shown only when the drawer is open,
-    /// and the row of the drawer takes the height that the drawer asks
-    /// for.
+    /// The panel and its handle are shown only when the panel is open, and
+    /// the column of the panel takes the width that the panel asks for.
     /// </summary>
     private void ApplyPaneState()
     {
@@ -104,13 +105,14 @@ public partial class SshSessionView : UserControl
         SftpHost.IsVisible = expanded;
         SftpSplitter.IsVisible = expanded;
 
-        SessionGrid.RowDefinitions[DrawerRow].Height = new GridLength(
-            expanded ? pane?.PaneHeight ?? 0 : 0);
+        SessionGrid.ColumnDefinitions[PanelColumn].Width = new GridLength(
+            expanded ? pane?.PaneWidth ?? 0 : 0);
+        SessionGrid.ColumnDefinitions[SplitterColumn].Width = new GridLength(expanded ? 4 : 0);
     }
 
     /// <summary>
-    /// The height that the user dragged the handle to becomes the height
-    /// of the drawer.
+    /// The width that the user dragged the handle to becomes the width of
+    /// the panel.
     /// </summary>
     private void OnSftpSplitterDragCompleted(object? sender, VectorEventArgs e)
     {
@@ -120,10 +122,10 @@ public partial class SshSessionView : UserControl
             return;
         }
 
-        var height = DrawerHeight;
-        if (height > 0)
+        var width = PanelWidth;
+        if (width > 0)
         {
-            pane.PaneHeight = height;
+            pane.PaneWidth = width;
         }
     }
 }

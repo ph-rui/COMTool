@@ -224,6 +224,7 @@ public sealed class SftpTransferUiTests
 
         var terminal = new TerminalControl { Process = string.Empty };
         var view = new SshSessionView { Terminal = terminal, SftpPane = viewModel };
+        viewModel.IsExpanded = true;
         var window = new Window { Content = view, Width = 900, Height = 600 };
         window.Show();
         Dispatcher.UIThread.RunJobs();
@@ -236,7 +237,7 @@ public sealed class SftpTransferUiTests
             await WaitUntil(() => viewModel.IsConflictVisible, "ask about the conflict");
             Dispatcher.UIThread.RunJobs();
 
-            // The prompt sits inside the drawer, so the terminal stays
+            // The prompt sits inside the panel, so the terminal stays
             // usable while it is shown.
             var drawer = view.SftpHostControl.Content as SftpPane;
             Assert.NotNull(drawer);

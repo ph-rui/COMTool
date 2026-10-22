@@ -744,10 +744,6 @@ public partial class MainWindow : Window
         };
         AttachSshTransport(tab, terminal, connection);
 
-        // The first listing of the remote side runs in the background, so
-        // that the shell of the session is ready right away.
-        _ = pane.LoadAsync(CancellationToken.None);
-
         var stoppedBehavior = new SessionStoppedBehavior(
             terminal,
             tab,
@@ -2437,6 +2433,14 @@ public partial class MainWindow : Window
         }
 
         pane.IsExpanded = !pane.IsExpanded;
+
+        // The panel asks the server for the sftp subsystem only when it is
+        // shown, so an SSH session that never opens it keeps the one
+        // connection of the shell.
+        if (pane.IsExpanded)
+        {
+            _ = pane.EnsureLoadedAsync(CancellationToken.None);
+        }
     }
 
     private void OnEncodingChanged(object? sender, SelectionChangedEventArgs e)

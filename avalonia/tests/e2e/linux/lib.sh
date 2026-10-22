@@ -61,34 +61,36 @@ SESSIONS_TOGGLE_Y="${SESSIONS_TOGGLE_Y:-18}"
 SIDEBAR_PROBE_X="${SIDEBAR_PROBE_X:-200}"
 SIDEBAR_PROBE_Y="${SIDEBAR_PROBE_Y:-300}"
 
-# The SFTP drawer of an SSH tab. In the 1000x650 test window the drawer is
-# the bottom row of the session view: it starts at y=334 and is 260px high.
-# Its first row is the toolbar, its second row holds the two panes (the
-# remote one on the left, the local one on the right) and its last row
-# holds the status line. The coordinates below assume that the sidebar is
+# The SFTP panel of an SSH tab. In the 1000x650 test window the panel is
+# the left column of the session view, 420px wide, and it is folded away
+# until the folder button of the tab strip opens it. Its first row is the
+# toolbar, the remote side sits above the local side, and the status line
+# is the last row. The coordinates below assume that the sidebar is
 # collapsed, because an expanded sidebar shifts the whole content 223px to
 # the right.
-SFTP_TOOLBAR_Y="${SFTP_TOOLBAR_Y:-352}"
-SFTP_UPLOAD_X="${SFTP_UPLOAD_X:-710}"
-SFTP_DOWNLOAD_X="${SFTP_DOWNLOAD_X:-784}"
-SFTP_REMOTE_PATH_X="${SFTP_REMOTE_PATH_X:-100}"
-SFTP_REMOTE_PATH_Y="${SFTP_REMOTE_PATH_Y:-424}"
-SFTP_LOCAL_PATH_X="${SFTP_LOCAL_PATH_X:-560}"
-SFTP_LOCAL_PATH_Y="${SFTP_LOCAL_PATH_Y:-424}"
-SFTP_REMOTE_ITEM_X="${SFTP_REMOTE_ITEM_X:-60}"
-SFTP_REMOTE_ITEM_Y="${SFTP_REMOTE_ITEM_Y:-460}"
-SFTP_LOCAL_ITEM_X="${SFTP_LOCAL_ITEM_X:-530}"
-SFTP_LOCAL_ITEM_Y="${SFTP_LOCAL_ITEM_Y:-460}"
+SFTP_TOGGLE_X="${SFTP_TOGGLE_X:-873}"
+SFTP_TOGGLE_Y="${SFTP_TOGGLE_Y:-53}"
+SFTP_TOOLBAR_Y="${SFTP_TOOLBAR_Y:-136}"
+SFTP_UPLOAD_X="${SFTP_UPLOAD_X:-329}"
+SFTP_DOWNLOAD_X="${SFTP_DOWNLOAD_X:-400}"
+SFTP_REMOTE_PATH_X="${SFTP_REMOTE_PATH_X:-200}"
+SFTP_REMOTE_PATH_Y="${SFTP_REMOTE_PATH_Y:-206}"
+SFTP_LOCAL_PATH_X="${SFTP_LOCAL_PATH_X:-200}"
+SFTP_LOCAL_PATH_Y="${SFTP_LOCAL_PATH_Y:-405}"
+SFTP_REMOTE_ITEM_X="${SFTP_REMOTE_ITEM_X:-120}"
+SFTP_REMOTE_ITEM_Y="${SFTP_REMOTE_ITEM_Y:-248}"
+SFTP_LOCAL_ITEM_X="${SFTP_LOCAL_ITEM_X:-120}"
+SFTP_LOCAL_ITEM_Y="${SFTP_LOCAL_ITEM_Y:-428}"
 # The strip that asks what to do with a target that already exists. Its
 # background is a fixed light yellow, and the "Overwrite" button sits at
-# the right end of the first row of the strip.
-SFTP_CONFLICT_OVERWRITE_X="${SFTP_CONFLICT_OVERWRITE_X:-707}"
-SFTP_CONFLICT_OVERWRITE_Y="${SFTP_CONFLICT_OVERWRITE_Y:-501}"
+# the right end of the top row of the strip.
+SFTP_CONFLICT_OVERWRITE_X="${SFTP_CONFLICT_OVERWRITE_X:-182}"
+SFTP_CONFLICT_OVERWRITE_Y="${SFTP_CONFLICT_OVERWRITE_Y:-504}"
 SFTP_CONFLICT_COLOR="${SFTP_CONFLICT_COLOR:-#fff4ce}"
-SFTP_CONFLICT_PROBE_X="${SFTP_CONFLICT_PROBE_X:-60}"
-SFTP_CONFLICT_PROBE_Y="${SFTP_CONFLICT_PROBE_Y:-485}"
-SFTP_CONFLICT_PROBE_W="${SFTP_CONFLICT_PROBE_W:-300}"
-SFTP_CONFLICT_PROBE_H="${SFTP_CONFLICT_PROBE_H:-25}"
+SFTP_CONFLICT_PROBE_X="${SFTP_CONFLICT_PROBE_X:-350}"
+SFTP_CONFLICT_PROBE_Y="${SFTP_CONFLICT_PROBE_Y:-520}"
+SFTP_CONFLICT_PROBE_W="${SFTP_CONFLICT_PROBE_W:-60}"
+SFTP_CONFLICT_PROBE_H="${SFTP_CONFLICT_PROBE_H:-20}"
 # The directory that the SFTP test writes into on the server. It lives in
 # the home of the user that runs the suite, because the SSH fixture runs
 # as the same user.
