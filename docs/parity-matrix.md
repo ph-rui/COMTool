@@ -38,7 +38,7 @@
 | TERM-06 | 粘贴 | P0 | 完成 | 右键、Ctrl+V/Ctrl+Shift+V、中文已验证 |
 | TERM-07 | MobaXterm 关键字高亮 | P0 | 完成 | 错误红、成功绿、警告黄、URL 下划线、ANSI 优先；流式高亮测试通过 |
 | TERM-08 | 光标显示 | P0 | 完成 | 光标颜色/位置正常，隐藏/显示和宽字符推进已通过单元测试 |
-| TERM-09 | 字体/字号配置 | P1 | 部分 | Python 固定 15px；Avalonia 同样固定 15px，并改为平台等宽字体（Windows Consolas / macOS Menlo / Linux DejaVu Sans Mono），resize/分离渲染正常 |
+| TERM-09 | 字体/字号配置 | P1 | 部分 | Python 固定 15px；Avalonia 同样固定 15px；2026-10-23 起终端字体为内置 Noto Sans Mono CJK SC（拉丁半宽 + CJK 全宽同一字网格，修复中英文混排基线高低不一），resize/分离渲染正常 |
 | TERM-10 | 终端输入映射 | P0 | 部分 | 文本、Enter、Ctrl+C/V、方向键、Home/End、Insert/Delete、F1-F12 已通过 `cat -v` 实测 |
 | TERM-11 | 断线/重连显示 | P0 | 完成 | SSH 通道 `Closed`/错误事件立即置为断开；主窗口和分离窗口均显示断线，侧栏圆点变灰；无存活连接时点击会话关闭死标签并用缓存凭据重连且不重复提示；已有存活连接时点击会话另开连接；shell 退出或标签关闭后终端布局再次 resize 不再访问已释放的 `ShellStream`，避免 UI 线程未处理异常导致软件退出 |
 | TERM-12 | ZMODEM 字节流接入 | P0 | 完成 | 自动检测、流路由、发送/接收引擎、保存对话框已接入 |

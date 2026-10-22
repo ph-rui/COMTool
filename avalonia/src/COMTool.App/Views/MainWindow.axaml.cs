@@ -1513,23 +1513,18 @@ public partial class MainWindow : Window
         }
     }
 
-    private static FontFamily TerminalFontFamily()
-    {
-        // Avalonia treats the comma-separated Qt family list as one name and
-        // falls back to a proportional UI font, which gives every cell the
-        // width of a wide fallback glyph. Pick a real monospace family.
-        if (OperatingSystem.IsWindows())
-        {
-            return new FontFamily("Consolas");
-        }
-
-        if (OperatingSystem.IsMacOS())
-        {
-            return new FontFamily("Menlo");
-        }
-
-        return new FontFamily("DejaVu Sans Mono");
-    }
+    // One face grid must cover BOTH latin and CJK. The terminal control
+    // shapes every run independently, and a CJK run shaped from a latin
+    // primary falls back to a CJK font whose line metrics differ: the CJK
+    // glyphs then land on a lower baseline than the latin glyphs of the same
+    // row, so mixed output looked staggered. Noto Sans Mono CJK SC puts
+    // latin on a half-width grid and CJK on a full-width grid with identical
+    // metrics, so every run shapes from one font and every baseline agrees by
+    // construction. Both weights are registered so bold cells stay inside the
+    // family instead of escaping to a system font.
+    internal static FontFamily TerminalFontFamily() => new FontFamily(
+        "avares://COMTool.App/Assets/Fonts/NotoSansMonoCJKsc-Regular.otf#Noto Sans Mono CJK SC," +
+        "avares://COMTool.App/Assets/Fonts/NotoSansMonoCJKsc-Bold.otf#Noto Sans Mono CJK SC");
 
     private TerminalControl CreateTerminal()
     {
