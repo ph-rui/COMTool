@@ -223,11 +223,13 @@ public partial class MainViewModel : ViewModelBase
             }
 
             OnPropertyChanged();
+            OnPropertyChanged(nameof(CanSendMacro));
         }
     }
 
     public MainViewModel()
     {
+        InitializeSidebar();
         var demo = Environment.GetCommandLineArgs().Contains("--demo");
         if (!demo)
         {

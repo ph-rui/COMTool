@@ -82,9 +82,9 @@ geometry. These are functional evidence images, not final pixel baselines.
 
 `docs/testing/feature-test-matrix.md` now maps all parity rows, including the
 Telnet and SFTP rows. The gate passes in `verify` and `package` phases on Linux,
-and the structure also passes for Windows/macOS. The suite is 358 tests:
+and the structure also passes for Windows/macOS. The suite is 393 tests:
 
-- Core 45, SFTP 40, Connections 55, Terminal 11, ZMODEM 32, TestGate 49, App 126.
+- Core 47, SFTP 40, Connections 75, Terminal 11, ZMODEM 32, TestGate 49, App 139.
 - Linux Xvfb E2E: `APP01_SmokeLaunchE2E`,
   `UI01_TitleBarDoubleClickMaximizeE2E`,
   `UI02_SidebarDockedOnLaunchE2E`, `UI02_SidebarStaysDockedE2E`,

@@ -508,6 +508,29 @@ and the visible state and width are restored on launch:
   the dock, manual toggle writes the config, collapsed state and width survive
   a restart, the new-session menu keeps the dock open) and the repurposed E2E
   pair `UI02_SidebarDockedOnLaunchE2E` / `UI02_SidebarStaysDockedE2E`;
+
+## 2026-10-23 — sidebar rail, network scanner, macros, history
+
+- feature: MobaXterm-style 4-tab icon rail in the sidebar (Sessions /
+  Tools / Macros / History, Chinese tooltips, active cell white), the 16px
+  left gutter removed; Tools tab hosts the v1 network scanner (target
+  single IP / CIDR / range capped at 1024, ports default `22,23`, 32-way
+  concurrency, best-effort ICMP + 500ms TCP probe + 1s reverse DNS, live
+  progress, stop button); Macros tab = global named commands sent to the
+  active tab's terminal via `SendInputAsync` with optional trailing `\r`
+  (`macros: [{id,name,text,appendEnter}]` in config, persisted on change);
+  History tab = last-20 MRU of opened saved sessions
+  (`recentSessions: [{kind,id,at}]`), click to reopen, deleted sessions
+  pruned, 清空 button; both new config fields optional, version stays 3;
+- test evidence: `SidebarRailTests` (13 headless tests: rail switching/
+  active state, macro CRUD + persisted bytes with `\r` asserted on an
+  in-memory PTY, send disabled without a terminal, history MRU/cap/prune/
+  click-reopen/clear, scanner UI with an injectable fake scanner and
+  stop/cancel), `NetworkScannerTests` (20: target parser single/CIDR/
+  range/invalid/cap, loopback open-port discovery, closed port never
+  reported open, cancellation), `ConfigTests` macro/history round-trip;
+  the automated suite passes 393 tests (App 139) and Linux Xvfb E2E passes
+  13/13 with the rail in place;
 - interactive Windows confirmation of the docked panel is WIN-25.
 
 The previously packaged release zip is 74,795,557 bytes with SHA256:
