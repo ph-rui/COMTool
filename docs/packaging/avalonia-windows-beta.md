@@ -490,6 +490,26 @@ This was a direct executable deployment over the existing working and desktop
 copies, not a formal packaged release. No new candidate zip was created or
 signed off for this build.
 
+A second deployment on 2026-10-23 replaced both copies with commit `06c18f4`,
+which makes the sessions panel a fixed MobaXterm-style dock (user request:
+"不要什么自动侧边栏了"): the left-edge hover strip, the floating arrow handle,
+the 250ms auto-hide timer and the red/green-edge reveal logic are gone; only
+the title-bar sessions button toggles the dock, the splitter still resizes it,
+and the visible state and width are restored on launch:
+
+- size: 208,483,148 bytes;
+- SHA256: `6D40457341F096DB365D55797A27B11517383722AC5B4B7EB9D9BDD94A34F1FB`;
+- both remote copies matched that hash via `Get-FileHash`;
+- no `COMTool-Avalonia.exe.bak-*` files were created (`BAK_COUNT=0`);
+- a Windows process smoke test started the deployed working copy, observed it
+  `Running` and `Responding=True`, then stopped it;
+- the automated suite passes 358 tests (App 126) and Linux Xvfb E2E passes
+  13/13, including the new `SidebarDockTests` (pointer movement never moves
+  the dock, manual toggle writes the config, collapsed state and width survive
+  a restart, the new-session menu keeps the dock open) and the repurposed E2E
+  pair `UI02_SidebarDockedOnLaunchE2E` / `UI02_SidebarStaysDockedE2E`;
+- interactive Windows confirmation of the docked panel is WIN-25.
+
 The previously packaged release zip is 74,795,557 bytes with SHA256:
 
 ```text
