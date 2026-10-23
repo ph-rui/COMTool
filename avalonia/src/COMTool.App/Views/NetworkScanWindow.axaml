@@ -1,0 +1,220 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:tools="using:COMTool.App.ViewModels.Tools"
+        x:Class="COMTool.App.Views.NetworkScanWindow"
+        x:DataType="tools:NetworkScanWindowViewModel"
+        Title="网络扫描"
+        Width="880"
+        Height="540"
+        MinWidth="700"
+        MinHeight="420"
+        CanResize="True"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource WindowBackgroundBrush}"
+        FontSize="12">
+  <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="12">
+    <!-- IP 地址范围: [192] . [168] . [1] . [1] .. [254]   ▶ Start scan -->
+    <Border Grid.Row="0"
+            Background="{DynamicResource SidebarListBackgroundBrush}"
+            BorderBrush="{DynamicResource SidebarBorderBrush}"
+            BorderThickness="1"
+            CornerRadius="3"
+            Padding="12,8">
+      <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+        <TextBlock Text="IP 地址范围:"
+                   VerticalAlignment="Center"
+                   Foreground="{DynamicResource WindowTextBrush}" />
+        <TextBox Name="ScanOctet1Box"
+                 Text="{Binding Octet1}"
+                 Width="52"
+                 HorizontalContentAlignment="Center" />
+        <TextBlock Text="." VerticalAlignment="Center" />
+        <TextBox Name="ScanOctet2Box"
+                 Text="{Binding Octet2}"
+                 Width="52"
+                 HorizontalContentAlignment="Center" />
+        <TextBlock Text="." VerticalAlignment="Center" />
+        <TextBox Name="ScanOctet3Box"
+                 Text="{Binding Octet3}"
+                 Width="52"
+                 HorizontalContentAlignment="Center" />
+        <TextBlock Text="." VerticalAlignment="Center" />
+        <TextBox Name="ScanOctetFromBox"
+                 Text="{Binding OctetFrom}"
+                 Width="52"
+                 HorizontalContentAlignment="Center" />
+        <TextBlock Text="--&gt;" VerticalAlignment="Center" Margin="4,0" />
+        <TextBox Name="ScanOctetToBox"
+                 Text="{Binding OctetTo}"
+                 Width="52"
+                 HorizontalContentAlignment="Center" />
+        <Button Name="ScanStartButton"
+                Classes="SidebarActionButton"
+                Margin="12,0,0,0"
+                Padding="14,5"
+                IsEnabled="{Binding !IsScanning}"
+                Click="OnStartScanClick"
+                ToolTip.Tip="Start scan">
+          <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
+            <TextBlock Text="&#xf04b;"
+                       FontFamily="{DynamicResource IconFontAwesome}"
+                       FontSize="11"
+                       Foreground="White"
+                       VerticalAlignment="Center" />
+            <TextBlock Text="Start scan" VerticalAlignment="Center" />
+          </StackPanel>
+        </Button>
+      </StackPanel>
+    </Border>
+
+    <!-- Status / error -->
+    <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="2,6,2,0">
+      <TextBlock Text="{Binding Status}"
+                 Foreground="{DynamicResource SidebarSectionBrush}"
+                 IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+      <TextBlock Text="{Binding Error}"
+                 Foreground="#c62828"
+                 Margin="10,0,0,0"
+                 TextWrapping="Wrap"
+                 IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+    </StackPanel>
+
+    <!-- Result grid: IP 地址 | 名称 | SSH | RDP | VNC | FTP | Telnet | Rlogin | HTTP | 其他端口 -->
+    <Border Grid.Row="2"
+            Margin="0,6,0,0"
+            Background="{DynamicResource SidebarListBackgroundBrush}"
+            BorderBrush="{DynamicResource SidebarBorderBrush}"
+            BorderThickness="1"
+            CornerRadius="3">
+      <Grid RowDefinitions="Auto,*">
+        <Border Grid.Row="0"
+                Background="{DynamicResource SidebarGroupHeaderBrush}"
+                BorderBrush="{DynamicResource SidebarBorderBrush}"
+                BorderThickness="0,0,0,1"
+                Padding="8,5">
+          <Grid ColumnDefinitions="120,90,60,60,60,60,60,60,60,140">
+            <TextBlock Grid.Column="0" Text="IP 地址" FontSize="11"
+                       Foreground="{DynamicResource SidebarSectionBrush}" />
+            <TextBlock Grid.Column="1" Text="名称" FontSize="11"
+                       Foreground="{DynamicResource SidebarSectionBrush}" />
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="3"
+                        HorizontalAlignment="Center">
+              <TextBlock Text="&#xf120;" FontFamily="{DynamicResource IconFontAwesome}"
+                         FontSize="10" Foreground="#424242" VerticalAlignment="Center" />
+              <TextBlock Text="SSH" FontSize="11"
+                         Foreground="{DynamicResource SidebarSectionBrush}" />
+            </StackPanel>
+            <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="3"
+                        HorizontalAlignment="Center">
+              <TextBlock Text="&#xf108;" FontFamily="{DynamicResource IconFontAwesome}"
+                         FontSize="10" Foreground="#1976d2" VerticalAlignment="Center" />
+              <TextBlock Text="RDP" FontSize="11"
+                         Foreground="{DynamicResource SidebarSectionBrush}" />
+            </StackPanel>
+            <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="3"
+                        HorizontalAlignment="Center">
+              <TextBlock Text="&#xf2d0;" FontFamily="{DynamicResource IconFontAwesome}"
+                         FontSize="10" Foreground="#0288d1" VerticalAlignment="Center" />
+              <TextBlock Text="VNC" FontSize="11"
+                         Foreground="{DynamicResource SidebarSectionBrush}" />
+            </StackPanel>
+            <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="3"
+                        HorizontalAlignment="Center">
+              <TextBlock Text="&#xf07b;" FontFamily="{DynamicResource IconFontAwesome}"
+                         FontSize="10" Foreground="#43a047" VerticalAlignment="Center" />
+              <TextBlock Text="FTP" FontSize="11"
+                         Foreground="{DynamicResource SidebarSectionBrush}" />
+            </StackPanel>
+            <StackPanel Grid.Column="6" Orientation="Horizontal" Spacing="3"
+                        HorizontalAlignment="Center">
+              <TextBlock Text="&#xf120;" FontFamily="{DynamicResource IconFontAwesome}"
+                         FontSize="10" Foreground="#6a1b9a" VerticalAlignment="Center" />
+              <TextBlock Text="Telnet" FontSize="11"
+                         Foreground="{DynamicResource SidebarSectionBrush}" />
+            </StackPanel>
+            <StackPanel Grid.Column="7" Orientation="Horizontal" Spacing="3"
+                        HorizontalAlignment="Center">
+              <TextBlock Text="&#xf0c0;" FontFamily="{DynamicResource IconFontAwesome}"
+                         FontSize="10" Foreground="#546e7a" VerticalAlignment="Center" />
+              <TextBlock Text="Rlogin" FontSize="11"
+                         Foreground="{DynamicResource SidebarSectionBrush}" />
+            </StackPanel>
+            <StackPanel Grid.Column="8" Orientation="Horizontal" Spacing="3"
+                        HorizontalAlignment="Center">
+              <TextBlock Text="&#xf0ac;" FontFamily="{DynamicResource IconFontAwesome}"
+                         FontSize="10" Foreground="#1976d2" VerticalAlignment="Center" />
+              <TextBlock Text="HTTP" FontSize="11"
+                         Foreground="{DynamicResource SidebarSectionBrush}" />
+            </StackPanel>
+            <TextBlock Grid.Column="9" Text="其他端口" FontSize="11"
+                       Foreground="{DynamicResource SidebarSectionBrush}" />
+          </Grid>
+        </Border>
+
+        <Grid Grid.Row="1">
+          <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                        VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding Rows}" Margin="8,4">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="tools:ScanGridRow">
+                  <Grid ColumnDefinitions="120,90,60,60,60,60,60,60,60,140" Margin="0,2">
+                    <TextBlock Grid.Column="0" Text="{Binding Address}" FontSize="11" />
+                    <TextBlock Grid.Column="1" Text="{Binding HostName}" FontSize="11"
+                               TextTrimming="CharacterEllipsis"
+                               ToolTip.Tip="{Binding HostName}" />
+                    <ItemsControl Grid.Column="2" Grid.ColumnSpan="7" ItemsSource="{Binding Cells}">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <StackPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="tools:PortCell">
+                          <TextBlock Text="{Binding Glyph}"
+                                     Width="60"
+                                     FontSize="12"
+                                     HorizontalAlignment="Center"
+                                     FontFamily="{DynamicResource IconFontAwesome}"
+                                     Foreground="{Binding Foreground}"
+                                     ToolTip.Tip="{Binding Label}" />
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Grid.Column="9" Text="{Binding OtherPorts}" FontSize="11"
+                               Foreground="{DynamicResource SessionDetailBrush}"
+                               TextTrimming="CharacterEllipsis"
+                               ToolTip.Tip="{Binding OtherPorts}" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+          <TextBlock Text="点击 Start scan 开始扫描"
+                     FontSize="12"
+                     Foreground="{DynamicResource WindowTextBrush}"
+                     HorizontalAlignment="Center"
+                     VerticalAlignment="Center"
+                     IsVisible="{Binding IsEmpty}" />
+        </Grid>
+      </Grid>
+    </Border>
+
+    <Button Grid.Row="3"
+            Name="NetScanCloseButton"
+            Classes="SidebarActionButton"
+            HorizontalAlignment="Center"
+            Margin="0,10,0,0"
+            Padding="18,5"
+            Click="OnCloseClick">
+      <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
+        <TextBlock Text="&#xf00d;"
+                   FontFamily="{DynamicResource IconFontAwesome}"
+                   FontSize="11"
+                   Foreground="White"
+                   VerticalAlignment="Center" />
+        <TextBlock Text="关闭" VerticalAlignment="Center" />
+      </StackPanel>
+    </Button>
+  </Grid>
+</Window>

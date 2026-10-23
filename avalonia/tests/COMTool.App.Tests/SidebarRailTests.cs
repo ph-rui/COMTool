@@ -120,24 +120,25 @@ public sealed class SidebarRailTests
     public void UI16_NetScanDefaultsMatchMobaXterm()
     {
         using var env = new TestEnvironment();
-        MainWindow? window = null;
+        NetworkScanWindow? window = null;
         try
         {
             env.Run(() =>
             {
-                env.SeedConfig(new ComtoolConfig());
-                window = CreateWindow(env);
-                var vm = Vm(window);
+                window = new NetworkScanWindow();
+                window.Show();
+                Dispatcher.UIThread.RunJobs();
+                var vm = window.ViewModel;
 
                 // 默认值 1:1 MobaXterm：192 . 168 . 1 . 1 --> 254
-                Assert.Equal("192", vm.ScanOctet1);
-                Assert.Equal("168", vm.ScanOctet2);
-                Assert.Equal("1", vm.ScanOctet3);
-                Assert.Equal("1", vm.ScanOctetFrom);
-                Assert.Equal("254", vm.ScanOctetTo);
+                Assert.Equal("192", vm.Octet1);
+                Assert.Equal("168", vm.Octet2);
+                Assert.Equal("1", vm.Octet3);
+                Assert.Equal("1", vm.OctetFrom);
+                Assert.Equal("254", vm.OctetTo);
                 Assert.True(
-                    NetworkScanTargets.TryParseSubnet(vm.ScanOctet1, vm.ScanOctet2, vm.ScanOctet3,
-                        vm.ScanOctetFrom, vm.ScanOctetTo, out var targets, out var error),
+                    NetworkScanTargets.TryParseSubnet(vm.Octet1, vm.Octet2, vm.Octet3,
+                        vm.OctetFrom, vm.OctetTo, out var targets, out var error),
                     $"default range not parseable: {error}");
                 Assert.Equal(254, targets.Count);
                 Assert.Equal("192.168.1.1", targets[0].ToString());
@@ -616,43 +617,41 @@ public sealed class SidebarRailTests
     public void NET05_ScanInvalidInputShowsError()
     {
         using var env = new TestEnvironment();
-        MainWindow? window = null;
+        NetworkScanWindow? window = null;
         try
         {
             env.Run(() =>
             {
-                env.SeedConfig(new ComtoolConfig());
-                window = CreateWindow(env);
-                var vm = Vm(window);
-                var sidebar = Sidebar(window);
-                vm.SidebarTab = SidebarTab.Tools;
-                RunJobs(window);
-                OpenScannerView(window, vm);
+                window = new NetworkScanWindow();
+                window.Show();
+                Dispatcher.UIThread.RunJobs();
+                var vm = window.ViewModel;
+                var start = window.FindControl<Button>("ScanStartButton")!;
 
                 // 段值非法：非数字
-                vm.ScanOctet1 = "abc";
-                vm.ScanError = null;
-                Click(window, sidebar.FindControl<Button>("ScanStartButton")!);
-                Assert.NotNull(vm.ScanError);
+                vm.Octet1 = "abc";
+                vm.Error = null;
+                Click(window, start);
+                Assert.NotNull(vm.Error);
                 Assert.False(vm.IsScanning);
-                Assert.Empty(vm.ScanRows);
+                Assert.Empty(vm.Rows);
 
                 // 段值超范围
-                vm.ScanOctet1 = "256";
-                vm.ScanError = null;
+                vm.Octet1 = "256";
+                vm.Error = null;
                 RunJobs(window);
-                Click(window, sidebar.FindControl<Button>("ScanStartButton")!);
-                Assert.NotNull(vm.ScanError);
+                Click(window, start);
+                Assert.NotNull(vm.Error);
                 Assert.False(vm.IsScanning);
 
                 // 末段范围：结束小于起始
-                vm.ScanOctet1 = "192";
-                vm.ScanOctetFrom = "200";
-                vm.ScanOctetTo = "10";
-                vm.ScanError = null;
+                vm.Octet1 = "192";
+                vm.OctetFrom = "200";
+                vm.OctetTo = "10";
+                vm.Error = null;
                 RunJobs(window);
-                Click(window, sidebar.FindControl<Button>("ScanStartButton")!);
-                Assert.NotNull(vm.ScanError);
+                Click(window, start);
+                Assert.NotNull(vm.Error);
                 Assert.False(vm.IsScanning);
             });
         }
@@ -667,50 +666,48 @@ public sealed class SidebarRailTests
     public void NET05_ScanShowsServiceGridResults()
     {
         using var env = new TestEnvironment();
-        MainWindow? window = null;
+        NetworkScanWindow? window = null;
         try
         {
             env.Run(() =>
             {
-                env.SeedConfig(new ComtoolConfig());
-                window = CreateWindow(env);
-                var vm = Vm(window);
-                var sidebar = Sidebar(window);
-                vm.SidebarTab = SidebarTab.Tools;
-                RunJobs(window);
-                OpenScannerView(window, vm);
-
-                // 网络扫描 1:1 MobaXterm：固定 7 服务列 + “其他端口”列
-                window.NetworkScannerForTests = new FakeScanner(new List<NetworkScanHost>
+                window = new NetworkScanWindow
                 {
-                    new(new IPAddress(new byte[] { 127, 0, 0, 1 }), "loopback", new[] { 22, 80, 443 }, 1),
-                    new(new IPAddress(new byte[] { 127, 0, 0, 2 }), null, Array.Empty<int>(), 2),
-                }) { DelayMs = 1 };
+                    // 网络扫描 1:1 MobaXterm：固定 7 服务列 + “其他端口”列
+                    ScannerForTests = new FakeScanner(new List<NetworkScanHost>
+                    {
+                        new(new IPAddress(new byte[] { 127, 0, 0, 1 }), "loopback", new[] { 22, 80, 443 }, 1),
+                        new(new IPAddress(new byte[] { 127, 0, 0, 2 }), null, Array.Empty<int>(), 2),
+                    }) { DelayMs = 1 },
+                };
+                window.Show();
+                Dispatcher.UIThread.RunJobs();
+                var vm = window.ViewModel;
 
-                Click(window, sidebar.FindControl<Button>("ScanStartButton")!);
-                var finished = WaitUntilTry(() => vm.ScanStatus.Contains("完成"), 10);
+                Click(window, window.FindControl<Button>("ScanStartButton")!);
+                var finished = WaitUntilTry(() => vm.Status.Contains("完成"), 10);
                 Assert.True(finished,
-                    $"scan did not finish: status='{vm.ScanStatus}' " +
-                    $"isScanning={vm.IsScanning} rows={vm.ScanRows.Count}");
+                    $"scan did not finish: status='{vm.Status}' " +
+                    $"isScanning={vm.IsScanning} rows={vm.Rows.Count}");
                 RunJobs(window);
 
-                Assert.Equal(2, vm.ScanRows.Count);
-                Assert.Equal("127.0.0.1", vm.ScanRows[0].Address);
-                Assert.Equal("loopback", vm.ScanRows[0].HostName);
+                Assert.Equal(2, vm.Rows.Count);
+                Assert.Equal("127.0.0.1", vm.Rows[0].Address);
+                Assert.Equal("loopback", vm.Rows[0].HostName);
                 // 7 个固定服务列：SSH(22) 与 HTTP(80) 开放，其余关闭
-                Assert.Equal(7, vm.ScanRows[0].Cells.Count);
-                Assert.True(vm.ScanRows[0].Cells[0].IsOpen);   // SSH
-                Assert.False(vm.ScanRows[0].Cells[1].IsOpen);  // RDP
-                Assert.False(vm.ScanRows[0].Cells[2].IsOpen);  // VNC
-                Assert.False(vm.ScanRows[0].Cells[3].IsOpen);  // FTP
-                Assert.False(vm.ScanRows[0].Cells[4].IsOpen);  // Telnet
-                Assert.False(vm.ScanRows[0].Cells[5].IsOpen);  // Rlogin
-                Assert.True(vm.ScanRows[0].Cells[6].IsOpen);   // HTTP
-                Assert.Equal("443", vm.ScanRows[0].OtherPorts);
-                Assert.Equal("127.0.0.2", vm.ScanRows[1].Address);
-                Assert.All(vm.ScanRows[1].Cells, c => Assert.False(c.IsOpen));
-                Assert.Equal("", vm.ScanRows[1].OtherPorts);
-                Assert.Equal("完成：发现 2 台在线设备", vm.ScanStatus);
+                Assert.Equal(7, vm.Rows[0].Cells.Count);
+                Assert.True(vm.Rows[0].Cells[0].IsOpen);   // SSH
+                Assert.False(vm.Rows[0].Cells[1].IsOpen);  // RDP
+                Assert.False(vm.Rows[0].Cells[2].IsOpen);  // VNC
+                Assert.False(vm.Rows[0].Cells[3].IsOpen);  // FTP
+                Assert.False(vm.Rows[0].Cells[4].IsOpen);  // Telnet
+                Assert.False(vm.Rows[0].Cells[5].IsOpen);  // Rlogin
+                Assert.True(vm.Rows[0].Cells[6].IsOpen);   // HTTP
+                Assert.Equal("443", vm.Rows[0].OtherPorts);
+                Assert.Equal("127.0.0.2", vm.Rows[1].Address);
+                Assert.All(vm.Rows[1].Cells, c => Assert.False(c.IsOpen));
+                Assert.Equal("", vm.Rows[1].OtherPorts);
+                Assert.Equal("完成：发现 2 台在线设备", vm.Status);
             });
         }
         finally
@@ -724,31 +721,27 @@ public sealed class SidebarRailTests
     public void NET05_NetScanCloseCancelsScan()
     {
         using var env = new TestEnvironment();
-        MainWindow? window = null;
+        NetworkScanWindow? window = null;
         try
         {
             env.Run(() =>
             {
-                env.SeedConfig(new ComtoolConfig());
-                window = CreateWindow(env);
-                var vm = Vm(window);
-                var sidebar = Sidebar(window);
-                vm.SidebarTab = SidebarTab.Tools;
-                RunJobs(window);
-                OpenScannerView(window, vm);
+                window = new NetworkScanWindow
+                {
+                    ScannerForTests =
+                        new FakeScanner(Array.Empty<NetworkScanHost>()) { DelayMs = 5000 },
+                };
+                window.Show();
+                Dispatcher.UIThread.RunJobs();
+                var vm = window.ViewModel;
 
-                window.NetworkScannerForTests =
-                    new FakeScanner(Array.Empty<NetworkScanHost>()) { DelayMs = 5000 };
-
-                Click(window, sidebar.FindControl<Button>("ScanStartButton")!);
+                Click(window, window.FindControl<Button>("ScanStartButton")!);
                 WaitUntil(() => vm.IsScanning, "scan to start");
-                // MobaXterm：关闭对话框即终止扫描并返回工具菜单
-                Click(window, sidebar.FindControl<Button>("NetScanCloseButton")!);
+                // MobaXterm：关闭对话框即终止扫描
+                Click(window, window.FindControl<Button>("NetScanCloseButton")!);
                 WaitUntil(() => !vm.IsScanning, "scan to stop");
 
-                Assert.StartsWith("已停止", vm.ScanStatus);
-                Assert.Equal(ToolsView.Menu, vm.ToolsView);
-                Assert.False(vm.IsBusy);
+                Assert.StartsWith("已停止", vm.Status);
             });
         }
         finally
@@ -1062,6 +1055,32 @@ public sealed class SidebarRailTests
         window.MouseDown(center!.Value, MouseButton.Left);
         window.MouseUp(center.Value, MouseButton.Left);
         RunJobs(window);
+    }
+
+    /// <summary>Clicks a control inside any standalone tool window.</summary>
+    private static void Click(Window window, Control control)
+    {
+        var center = control.TranslatePoint(
+            new Point(control.Bounds.Width / 2, control.Bounds.Height / 2),
+            window);
+        Assert.NotNull(center);
+        window.MouseDown(center!.Value, MouseButton.Left);
+        window.MouseUp(center.Value, MouseButton.Left);
+        if (window.IsVisible)
+        {
+            RunJobs(window);
+        }
+        else
+        {
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    private static void RunJobs(Window window)
+    {
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+        Dispatcher.UIThread.RunJobs();
     }
 
     private static void RunJobs(MainWindow window)
