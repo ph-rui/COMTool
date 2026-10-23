@@ -571,6 +571,22 @@ and the visible state and width are restored on launch:
 - interactive Windows confirmation is WIN-26 (includes checking icons/labels
   render crisp on the real desktop).
 
+### 2026-10-23 — 工具页 1:1 对标 MobaXterm（剪刀图标 / 8 项菜单 / 扫描仪对话框 / 深度扫描）
+
+- commit: `a79001b` (feat(avalonia): 工具页 1:1 对标 MobaXterm：剪刀图标、
+  8 项工具菜单、网络扫描仪对话框（起始/结束 IP + 主机×端口表格 + 深度扫描）);
+- test evidence: full gate PASS — 389 tests (Core 47, SFTP 40, Connections
+  67, Terminal 11, ZMODEM 32, TestGate 49, App 143), Linux Xvfb E2E 13/13;
+- deployment 2026-10-23 (in-place overwrite, no `.bak-*`):
+  - exe published from `a79001b`;
+  - size: 208,847,692 bytes;
+  - SHA256: `2FEBADCCA5FA3B6900CA5BAE4DBDF37DC744ADC9A79B7B6B29811BBAB509F133`;
+  - WORK and DESKTOP copies both matched that hash via `Get-FileHash`;
+  - `BAK_COUNT=0`;
+  - smoke test: process started, `Responding=True`, then stopped;
+- interactive Windows confirmation is WIN-26 (工具菜单文案、扫描仪对话框
+  布局与深度扫描行为对照实机 MobaXterm 22.1 核对，桌面解锁后补拍)。
+
 The previously packaged release zip is 74,795,557 bytes with SHA256:
 
 ```text
