@@ -5,7 +5,8 @@
              x:Class="COMTool.App.Views.SessionSidebar"
              x:DataType="vm:MainViewModel">
   <Grid ColumnDefinitions="24,*" Margin="0,5,0,0">
-    <!-- MobaXterm-style icon rail: Sessions / Tools / Macros / History. -->
+    <!-- MobaXterm-style icon rail: Sessions / Tools / Macros, plus the
+         SSH-browser icon that only exists while an SSH session is connected. -->
     <Border Grid.Column="0"
             Name="SidebarRail"
             Background="{DynamicResource SidebarRailBackgroundBrush}"
@@ -44,16 +45,16 @@
                      FontSize="16"
                      Foreground="#2f7ed8" />
         </Button>
-        <Button Name="RailHistoryButton"
+        <!-- MobaXterm shows this globe only while an SSH login is live. -->
+        <Button Name="RailSshBrowserButton"
                 Classes="RailButton"
-                Classes.active="{Binding IsHistoryTab}"
-                Tag="History"
-                Click="OnRailTabClick"
-                ToolTip.Tip="历史（最近打开的会话）">
-          <TextBlock Text="&#xf1da;"
+                IsVisible="{Binding IsSshBrowserVisible}"
+                Click="OnRailSshBrowserClick"
+                ToolTip.Tip="SSH 浏览器（SFTP）">
+          <TextBlock Text="&#xf57d;"
                      FontFamily="{DynamicResource IconFontAwesome}"
                      FontSize="16"
-                     Foreground="#e0a526" />
+                     Foreground="#ff9800" />
         </Button>
       </StackPanel>
     </Border>
@@ -141,14 +142,6 @@
                      FontFamily="{DynamicResource IconFontAwesome}"
                      FontSize="13"
                      Foreground="White" />
-        </Button>
-        <Button Grid.Column="4"
-                Name="SidebarClearHistoryButton"
-                Classes="SidebarTextButton"
-                IsVisible="{Binding IsHistoryTab}"
-                Click="OnClearHistoryClick"
-                ToolTip.Tip="清空历史">
-          <TextBlock Text="清空" FontSize="11" />
         </Button>
       </Grid>
 
@@ -368,63 +361,6 @@
                        Margin="4,8,4,0"
                        VerticalAlignment="Top"
                        IsVisible="{Binding !HasMacros}" />
-          </Grid>
-        </Border>
-      </Grid>
-
-      <!-- History -->
-      <Grid Grid.Row="2" Name="HistoryPanel" Margin="4,0,2,0" IsVisible="{Binding IsHistoryTab}">
-        <Border Background="{DynamicResource SidebarListBackgroundBrush}"
-                BorderBrush="{DynamicResource SidebarBorderBrush}"
-                BorderThickness="1"
-                CornerRadius="3"
-                Padding="2">
-          <Grid>
-            <ScrollViewer HorizontalScrollBarVisibility="Disabled"
-                          VerticalScrollBarVisibility="Auto">
-              <ItemsControl ItemsSource="{Binding History}">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="vm:HistoryEntry">
-                    <Grid Margin="4,2,2,2"
-                          MinHeight="30"
-                          ColumnDefinitions="16,*,Auto"
-                          Background="Transparent"
-                          Cursor="Hand"
-                          Tapped="OnHistoryTapped">
-                      <TextBlock Grid.Column="0"
-                                 Text="{Binding IconGlyph}"
-                                 FontFamily="{DynamicResource IconFontAwesome}"
-                                 FontSize="13"
-                                 Foreground="#607d8b"
-                                 VerticalAlignment="Center"
-                                 Margin="4,0,0,0" />
-                      <StackPanel Grid.Column="1"
-                                  Margin="4,0,4,0"
-                                  VerticalAlignment="Center"
-                                  Spacing="0">
-                        <TextBlock Classes="SessionName"
-                                   Text="{Binding Name}"
-                                   FontSize="11" />
-                        <TextBlock Classes="SessionDetail"
-                                   Text="{Binding Detail}"
-                                   IsVisible="{Binding Detail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-                      </StackPanel>
-                      <TextBlock Grid.Column="2"
-                                 Classes="SessionDetail"
-                                 Text="{Binding TimeText}"
-                                 VerticalAlignment="Center"
-                                 Margin="0,0,4,0" />
-                    </Grid>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-            </ScrollViewer>
-            <TextBlock Text="暂无最近会话"
-                       FontSize="12"
-                       Foreground="{DynamicResource WindowTextBrush}"
-                       Margin="4,8,4,0"
-                       VerticalAlignment="Top"
-                       IsVisible="{Binding !HasHistory}" />
           </Grid>
         </Border>
       </Grid>

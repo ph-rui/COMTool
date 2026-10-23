@@ -9,8 +9,7 @@ public enum SidebarTab
 {
     Sessions,
     Tools,
-    Macros,
-    History
+    Macros
 }
 
 public sealed partial class MacroItem : ObservableObject
@@ -25,18 +24,6 @@ public sealed partial class MacroItem : ObservableObject
 
     [ObservableProperty]
     private bool _appendEnter = true;
-}
-
-public sealed class HistoryEntry
-{
-    public required string Kind { get; init; }
-    public required string Id { get; init; }
-    public required long At { get; init; }
-    public required SessionItem Session { get; init; }
-    public string Name => Session.Name;
-    public string Detail => Session.Detail ?? "";
-    public string IconGlyph => Session.IconGlyph;
-    public string TimeText { get; init; } = "";
 }
 
 /// <summary>
@@ -63,6 +50,13 @@ public partial class MainViewModel
     [ObservableProperty]
     private SidebarTab _sidebarTab = SidebarTab.Sessions;
 
+    /// <summary>
+    /// True while at least one SSH session is connected. The MobaXterm rail
+    /// shows its SSH-browser icon only while an SSH login exists.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isSshBrowserVisible;
+
     [ObservableProperty]
     private bool _isMacroEditorOpen;
 
@@ -82,7 +76,6 @@ public partial class MainViewModel
     private string? _editingMacroId;
 
     public ObservableCollection<MacroItem> Macros { get; } = new();
-    public ObservableCollection<HistoryEntry> History { get; } = new();
     public ObservableCollection<ToolMenuItem> ToolMenu { get; } = new();
 
     /// <summary>
@@ -92,7 +85,6 @@ public partial class MainViewModel
     public void InitializeSidebar()
     {
         Macros.CollectionChanged += OnSidebarCollectionChanged;
-        History.CollectionChanged += OnSidebarCollectionChanged;
         InitToolMenu();
         UpdateSidebarEmptyStates();
     }
@@ -120,20 +112,17 @@ public partial class MainViewModel
         OnPropertyChanged(nameof(IsSessionsTab));
         OnPropertyChanged(nameof(IsToolsTab));
         OnPropertyChanged(nameof(IsMacrosTab));
-        OnPropertyChanged(nameof(IsHistoryTab));
         OnPropertyChanged(nameof(SidebarTitle));
     }
 
     public bool IsSessionsTab => SidebarTab == SidebarTab.Sessions;
     public bool IsToolsTab => SidebarTab == SidebarTab.Tools;
     public bool IsMacrosTab => SidebarTab == SidebarTab.Macros;
-    public bool IsHistoryTab => SidebarTab == SidebarTab.History;
 
     public string SidebarTitle => SidebarTab switch
     {
         SidebarTab.Tools => "Tools",
         SidebarTab.Macros => "Macros",
-        SidebarTab.History => "History",
         _ => "User sessions",
     };
 
@@ -145,11 +134,9 @@ public partial class MainViewModel
     private void UpdateSidebarEmptyStates()
     {
         OnPropertyChanged(nameof(HasMacros));
-        OnPropertyChanged(nameof(HasHistory));
     }
 
     public bool HasMacros => Macros.Count > 0;
-    public bool HasHistory => History.Count > 0;
 
     /// <summary>
     /// Opens the inline macro editor, optionally pre-filled for editing an
@@ -174,13 +161,4 @@ public partial class MainViewModel
 
     public MacroItem? FindMacro(string? id) =>
         id is null ? null : Macros.FirstOrDefault(m => m.Id == id);
-
-    public static string FormatRelativeTime(long atMillis, long nowMillis)
-    {
-        long seconds = Math.Max(0, (nowMillis - atMillis) / 1000);
-        if (seconds < 60) return "just now";
-        if (seconds < 3600) return $"{seconds / 60} min ago";
-        if (seconds < 86400) return $"{seconds / 3600} h ago";
-        return $"{seconds / 86400} d ago";
-    }
 }

@@ -313,6 +313,10 @@ public partial class MainViewModel : ViewModelBase
                 _ => false,
             };
         }
+
+        // The rail browser icon follows live connections, including quick
+        // connections that have no saved session behind them.
+        IsSshBrowserVisible = connectedSsh.Count > 0;
     }
 
     public void LoadSessions(
@@ -323,6 +327,7 @@ public partial class MainViewModel : ViewModelBase
         IReadOnlySet<string>? connectedTelnet = null)
     {
         Sections.Clear();
+        IsSshBrowserVisible = connectedSsh.Count > 0;
 
         var serial = new SidebarSection { Title = "Serial", ShowHeader = true };
         var availableSerial = config.PortScanSucceeded

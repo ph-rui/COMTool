@@ -40,7 +40,6 @@ public partial class MainWindow : Window
     private readonly Dictionary<TerminalTab, SerialTabState> _serialTabs = new();
     private readonly HashSet<TerminalTab> _sshRestarts = new();
     private readonly HashSet<TerminalTab> _telnetRestarts = new();
-    private string _historySignature = "";
 
     internal Func<SerialConnectionConfig, ISerialConnection> SerialConnectionFactory { get; set; } =
         config => SerialConnection.Open(config);
@@ -87,8 +86,7 @@ public partial class MainWindow : Window
         Sidebar.MacroDeleteRequested += OnMacroDeleteRequested;
         Sidebar.MacroSaveRequested += OnMacroSaveRequested;
         Sidebar.MacroCancelRequested += OnMacroCancelRequested;
-        Sidebar.HistoryActivated += OnHistoryActivated;
-        Sidebar.HistoryClearRequested += OnHistoryClearRequested;
+        Sidebar.SshBrowserRequested += OnSshBrowserRequested;
         Sidebar.ToolRequested += OnToolRequested;
         Opened += OnOpened;
     }
@@ -225,6 +223,8 @@ public partial class MainWindow : Window
         }
     }
 
+    internal void UpdateConnectionStatesForTests() => UpdateConnectionStates();
+
     internal void OpenSerialSessionForTests(string port) => OpenSerialSession(port);
 
     internal Task ActivateSessionForTests(SessionItem item) => ActivateSessionAsync(item);
@@ -320,10 +320,6 @@ public partial class MainWindow : Window
 
         var (serial, ssh, telnet, tcp) = ConnectedSessions();
         viewModel.LoadSessions(_config, serial, ssh, tcp, telnet);
-        // Keep the History tab in sync: prune entries whose saved session was
-        // removed, and pick up newly added sessions. Cheap no-op when nothing
-        // changed (signature compare), so the 2s port-scan refresh is fine.
-        RefreshHistory(viewModel);
     }
 
     private async void OnSessionActivated(object? sender, SessionItem item) =>
@@ -336,13 +332,6 @@ public partial class MainWindow : Window
             || item.IsConnecting)
         {
             return;
-        }
-
-        // Every activation of a saved session is a "recent" event. Local
-        // terminals have no saved session behind them and are not recorded.
-        if (item.Kind != SessionKind.Local)
-        {
-            RecordHistory(viewModel, item);
         }
 
         // SSH, Telnet and TCP clients are saved endpoints, not a single
@@ -2543,6 +2532,39 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// The SSH-browser icon of the rail opens the SFTP pane of the current
+    /// SSH session. When the current tab is not an SSH tab, the most recent
+    /// connected SSH tab is selected first.
+    /// </summary>
+    private void OnSshBrowserRequested(object? sender, EventArgs e)
+    {
+        if (DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        var tab = viewModel.SelectedTab;
+        if (tab is null || !tab.IsSshTab || !IsTabConnected(tab))
+        {
+            tab = viewModel.Tabs.FirstOrDefault(
+                candidate => candidate.IsSshTab && IsTabConnected(candidate));
+        }
+
+        if (tab?.SftpPane is not { } pane)
+        {
+            return;
+        }
+
+        if (!ReferenceEquals(viewModel.SelectedTab, tab))
+        {
+            viewModel.SelectedTab = tab;
+        }
+
+        pane.IsExpanded = true;
+        _ = pane.EnsureLoadedAsync(CancellationToken.None);
+    }
+
     private void OnEncodingChanged(object? sender, SelectionChangedEventArgs e)
     {
         if (_applyingEncoding
@@ -2861,12 +2883,12 @@ public partial class MainWindow : Window
     }
 
     // ------------------------------------------------------------------
-    // Sidebar rail data: Macros / History / Tools (network scanner)
+    // Sidebar rail data: Macros / Tools (network scanner)
     // ------------------------------------------------------------------
 
     /// <summary>
-    /// Loads the persisted macro list into the view model and refreshes the
-    /// History tab. Called once after the config is available.
+    /// Loads the persisted macro list into the view model. Called once
+    /// after the config is available.
     /// </summary>
     private void LoadSidebarData()
     {
@@ -2903,208 +2925,6 @@ public partial class MainWindow : Window
         {
             _config.Save();
         }
-
-        RefreshHistory(viewModel, force: true);
-    }
-
-    private void RecordHistory(MainViewModel viewModel, SessionItem item)
-    {
-        if (_config is null)
-        {
-            return;
-        }
-
-        var kind = item.Kind.ToString();
-        var entries = _config.Config.RecentSessions;
-        entries.RemoveAll(entry =>
-            entry.Kind == kind
-            && string.Equals(entry.Id, item.SessionId, StringComparison.OrdinalIgnoreCase));
-        entries.Insert(0, new RecentSessionConfig
-        {
-            Kind = kind,
-            Id = item.SessionId,
-            At = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-        });
-        while (entries.Count > MaxHistoryEntries)
-        {
-            entries.RemoveAt(entries.Count - 1);
-        }
-
-        _config.Save();
-        RefreshHistory(viewModel, force: true);
-    }
-
-    private const int MaxHistoryEntries = 20;
-
-    /// <summary>
-    /// Rebuilds the History tab from the persisted entries, resolving each
-    /// kind|id against the live sidebar (preferred) or the saved session
-    /// stores. Entries whose session no longer exists are pruned. When the
-    /// resolved set is unchanged the view model is left alone, so the
-    /// periodic port-scan refresh stays a no-op.
-    /// </summary>
-    private void RefreshHistory(MainViewModel viewModel, bool force = false)
-    {
-        if (_config is null)
-        {
-            return;
-        }
-
-        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var entries = _config.Config.RecentSessions;
-        var kept = new List<RecentSessionConfig>();
-        var history = new List<HistoryEntry>();
-        foreach (var entry in entries)
-        {
-            if (ResolveHistorySession(entry) is not { } item)
-            {
-                continue;
-            }
-
-            kept.Add(entry);
-            history.Add(new HistoryEntry
-            {
-                Kind = entry.Kind,
-                Id = entry.Id,
-                At = entry.At,
-                Session = item,
-                TimeText = MainViewModel.FormatRelativeTime(entry.At, now),
-            });
-        }
-
-        if (kept.Count > MaxHistoryEntries)
-        {
-            // An older version (or a hand-edited file) may hold more than the
-            // cap; trim the oldest entries and persist the result.
-            kept.RemoveRange(MaxHistoryEntries, kept.Count - MaxHistoryEntries);
-            history.RemoveRange(MaxHistoryEntries, history.Count - MaxHistoryEntries);
-        }
-
-        if (kept.Count != entries.Count)
-        {
-            // At least one referenced session was deleted: persist the prune.
-            _config.Config.RecentSessions = kept;
-            _config.Save();
-            force = true;
-        }
-
-        var signature = string.Join('\u0001', history.Select(h => $"{h.Kind}|{h.Id}|{h.At}"));
-        if (!force && signature == _historySignature)
-        {
-            return;
-        }
-
-        _historySignature = signature;
-        viewModel.History.Clear();
-        foreach (var item in history)
-        {
-            viewModel.History.Add(item);
-        }
-    }
-
-    private SessionItem? ResolveHistorySession(RecentSessionConfig entry)
-    {
-        // Prefer the live sidebar item so connection state stays current.
-        if (DataContext is MainViewModel viewModel)
-        {
-            foreach (var section in viewModel.Sections)
-            {
-                foreach (var item in section.Items)
-                {
-                    if (item.Kind.ToString() == entry.Kind
-                        && string.Equals(item.SessionId, entry.Id, StringComparison.OrdinalIgnoreCase))
-                    {
-                        return item;
-                    }
-                }
-            }
-        }
-
-        if (_config is null)
-        {
-            return null;
-        }
-
-        switch (entry.Kind)
-        {
-            case nameof(SessionKind.Serial):
-                if (_config.SerialSessions.Get(entry.Id) is not { } serial)
-                {
-                    return null;
-                }
-
-                var detail = serial.Name;
-                if (string.IsNullOrWhiteSpace(detail)
-                    || string.Equals(detail, serial.Port, StringComparison.OrdinalIgnoreCase))
-                {
-                    detail = null;
-                }
-
-                return new SessionItem
-                {
-                    Name = serial.Port,
-                    SessionId = serial.Port,
-                    Kind = SessionKind.Serial,
-                    Detail = detail,
-                    SerialSettings = SerialSessionRules.ConnectionSummary(serial.Serial),
-                };
-
-            case nameof(SessionKind.Ssh):
-                return _config.SshSessions.Get(entry.Id) is { } ssh
-                    ? new SessionItem
-                    {
-                        Name = SshSessionRules.DisplayName(ssh),
-                        SessionId = ssh.Key,
-                        Kind = SessionKind.Ssh,
-                        Detail = SshSessionRules.Detail(ssh),
-                    }
-                    : null;
-
-            case nameof(SessionKind.Telnet):
-                return _config.TelnetSessions.Get(entry.Id) is { } telnet
-                    ? new SessionItem
-                    {
-                        Name = TelnetSessionRules.DisplayName(telnet),
-                        SessionId = telnet.Key,
-                        Kind = SessionKind.Telnet,
-                        Detail = TelnetSessionRules.Detail(telnet),
-                    }
-                    : null;
-
-            case nameof(SessionKind.Tcp):
-                return _config.TcpSessions.Get(entry.Id) is { } tcp
-                    ? new SessionItem
-                    {
-                        Name = TcpSessionRules.DisplayName(tcp),
-                        SessionId = tcp.Key,
-                        Kind = SessionKind.Tcp,
-                        Detail = TcpSessionRules.Detail(tcp),
-                    }
-                    : null;
-
-            default:
-                return null;
-        }
-    }
-
-    private void OnHistoryActivated(object? sender, HistoryEntry entry)
-    {
-        // The entry always carries the best resolved session item (live
-        // sidebar item first, saved-store fallback second).
-        _ = ActivateSessionAsync(entry.Session);
-    }
-
-    private void OnHistoryClearRequested(object? sender, EventArgs e)
-    {
-        if (_config is null || DataContext is not MainViewModel viewModel)
-        {
-            return;
-        }
-
-        _config.Config.RecentSessions.Clear();
-        _config.Save();
-        _historySignature = "";
-        viewModel.History.Clear();
     }
 
     private void OnMacroSaveRequested(object? sender, EventArgs e)

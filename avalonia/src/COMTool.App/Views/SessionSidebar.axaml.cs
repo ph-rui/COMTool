@@ -36,9 +36,11 @@ public partial class SessionSidebar : UserControl
 
     public event EventHandler? MacroCancelRequested;
 
-    public event EventHandler<HistoryEntry>? HistoryActivated;
-
-    public event EventHandler? HistoryClearRequested;
+    /// <summary>
+    /// Raised when the SSH-browser rail icon is clicked. The main window
+    /// shows the SFTP browser of the current SSH session.
+    /// </summary>
+    public event EventHandler? SshBrowserRequested;
 
     /// <summary>Raised with a <c>ToolCatalog</c> id when a tool menu row is clicked.</summary>
     public event EventHandler<string>? ToolRequested;
@@ -111,16 +113,8 @@ public partial class SessionSidebar : UserControl
         }
     }
 
-    private void OnHistoryTapped(object? sender, TappedEventArgs e)
-    {
-        if (sender is Control { DataContext: HistoryEntry entry })
-        {
-            HistoryActivated?.Invoke(this, entry);
-        }
-    }
-
-    private void OnClearHistoryClick(object? sender, RoutedEventArgs e) =>
-        HistoryClearRequested?.Invoke(this, EventArgs.Empty);
+    private void OnRailSshBrowserClick(object? sender, RoutedEventArgs e) =>
+        SshBrowserRequested?.Invoke(this, EventArgs.Empty);
 
     private void OnToolMenuClick(object? sender, RoutedEventArgs e)
     {

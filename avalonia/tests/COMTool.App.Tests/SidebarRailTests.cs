@@ -13,13 +13,16 @@ using COMTool.App.Views;
 using COMTool.Connections.NetworkScan;
 using COMTool.Connections.Servers;
 using COMTool.Core.Config;
+using COMTool.Sftp;
+using COMTool.Sftp.Testing;
 using Iciclecreek.Terminal;
 
 namespace COMTool.App.Tests;
 
 /// <summary>
 /// The sidebar icon rail (UI-16) and its three new panels: the network
-/// scanner (NET-01), macros (MAC-01) and recent-session history (HIST-01).
+/// scanner (NET-01), macros (MAC-01) and the SSH-browser icon that follows
+/// SSH connections.
 /// </summary>
 public sealed class SidebarRailTests
 {
@@ -43,24 +46,22 @@ public sealed class SidebarRailTests
                 Assert.True(sidebar.FindControl<Grid>("SessionsPanel")!.IsVisible);
                 Assert.False(sidebar.FindControl<Grid>("ToolsPanel")!.IsVisible);
                 Assert.False(sidebar.FindControl<Grid>("MacrosPanel")!.IsVisible);
-                Assert.False(sidebar.FindControl<Grid>("HistoryPanel")!.IsVisible);
 
+                // MobaXterm 左侧固定三格；SSH 浏览器是连接后才出现的第四格。
                 var rail = new[]
                 {
                     sidebar.FindControl<Button>("RailToolsButton")!,
                     sidebar.FindControl<Button>("RailMacrosButton")!,
-                    sidebar.FindControl<Button>("RailHistoryButton")!,
                     sidebar.FindControl<Button>("RailSessionsButton")!,
                 };
                 var tabs = new[]
                 {
                     SidebarTab.Tools,
                     SidebarTab.Macros,
-                    SidebarTab.History,
                     SidebarTab.Sessions,
                 };
-                var panels = new[] { "ToolsPanel", "MacrosPanel", "HistoryPanel", "SessionsPanel" };
-                var titles = new[] { "Tools", "Macros", "History", "User sessions" };
+                var panels = new[] { "ToolsPanel", "MacrosPanel", "SessionsPanel" };
+                var titles = new[] { "Tools", "Macros", "User sessions" };
 
                 for (var i = 0; i < rail.Length; i++)
                 {
@@ -83,6 +84,54 @@ public sealed class SidebarRailTests
         {
             window?.Close();
             Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public void UI16_SshBrowserIconAppearsOnlyWithAConnectedSshSession()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        InMemoryPty? pty = null;
+        try
+        {
+            env.Run(() =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                window = CreateWindow(env);
+                var vm = Vm(window);
+                var sidebar = Sidebar(window);
+                var browser = sidebar.FindControl<Button>("RailSshBrowserButton")!;
+
+                // 没有 SSH 连接时，MobaXterm 左栏只有三格。
+                Assert.False(browser.IsVisible);
+
+                var (tab, pane, connection) = AddConnectedSshTab(window);
+                pty = connection;
+                window.UpdateConnectionStatesForTests();
+                RunJobs(window);
+
+                // SSH 登录成功后出现第四格（橙色地球）。
+                Assert.True(browser.IsVisible);
+                Assert.Same(tab, vm.SelectedTab);
+                Assert.False(pane.IsExpanded);
+
+                // 点图标 = 打开当前 SSH 会话的 SFTP 浏览器。
+                Click(window, browser);
+                Assert.True(pane.IsExpanded);
+
+                // 连接断开后第四格消失。
+                tab.IsAlive = false;
+                window.UpdateConnectionStatesForTests();
+                RunJobs(window);
+                Assert.False(browser.IsVisible);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+            pty?.Dispose();
         }
     }
 
@@ -382,215 +431,6 @@ public sealed class SidebarRailTests
                 vm.AddTab(TestTab.Create(terminal, sessionId: "t", terminal: terminal));
                 RunJobs(window);
                 Assert.True(send.IsEnabled);
-            });
-        }
-        finally
-        {
-            window?.Close();
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
-
-    [AvaloniaFact]
-    public async Task HIST01_OpeningSessionRecordsAndPersistsHistory()
-    {
-        using var env = new TestEnvironment();
-        MainWindow? window = null;
-        try
-        {
-            await env.RunAsync(async () =>
-            {
-                var config = new ComtoolConfig();
-                config.SshSessions.Add(new SshSession
-                {
-                    Host = "192.168.1.10",
-                    Port = 22,
-                    User = "root",
-                });
-                env.SeedConfig(config);
-                window = CreateWindow(env);
-                var vm = Vm(window);
-                const string key = "root@192.168.1.10:22";
-                var item = vm.Sections
-                    .SelectMany(section => section.Items)
-                    .Single(i => i.SessionId == key);
-
-                window.SessionActivationOverrideForTests = _ => Task.CompletedTask;
-                await window.ActivateSessionAsync(item);
-                RunJobs(window);
-
-                Assert.Single(vm.History);
-                Assert.Equal(key, vm.History[0].Session.SessionId);
-                var disk = ReadConfig(env);
-                Assert.Single(disk.RecentSessions);
-                Assert.Equal("Ssh", disk.RecentSessions[0].Kind);
-                Assert.Equal(key, disk.RecentSessions[0].Id);
-
-                // Reopening the same session must not duplicate the entry.
-                await window.ActivateSessionAsync(item);
-                RunJobs(window);
-                Assert.Single(vm.History);
-                Assert.Single(ReadConfig(env).RecentSessions);
-            });
-        }
-        finally
-        {
-            window?.Close();
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
-
-    [AvaloniaFact]
-    public void HIST01_HistoryIsMruCappedAndPrunedOnLoad()
-    {
-        using var env = new TestEnvironment();
-        MainWindow? window = null;
-        try
-        {
-            env.Run(() =>
-            {
-                var config = new ComtoolConfig();
-                for (var i = 1; i <= 22; i++)
-                {
-                    config.SshSessions.Add(new SshSession
-                    {
-                        Host = $"10.0.0.{i}",
-                        Port = 22,
-                        User = "root",
-                    });
-                }
-
-                var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                for (var i = 1; i <= 22; i++)
-                {
-                    config.RecentSessions.Add(new RecentSessionConfig
-                    {
-                        Kind = "Ssh",
-                        Id = $"root@10.0.0.{i}:22",
-                        At = now - (long)i * 1000,
-                    });
-                }
-
-                // A session that was deleted after being opened.
-                config.RecentSessions.Add(new RecentSessionConfig
-                {
-                    Kind = "Ssh",
-                    Id = "root@10.9.9.9:22",
-                    At = now,
-                });
-                env.SeedConfig(config);
-
-                window = CreateWindow(env);
-                var vm = Vm(window);
-
-                Assert.Equal(20, vm.History.Count);
-                Assert.Equal("root@10.0.0.1:22", vm.History[0].Session.SessionId);
-                Assert.Equal("just now", vm.History[0].TimeText);
-
-                var disk = ReadConfig(env);
-                Assert.Equal(20, disk.RecentSessions.Count);
-                Assert.DoesNotContain(disk.RecentSessions, e => e.Id == "root@10.9.9.9:22");
-                Assert.DoesNotContain(disk.RecentSessions, e => e.Id == "root@10.0.0.22:22");
-            });
-        }
-        finally
-        {
-            window?.Close();
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
-
-    [AvaloniaFact]
-    public void HIST01_HistoryClickReopensSession()
-    {
-        using var env = new TestEnvironment();
-        MainWindow? window = null;
-        try
-        {
-            env.Run(() =>
-            {
-                var config = new ComtoolConfig();
-                config.SshSessions.Add(new SshSession
-                {
-                    Host = "192.168.1.10",
-                    Port = 22,
-                    User = "root",
-                });
-                var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                config.RecentSessions.Add(new RecentSessionConfig
-                {
-                    Kind = "Ssh",
-                    Id = "root@192.168.1.10:22",
-                    At = now - 60_000,
-                });
-                env.SeedConfig(config);
-                window = CreateWindow(env);
-                var vm = Vm(window);
-
-                SessionItem? activated = null;
-                window.SessionActivationOverrideForTests = item =>
-                {
-                    activated = item;
-                    return Task.CompletedTask;
-                };
-
-                vm.SidebarTab = SidebarTab.History;
-                RunJobs(window);
-
-                Assert.Single(vm.History);
-                Assert.Equal("1 min ago", vm.History[0].TimeText);
-
-                var row = window.GetVisualDescendants()
-                    .OfType<Control>()
-                    .First(control => control.DataContext is HistoryEntry);
-                Click(window, row);
-
-                Assert.NotNull(activated);
-                Assert.Equal("root@192.168.1.10:22", activated!.SessionId);
-                Assert.Equal(SessionKind.Ssh, activated!.Kind);
-            });
-        }
-        finally
-        {
-            window?.Close();
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
-
-    [AvaloniaFact]
-    public void HIST01_ClearHistory()
-    {
-        using var env = new TestEnvironment();
-        MainWindow? window = null;
-        try
-        {
-            env.Run(() =>
-            {
-                var config = new ComtoolConfig();
-                config.SshSessions.Add(new SshSession
-                {
-                    Host = "192.168.1.10",
-                    Port = 22,
-                    User = "root",
-                });
-                var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                config.RecentSessions.Add(new RecentSessionConfig
-                {
-                    Kind = "Ssh",
-                    Id = "root@192.168.1.10:22",
-                    At = now,
-                });
-                env.SeedConfig(config);
-                window = CreateWindow(env);
-                var vm = Vm(window);
-                vm.SidebarTab = SidebarTab.History;
-                RunJobs(window);
-
-                Assert.Single(vm.History);
-                Click(window, Sidebar(window).FindControl<Button>("SidebarClearHistoryButton")!);
-
-                Assert.Empty(vm.History);
-                Assert.Empty(ReadConfig(env).RecentSessions);
             });
         }
         finally
@@ -1246,6 +1086,39 @@ public sealed class SidebarRailTests
             .First(b => b.Tag is string s && s == id);
         Click(window, item);
         RunJobs(window);
+    }
+
+    /// <summary>
+    /// Adds an SSH tab whose transport reports itself as connected, without
+    /// going near a network. The SFTP pane stays usable through the in-memory
+    /// file system.
+    /// </summary>
+    private static (TerminalTab Tab, SftpPaneViewModel Pane, InMemoryPty Pty) AddConnectedSshTab(
+        MainWindow window)
+    {
+        var viewModel = Vm(window);
+        var pty = new InMemoryPty();
+        var terminal = new TerminalControl { Process = string.Empty };
+        var pane = new SftpPaneViewModel(
+            () => new InMemoryFileSystem("/home/test"),
+            new SystemLocalFileSystem());
+        var tab = new TerminalTab
+        {
+            Title = "ssh",
+            SessionId = "ssh",
+            Kind = SessionKind.Ssh,
+            Content = new SshSessionView { Terminal = terminal, SftpPane = pane },
+            Terminal = terminal,
+            SftpPane = pane,
+            IsTransportOpen = () => true,
+            CloseAction = () => { },
+        };
+        viewModel.AddTab(tab);
+        RunJobs(window);
+        terminal.ApplyTemplate();
+        terminal.AttachConnection(pty);
+        RunJobs(window);
+        return (tab, pane, pty);
     }
 
     private static MainWindow CreateWindow(TestEnvironment env)

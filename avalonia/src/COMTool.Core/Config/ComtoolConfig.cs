@@ -69,14 +69,6 @@ public sealed class ComtoolConfig
     [JsonPropertyName("macros")]
     public List<MacroConfig> Macros { get; set; } = new();
 
-    /// <summary>
-    /// Recently opened saved sessions, most recent first. Only kind and id
-    /// are stored; the display data is resolved from the session stores so a
-    /// removed session never leaves a stale clickable row behind.
-    /// </summary>
-    [JsonPropertyName("recentSessions")]
-    public List<RecentSessionConfig> RecentSessions { get; set; } = new();
-
     [JsonPropertyName("window")]
     public WindowConfig Window { get; set; } = new();
 
@@ -147,21 +139,6 @@ public sealed class MacroConfig
 
     [JsonPropertyName("appendEnter")]
     public bool AppendEnter { get; set; } = true;
-
-    [JsonExtensionData]
-    public Dictionary<string, JsonElement>? Extra { get; set; }
-}
-
-public sealed class RecentSessionConfig
-{
-    [JsonPropertyName("kind")]
-    public string Kind { get; set; } = "";
-
-    [JsonPropertyName("id")]
-    public string Id { get; set; } = "";
-
-    [JsonPropertyName("at")]
-    public long At { get; set; }
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? Extra { get; set; }

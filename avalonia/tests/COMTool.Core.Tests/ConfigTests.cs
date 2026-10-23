@@ -157,7 +157,7 @@ public sealed class ConfigTests : IDisposable
     }
 
     [Fact]
-    public void SaveAndLoad_RoundTripsMacrosAndRecentSessions()
+    public void SaveAndLoad_RoundTripsMacros()
     {
         var path = Path.Combine(_directory, "config.json");
         var config = new ComtoolConfig();
@@ -175,19 +175,6 @@ public sealed class ConfigTests : IDisposable
             Text = "hostname",
             AppendEnter = false,
         });
-        config.RecentSessions.Add(new RecentSessionConfig
-        {
-            Kind = "Ssh",
-            Id = "root@192.168.1.10:22",
-            At = 1761234567890L,
-        });
-        config.RecentSessions.Add(new RecentSessionConfig
-        {
-            Kind = "Serial",
-            Id = "COM99",
-            At = 1761234567000L,
-        });
-
         config.Save(path);
         var loaded = ComtoolConfig.Load(path);
 
@@ -198,17 +185,10 @@ public sealed class ConfigTests : IDisposable
         Assert.True(loaded.Macros[0].AppendEnter);
         Assert.Equal("macro-2", loaded.Macros[1].Id);
         Assert.False(loaded.Macros[1].AppendEnter);
-
-        Assert.Equal(2, loaded.RecentSessions.Count);
-        Assert.Equal("Ssh", loaded.RecentSessions[0].Kind);
-        Assert.Equal("root@192.168.1.10:22", loaded.RecentSessions[0].Id);
-        Assert.Equal(1761234567890L, loaded.RecentSessions[0].At);
-        Assert.Equal("Serial", loaded.RecentSessions[1].Kind);
-        Assert.Equal("COM99", loaded.RecentSessions[1].Id);
     }
 
     [Fact]
-    public void Load_OldConfigWithoutMacrosOrHistory_LoadsEmpty()
+    public void Load_OldConfigWithoutMacros_LoadsEmpty()
     {
         var path = Path.Combine(_directory, "config.json");
         File.WriteAllText(path, """
@@ -221,7 +201,6 @@ public sealed class ConfigTests : IDisposable
         var config = ComtoolConfig.Load(path);
 
         Assert.Empty(config.Macros);
-        Assert.Empty(config.RecentSessions);
     }
 
     [Fact]
