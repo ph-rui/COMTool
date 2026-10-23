@@ -658,7 +658,8 @@ and the visible state and width are restored on launch:
   MainWindow 无需改动；重复点选只激活已打开窗口，关窗后从注册表移除；
 - 网络服务器（1:1 MobaXterm "Servers management"）：9 行服务器、每行
   ▶/■/⚙ 按钮；HTTP 与 TFTP 真实现，其余 7 行置灰提示"暂不支持（框架已
-  预留）"；窗口 741×444、行高 40、右面板 409×300、欢迎页 5 卫星分子球、
+  预留）"；窗口 741×444、行高 40、右面板 409×300、欢迎页仅居中欢迎文字 +
+  5 卫星分子球（按实机截图去掉误加的红色标题）、
   表单标签右对齐、文件夹图标浏览按钮、数字框宽度与日志高度按实机截图
   校正；HTTP 使用原始 TcpListener（GET/HEAD、目录列表开关、穿越 403/404）；
   TFTP 为 RFC 1350 RRQ/WRQ；日志 `[HH:mm:ss]` + 运行中 `(N)` 倒计时并自动
@@ -666,13 +667,13 @@ and the visible state and width are restored on launch:
   "扫描完成：发现 N 个开放端口"，迟到的进度上报不会覆盖完成状态；
 - test evidence: full gate PASS — 406 tests (Core 49, SFTP 40, Connections
   77, Terminal 11, ZMODEM 32, TestGate 49, App 148), Linux Xvfb E2E 13/13,
-  results `20261023T111625Z`；UI16 重写为三项菜单 + 开窗/单例/重开断言，
+  results `20261023T111625Z` 与 `20261023T151916Z`（欢迎页标题移除后复跑）；UI16 重写为三项菜单 + 开窗/单例/重开断言，
   PORT01 增加完成状态断言；SRV01 ×5、HTTP ×7、TFTP ×4、ServerSettings ×2
   全部通过；
 - deployment 2026-10-23 (in-place overwrite, no `.bak-*`):
   - exe `COMTool.App-tools.exe` published from the commit above;
   - size: 209,290,060 bytes;
-  - SHA256: `7C1D3CA3B58D3A6F4B1BB936101C84F7D44D7BFB48DA4B7F24B7FDD3695781E0`;
+  - SHA256: `A5807CC6D1EBCA3C620919CF919CF71BA3FC953425C0BE460F3EC2D3AA58EFD6`;
   - WORK and DESKTOP copies both matched that hash via `Get-FileHash`;
   - `BAK_COUNT=0`;
   - smoke test: process started, `Responding=True`, then stopped;

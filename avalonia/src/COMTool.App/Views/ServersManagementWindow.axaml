@@ -119,15 +119,8 @@
             BorderBrush="#a0a0a0"
             BorderThickness="1">
       <Panel>
-        <!-- Welcome pane -->
+        <!-- Welcome pane: 1:1 MobaXterm 22.1（仅居中欢迎文字 + 分子球，无标题） -->
         <Grid IsVisible="{Binding IsWelcome}">
-          <TextBlock Text="网络服务器"
-                     Foreground="#e00000"
-                     FontWeight="Bold"
-                     FontSize="13"
-                     Margin="14,10,0,0"
-                     HorizontalAlignment="Left"
-                     VerticalAlignment="Top" />
           <!-- 分子球：1:1 MobaXterm 欢迎页（5 个卫星球 + 深蓝中心球 + 浅灰键线） -->
           <StackPanel Width="292"
                       HorizontalAlignment="Left"
