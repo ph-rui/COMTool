@@ -765,6 +765,37 @@ and the visible state and width are restored on launch:
   - `BAK_COUNT=0`;
   - smoke test: process started, `Responding=True`, then stopped.
 
+### 2026-10-24 — 栏图标展开/收回与移除右上角 SFTP 按钮
+
+- 按用户要求：会话、工具、宏、SSH 浏览器四个栏图标点击展开对应面板，
+  再次点击同一图标只收回面板；24px 图标栏始终保留，收回后仍可再次点开；
+- 收回时 `Sidebar` 保持可见、列宽 24px、splitter 隐藏，内容区左边距由
+  32px 改为 8px，因此终端的绝对左边界仍是 32px（与原来的完全折叠态一致，
+  E2E 的标签坐标不变）；展开时会话栏 220px / 浏览器 460px，内容边距
+  分别为 32px / 0；
+- 点击不同栏图标会切换面板并保持展开；SSH 浏览器地球遵循同样的 toggle，
+  当前标签不是 SSH 时先切到最近的已连接 SSH 标签；
+- 删除标签栏右上角的 `SFTP` 按钮（`SftpToggleButton`、
+  `OnSftpToggleClick`、`SftpToggleToolTipConverter`），浏览器只从左栏
+  橙色地球进入；
+- test evidence: full gate PASS — 409 tests (Core 49, SFTP 42, Connections 77,
+  Terminal 11, ZMODEM 32, TestGate 49, App 149), Linux Xvfb E2E 13/13,
+  results `20261023T175047Z`；新增/改名测试：
+  `SftpPaneLayoutTests.RailGlobeTogglesTheBrowserInTheSidebar`、
+  `SftpPaneLayoutTests.TabStripHasNoSftpChip`、
+  `SidebarRailTests.UI16_RailIconTogglesItsPanel`、
+  `SidebarRailTests.UI16_RailStaysVisibleWhenTheDockCollapses`，并更新
+  `MainWindowHeadlessTests.UI02_CollapsedSidebarStaysCollapsedOnLaunch`
+  与 `SidebarDockTests` 的收回语义（面板收起但图标栏保留）；
+  SFTP01/SFTP02 改用 `(12,190)` 的栏地球并先等待橙色图标出现，均通过；
+- deployment 2026-10-24 (in-place overwrite, no `.bak-*`):
+  - exe `COMTool.App-tools.exe` published win-x64 single-file R2R;
+  - size: 209,265,484 bytes;
+  - SHA256: `0A55749FA49951531161906CC5171EF8C7162F5C934AEF53398252B351D90EEC`;
+  - WORK and DESKTOP copies both matched that hash via `Get-FileHash`;
+  - `BAK_COUNT=0`;
+  - smoke test: process started, `Responding=True`, then stopped.
+
 The previously packaged release zip is 74,795,557 bytes with SHA256:
 
 ```text

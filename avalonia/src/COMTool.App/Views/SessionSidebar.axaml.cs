@@ -37,8 +37,17 @@ public partial class SessionSidebar : UserControl
     public event EventHandler? MacroCancelRequested;
 
     /// <summary>
+    /// Raised when the Sessions, Tools or Macros rail icon is clicked. The
+    /// main window decides whether to switch the panel or to collapse it:
+    /// clicking the icon of the panel that is already open closes the panel
+    /// while the rail stays on screen.
+    /// </summary>
+    public event EventHandler<SidebarTab>? RailTabRequested;
+
+    /// <summary>
     /// Raised when the SSH-browser rail icon is clicked. The main window
-    /// shows the SFTP browser of the current SSH session.
+    /// shows the SFTP browser of the current SSH session, or collapses the
+    /// panel when the browser is already the open tab.
     /// </summary>
     public event EventHandler? SshBrowserRequested;
 
@@ -53,13 +62,15 @@ public partial class SessionSidebar : UserControl
     private void OnRailTabClick(object? sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: string tag }
-            || DataContext is not MainViewModel viewModel
+            || DataContext is not MainViewModel
             || !Enum.TryParse<SidebarTab>(tag, out var tab))
         {
             return;
         }
 
-        viewModel.SidebarTab = tab;
+        // The main window owns the open/collapsed state of the dock, so it
+        // receives the request instead of the tab being switched here.
+        RailTabRequested?.Invoke(this, tab);
     }
 
     private void OnAddMacroClick(object? sender, RoutedEventArgs e)

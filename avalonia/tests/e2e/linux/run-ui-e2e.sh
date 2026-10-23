@@ -691,17 +691,19 @@ run_sftp01_browser_transfer() {
 
     log "Running $test_id"
 
-    # The browser of a new SSH tab stays closed. The button in the tab
-    # strip opens it in the left sidebar, and only then does the app ask
+    # The browser of a new SSH tab stays closed. The orange globe of the
+    # left rail opens it in the sidebar, and only then does the app ask
     # the server for the sftp subsystem.
     ensure_first_shell "$test_id"
 
-    # Keep the tab strip at its stable collapsed-sidebar position before
-    # the first click. Opening the browser docks the sidebar at 460px.
+    # Keep the tab strip at its stable collapsed-panel position before the
+    # first click. The rail remains on screen, so the globe is still there.
     collapse_sidebar_for_tabs || fail "$test_id" "could not collapse the sidebar"
+    wait_for_ssh_browser_rail 10 \
+        || fail "$test_id" "the SSH-browser globe did not appear in the rail"
 
-    click_window "$SFTP_TOGGLE_X" "$SFTP_TOGGLE_Y" \
-        || fail "$test_id" "could not click the SFTP button of the tab strip"
+    click_window "$SSH_BROWSER_RAIL_X" "$SSH_BROWSER_RAIL_Y" \
+        || fail "$test_id" "could not click the SSH-browser globe of the rail"
 
     if ! wait_for_sshd_log "subsystem 'sftp'" 20; then
         fail "$test_id" "the panel did not ask the server for the sftp subsystem"
@@ -784,25 +786,25 @@ run_sftp02_file_management() {
 
     # SFTP01 leaves the browser open in the sidebar. The probe at (300,300)
     # is bright while the browser is up (its pane covers x=24..460) and
-    # dark for the terminal when it is closed. Close the browser first so
-    # the toggle below opens it again instead of switching the sidebar to
-    # the session list.
+    # dark for the terminal when the panel is retracted. Retract it first
+    # with the same globe, so the click below opens the browser again.
     if ! window_region_is_dark 300 300; then
-        click_window "$SFTP_TOGGLE_X" "$SFTP_TOGGLE_Y" || true
+        click_window "$SSH_BROWSER_RAIL_X" "$SSH_BROWSER_RAIL_Y" || true
         sleep 0.5
     fi
     collapse_sidebar_for_tabs \
         || fail "$test_id" "could not collapse the sidebar"
+    wait_for_ssh_browser_rail 10 \
+        || fail "$test_id" "the SSH-browser globe did not appear in the rail"
 
-    # A standalone run can start with the browser closed. A run after
-    # SFTP01 has it open; the sidebar may still be hiding it, in which case
-    # the first toggle shows the session list and the second shows the
-    # browser again. Accept either starting state.
-    click_window "$SFTP_TOGGLE_X" "$SFTP_TOGGLE_Y" \
-        || fail "$test_id" "could not click the SFTP button of the tab strip"
+    # A standalone run can start with the browser panel retracted. A run
+    # after SFTP01 has the browser tab active but the panel retracted. The
+    # globe opens the browser from either state.
+    click_window "$SSH_BROWSER_RAIL_X" "$SSH_BROWSER_RAIL_Y" \
+        || fail "$test_id" "could not click the SSH-browser globe of the rail"
     if ! wait_for_sftp_browser_visible 10; then
-        click_window "$SFTP_TOGGLE_X" "$SFTP_TOGGLE_Y" \
-            || fail "$test_id" "could not click the SFTP button of the tab strip"
+        click_window "$SSH_BROWSER_RAIL_X" "$SSH_BROWSER_RAIL_Y" \
+            || fail "$test_id" "could not click the SSH-browser globe of the rail"
         wait_for_sftp_browser_visible 10 \
             || fail "$test_id" "the browser did not open in the sidebar"
     fi

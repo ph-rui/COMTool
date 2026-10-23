@@ -61,8 +61,12 @@
       </StackPanel>
     </Border>
 
-    <!-- Panel content: a header plus exactly one visible body per tab. -->
-    <Grid Grid.Column="1" RowDefinitions="28,5,*">
+    <!-- Panel content: a header plus exactly one visible body per tab.
+         ClipToBounds keeps the panel out of the terminal while the dock
+         is collapsed to the 24px rail (its star column becomes zero). -->
+    <Grid Grid.Column="1"
+          RowDefinitions="28,5,*"
+          ClipToBounds="True">
       <Grid Grid.Row="0" Margin="8,2,6,2" ColumnDefinitions="Auto,6,*,6,Auto">
         <TextBlock Grid.Column="0"
                    Text="&#xf007;"

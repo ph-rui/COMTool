@@ -93,6 +93,7 @@ public partial class MainWindow : Window
         Sidebar.MacroDeleteRequested += OnMacroDeleteRequested;
         Sidebar.MacroSaveRequested += OnMacroSaveRequested;
         Sidebar.MacroCancelRequested += OnMacroCancelRequested;
+        Sidebar.RailTabRequested += OnRailTabRequested;
         Sidebar.SshBrowserRequested += OnSshBrowserRequested;
         Sidebar.ToolRequested += OnToolRequested;
         Opened += OnOpened;
@@ -2514,37 +2515,47 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Opens or closes the SSH browser in the left sidebar. The button
-    /// lives in the tab strip, so its context is the view model of the
-    /// window and not the tab.
+    /// A rail icon switches to its panel. Clicking the icon of the panel
+    /// that is already open collapses the panel while the rail stays on
+    /// screen, so the same icon opens it again.
     /// </summary>
-    private void OnSftpToggleClick(object? sender, RoutedEventArgs e)
+    private void OnRailTabRequested(object? sender, SidebarTab tab)
     {
-        if ((sender as Button)?.DataContext is not MainViewModel viewModel
-            || viewModel.SelectedTab?.SftpPane is null)
+        if (DataContext is not MainViewModel viewModel)
         {
             return;
         }
 
+        if (_sidebarVisible && viewModel.SidebarTab == tab)
+        {
+            SetSidebarVisible(false);
+            return;
+        }
+
+        viewModel.SidebarTab = tab;
         if (!_sidebarVisible)
         {
             SetSidebarVisible(true);
         }
-
-        viewModel.SidebarTab = viewModel.IsSshBrowserTab
-            ? SidebarTab.Sessions
-            : SidebarTab.SshBrowser;
     }
 
     /// <summary>
     /// The SSH-browser icon of the rail opens the SFTP browser of the
     /// current SSH session in the sidebar. When the current tab is not an
     /// SSH tab, the most recent connected SSH tab is selected first.
+    /// Clicking the icon again while the browser is open collapses the
+    /// panel and leaves the rail on screen.
     /// </summary>
     private void OnSshBrowserRequested(object? sender, EventArgs e)
     {
         if (DataContext is not MainViewModel viewModel)
         {
+            return;
+        }
+
+        if (_sidebarVisible && viewModel.IsSshBrowserTab)
+        {
+            SetSidebarVisible(false);
             return;
         }
 
@@ -2560,17 +2571,16 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (!_sidebarVisible)
-        {
-            SetSidebarVisible(true);
-        }
-
         if (!ReferenceEquals(viewModel.SelectedTab, tab))
         {
             viewModel.SelectedTab = tab;
         }
 
         viewModel.SidebarTab = SidebarTab.SshBrowser;
+        if (!_sidebarVisible)
+        {
+            SetSidebarVisible(true);
+        }
     }
 
     private void OnEncodingChanged(object? sender, SelectionChangedEventArgs e)
@@ -2656,12 +2666,7 @@ public partial class MainWindow : Window
     private void SetSidebarVisible(bool visible, bool persist = true)
     {
         _sidebarVisible = visible;
-        Sidebar.IsVisible = visible;
-        SidebarSplitter.IsVisible = visible;
-        BodyGrid.ColumnDefinitions[0].Width = visible
-            ? new GridLength(CurrentSidebarWidth())
-            : new GridLength(0);
-        BodyGrid.ColumnDefinitions[1].Width = visible ? new GridLength(3) : new GridLength(0);
+        ApplySidebarMode();
 
         if (persist)
         {
@@ -2672,7 +2677,9 @@ public partial class MainWindow : Window
     /// <summary>
     /// The sidebar becomes the SSH browser and back. The rail keeps its
     /// place, the content starts at the splitter while the browser is
-    /// open, and the terminal gets the whole right side.
+    /// open, and the terminal gets the whole right side. When the panel
+    /// is collapsed only the 24px rail remains; the content inset shrinks
+    /// by the same amount, so the terminal keeps its absolute position.
     /// </summary>
     private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
@@ -2688,14 +2695,20 @@ public partial class MainWindow : Window
     {
         var browser = (DataContext as MainViewModel)?.IsSshBrowserTab == true;
 
-        if (_sidebarVisible)
-        {
-            BodyGrid.ColumnDefinitions[0].Width = new GridLength(CurrentSidebarWidth());
-        }
+        // The rail is always on screen: it is the only way to reopen the
+        // panel after a collapse. The panel content simply loses its star
+        // column when the dock is collapsed.
+        Sidebar.IsVisible = true;
+        BodyGrid.ColumnDefinitions[0].Width = new GridLength(
+            _sidebarVisible ? CurrentSidebarWidth() : 24);
+        SidebarSplitter.IsVisible = _sidebarVisible;
+        BodyGrid.ColumnDefinitions[1].Width = new GridLength(_sidebarVisible ? 3 : 0);
 
-        ContentArea.Margin = browser
-            ? new Thickness(0, 0, 0, 0)
-            : new Thickness(32, 0, 0, 0);
+        ContentArea.Margin = !_sidebarVisible
+            ? new Thickness(8, 0, 0, 0)
+            : browser
+                ? new Thickness(0, 0, 0, 0)
+                : new Thickness(32, 0, 0, 0);
     }
 
     private double CurrentSidebarWidth() =>
@@ -2715,8 +2728,16 @@ public partial class MainWindow : Window
 
     internal void SetSidebarWidthForTests(double width)
     {
-        _sidebarWidth = ClampSidebarWidth(width);
-        BodyGrid.ColumnDefinitions[0].Width = new GridLength(_sidebarWidth);
+        if ((DataContext as MainViewModel)?.IsSshBrowserTab == true)
+        {
+            _browserSidebarWidth = width;
+        }
+        else
+        {
+            _sidebarWidth = ClampSidebarWidth(width);
+        }
+
+        ApplySidebarMode();
     }
 
     internal ConnectionSettingsWindow? SettingsWindowForTests => _settingsWindow;

@@ -78,18 +78,26 @@ public sealed class SidebarDockTests
                 var toggle = window.FindControl<Button>("SessionsButton")!;
 
                 Click(window, toggle);
-                Assert.False(sidebar.IsVisible);
-                Assert.Equal(0, body.ColumnDefinitions[0].ActualWidth, precision: 1);
+
+                // The panel collapses to the icon rail. The rail itself
+                // stays on screen so a rail icon can reopen the panel.
+                Assert.True(sidebar.IsVisible);
+                Assert.NotNull(sidebar.FindControl<Border>("SidebarRail"));
+                Assert.Equal(24, body.ColumnDefinitions[0].ActualWidth, precision: 1);
+                Assert.False(
+                    window.FindControl<GridSplitter>("SidebarSplitter")!.IsVisible);
                 Assert.False(ReadConfig(env).SessionSidebar.Visible);
 
                 // The dock is still closed: no auto reopening on pointer entry.
                 window.MouseMove(new Point(25, 300));
                 RunJobs(window);
-                Assert.False(sidebar.IsVisible);
+                Assert.Equal(24, body.ColumnDefinitions[0].ActualWidth, precision: 1);
 
                 Click(window, toggle);
                 Assert.True(sidebar.IsVisible);
                 Assert.Equal(220, body.ColumnDefinitions[0].ActualWidth, precision: 1);
+                Assert.True(
+                    window.FindControl<GridSplitter>("SidebarSplitter")!.IsVisible);
                 Assert.True(ReadConfig(env).SessionSidebar.Visible);
             });
         }
@@ -112,7 +120,10 @@ public sealed class SidebarDockTests
             {
                 first = ShowWindow(env, visible: true, width: 220);
                 Click(first, first.FindControl<Button>("SessionsButton")!);
-                Assert.False(first.FindControl<SessionSidebar>("Sidebar")!.IsVisible);
+                Assert.Equal(
+                    24,
+                    first.FindControl<Grid>("BodyGrid")!.ColumnDefinitions[0].ActualWidth,
+                    precision: 1);
             });
 
             first!.Close();
@@ -125,8 +136,10 @@ public sealed class SidebarDockTests
                 // silently forcing the dock open like the auto-hide build did.
                 second = ShowWindow(env, visible: false, width: 220, seed: false);
                 var body = second.FindControl<Grid>("BodyGrid")!;
-                Assert.False(second.FindControl<SessionSidebar>("Sidebar")!.IsVisible);
-                Assert.Equal(0, body.ColumnDefinitions[0].ActualWidth, precision: 1);
+                var sidebar = second.FindControl<SessionSidebar>("Sidebar")!;
+                Assert.True(sidebar.IsVisible);
+                Assert.NotNull(sidebar.FindControl<Border>("SidebarRail"));
+                Assert.Equal(24, body.ColumnDefinitions[0].ActualWidth, precision: 1);
             });
         }
         finally

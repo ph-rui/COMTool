@@ -55,8 +55,23 @@ public sealed class SftpPaneLayoutTests
             SftpPane = pane,
         };
         viewModel.AddTab(tab);
+        // The rail globe only exists while an SSH transport is live. The
+        // test tab reports connected (no IsTransportOpen callback), exactly
+        // like a connected shell.
+        window.UpdateConnectionStatesForTests();
         RunJobs(window);
         return tab;
+    }
+
+    private static Button RailGlobe(MainWindow window) =>
+        Sidebar(window).FindControl<Button>("RailSshBrowserButton")!;
+
+    private static void ClickRailGlobe(MainWindow window)
+    {
+        var globe = RailGlobe(window);
+        Assert.True(globe.IsVisible, "the SSH-browser rail icon should be visible");
+        globe.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        RunJobs(window);
     }
 
     private static async Task WaitUntil(Func<bool> condition, string what)
@@ -329,7 +344,7 @@ public sealed class SftpPaneLayoutTests
     }
 
     [AvaloniaFact]
-    public void ToggleButtonOpensTheBrowserInTheSidebar()
+    public void RailGlobeTogglesTheBrowserInTheSidebar()
     {
         using var env = new TestEnvironment();
         MainWindow? window = null;
@@ -342,14 +357,14 @@ public sealed class SftpPaneLayoutTests
                 var pane = NewPaneViewModel();
                 AddTab(window, SessionKind.Ssh, pane);
 
-                var button = window.FindControl<Button>("SftpToggleButton")!;
+                var globe = RailGlobe(window);
                 var body = window.FindControl<Grid>("BodyGrid")!;
                 var content = window.FindControl<Grid>("ContentArea")!;
-                Assert.True(button.IsVisible);
+                var splitter = window.FindControl<GridSplitter>("SidebarSplitter")!;
+                Assert.True(globe.IsVisible);
                 Assert.False(pane.IsExpanded);
 
-                button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                RunJobs(window);
+                ClickRailGlobe(window);
 
                 // The browser replaces the sessions panel, the rail stays
                 // and the terminal gets the full right side.
@@ -360,18 +375,30 @@ public sealed class SftpPaneLayoutTests
                 Assert.Same(pane, Vm(window).SshBrowserPane);
                 Assert.True(body.ColumnDefinitions[0].ActualWidth >= 440);
                 Assert.Equal(0, content.Margin.Left);
+                Assert.True(splitter.IsVisible);
 
                 var tabView = (SshSessionView)Vm(window).SelectedTab!.Content!;
                 Assert.Null(tabView.FindControl<Control>("SftpHost"));
 
-                button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                RunJobs(window);
+                // Clicking the globe again retracts the panel. The 24px
+                // rail stays on screen and the terminal keeps its former
+                // absolute left edge (24 + 8 = 32).
+                ClickRailGlobe(window);
 
-                Assert.Equal(SidebarTab.Sessions, Vm(window).SidebarTab);
-                Assert.False(pane.IsExpanded);
-                Assert.False(Browser(window).IsVisible);
-                Assert.True(body.ColumnDefinitions[0].ActualWidth <= 320);
-                Assert.Equal(32, content.Margin.Left);
+                Assert.Equal(SidebarTab.SshBrowser, Vm(window).SidebarTab);
+                Assert.True(Sidebar(window).IsVisible);
+                Assert.True(RailGlobe(window).IsVisible);
+                Assert.Equal(24, body.ColumnDefinitions[0].ActualWidth, precision: 1);
+                Assert.Equal(8, content.Margin.Left);
+                Assert.False(splitter.IsVisible);
+
+                // The same icon opens the browser again.
+                ClickRailGlobe(window);
+
+                Assert.Equal(SidebarTab.SshBrowser, Vm(window).SidebarTab);
+                Assert.True(body.ColumnDefinitions[0].ActualWidth >= 440);
+                Assert.Equal(0, content.Margin.Left);
+                Assert.True(splitter.IsVisible);
             });
         }
         finally
@@ -407,16 +434,14 @@ public sealed class SftpPaneLayoutTests
                 await Task.Delay(200);
                 Assert.Equal(0, calls);
 
-                var button = window.FindControl<Button>("SftpToggleButton")!;
-                button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                ClickRailGlobe(window);
 
                 await WaitUntil(() => calls == 1 && pane.RemotePath == "/remote", "load the remote side");
 
-                // Closing and opening the browser again keeps the one
+                // Retracting the panel and opening it again keeps the one
                 // remote side that is already there.
-                button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                RunJobs(window);
-                button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                ClickRailGlobe(window);
+                ClickRailGlobe(window);
                 await Task.Delay(300);
                 Dispatcher.UIThread.RunJobs();
 
@@ -444,8 +469,7 @@ public sealed class SftpPaneLayoutTests
                 var pane = NewPaneViewModel();
                 AddTab(window, SessionKind.Ssh, pane);
 
-                var button = window.FindControl<Button>("SftpToggleButton")!;
-                button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                ClickRailGlobe(window);
 
                 await WaitUntil(() => pane.HasRemoteError, "report the failure of the remote side");
                 RunJobs(window);
@@ -477,9 +501,7 @@ public sealed class SftpPaneLayoutTests
                 var pane = NewPaneViewModel();
                 var ssh = AddTab(window, SessionKind.Ssh, pane);
 
-                var button = window.FindControl<Button>("SftpToggleButton")!;
-                button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                RunJobs(window);
+                ClickRailGlobe(window);
                 Assert.Equal(SidebarTab.SshBrowser, Vm(window).SidebarTab);
 
                 var serial = AddTab(window, SessionKind.Serial, null);
@@ -521,9 +543,7 @@ public sealed class SftpPaneLayoutTests
                 var tabB = AddTab(window, SessionKind.Ssh, paneB);
                 Vm(window).SelectedTab = tabA;
 
-                var button = window.FindControl<Button>("SftpToggleButton")!;
-                button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                RunJobs(window);
+                ClickRailGlobe(window);
                 Assert.Same(paneA, Vm(window).SshBrowserPane);
                 Assert.Same(paneA, Browser(window).SftpPaneControl?.ViewModel);
 
@@ -545,7 +565,7 @@ public sealed class SftpPaneLayoutTests
     }
 
     [AvaloniaFact]
-    public void ToggleButtonSitsLeftOfTheEncodingCombo()
+    public void TabStripHasNoSftpChip()
     {
         using var env = new TestEnvironment();
         MainWindow? window = null;
@@ -557,51 +577,11 @@ public sealed class SftpPaneLayoutTests
                 window = CreateWindow();
                 AddTab(window, SessionKind.Ssh, NewPaneViewModel());
 
-                var button = window.FindControl<Button>("SftpToggleButton")!;
-                var combo = window.FindControl<ComboBox>("EncodingCombo")!;
-
-                var buttonRight = button.TranslatePoint(new Point(button.Bounds.Width, 0), window);
-                var comboLeft = combo.TranslatePoint(new Point(0, 0), window);
-
-                Assert.NotNull(buttonRight);
-                Assert.NotNull(comboLeft);
-                Assert.True(
-                    buttonRight!.Value.X < comboLeft!.Value.X,
-                    $"the button ends at {buttonRight.Value.X} and the combo starts at {comboLeft.Value.X}");
-            });
-        }
-        finally
-        {
-            window?.Close();
-            Dispatcher.UIThread.RunJobs();
-        }
-    }
-
-    [AvaloniaFact]
-    public void ToggleButtonIsHiddenForNonSshTabs()
-    {
-        using var env = new TestEnvironment();
-        MainWindow? window = null;
-        try
-        {
-            env.Run(() =>
-            {
-                env.SeedConfig(new ComtoolConfig());
-                window = CreateWindow();
-
-                var button = window.FindControl<Button>("SftpToggleButton")!;
-
-                AddTab(window, SessionKind.Serial, null);
-                Assert.False(button.IsVisible);
-
-                AddTab(window, SessionKind.Tcp, null);
-                Assert.False(button.IsVisible);
-
-                AddTab(window, SessionKind.Local, null);
-                Assert.False(button.IsVisible);
-
-                AddTab(window, SessionKind.Ssh, NewPaneViewModel());
-                Assert.True(button.IsVisible);
+                // MobaXterm has no SFTP chip next to the encoding combo:
+                // the browser is entered from the orange globe of the rail.
+                Assert.Null(window.FindControl<Button>("SftpToggleButton"));
+                Assert.NotNull(window.FindControl<ComboBox>("EncodingCombo"));
+                Assert.True(RailGlobe(window).IsVisible);
             });
         }
         finally
