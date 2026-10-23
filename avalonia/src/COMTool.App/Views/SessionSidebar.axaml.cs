@@ -40,13 +40,8 @@ public partial class SessionSidebar : UserControl
 
     public event EventHandler? HistoryClearRequested;
 
-    public event EventHandler? NetScanStartRequested;
-
-    public event EventHandler? PortScanStartRequested;
-
-    public event EventHandler? PortScanStopRequested;
-
-    public event EventHandler? ToolCloseRequested;
+    /// <summary>Raised with a <c>ToolCatalog</c> id when a tool menu row is clicked.</summary>
+    public event EventHandler<string>? ToolRequested;
 
     public bool HasOpenNewSessionMenu => SidebarAddSessionButton.Flyout is { IsOpen: true };
 
@@ -127,37 +122,12 @@ public partial class SessionSidebar : UserControl
     private void OnClearHistoryClick(object? sender, RoutedEventArgs e) =>
         HistoryClearRequested?.Invoke(this, EventArgs.Empty);
 
-    private void OnNetScanStartClick(object? sender, RoutedEventArgs e) =>
-        NetScanStartRequested?.Invoke(this, EventArgs.Empty);
-
-    private void OnPortScanStartClick(object? sender, RoutedEventArgs e) =>
-        PortScanStartRequested?.Invoke(this, EventArgs.Empty);
-
-    private void OnPortScanStopClick(object? sender, RoutedEventArgs e) =>
-        PortScanStopRequested?.Invoke(this, EventArgs.Empty);
-
-    /// <summary>
-    /// Both tool dialogs' 关闭 button (and the sidebar back arrow): cancels
-    /// any running scan and returns to the tool menu.
-    /// </summary>
-    private void OnToolCloseClick(object? sender, RoutedEventArgs e) =>
-        ToolCloseRequested?.Invoke(this, EventArgs.Empty);
-
     private void OnToolMenuClick(object? sender, RoutedEventArgs e)
     {
-        // 网络扫描仪 / 端口扫描仪 implemented; the other entries are 暂不支持.
-        if (sender is not Button { Tag: string id }
-            || DataContext is not MainViewModel viewModel)
+        if (sender is Button { Tag: string id })
         {
-            return;
+            ToolRequested?.Invoke(this, id);
         }
-
-        viewModel.ToolsView = id switch
-        {
-            "scanner"      => ToolsView.NetworkScanner,
-            "port-scanner" => ToolsView.PortScanner,
-            _              => viewModel.ToolsView,
-        };
     }
 
     private void OnNewSessionMenuItemClick(object? sender, RoutedEventArgs e)

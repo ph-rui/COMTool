@@ -171,73 +171,58 @@ public sealed class SidebarRailTests
                 vm.SidebarTab = SidebarTab.Tools;
                 RunJobs(window);
 
-                // 工具页默认显示菜单（1:1 MobaXterm "工具"下拉）：
-                // 三组 系统/文本/网络 + 19 项，按 MobaXterm 顺序与图标
+                // 工具页 = 三个独立窗口工具，1:1 MobaXterm 22.1 工具菜单
                 Assert.True(sidebar.FindControl<Border>("ToolsMenuView")!.IsVisible);
-                Assert.False(sidebar.FindControl<Grid>("NetworkScannerView")!.IsVisible);
-                Assert.False(sidebar.FindControl<Grid>("PortScannerView")!.IsVisible);
-                Assert.Equal(22, vm.ToolMenu.Count);
-                Assert.Equal("系统", vm.ToolMenu[0].Name);
-                Assert.True(vm.ToolMenu[0].IsHeader);
-                Assert.Equal("文本", vm.ToolMenu[9].Name);
-                Assert.True(vm.ToolMenu[9].IsHeader);
-                Assert.Equal("网络", vm.ToolMenu[13].Name);
-                Assert.True(vm.ToolMenu[13].IsHeader);
-                Assert.Equal(new[]
-                {
-                    "MobaPkg 包管理器 (实验性)",
-                    "带 Dwm 的 X11 标签页",
-                    "带 Fvwm 的 X11 窗口",
-                    "带 Twm 的 X11 窗口",
-                    "列出硬件设备",
-                    "列出运行中的进程",
-                    "命令提示符 (管理员)",
-                    "Windows Powershell (管理员)",
-                    "MobaTextEditor",
-                    "MobaDiff",
-                    "Ascii table",
-                    "网络服务器",
-                    "MobaSSHtunnel (端口转发)",
-                    "MobaKeyGen (SSH 密钥生成器)",
-                    "列出开放的网络端口",
-                    "网络唤醒",
-                    "网络扫描仪",
-                    "端口扫描仪",
-                    "网络数据包捕获",
-                },
-                    vm.ToolMenu.Where(t => !t.IsHeader).Select(t => t.Name).ToArray());
-
-                // 仅 网络扫描仪/端口扫描仪 可用；每一项都有图标
+                Assert.Equal(3, vm.ToolMenu.Count);
+                Assert.All(vm.ToolMenu, item => Assert.True(item.IsEnabled));
                 Assert.Equal(
-                    new[] { "scanner", "port-scanner" },
-                    vm.ToolMenu.Where(t => !t.IsHeader && t.IsEnabled).Select(t => t.Id).ToArray());
-                Assert.Equal(17, vm.ToolMenu.Count(t => !t.IsHeader && !t.IsEnabled));
-                Assert.All(vm.ToolMenu.Where(t => !t.IsHeader),
-                    t => Assert.False(string.IsNullOrEmpty(t.Glyph)));
+                    new[] { "net-server", "scanner", "port-scanner" },
+                    vm.ToolMenu.Select(item => item.Id).ToArray());
+                Assert.Equal(
+                    new[] { "网络服务器", "网络扫描仪", "端口扫描仪" },
+                    vm.ToolMenu.Select(item => item.Name).ToArray());
+                Assert.Equal(
+                    new[] { "\uf013", "\uf7c0", "\uf1eb" },
+                    vm.ToolMenu.Select(item => item.Glyph).ToArray());
+                Assert.Equal(
+                    new[] { "#00897b", "#5e35b1", "#2196f3" },
+                    vm.ToolMenu.Select(item => item.GlyphColor).ToArray());
 
-                // 点选"网络扫描仪"进入网络扫描页（IP 地址范围五段框）
-                OpenScannerView(window, vm);
-                Assert.Equal(ToolsView.NetworkScanner, vm.ToolsView);
-                Assert.True(sidebar.FindControl<TextBox>("ScanOctet1Box")!.IsVisible);
-                Assert.True(sidebar.FindControl<TextBox>("ScanOctetFromBox")!.IsVisible);
-                Assert.True(sidebar.FindControl<Button>("ScanStartButton")!.IsEnabled);
-                Assert.True(sidebar.FindControl<Button>("NetScanCloseButton")!.IsVisible);
+                // 点选“网络服务器”：打开独立窗口，重复点选只激活同一实例
+                ClickToolMenuItem(window, "net-server");
+                var servers = Assert.IsType<ServersManagementWindow>(
+                    window!.FindToolWindowForTests("net-server"));
+                Assert.True(servers.IsVisible);
+                ClickToolMenuItem(window, "net-server");
+                Assert.Single(window.ToolWindowsForTests);
+                Assert.Same(servers, window.FindToolWindowForTests("net-server"));
 
-                // 返回工具菜单，再打开"端口扫描仪"
-                Click(window, sidebar.FindControl<Button>("SidebarBackToolsButton")!);
-                Assert.Equal(ToolsView.Menu, vm.ToolsView);
+                // 点选“网络扫描仪”：再开一个独立窗口
+                ClickToolMenuItem(window, "scanner");
+                var scanner = Assert.IsType<NetworkScanWindow>(
+                    window.FindToolWindowForTests("scanner"));
+                Assert.True(scanner.IsVisible);
+                Assert.Equal(2, window.ToolWindowsForTests.Count);
+
+                // 点选“端口扫描仪”：第三个窗口
+                ClickToolMenuItem(window, "port-scanner");
+                var portScanner = Assert.IsType<PortScanWindow>(
+                    window.FindToolWindowForTests("port-scanner"));
+                Assert.True(portScanner.IsVisible);
+                Assert.Equal(3, window.ToolWindowsForTests.Count);
+
+                // 关闭窗口后从注册表移除，再次点选可重新打开
+                portScanner.Close();
                 RunJobs(window);
-                OpenPortScannerView(window, vm);
-                Assert.Equal(ToolsView.PortScanner, vm.ToolsView);
-                Assert.True(sidebar.FindControl<TextBox>("PortScanIpBox")!.IsVisible);
-                Assert.True(sidebar.FindControl<Button>("PortScanStartButton")!.IsVisible);
-                // 默认"仅扫描已知端口"，范围框禁用
-                Assert.False(vm.PortScanRangeMode);
-                Assert.False(sidebar.FindControl<TextBox>("PortScanFromBox")!.IsEnabled);
+                Assert.Null(window.FindToolWindowForTests("port-scanner"));
+                ClickToolMenuItem(window, "port-scanner");
+                Assert.NotNull(window.FindToolWindowForTests("port-scanner"));
+                Assert.Equal(3, window.ToolWindowsForTests.Count);
 
-                // 关闭返回工具菜单
-                Click(window, sidebar.FindControl<Button>("PortScanCloseButton")!);
-                Assert.Equal(ToolsView.Menu, vm.ToolsView);
+                servers.Close();
+                scanner.Close();
+                window.FindToolWindowForTests("port-scanner")!.Close();
+                RunJobs(window);
             });
         }
         finally
@@ -1250,38 +1235,13 @@ public sealed class SidebarRailTests
     }
 
     /// <summary>Clicks the 网络扫描仪 entry in the tools menu, opening the scanner view.</summary>
-    private static void OpenScannerView(MainWindow window, MainViewModel vm)
+    /// <summary>Clicks a tool row in the Tools tab (opens or activates its window).</summary>
+    private static void ClickToolMenuItem(MainWindow window, string id)
     {
-        ScrollMenuToBottom(window);
-        var scannerItem = window.GetVisualDescendants()
-            .OfType<Button>()
-            .First(b => b.Tag is string s && s == "scanner");
-        Click(window, scannerItem);
-        Assert.Equal(ToolsView.NetworkScanner, vm.ToolsView);
-        RunJobs(window);
-    }
-
-    /// <summary>Clicks the 端口扫描仪 entry in the tools menu, opening the port scanner view.</summary>
-    private static void OpenPortScannerView(MainWindow window, MainViewModel vm)
-    {
-        ScrollMenuToBottom(window);
         var item = window.GetVisualDescendants()
             .OfType<Button>()
-            .First(b => b.Tag is string s && s == "port-scanner");
+            .First(b => b.Tag is string s && s == id);
         Click(window, item);
-        Assert.Equal(ToolsView.PortScanner, vm.ToolsView);
-        RunJobs(window);
-    }
-
-    /// <summary>
-    /// The 1:1 menu (22 rows) is taller than the panel viewport, so the
-    /// scanner entries live below the fold: scroll the menu to the bottom
-    /// before clicking them (real users scroll the same way).
-    /// </summary>
-    private static void ScrollMenuToBottom(MainWindow window)
-    {
-        var scroller = Sidebar(window).FindControl<ScrollViewer>("ToolMenuScroll")!;
-        scroller.Offset = new Vector(0, scroller.Extent.Height);
         RunJobs(window);
     }
 

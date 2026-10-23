@@ -8,6 +8,7 @@ using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using COMTool.App.Services;
+using COMTool.App.Tools;
 using COMTool.App.ViewModels;
 using COMTool.Connections;
 using COMTool.Connections.NetworkScan;
@@ -39,9 +40,6 @@ public partial class MainWindow : Window
     private readonly Dictionary<TerminalTab, SerialTabState> _serialTabs = new();
     private readonly HashSet<TerminalTab> _sshRestarts = new();
     private readonly HashSet<TerminalTab> _telnetRestarts = new();
-    private CancellationTokenSource? _scanCts;
-    private CancellationTokenSource? _portScanCts;
-    private INetworkScanner? _scanner;
     private string _historySignature = "";
 
     internal Func<SerialConnectionConfig, ISerialConnection> SerialConnectionFactory { get; set; } =
@@ -49,7 +47,8 @@ public partial class MainWindow : Window
 
     internal Func<SessionItem, Task>? SessionActivationOverrideForTests { get; set; }
 
-    internal INetworkScanner? NetworkScannerForTests { get; set; }
+    /// <summary>Config service used by tool windows (null before load/demo mode).</summary>
+    internal AppConfigService? ConfigService => _config;
     private static readonly IBrush StatusInfoBrush =
         new SolidColorBrush(Color.Parse("#008200"));
     private static readonly IBrush StatusWarningBrush =
@@ -90,10 +89,7 @@ public partial class MainWindow : Window
         Sidebar.MacroCancelRequested += OnMacroCancelRequested;
         Sidebar.HistoryActivated += OnHistoryActivated;
         Sidebar.HistoryClearRequested += OnHistoryClearRequested;
-        Sidebar.NetScanStartRequested += OnNetScanStartRequested;
-        Sidebar.PortScanStartRequested += OnPortScanStartRequested;
-        Sidebar.PortScanStopRequested += OnPortScanStopRequested;
-        Sidebar.ToolCloseRequested += OnToolCloseRequested;
+        Sidebar.ToolRequested += OnToolRequested;
         Opened += OnOpened;
     }
 
@@ -3205,223 +3201,39 @@ public partial class MainWindow : Window
         // The view already closed the editor; nothing to persist.
     }
 
-    private INetworkScanner ActiveScanner =>
-        NetworkScannerForTests ?? (_scanner ??= new NetworkScanner());
-
     /// <summary>
-    /// 网络扫描仪 Start scan: expands the octet range (MobaXterm /24 form)
-    /// and probes the fixed MobaXterm service set + "other ports" per host.
+    /// Tool windows opened from the 工具 tab, keyed by ToolCatalog id, so a
+    /// second click activates the existing window instead of opening another.
     /// </summary>
-    private async void OnNetScanStartRequested(object? sender, EventArgs e)
+    private readonly Dictionary<string, Window> _toolWindows = new(StringComparer.Ordinal);
+
+    internal IReadOnlyCollection<Window> ToolWindowsForTests => _toolWindows.Values;
+
+    internal Window? FindToolWindowForTests(string id) =>
+        _toolWindows.TryGetValue(id, out var window) ? window : null;
+
+    private void OnToolRequested(object? sender, string id)
     {
-        if (_scanCts is not null || _portScanCts is not null || DataContext is not MainViewModel viewModel)
+        var descriptor = ToolCatalog.Find(id);
+        if (descriptor is null || !descriptor.IsEnabled)
         {
             return;
         }
 
-        if (!NetworkScanTargets.TryParseSubnet(
-                viewModel.ScanOctet1, viewModel.ScanOctet2, viewModel.ScanOctet3,
-                viewModel.ScanOctetFrom, viewModel.ScanOctetTo,
-                out var targets, out var targetError))
+        if (_toolWindows.TryGetValue(id, out var existing))
         {
-            viewModel.ScanError = targetError;
+            if (!existing.IsVisible)
+            {
+                existing.Show();
+            }
+            existing.Activate();
             return;
         }
 
-        var ports = NetworkServices.AllProbePorts;
-
-        viewModel.ScanError = null;
-        viewModel.ScanRows.Clear();
-        viewModel.ScanStatus = $"扫描中… 0/{targets.Count}";
-        viewModel.IsScanning = true;
-        _scanCts = new CancellationTokenSource();
-
-        var progress = new UiProgress<NetworkScanProgress>(p =>
-        {
-            if (p.Host is { } host)
-            {
-                viewModel.ScanRows.Add(ToScanGridRow(host));
-            }
-
-            if (p.Completed >= p.Total)
-            {
-                // 最终进度上报时写终止状态，保证与增量更新顺序一致
-                viewModel.IsScanning = false;
-                _scanCts?.Dispose();
-                _scanCts = null;
-                viewModel.ScanStatus = $"完成：发现 {viewModel.ScanRows.Count} 台在线设备";
-            }
-            else
-            {
-                viewModel.ScanStatus = $"扫描中… {p.Completed}/{p.Total}";
-            }
-        });
-
-        try
-        {
-            await ActiveScanner.ScanAsync(targets, ports, progress, _scanCts.Token);
-            // 兜底：若扫描器未上报最终计数
-            if (viewModel.IsScanning)
-            {
-                viewModel.IsScanning = false;
-                _scanCts?.Dispose();
-                _scanCts = null;
-                viewModel.ScanStatus = $"完成：发现 {viewModel.ScanRows.Count} 台在线设备";
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            viewModel.IsScanning = false;
-            _scanCts?.Dispose();
-            _scanCts = null;
-            viewModel.ScanStatus = $"已停止（已发现 {viewModel.ScanRows.Count} 台）";
-        }
-        catch (Exception ex)
-        {
-            viewModel.IsScanning = false;
-            _scanCts?.Dispose();
-            _scanCts = null;
-            viewModel.ScanError = ex.Message;
-            viewModel.ScanStatus = "";
-        }
-    }
-
-    private void OnPortScanStopRequested(object? sender, EventArgs e)
-    {
-        _portScanCts?.Cancel();
-    }
-
-    /// <summary>
-    /// 关闭按钮 / 返回箭头：取消正在运行的扫描并返回工具菜单
-    /// （MobaXterm 关闭对话框即终止扫描）。
-    /// </summary>
-    private void OnToolCloseRequested(object? sender, EventArgs e)
-    {
-        if (DataContext is MainViewModel viewModel)
-        {
-            _scanCts?.Cancel();
-            _portScanCts?.Cancel();
-            viewModel.ToolsView = ToolsView.Menu;
-        }
-    }
-
-    /// <summary>
-    /// Reports progress on the UI thread regardless of the ambient
-    /// synchronization context, which keeps headless tests deterministic.
-    /// </summary>
-    private sealed class UiProgress<T>(Action<T> action) : IProgress<T>
-    {
-        public void Report(T value) =>
-            Avalonia.Threading.Dispatcher.UIThread.Post(() => action(value));
-    }
-
-    /// <summary>
-    /// 端口扫描仪 Start scan: known-ports mode probes the fixed service table;
-    /// range mode probes every port in [from..to] (1..65535 = MobaXterm deep
-    /// scan). Results are MobaXterm-style lines: "- Port #22 (ssh): listening".
-    /// </summary>
-    private async void OnPortScanStartRequested(object? sender, EventArgs e)
-    {
-        if (_portScanCts is not null || _scanCts is not null || DataContext is not MainViewModel viewModel)
-        {
-            return;
-        }
-
-        if (!NetworkScanTargets.TryParseIp(viewModel.PortScanIp, out var host, out var ipError))
-        {
-            viewModel.PortScanError = ipError;
-            return;
-        }
-
-        int from = 0;
-        int to = 0;
-        if (viewModel.PortScanRangeMode)
-        {
-            if (!int.TryParse(viewModel.PortScanFrom, out from) || from is < 1 or > 65535)
-            {
-                viewModel.PortScanError = "起始端口无效（须为 1~65535 的整数）";
-                return;
-            }
-            if (!int.TryParse(viewModel.PortScanTo, out to) || to is < 1 or > 65535)
-            {
-                viewModel.PortScanError = "结束端口无效（须为 1~65535 的整数）";
-                return;
-            }
-            if (from > to)
-            {
-                viewModel.PortScanError = "起始端口不能大于结束端口";
-                return;
-            }
-        }
-
-        var total = viewModel.PortScanRangeMode
-            ? to - from + 1
-            : NetworkServices.KnownPortNumbers.Length;
-        viewModel.PortScanError = null;
-        viewModel.PortScanResult = "";
-        viewModel.PortScanStatus = $"正在扫描 {host}：0/{total}";
-        viewModel.IsPortScanning = true;
-        _portScanCts = new CancellationTokenSource();
-
-        var progress = new UiProgress<int>(done =>
-        {
-            viewModel.PortScanStatus =
-                $"正在扫描 {host}：{Math.Min(done, total)}/{total}";
-        });
-
-        try
-        {
-            IReadOnlyList<int> openPorts = viewModel.PortScanRangeMode
-                ? await ActiveScanner.ScanHostPortsAsync(host, from, to, progress, _portScanCts.Token)
-                : await ActiveScanner.ScanHostPortsAsync(host, NetworkServices.KnownPortNumbers, progress, _portScanCts.Token);
-            viewModel.PortScanResult = FormatPortResults(openPorts);
-        }
-        catch (OperationCanceledException)
-        {
-            viewModel.PortScanResult = "扫描已停止";
-        }
-        catch (Exception ex)
-        {
-            viewModel.PortScanResult = "";
-            viewModel.PortScanError = ex.Message;
-        }
-        finally
-        {
-            viewModel.IsPortScanning = false;
-            viewModel.PortScanStatus = "";
-            _portScanCts?.Dispose();
-            _portScanCts = null;
-        }
-    }
-
-    private static string FormatPortResults(IReadOnlyList<int> openPorts)
-    {
-        if (openPorts.Count == 0)
-        {
-            return "未发现开放端口";
-        }
-
-        var sb = new System.Text.StringBuilder();
-        foreach (var port in openPorts)
-        {
-            sb.AppendLine(NetworkServices.FormatPortLine(port));
-        }
-        return sb.ToString().TrimEnd();
-    }
-
-    private static ScanGridRow ToScanGridRow(NetworkScanHost host)
-    {
-        var openPorts = new HashSet<int>(host.OpenPorts);
-        var otherPorts = NetworkServices.OtherPorts.Where(p => openPorts.Contains(p)).ToList();
-        return new ScanGridRow
-        {
-            Address = host.Address.ToString(),
-            HostName = host.HostName ?? "",
-            Cells = NetworkServices.ServiceColumns
-                .Select(c => new PortCell { Label = c.Name, IsOpen = openPorts.Contains(c.Port) })
-                .ToList(),
-            OtherPorts = otherPorts.Count == 0 ? "" : string.Join(", ", otherPorts),
-        };
+        var window = descriptor.CreateWindow(this);
+        window.Closed += (_, _) => _toolWindows.Remove(id);
+        _toolWindows[id] = window;
+        window.Show(this);
     }
 
     private void OnMinimizeClick(object? sender, RoutedEventArgs e)
