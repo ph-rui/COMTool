@@ -8,7 +8,7 @@ geometry. These are functional evidence images, not final pixel baselines.
 | File | What it proves |
 | --- | --- |
 | `ui-chrome-fixed-850x500.png` | Borderless custom window: no native white strip above the title bar, Material Design minimize/maximize/close icons, and no 6px gap below the title bar. |
-| `sidebar-auto-hide-850x500.png` | The sidebar auto-collapsed after the pointer moved into the content area; the left hover strip and manual handle remain available. |
+| `sidebar-auto-hide-850x500.png` | Historical (pre-2026-10-23 auto-hide build): the sidebar auto-collapsed after the pointer moved into the content area; the left hover strip and manual handle were still available. The dock is now fixed and those affordances are gone. |
 | `encoding-focus-850x500.png` | Selecting UTF-8 from the encoding drop-down returns keyboard focus to the terminal; `echo FOCUS-MOUSE` is accepted immediately. |
 | `version-focus-0.01-1280x800.png` | The title bar reports `COMTool v0.01`; after maximize, settings close, plugin-menu close, tab click and encoding selection, the terminal still accepts `echo ...` and Enter. |
 | `chrome-icons-centered-850x500.png` | Historical: the settings gear, plugin plus and functional arrow icons were centered inside their blue/transparent controls instead of sticking to the top-left corner; the functional arrow was removed on 2026-10-21. |
@@ -54,7 +54,7 @@ geometry. These are functional evidence images, not final pixel baselines.
 | `terminal-key-mappings-850x500.png` | `cat -v` shows the expected sequences for arrows, Home/End, Insert/Delete and F1-F12, including both SS3 and CSI forms. |
 | `terminal-autofocus-ssh-1000x650.png` | Clicking an SSH session immediately focuses the new terminal; `echo PACKAGE_FOCUS` is accepted and executed without clicking the terminal area first. |
 | `terminal-single-char-echo-1000x650.png` | Typing a bare `i` over SSH echoes immediately even though `i` is a prefix of the highlight keywords `info`/`invalid`/`important`; the highlighter's pending prefix is flushed after 15 ms instead of waiting for Enter. |
-| `session-sidebar-expanded-on-launch-1000x650.png` | The sessions sidebar is expanded on startup even though the test config had `sessionSidebar.visible=false`; the saved width is still applied and auto-hide remains available. |
+| `session-sidebar-expanded-on-launch-1000x650.png` | Historical (pre-2026-10-23 auto-hide build): the sessions sidebar was expanded on startup even though the test config had `sessionSidebar.visible=false`, and the saved width was applied. The dock now restores the saved visible state instead. |
 | `serial-sidebar-summary-1000x650.png` | Serial entries keep the device description and add a third line with the saved connection summary (`115200 8N1`); the row grows only when the summary is present. |
 | `serial-sidebar-summary-windows-115200-8n1.png` | Windows 10 desktop: the saved COM99 CH344 row keeps its device description and shows `115200 8N1` on the third line. |
 | `serial-clean-prompt-windows-after-buffer-fix.png` | Windows 10 COM99 opened at `115200 8N1` after the driver receive/transmit buffers are purged on open; the terminal shows the clean `root@imx95evk:~/depth#` prompt and `Connected COM99`, with no stale binary payload or replacement characters. |
@@ -78,16 +78,16 @@ geometry. These are functional evidence images, not final pixel baselines.
 | `telnet-windows-dpapi-2026-10-21.md` | Sanitized Windows Telnet fixture log, binary SHA256, DPAPI token length, and plaintext-absence check for the remembered-password restart. |
 | `performance-2026-10-20.md` | Startup, terminal parsing, SSH 10 MB throughput, R2R packaging and Native AOT experiment measurements. |
 
-## Automated test-gate coverage (2026-10-21)
+## Automated test-gate coverage (2026-10-23)
 
 `docs/testing/feature-test-matrix.md` now maps all parity rows, including the
 Telnet and SFTP rows. The gate passes in `verify` and `package` phases on Linux,
-and the structure also passes for Windows/macOS. The suite is 349 tests:
+and the structure also passes for Windows/macOS. The suite is 358 tests:
 
-- Core 45, SFTP 40, Connections 55, Terminal 11, ZMODEM 32, TestGate 49, App 117.
+- Core 45, SFTP 40, Connections 55, Terminal 11, ZMODEM 32, TestGate 49, App 126.
 - Linux Xvfb E2E: `APP01_SmokeLaunchE2E`,
   `UI01_TitleBarDoubleClickMaximizeE2E`,
-  `UI02_SidebarExpandsOnLaunchE2E`, `UI02_SidebarAutoHideE2E`,
+  `UI02_SidebarDockedOnLaunchE2E`, `UI02_SidebarStaysDockedE2E`,
   `E2E01_OpenSshSession`, `SSH11_RestartStoppedSessionE2E`,
   `SSH06_MultipleConnectionsE2E`, `UI05_TabSwitchTypingBothDirections`,
   `TERM15_DoubleClickMaximizeE2E`, `SFTP01_BrowserTransferE2E`,

@@ -48,7 +48,6 @@ public sealed class TelnetRestartTests
                 window = new MainWindow { DataContext = new MainViewModel() };
                 window.Show();
                 window.StopPortTimerForTests();
-                window.StopSidebarHoverTimerForTests();
                 RunJobs(window);
 
                 var viewModel = Assert.IsType<MainViewModel>(window.DataContext);
@@ -126,7 +125,6 @@ public sealed class TelnetRestartTests
                 window = new MainWindow { DataContext = new MainViewModel() };
                 window.Show();
                 window.StopPortTimerForTests();
-                window.StopSidebarHoverTimerForTests();
                 RunJobs(window);
 
                 var viewModel = Assert.IsType<MainViewModel>(window.DataContext);

@@ -72,7 +72,6 @@ public sealed class RestartProgressTests
                 window = new MainWindow { DataContext = new MainViewModel() };
                 window.Show();
                 window.StopPortTimerForTests();
-                window.StopSidebarHoverTimerForTests();
                 RunJobs();
 
                 var result = window.ShowRestartAskAsync(window, "Connection refused");
@@ -112,7 +111,6 @@ public sealed class RestartProgressTests
                 window = new MainWindow { DataContext = new MainViewModel() };
                 window.Show();
                 window.StopPortTimerForTests();
-                window.StopSidebarHoverTimerForTests();
                 RunJobs();
 
                 var result = window.ShowRestartAskAsync(window, "boom");

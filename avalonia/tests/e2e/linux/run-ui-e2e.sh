@@ -20,8 +20,8 @@ WINDOW_TITLE="COMTool v0.01"
 E2E_TESTS=(
     APP01_SmokeLaunchE2E
     UI01_TitleBarDoubleClickMaximizeE2E
-    UI02_SidebarExpandsOnLaunchE2E
-    UI02_SidebarAutoHideE2E
+    UI02_SidebarDockedOnLaunchE2E
+    UI02_SidebarStaysDockedE2E
     E2E01_OpenSshSession
     SSH11_RestartStoppedSessionE2E
     SSH06_MultipleConnectionsE2E
@@ -34,8 +34,8 @@ E2E_TESTS=(
 )
 SSH_TEST_IDS=(
     UI01_TitleBarDoubleClickMaximizeE2E
-    UI02_SidebarExpandsOnLaunchE2E
-    UI02_SidebarAutoHideE2E
+    UI02_SidebarDockedOnLaunchE2E
+    UI02_SidebarStaysDockedE2E
     E2E01_OpenSshSession
     SSH11_RestartStoppedSessionE2E
     SSH06_MultipleConnectionsE2E
@@ -349,16 +349,20 @@ ensure_second_shell() {
     fail "$test_id" "second SSH shell did not get an independent shell PID (first: ${SHELL_A_PID:-unknown})"
 }
 
-run_ui02_sidebar_expands() {
-    local test_id="UI02_SidebarExpandsOnLaunchE2E"
+run_ui02_sidebar_docked_on_launch() {
+    local test_id="UI02_SidebarDockedOnLaunchE2E"
     local config="$CONFIG_ROOT/avalonia/config.json"
 
     log "Running $test_id"
-    if ! grep -q '"visible": false' "$config" 2>/dev/null; then
-        fail "$test_id" "seeded config did not request a collapsed sidebar"
+    if grep -q '"visible": false' "$config" 2>/dev/null; then
+        fail "$test_id" "seeded config did not request a docked sidebar"
     fi
 
     ensure_first_shell "$test_id"
+
+    if ! wait_for_sidebar_visible 5; then
+        fail "$test_id" "sidebar was not docked at launch"
+    fi
 
     if ! run_command_until_marker \
         "printf UI02_READY > $TMP_ROOT/ui02-ready" \
@@ -373,59 +377,40 @@ run_ui02_sidebar_expands() {
 }
 
 
-run_ui02_sidebar_auto_hide() {
-    local test_id="UI02_SidebarAutoHideE2E"
-    local config="$CONFIG_ROOT/avalonia/config.json"
+run_ui02_sidebar_stays_docked() {
+    local test_id="UI02_SidebarStaysDockedE2E"
 
     log "Running $test_id"
     ensure_first_shell "$test_id"
 
     if ! wait_for_sidebar_visible 5; then
-        fail "$test_id" "sidebar did not start expanded"
+        fail "$test_id" "sidebar did not start docked"
     fi
 
-    # Moving into the content area must retract the panel even when this is
-    # the first pointer move after launch (no prior sidebar hover required).
+    # Pointer movement into the content no longer collapses the dock.
     xdotool mousemove --window "$WINDOW_ID" 700 300 || fail "$test_id" "could not move pointer into content"
+    sleep 1
+    if ! wait_for_sidebar_visible 2; then
+        fail "$test_id" "sidebar collapsed after the pointer moved into content"
+    fi
+    xdotool mousemove --window "$WINDOW_ID" 25 300 || fail "$test_id" "could not move pointer to the left edge"
+    sleep 1
+    if ! wait_for_sidebar_visible 2; then
+        fail "$test_id" "sidebar changed state after the pointer visited the left edge"
+    fi
+
+    # The title-bar sessions button is the only way to collapse it.
+    click_window "$SESSIONS_TOGGLE_X" "$SESSIONS_TOGGLE_Y" || fail "$test_id" "could not click the sessions button"
     if ! wait_for_sidebar_hidden 5; then
-        fail "$test_id" "sidebar did not auto-hide after moving into content"
+        fail "$test_id" "sessions button did not collapse the dock"
     fi
     if ! window_pixel_is_dark "$SIDEBAR_PROBE_X" "$SIDEBAR_PROBE_Y"; then
-        fail "$test_id" "content did not expand into the collapsed sidebar area"
+        fail "$test_id" "content did not expand into the collapsed dock area"
     fi
-    grep -q '"visible": false' "$config" 2>/dev/null \
-        || fail "$test_id" "auto-hide rewrote the saved sidebar preference"
 
-    # The list frame's left edge is x=32 for the seeded 220px sidebar. Moving
-    # just left of that red edge must reopen the panel even though the point is
-    # outside the old fixed 10px hover strip.
-    xdotool mousemove --window "$WINDOW_ID" 25 300 || fail "$test_id" "could not move pointer just left of the list frame"
+    click_window "$SESSIONS_TOGGLE_X" "$SESSIONS_TOGGLE_Y" || fail "$test_id" "could not click the sessions button again"
     if ! wait_for_sidebar_visible 5; then
-        fail "$test_id" "sidebar did not reopen from the list frame's left edge"
-    fi
-
-    # Anywhere between the list frame's red and green edges stays open.
-    xdotool mousemove --window "$WINDOW_ID" 30 300 || fail "$test_id" "could not move pointer into sidebar padding"
-    if ! wait_for_sidebar_visible 2; then
-        fail "$test_id" "sidebar retracted while pointer was inside its left padding"
-    fi
-    xdotool mousemove --window "$WINDOW_ID" 100 300 || fail "$test_id" "could not move pointer into the session list"
-    if ! wait_for_sidebar_visible 2; then
-        fail "$test_id" "sidebar retracted while pointer was over the session list"
-    fi
-
-    # Crossing the list frame's right edge (x=236 for the seeded width) must
-    # retract the panel even before the pointer reaches the terminal center.
-    xdotool mousemove --window "$WINDOW_ID" 240 300 || fail "$test_id" "could not move pointer past the list frame's right edge"
-    if ! wait_for_sidebar_hidden 5; then
-        fail "$test_id" "sidebar did not retract after crossing the list frame's right edge"
-    fi
-
-    # The E2E suite reuses one app instance; later SSH tests click the session
-    # row directly and expect the panel to be expanded.
-    xdotool mousemove --window "$WINDOW_ID" 25 300 || fail "$test_id" "could not move pointer back to the list frame's left edge"
-    if ! wait_for_sidebar_visible 5; then
-        fail "$test_id" "sidebar did not reopen before the next test"
+        fail "$test_id" "sessions button did not restore the dock"
     fi
     pass "$test_id"
 }
@@ -972,11 +957,11 @@ if [[ -n "$SSH_TEST_ID" ]]; then
     if matches_filter "UI01_TitleBarDoubleClickMaximizeE2E"; then
         run_ui01_title_bar_double_click_maximize
     fi
-    if matches_filter "UI02_SidebarExpandsOnLaunchE2E"; then
-        run_ui02_sidebar_expands
+    if matches_filter "UI02_SidebarDockedOnLaunchE2E"; then
+        run_ui02_sidebar_docked_on_launch
     fi
-    if matches_filter "UI02_SidebarAutoHideE2E"; then
-        run_ui02_sidebar_auto_hide
+    if matches_filter "UI02_SidebarStaysDockedE2E"; then
+        run_ui02_sidebar_stays_docked
     fi
     if matches_filter "E2E01_OpenSshSession"; then
         run_e2e01_open_ssh

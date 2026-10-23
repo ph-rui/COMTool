@@ -8,8 +8,6 @@ namespace COMTool.App.Views;
 
 public partial class SessionSidebar : UserControl
 {
-    private ContextMenu? _contextMenu;
-
     public SessionSidebar()
     {
         InitializeComponent();
@@ -28,11 +26,7 @@ public partial class SessionSidebar : UserControl
 
     public event EventHandler<string>? NewSessionRequested;
 
-    public bool HasOpenContextMenu => _contextMenu?.IsOpen == true;
-
     public bool HasOpenNewSessionMenu => SidebarAddSessionButton.Flyout is { IsOpen: true };
-
-    internal Border SessionListFrameControl => SessionListFrame;
 
     private void OnNewSessionMenuItemClick(object? sender, RoutedEventArgs e)
     {
@@ -70,9 +64,7 @@ public partial class SessionSidebar : UserControl
         }
 
         e.Handled = true;
-        var menu = CreateSessionContextMenu(item);
-        _contextMenu = menu;
-        menu.Open(control);
+        CreateSessionContextMenu(item).Open(control);
     }
 
     internal ContextMenu CreateSessionContextMenu(SessionItem item)
@@ -87,13 +79,6 @@ public partial class SessionSidebar : UserControl
         menu.Items.Add(open);
         menu.Items.Add(edit);
         menu.Items.Add(remove);
-        menu.Closed += (_, _) =>
-        {
-            if (ReferenceEquals(_contextMenu, menu))
-            {
-                _contextMenu = null;
-            }
-        };
         return menu;
     }
 }

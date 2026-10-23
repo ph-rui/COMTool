@@ -30,13 +30,7 @@ public partial class MainWindow : Window
     private bool _applyingEncoding;
     private AppConfigService? _config;
     private DispatcherTimer? _portTimer;
-    private readonly DispatcherTimer _sessionHoverTimer;
     private bool _windowPointerPressed;
-    private Rect _sessionListFrame;
-    private double _lastSessionPointerX;
-    private double _lastSessionPointerY;
-    private double _lastSessionTimerX;
-    private DateTime _sessionShownAt = DateTime.MinValue;
     private ConnectionSettingsWindow? _settingsWindow;
     private readonly Dictionary<TerminalTab, ZmodemTiming> _zmodemTimings = new();
     private readonly Dictionary<TerminalTab, ZmodemStream> _zmodemStreams = new();
@@ -70,11 +64,6 @@ public partial class MainWindow : Window
         UpdateMaximizeIcon();
         SizeChanged += OnWindowSizeChanged;
         ApplySavedWindowSizeBeforeShow();
-        _sessionHoverTimer = new DispatcherTimer
-        {
-            Interval = TimeSpan.FromMilliseconds(250),
-        };
-        _sessionHoverTimer.Tick += (_, _) => CheckSessionSidebarAutoHide();
         AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Tunnel);
         AddHandler(PointerMovedEvent, OnWindowPointerMoved, RoutingStrategies.Tunnel, handledEventsToo: true);
         AddHandler(PointerPressedEvent, OnWindowPointerPressed, RoutingStrategies.Tunnel);
@@ -2609,60 +2598,8 @@ public partial class MainWindow : Window
         SetSidebarVisible(!_sidebarVisible);
     }
 
-    private void OnSessionHandleClick(object? sender, RoutedEventArgs e)
-    {
-        if (_sidebarVisible)
-        {
-            // Ignore the click immediately following a hover-open.
-            if (DateTime.UtcNow - _sessionShownAt < TimeSpan.FromMilliseconds(350))
-            {
-                return;
-            }
-
-            SetSidebarVisible(false);
-            return;
-        }
-
-        SetSidebarVisible(true);
-        _sessionShownAt = DateTime.UtcNow;
-    }
-
-    private void OnSessionHandlePointerEntered(object? sender, PointerEventArgs e)
-    {
-        if (!_sidebarVisible)
-        {
-            ShowSessionSidebarAuto();
-        }
-    }
-
-    private void OnSessionHoverStripEntered(object? sender, PointerEventArgs e)
-    {
-        if (!_sidebarVisible)
-        {
-            ShowSessionSidebarAuto();
-        }
-    }
-
-    private void ShowSessionSidebarAuto()
-    {
-        if (_sidebarVisible)
-        {
-            return;
-        }
-
-        SetSidebarVisible(true, persist: false);
-        _sessionShownAt = DateTime.UtcNow;
-    }
-
     private void SetSidebarVisible(bool visible, bool persist = true)
     {
-        if (!visible)
-        {
-            // Keep the last visible frame so the reopen trigger still matches
-            // the red edge after the panel collapses.
-            GetSessionListFrame();
-        }
-
         _sidebarVisible = visible;
         Sidebar.IsVisible = visible;
         SidebarSplitter.IsVisible = visible;
@@ -2670,18 +2607,6 @@ public partial class MainWindow : Window
             ? new GridLength(ClampSidebarWidth(_sidebarWidth))
             : new GridLength(0);
         BodyGrid.ColumnDefinitions[1].Width = visible ? new GridLength(3) : new GridLength(0);
-        SessionHandleIcon.Text = visible ? "\uf053" : "\uf054";
-        SessionHoverStrip.IsVisible = !visible;
-
-        if (visible)
-        {
-            _lastSessionTimerX = _lastSessionPointerX;
-            _sessionHoverTimer.Start();
-        }
-        else
-        {
-            _sessionHoverTimer.Stop();
-        }
 
         if (persist)
         {
@@ -2689,137 +2614,17 @@ public partial class MainWindow : Window
         }
     }
 
-    internal void CheckSidebarAutoHideForTests() => CheckSessionSidebarAutoHide();
-
     internal void SetSidebarWidthForTests(double width)
     {
         _sidebarWidth = ClampSidebarWidth(width);
         BodyGrid.ColumnDefinitions[0].Width = new GridLength(_sidebarWidth);
     }
 
-    internal void StopSidebarHoverTimerForTests() => _sessionHoverTimer.Stop();
-
     internal ConnectionSettingsWindow? SettingsWindowForTests => _settingsWindow;
-
-    private void CheckSessionSidebarAutoHide()
-    {
-        if (!_sidebarVisible)
-        {
-            _sessionHoverTimer.Stop();
-            return;
-        }
-
-        var dx = _lastSessionPointerX - _lastSessionTimerX;
-        _lastSessionTimerX = _lastSessionPointerX;
-
-        var inside = Sidebar.IsPointerOver
-            || IsInSessionSidebarArea()
-            || SessionHandle.IsPointerOver
-            || SessionHoverStrip.IsPointerOver
-            || IsInSessionSidebarApproach();
-        if (inside)
-        {
-            return;
-        }
-
-        // Moving right while outside the window's left edge approaches the panel.
-        if (_lastSessionPointerX < 0)
-        {
-            return;
-        }
-
-        // Pointer movement in the title bar is unrelated to the session panel;
-        // only the body area should trigger auto-hide.
-        var bodyOrigin = BodyGrid.TranslatePoint(new Point(0, 0), this) ?? new Point(16, 35);
-        if (_lastSessionPointerY < bodyOrigin.Y)
-        {
-            return;
-        }
-
-        // Do not collapse while dragging the splitter, selecting text, or using
-        // a sidebar menu/flyout. The new-session flyout opens to the right of
-        // the sidebar, so moving onto its items must not retract the panel.
-        if (_windowPointerPressed
-            || Sidebar.HasOpenContextMenu
-            || Sidebar.HasOpenNewSessionMenu)
-        {
-            return;
-        }
-
-        if (dx > 0)
-        {
-            SetSidebarVisible(false, persist: false);
-        }
-    }
-
-    private bool IsInSessionSidebarArea()
-    {
-        if (!_sidebarVisible)
-        {
-            return false;
-        }
-
-        var bodyOrigin = BodyGrid.TranslatePoint(new Point(0, 0), this) ?? new Point(16, 35);
-        var frame = GetSessionListFrame();
-        var left = frame.Width > 0 ? frame.Left : bodyOrigin.X;
-        var right = frame.Width > 0 ? frame.Right : bodyOrigin.X + FallbackSidebarWidth();
-
-        return _lastSessionPointerX >= left
-            && _lastSessionPointerX <= right
-            && _lastSessionPointerY >= bodyOrigin.Y
-            && _lastSessionPointerY <= bodyOrigin.Y + BodyGrid.Bounds.Height;
-    }
-
-    private bool IsInSessionSidebarApproach()
-    {
-        var bodyOrigin = BodyGrid.TranslatePoint(new Point(0, 0), this) ?? new Point(16, 35);
-        var frame = GetSessionListFrame();
-        var left = frame.Width > 0 ? frame.Left : bodyOrigin.X;
-        var bodyBottom = bodyOrigin.Y + BodyGrid.Bounds.Height;
-        return _lastSessionPointerX >= 0
-            && _lastSessionPointerX <= left
-            && _lastSessionPointerY >= bodyOrigin.Y
-            && _lastSessionPointerY <= bodyBottom;
-    }
-
-    private double FallbackSidebarWidth()
-    {
-        var width = BodyGrid.ColumnDefinitions[0].ActualWidth;
-        return width > 0 ? width : ClampSidebarWidth(_sidebarWidth);
-    }
-
-    private Rect GetSessionListFrame()
-    {
-        if (Sidebar.IsVisible)
-        {
-            var frame = Sidebar.SessionListFrameControl;
-            if (frame.Bounds.Width > 0
-                && frame.Bounds.Height > 0
-                && frame.TranslatePoint(new Point(0, 0), this) is { } origin)
-            {
-                _sessionListFrame = new Rect(
-                    origin.X,
-                    origin.Y,
-                    frame.Bounds.Width,
-                    frame.Bounds.Height);
-            }
-        }
-
-        return _sessionListFrame;
-    }
 
     private void OnWindowPointerMoved(object? sender, PointerEventArgs e)
     {
         var position = e.GetPosition(this);
-        _lastSessionPointerX = position.X;
-        _lastSessionPointerY = position.Y;
-
-        if (!_sidebarVisible
-            && !_windowPointerPressed
-            && IsInSessionSidebarApproach())
-        {
-            ShowSessionSidebarAuto();
-        }
 
         if (e.Source is Control source
             && source.FindAncestorOfType<Button>(includeSelf: true) is not null)
@@ -2903,9 +2708,9 @@ public partial class MainWindow : Window
 
         var config = _config.Config.SessionSidebar;
         _sidebarWidth = ClampSidebarWidth(config.Width);
-        // Start with the sessions visible even if the panel was collapsed when
-        // the app last closed. Auto-hide still collapses it during use.
-        SetSidebarVisible(true, persist: false);
+        // The dock only changes when the title-bar button is clicked, so the
+        // saved choice is the state to restore — no automatic reveal/collapse.
+        SetSidebarVisible(config.Visible, persist: false);
     }
 
     private void ApplyWindowSizeConfig()
