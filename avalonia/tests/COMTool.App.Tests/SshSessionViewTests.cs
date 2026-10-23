@@ -3,109 +3,35 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using COMTool.App.ViewModels;
 using COMTool.App.Views;
-using COMTool.Sftp.Testing;
 using Iciclecreek.Terminal;
 
 namespace COMTool.App.Tests;
 
 public sealed class SshSessionViewTests
 {
-    private static SftpPaneViewModel NewPane()
-    {
-        return new SftpPaneViewModel(
-            () => throw new InvalidOperationException("the test has no remote"),
-            new InMemoryFileSystem("/local"));
-    }
-
     [AvaloniaFact]
-    public void SshSessionViewPutsThePanelLeftOfTheTerminal()
+    public void SshSessionViewShowsOnlyTheTerminal()
     {
         using var env = new TestEnvironment();
         env.Run(() =>
         {
-            var pane = NewPane();
             var terminal = new TerminalControl { Process = string.Empty };
-            var view = new SshSessionView { Terminal = terminal, SftpPane = pane };
+            var view = new SshSessionView { Terminal = terminal };
 
             var window = new Window { Content = view, Width = 800, Height = 600 };
             window.Show();
             Dispatcher.UIThread.RunJobs();
+            window.UpdateLayout();
 
             Assert.Same(terminal, view.TerminalHostControl.Content);
-            Assert.Equal(0, Grid.GetColumn(view.SftpHostControl));
-            Assert.Equal(1, Grid.GetColumn(view.SftpSplitterControl));
-            Assert.Equal(2, Grid.GetColumn(view.TerminalHostControl));
-        });
-    }
+            Assert.Null(view.FindControl<Control>("SftpHost"));
+            Assert.Null(view.FindControl<Control>("SftpSplitter"));
 
-    [AvaloniaFact]
-    public void SshSessionViewStartsWithThePanelFoldedAway()
-    {
-        using var env = new TestEnvironment();
-        env.Run(() =>
-        {
-            var pane = NewPane();
-            var terminal = new TerminalControl { Process = string.Empty };
-            var view = new SshSessionView { Terminal = terminal, SftpPane = pane };
-
-            var window = new Window { Content = view, Width = 800, Height = 600 };
-            window.Show();
-            Dispatcher.UIThread.RunJobs();
-            window.UpdateLayout();
-
-            Assert.False(pane.IsExpanded);
-            Assert.Equal(0, view.PanelWidth);
-            Assert.False(view.SftpHostControl.IsVisible);
-            Assert.False(view.SftpSplitterControl.IsVisible);
-
-            // The terminal takes the whole width while the panel is folded
-            // away.
+            // The remote files are not a drawer of the tab any more: the
+            // terminal fills the whole view and the browser lives in the
+            // sidebar.
             Assert.Equal(800, view.TerminalHostControl.Bounds.Width, 0.5);
-        });
-    }
-
-    [AvaloniaFact]
-    public void SshSessionViewGivesThePanelItsWidthAndKeepsItWhenItIsFoldedAway()
-    {
-        using var env = new TestEnvironment();
-        env.Run(() =>
-        {
-            var pane = NewPane();
-            var terminal = new TerminalControl { Process = string.Empty };
-            var view = new SshSessionView { Terminal = terminal, SftpPane = pane };
-
-            var window = new Window { Content = view, Width = 800, Height = 600 };
-            window.Show();
-            Dispatcher.UIThread.RunJobs();
-            window.UpdateLayout();
-
-            pane.IsExpanded = true;
-            Dispatcher.UIThread.RunJobs();
-            window.UpdateLayout();
-
-            Assert.Equal(420, view.PanelWidth);
-            Assert.True(view.SftpHostControl.IsVisible);
-            Assert.True(view.SftpSplitterControl.IsVisible);
-            Assert.True(
-                view.TerminalHostControl.Bounds.Width < 800,
-                $"the terminal still takes {view.TerminalHostControl.Bounds.Width}");
-
-            pane.IsExpanded = false;
-            Dispatcher.UIThread.RunJobs();
-            window.UpdateLayout();
-
-            Assert.Equal(0, view.PanelWidth);
-            Assert.False(view.SftpHostControl.IsVisible);
-            Assert.Equal(800, view.TerminalHostControl.Bounds.Width, 0.5);
-
-            // The panel comes back with the width it had.
-            pane.PaneWidth = 480;
-            pane.IsExpanded = true;
-            Dispatcher.UIThread.RunJobs();
-            window.UpdateLayout();
-
-            Assert.Equal(480, view.PanelWidth);
-            Assert.True(view.SftpHostControl.IsVisible);
+            Assert.Equal(600, view.TerminalHostControl.Bounds.Height, 0.5);
         });
     }
 
@@ -115,9 +41,10 @@ public sealed class SshSessionViewTests
         using var env = new TestEnvironment();
         env.Run(() =>
         {
-            var pane = NewPane();
             var terminal = new TerminalControl { Process = string.Empty };
-            var view = new SshSessionView { Terminal = terminal, SftpPane = pane };
+            var view = new SshSessionView { Terminal = terminal };
+            var pane = new SftpPaneViewModel(
+                () => throw new InvalidOperationException("the test has no remote"));
 
             var tab = new TerminalTab
             {

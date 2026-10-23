@@ -73,36 +73,43 @@ SIDEBAR_PROBE_Y="${SIDEBAR_PROBE_Y:-300}"
 # content 223px to the right.
 SFTP_TOGGLE_X="${SFTP_TOGGLE_X:-858}"
 SFTP_TOGGLE_Y="${SFTP_TOGGLE_Y:-51}"
-SFTP_TOOLBAR_Y="${SFTP_TOOLBAR_Y:-96}"
-SFTP_NEWFOLDER_X="${SFTP_NEWFOLDER_X:-122}"
-SFTP_RENAME_X="${SFTP_RENAME_X:-151}"
-SFTP_DELETE_X="${SFTP_DELETE_X:-178}"
-SFTP_UPLOAD_X="${SFTP_UPLOAD_X:-244}"
-SFTP_DOWNLOAD_X="${SFTP_DOWNLOAD_X:-272}"
+# The browser lives in the left sidebar: 24px rail plus a 436px pane. The
+# toolbar, path row and first list row below are window-relative pixels in
+# the 1000x650 window, measured from the SFTP e2e failure screenshot.
+SFTP_TOOLBAR_Y="${SFTP_TOOLBAR_Y:-50}"
+SFTP_NEWFOLDER_X="${SFTP_NEWFOLDER_X:-129}"
+SFTP_RENAME_X="${SFTP_RENAME_X:-156}"
+SFTP_DELETE_X="${SFTP_DELETE_X:-183}"
+SFTP_UPLOAD_X="${SFTP_UPLOAD_X:-102}"
+SFTP_DOWNLOAD_X="${SFTP_DOWNLOAD_X:-74}"
 SFTP_REMOTE_PATH_X="${SFTP_REMOTE_PATH_X:-200}"
-SFTP_REMOTE_PATH_Y="${SFTP_REMOTE_PATH_Y:-130}"
+SFTP_REMOTE_PATH_Y="${SFTP_REMOTE_PATH_Y:-75}"
+# The focused path box draws a 0078d7 ring; its top edge is 6px above the
+# click point. The probe is a wide, short region so the thin border is
+# enough to prove the focus moved into the box.
+SFTP_PATH_FOCUS_PROBE_Y="${SFTP_PATH_FOCUS_PROBE_Y:-67}"
 SFTP_REMOTE_ITEM_X="${SFTP_REMOTE_ITEM_X:-120}"
-SFTP_REMOTE_ITEM_Y="${SFTP_REMOTE_ITEM_Y:-181}"
+SFTP_REMOTE_ITEM_Y="${SFTP_REMOTE_ITEM_Y:-139}"
 # The inline prompt row (new folder / rename). Its light-blue background is
 # the observable "the row is up" signal; the input and the ok/cancel
 # buttons sit in the middle of the row.
 SFTP_PROMPT_COLOR="${SFTP_PROMPT_COLOR:-#dbeafe}"
 SFTP_PROMPT_PROBE_X="${SFTP_PROMPT_PROBE_X:-50}"
-SFTP_PROMPT_PROBE_Y="${SFTP_PROMPT_PROBE_Y:-116}"
+SFTP_PROMPT_PROBE_Y="${SFTP_PROMPT_PROBE_Y:-68}"
 SFTP_PROMPT_PROBE_W="${SFTP_PROMPT_PROBE_W:-300}"
 SFTP_PROMPT_PROBE_H="${SFTP_PROMPT_PROBE_H:-30}"
-SFTP_PROMPT_INPUT_X="${SFTP_PROMPT_INPUT_X:-230}"
-SFTP_PROMPT_INPUT_Y="${SFTP_PROMPT_INPUT_Y:-132}"
+SFTP_PROMPT_INPUT_X="${SFTP_PROMPT_INPUT_X:-226}"
+SFTP_PROMPT_INPUT_Y="${SFTP_PROMPT_INPUT_Y:-89}"
 # The strip that asks what to do with a target that already exists. Its
-# background is a fixed light yellow, and the "Overwrite" button sits at
-# the right end of the top row of the strip.
-SFTP_CONFLICT_OVERWRITE_X="${SFTP_CONFLICT_OVERWRITE_X:-182}"
-SFTP_CONFLICT_OVERWRITE_Y="${SFTP_CONFLICT_OVERWRITE_Y:-504}"
+# background is a fixed light yellow; the compact buttons sit at the right
+# of the message row. The probe reads the background left of the message.
+SFTP_CONFLICT_OVERWRITE_X="${SFTP_CONFLICT_OVERWRITE_X:-243}"
+SFTP_CONFLICT_OVERWRITE_Y="${SFTP_CONFLICT_OVERWRITE_Y:-546}"
 SFTP_CONFLICT_COLOR="${SFTP_CONFLICT_COLOR:-#fff4ce}"
-SFTP_CONFLICT_PROBE_X="${SFTP_CONFLICT_PROBE_X:-350}"
-SFTP_CONFLICT_PROBE_Y="${SFTP_CONFLICT_PROBE_Y:-520}"
-SFTP_CONFLICT_PROBE_W="${SFTP_CONFLICT_PROBE_W:-60}"
-SFTP_CONFLICT_PROBE_H="${SFTP_CONFLICT_PROBE_H:-20}"
+SFTP_CONFLICT_PROBE_X="${SFTP_CONFLICT_PROBE_X:-30}"
+SFTP_CONFLICT_PROBE_Y="${SFTP_CONFLICT_PROBE_Y:-540}"
+SFTP_CONFLICT_PROBE_W="${SFTP_CONFLICT_PROBE_W:-40}"
+SFTP_CONFLICT_PROBE_H="${SFTP_CONFLICT_PROBE_H:-10}"
 # The directory that the SFTP test writes into on the server. It lives in
 # the home of the user that runs the suite, because the SSH fixture runs
 # as the same user.
@@ -916,7 +923,7 @@ click_sftp_path_box() {
     for ((attempt = 0; attempt < iterations; attempt++)); do
         log "sftp path-box click (attempt $((attempt + 1))), X focus: $(x_focus_window)"
         click_window "$SFTP_REMOTE_PATH_X" "$SFTP_REMOTE_PATH_Y" || return 1
-        if window_region_has_color "0078d7" "$SFTP_REMOTE_PATH_X" 113 40 6; then
+        if window_region_has_color "0078d7" "$SFTP_REMOTE_PATH_X" "$SFTP_PATH_FOCUS_PROBE_Y" 40 6; then
             log "sftp path box focused"
             return 0
         fi
@@ -1102,6 +1109,30 @@ wait_for_sidebar_visible() {
 # coordinates are deterministic. The probe tolerates the panel already being
 # collapsed (a prior click or a restored preference) and retries a missed
 # button click.
+# Wait until the sidebar shows the SSH browser. The browser pane is 460px
+# wide, so (300,300) is its file list; a visible session sidebar is only
+# 220px wide and leaves (300,300) on the dark terminal.
+wait_for_sftp_browser_visible() {
+    local timeout_s="${1:-10}"
+    local iterations=$((timeout_s * 4))
+    local attempt
+    local probe_status
+
+    for ((attempt = 0; attempt < iterations; attempt++)); do
+        window_region_is_dark 300 300
+        probe_status=$?
+        if ((probe_status == 1)); then
+            return 0
+        fi
+        if ((probe_status == 2)); then
+            return 2
+        fi
+        sleep 0.25
+    done
+
+    return 1
+}
+
 collapse_sidebar_for_tabs() {
     local attempt
     local probe_status

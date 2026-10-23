@@ -1,16 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="COMTool.App.Views.SshSessionView">
-  <!-- The SFTP panel sits on the left of the terminal and is folded away
-       at first. The column of the panel takes the width that the panel
-       asks for, so that the terminal fills the window while the panel is
-       folded away. -->
-  <Grid Name="SessionGrid" ColumnDefinitions="0,4,*">
-    <ContentControl Name="SftpHost" Grid.Column="0" />
-    <GridSplitter Name="SftpSplitter"
-                  Grid.Column="1"
-                  Width="4"
-                  ResizeDirection="Columns" />
-    <ContentControl Name="TerminalHost" Grid.Column="2" />
-  </Grid>
+  <!-- The SFTP browser lives in the left sidebar, so the tab of an SSH
+       session holds only the terminal. -->
+  <ContentControl Name="TerminalHost" />
 </UserControl>

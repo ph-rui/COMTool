@@ -276,9 +276,17 @@ public sealed class SftpTransferUiTests
         await viewModel.LoadAsync(CancellationToken.None);
 
         var terminal = new TerminalControl { Process = string.Empty };
-        var view = new SshSessionView { Terminal = terminal, SftpPane = viewModel };
+        var drawer = new SftpPane { ViewModel = viewModel };
         viewModel.IsExpanded = true;
-        var window = new Window { Content = view, Width = 900, Height = 600 };
+
+        // The browser is a panel of the sidebar; the terminal keeps its
+        // own column while the question is shown.
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("420,*") };
+        grid.Children.Add(drawer);
+        Grid.SetColumn(terminal, 1);
+        grid.Children.Add(terminal);
+
+        var window = new Window { Content = grid, Width = 900, Height = 600 };
         window.Show();
         Dispatcher.UIThread.RunJobs();
 
@@ -291,9 +299,7 @@ public sealed class SftpTransferUiTests
 
             // The prompt sits inside the panel, so the terminal stays
             // usable while it is shown.
-            var drawer = view.SftpHostControl.Content as SftpPane;
-            Assert.NotNull(drawer);
-            Assert.True(drawer!.ConflictPanelControl.IsVisible);
+            Assert.True(drawer.ConflictPanelControl.IsVisible);
             Assert.Contains(
                 drawer.ConflictPanelControl,
                 drawer.GetVisualDescendants().OfType<Border>());

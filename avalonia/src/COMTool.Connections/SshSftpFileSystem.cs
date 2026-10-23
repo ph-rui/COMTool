@@ -20,6 +20,7 @@ public sealed class SshSftpFileSystem : ISftpFileSystem
 {
     private readonly SftpClient _client;
     private int _disposed;
+    private IReadOnlyDictionary<long, string>? _userNames;
 
     public SshSftpFileSystem(ConnectionInfo connectionInfo)
     {
@@ -69,7 +70,8 @@ public sealed class SshSftpFileSystem : ISftpFileSystem
                         file.GroupCanExecute,
                         file.OthersCanRead,
                         file.OthersCanWrite,
-                        file.OthersCanExecute)));
+                        file.OthersCanExecute),
+                    OwnerOf(file)));
             }
         }
         catch (SftpException ex)
@@ -82,6 +84,34 @@ public sealed class SshSftpFileSystem : ISftpFileSystem
         }
 
         return Task.FromResult<IReadOnlyList<SftpEntry>>(entries);
+    }
+
+    /// <summary>
+    /// The owner name of an entry, as MobaXterm shows it. The SFTP
+    /// protocol only carries the numeric uid, so the names are read once
+    /// from <c>/etc/passwd</c>. A server that hides the file, or that is
+    /// not a Unix system, leaves the number in place.
+    /// </summary>
+    private string OwnerOf(ISftpFile file)
+    {
+        var names = _userNames ??= LoadUserNames();
+        return names.TryGetValue(file.UserId, out var name)
+            ? name
+            : file.UserId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private IReadOnlyDictionary<long, string> LoadUserNames()
+    {
+        try
+        {
+            return PasswdUserMap.Parse(_client.ReadAllText("/etc/passwd"));
+        }
+        catch (Exception)
+        {
+            // The owner is a detail of the listing. A server that does not
+            // let the login read the passwd file must not fail the list.
+            return new Dictionary<long, string>();
+        }
     }
 
     /// <summary>

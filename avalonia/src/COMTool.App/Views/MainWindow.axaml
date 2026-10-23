@@ -128,7 +128,7 @@
                     ResizeBehavior="PreviousAndNext"
                     DragCompleted="OnSidebarSplitterDragCompleted" />
 
-      <Grid Grid.Column="2" Margin="32,0,0,0">
+      <Grid Grid.Column="2" Name="ContentArea" Margin="32,0,0,0">
         <Grid Name="MainStack">
           <!-- Empty state mirrors main2.py: one part above, two parts below. -->
           <Grid Name="EmptyState"
