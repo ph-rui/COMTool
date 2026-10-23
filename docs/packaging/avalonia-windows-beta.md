@@ -649,6 +649,48 @@ and the visible state and width are restored on launch:
 - interactive Windows confirmation is WIN-26（工具菜单三组 19 项与图标、
   两扫描仪对话框对照实机 MobaXterm 22.1 核对）。
 
+### 2026-10-23 — 工具页收敛为三个独立窗口（网络服务器 HTTP/TFTP 实机验证）
+
+- commits: `97c943c` (feat: 工具页三项 + 独立窗口框架) + 本次文档/视觉提交；
+- 依据用户要求，工具页从 22 行 MobaXterm 下拉收敛为 3 个独立窗口工具：
+  网络服务器 / 网络扫描仪 / 端口扫描仪（全部可用，无分组标题）；新增工具
+  只需 `ToolCatalog` 一条 `ToolDescriptor` 和一个窗口类，菜单、侧栏与
+  MainWindow 无需改动；重复点选只激活已打开窗口，关窗后从注册表移除；
+- 网络服务器（1:1 MobaXterm "Servers management"）：9 行服务器、每行
+  ▶/■/⚙ 按钮；HTTP 与 TFTP 真实现，其余 7 行置灰提示"暂不支持（框架已
+  预留）"；窗口 741×444、行高 40、右面板 409×300、欢迎页 5 卫星分子球、
+  表单标签右对齐、文件夹图标浏览按钮、数字框宽度与日志高度按实机截图
+  校正；HTTP 使用原始 TcpListener（GET/HEAD、目录列表开关、穿越 403/404）；
+  TFTP 为 RFC 1350 RRQ/WRQ；日志 `[HH:mm:ss]` + 运行中 `(N)` 倒计时并自动
+  滚到最新行；关窗停止全部监听；端口扫描完成后状态显示
+  "扫描完成：发现 N 个开放端口"，迟到的进度上报不会覆盖完成状态；
+- test evidence: full gate PASS — 406 tests (Core 49, SFTP 40, Connections
+  77, Terminal 11, ZMODEM 32, TestGate 49, App 148), Linux Xvfb E2E 13/13,
+  results `20261023T111625Z`；UI16 重写为三项菜单 + 开窗/单例/重开断言，
+  PORT01 增加完成状态断言；SRV01 ×5、HTTP ×7、TFTP ×4、ServerSettings ×2
+  全部通过；
+- deployment 2026-10-23 (in-place overwrite, no `.bak-*`):
+  - exe `COMTool.App-tools.exe` published from the commit above;
+  - size: 209,290,060 bytes;
+  - SHA256: `7C1D3CA3B58D3A6F4B1BB936101C84F7D44D7BFB48DA4B7F24B7FDD3695781E0`;
+  - WORK and DESKTOP copies both matched that hash via `Get-FileHash`;
+  - `BAK_COUNT=0`;
+  - smoke test: process started, `Responding=True`, then stopped;
+- interactive Windows confirmation:
+  - HTTP root `C:\Users\zhangrui\http-root`（含 `hello.txt` 与 `sub\page.html`）：
+    `curl` 返回 200 `text/plain` 正文 `hello-comtool`，目录列表包含
+    `sub/` 与 `hello.txt`，子目录页面返回原文，`/../windows/win.ini` 返回 404；
+    日志显示 `Starting/started/GET … 200`，倒计时 3596→3580 每秒递减；
+    点击 ■ 后日志出现 `HTTP server stopped`，再次 `curl` 连接被拒绝；
+  - TFTP 配置面板、欢迎页与 9 行按钮对照实机 MobaXterm 22.1 截图核对；
+  - 端口扫描仪（窗口标题"网络扫描"）扫描 127.0.0.1 得到
+    `- Port #22 (ssh): listening` … `#3389 (rdp): listening` 共 7 行，
+    顺序与格式同 MobaXterm；
+  - TFTP 真实传输（Linux `curl` 作为客户端，UDP 69）：RRQ 下载
+    `hello.txt` 返回 `hello-comtool`，WRQ 上传 `tftp-up.txt` 后 Windows
+    端文件内容 `from-linux-tftp`（15 字节）；日志显示
+    `Download: hello.txt (15 bytes)` 与 `Upload: tftp-up.txt (15 bytes)`。
+
 The previously packaged release zip is 74,795,557 bytes with SHA256:
 
 ```text

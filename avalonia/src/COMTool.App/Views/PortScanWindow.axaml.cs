@@ -93,6 +93,13 @@ public partial class PortScanWindow : Window
 
         var progress = new UiProgress<int>(done =>
         {
+            // Ignore updates queued before the scan finished: they would
+            // otherwise overwrite the final status after the completion.
+            if (!ReferenceEquals(_cts, cts))
+            {
+                return;
+            }
+
             vm.Status = $"正在扫描 {host}：{Math.Min(done, total)}/{total}";
         });
 
@@ -103,20 +110,24 @@ public partial class PortScanWindow : Window
                 : await Scanner.ScanHostPortsAsync(
                     host, NetworkServices.KnownPortNumbers, progress, cts.Token);
             vm.Result = FormatPortResults(openPorts);
+            vm.Status = openPorts.Count == 0
+                ? "扫描完成：未发现开放端口"
+                : $"扫描完成：发现 {openPorts.Count} 个开放端口";
         }
         catch (OperationCanceledException)
         {
             vm.Result = "扫描已停止";
+            vm.Status = "扫描已停止";
         }
         catch (Exception ex)
         {
             vm.Result = "";
             vm.Error = ex.Message;
+            vm.Status = "";
         }
         finally
         {
             vm.IsScanning = false;
-            vm.Status = "";
             cts.Dispose();
             if (ReferenceEquals(_cts, cts))
             {

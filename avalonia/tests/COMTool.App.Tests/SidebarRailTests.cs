@@ -776,6 +776,9 @@ public sealed class SidebarRailTests
                 Assert.Equal(
                     "- Port #22 (ssh): listening\n- Port #80 (http): listening",
                     vm.Result);
+                // 完成后显示终止状态（迟到的进度上报不会覆盖它）
+                Assert.Equal("扫描完成：发现 2 个开放端口", vm.Status);
+                Assert.False(vm.IsScanning);
             });
         }
         finally
