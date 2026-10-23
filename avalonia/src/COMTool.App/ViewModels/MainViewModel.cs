@@ -48,6 +48,25 @@ public sealed partial class SessionItem : ObservableObject
             ? new SolidColorBrush(Color.Parse("#43a047"))
             : new SolidColorBrush(Color.Parse("#90a4ae"));
 
+    /// <summary>
+    /// MobaXterm-style single-line session title: "COM117 (USB-Enhanced-SERIAL-A
+    /// CH344 (COM117))". Falls back to the bare name when the detail is empty
+    /// or just repeats it.
+    /// </summary>
+    public string RowTitle
+    {
+        get
+        {
+            if (Detail is null || Detail.Length == 0
+                || string.Equals(Detail, Name, StringComparison.OrdinalIgnoreCase))
+            {
+                return Name;
+            }
+
+            return $"{Name} ({Detail})";
+        }
+    }
+
     partial void OnIsConnectedChanged(bool value) =>
         OnPropertyChanged(nameof(IconBrush));
 }

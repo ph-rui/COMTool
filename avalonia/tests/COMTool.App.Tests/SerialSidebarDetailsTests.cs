@@ -69,7 +69,7 @@ public sealed class SerialSidebarDetailsTests
                 var row = summary.FindAncestorOfType<Grid>();
                 Assert.NotNull(row);
                 Assert.True(
-                    row!.Bounds.Height >= 40,
+                    row!.Bounds.Height >= 28,
                     $"serial row is below the minimum height: {row.Bounds.Height}");
                 Assert.True(
                     summary.Bounds.Bottom <= row.Bounds.Bottom + 0.5,

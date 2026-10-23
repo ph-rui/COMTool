@@ -27,5 +27,6 @@
   <FontFamily x:Key="IconFontAwesome">avares://COMTool.App/Assets/Fonts/fontawesome6-solid.ttf#Font Awesome 6 Free Solid</FontFamily>
   <FontFamily x:Key="IconMaterialDesign">avares://COMTool.App/Assets/Fonts/materialdesignicons6.ttf#Material Design Icons</FontFamily>
   <FontFamily x:Key="IconPhosphor">avares://COMTool.App/Assets/Fonts/phosphor.ttf#Phosphor</FontFamily>
-  <FontFamily x:Key="UiFontFamily">DejaVu Sans</FontFamily>
+  <!-- Windows: 微软雅黑（含 CJK，小字号渲染清晰）；Linux: 回退 DejaVu Sans。 -->
+  <FontFamily x:Key="UiFontFamily">Microsoft YaHei UI, Microsoft YaHei, DejaVu Sans</FontFamily>
 </ResourceDictionary>

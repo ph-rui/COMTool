@@ -529,7 +529,7 @@ and the visible state and width are restored on launch:
   stop/cancel), `NetworkScannerTests` (20: target parser single/CIDR/
   range/invalid/cap, loopback open-port discovery, closed port never
   reported open, cancellation), `ConfigTests` macro/history round-trip;
-  the automated suite passes 393 tests (App 139) and Linux Xvfb E2E passes
+  the automated suite passes 381 tests (App 139) and Linux Xvfb E2E passes
   13/13 with the rail in place;
 - interactive Windows confirmation is WIN-26 (rail tabs, real-LAN scan,
   macro send, history reopen across restart);

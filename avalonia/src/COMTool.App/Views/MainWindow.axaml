@@ -109,9 +109,13 @@
       </Grid>
     </Border>
 
+    <!-- Left margin is 0 so the sidebar (and its icon rail) sits flush on the
+         window edge, MobaXterm-style. The content column carries the former
+         16px left inset itself (16+16=32), keeping the terminal and tab strip
+         in the same absolute position as before (E2E coordinates unchanged). -->
     <Grid Grid.Row="1"
           Name="BodyGrid"
-          Margin="16,0,10,10"
+          Margin="0,0,10,10"
           ColumnDefinitions="220,3,*">
       <views:SessionSidebar Grid.Column="0"
                             Name="Sidebar" />
@@ -124,7 +128,7 @@
                     ResizeBehavior="PreviousAndNext"
                     DragCompleted="OnSidebarSplitterDragCompleted" />
 
-      <Grid Grid.Column="2" Margin="16,0,0,0">
+      <Grid Grid.Column="2" Margin="32,0,0,0">
         <Grid Name="MainStack">
           <!-- Empty state mirrors main2.py: one part above, two parts below. -->
           <Grid Name="EmptyState"
