@@ -143,7 +143,7 @@ public sealed class SidebarRailTests
     }
 
     [AvaloniaFact]
-    public void UI16_RailGoesAwayWithTheDock()
+    public void UI16_RailStaysVisibleWhenTheDockCollapses()
     {
         using var env = new TestEnvironment();
         MainWindow? window = null;
@@ -157,14 +157,84 @@ public sealed class SidebarRailTests
                 });
                 window = CreateWindow(env);
                 var sidebar = Sidebar(window);
+                var body = window.FindControl<Grid>("BodyGrid")!;
                 var toggle = window.FindControl<Button>("SessionsButton")!;
 
                 Assert.NotNull(sidebar.FindControl<Border>("SidebarRail"));
                 Click(window, toggle);
-                Assert.False(sidebar.IsVisible);
-                Click(window, toggle);
+
+                // Only the panel is retracted; the rail stays at 24px.
                 Assert.True(sidebar.IsVisible);
                 Assert.NotNull(sidebar.FindControl<Border>("SidebarRail"));
+                Assert.Equal(24, body.ColumnDefinitions[0].ActualWidth, precision: 1);
+
+                Click(window, toggle);
+                Assert.True(sidebar.IsVisible);
+                Assert.Equal(220, body.ColumnDefinitions[0].ActualWidth, precision: 1);
+                Assert.NotNull(sidebar.FindControl<Border>("SidebarRail"));
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public void UI16_RailIconTogglesItsPanel()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                env.SeedConfig(new ComtoolConfig
+                {
+                    SessionSidebar = new SessionSidebarConfig { Visible = true, Width = 220 },
+                });
+                window = CreateWindow(env);
+                var sidebar = Sidebar(window);
+                var body = window.FindControl<Grid>("BodyGrid")!;
+                var content = window.FindControl<Grid>("ContentArea")!;
+                var splitter = window.FindControl<GridSplitter>("SidebarSplitter")!;
+                var tools = sidebar.FindControl<Button>("RailToolsButton")!;
+                var sessions = sidebar.FindControl<Button>("RailSessionsButton")!;
+
+                Assert.Equal(220, body.ColumnDefinitions[0].ActualWidth, precision: 1);
+                Assert.True(splitter.IsVisible);
+
+                // Another icon switches to its panel without collapsing.
+                Click(window, tools);
+                Assert.Equal(SidebarTab.Tools, Vm(window).SidebarTab);
+                Assert.True(sidebar.FindControl<Grid>("ToolsPanel")!.IsVisible);
+                Assert.Equal(220, body.ColumnDefinitions[0].ActualWidth, precision: 1);
+
+                // The same icon again retracts the panel; the rail and the
+                // active tab stay, so a third click reopens the same panel.
+                Click(window, tools);
+                Assert.Equal(SidebarTab.Tools, Vm(window).SidebarTab);
+                Assert.True(sidebar.IsVisible);
+                Assert.NotNull(sidebar.FindControl<Border>("SidebarRail"));
+                Assert.Equal(24, body.ColumnDefinitions[0].ActualWidth, precision: 1);
+                Assert.Equal(8, content.Margin.Left);
+                Assert.False(splitter.IsVisible);
+
+                Click(window, tools);
+                Assert.Equal(SidebarTab.Tools, Vm(window).SidebarTab);
+                Assert.Equal(220, body.ColumnDefinitions[0].ActualWidth, precision: 1);
+                Assert.Equal(32, content.Margin.Left);
+                Assert.True(splitter.IsVisible);
+
+                // The sessions icon toggles the same way.
+                Click(window, sessions);
+                Assert.Equal(SidebarTab.Sessions, Vm(window).SidebarTab);
+                Assert.True(sidebar.FindControl<Grid>("SessionsPanel")!.IsVisible);
+                Click(window, sessions);
+                Assert.Equal(24, body.ColumnDefinitions[0].ActualWidth, precision: 1);
+                Click(window, sessions);
+                Assert.Equal(220, body.ColumnDefinitions[0].ActualWidth, precision: 1);
             });
         }
         finally

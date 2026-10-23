@@ -159,19 +159,3 @@ public sealed class SftpEntryIconBrushConverter : IValueConverter
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }
-
-/// <summary>
-/// The text of the tip of the button that folds the SFTP panel away.
-/// </summary>
-public sealed class SftpToggleToolTipConverter : IValueConverter
-{
-    public static readonly SftpToggleToolTipConverter Instance = new();
-
-    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
-    {
-        return value is true ? "收起 SFTP 面板" : "展开 SFTP 面板";
-    }
-
-    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
-        => throw new NotSupportedException();
-}

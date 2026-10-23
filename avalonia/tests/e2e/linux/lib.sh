@@ -39,43 +39,47 @@ DEFAULT_WINDOW_TIMEOUT="${DEFAULT_WINDOW_TIMEOUT:-20}"
 E2E_CAPTURED="${E2E_CAPTURED:-0}"
 
 # Window-relative coordinates for the 1000x650 E2E window (no decorations).
-# The sidebar starts at x=16 inside BodyGrid and is 220px wide. Its first SSH
-# row sits below the 24px sidebar header, 5px gap, 26px "SSH" section header
-# and 2px list padding, so the 40px row spans y=98..138.
+# The sidebar is 220px wide when its panel is open. Its first SSH row sits
+# below the 24px sidebar header, 5px gap, 26px "SSH" section header and 2px
+# list padding, so the 40px row spans y=98..138.
 SIDEBAR_SESSION_X="${SIDEBAR_SESSION_X:-80}"
 SIDEBAR_SESSION_Y="${SIDEBAR_SESSION_Y:-118}"
 
-# The tab strip is the first 36px row of MainStack. UI05 collapses the sidebar
-# first: MainStack then starts at x=32 (16px body margin + 16px content
-# margin), the tab list has a 10px left margin and each tab is at least 112px
-# wide with a 2px right margin. Keeping the dock collapsed makes these
-# coordinates stable; leaving it expanded shifts every tab 223px right.
+# The tab strip is the first 36px row of MainStack. Collapsing the sidebar
+# panel leaves the 24px rail on screen and shrinks the content inset from
+# 32px to 8px, so MainStack still starts at x=32 (24 + 8): the tab
+# coordinates do not change. The tab list has a 10px left margin and each
+# tab is at least 112px wide with a 2px right margin. Keeping the panel
+# collapsed makes these coordinates stable; an open sessions panel shifts
+# every tab 223px right.
 FIRST_TAB_X="${FIRST_TAB_X:-125}"
 SECOND_TAB_X="${SECOND_TAB_X:-239}"
 TAB_STRIP_Y="${TAB_STRIP_Y:-53}"
 SESSIONS_TOGGLE_X="${SESSIONS_TOGGLE_X:-201}"
 SESSIONS_TOGGLE_Y="${SESSIONS_TOGGLE_Y:-18}"
-# Calibration probe: this point is the white sidebar list when expanded and
-# the dark terminal background when collapsed.
+# Calibration probe: this point is the white sidebar list when the panel is
+# expanded and the dark terminal background when it is collapsed to the rail.
 SIDEBAR_PROBE_X="${SIDEBAR_PROBE_X:-200}"
 SIDEBAR_PROBE_Y="${SIDEBAR_PROBE_Y:-300}"
 
-# The SFTP panel of an SSH tab. In the 1000x650 test window the panel is
-# the left column of the session view, 420px wide, and it is folded away
-# until the folder button of the tab strip opens it. The MobaXterm-style
-# layout is a single remote list: an icon-only toolbar (hover tooltips in
-# Chinese), the remote path box, a sortable header row, the list, then the
-# status line and the conflict strip at the bottom. The upload files and
-# the download directory come from the system pickers, which in the e2e
-# run are answered from the COMTOOL_E2E_PICK_FILES / COMTOOL_E2E_PICK_FOLDER
-# environment (set in start_app). The coordinates below assume that the
-# sidebar is collapsed, because an expanded sidebar shifts the whole
-# content 223px to the right.
-SFTP_TOGGLE_X="${SFTP_TOGGLE_X:-858}"
-SFTP_TOGGLE_Y="${SFTP_TOGGLE_Y:-51}"
-# The browser lives in the left sidebar: 24px rail plus a 436px pane. The
-# toolbar, path row and first list row below are window-relative pixels in
-# the 1000x650 window, measured from the SFTP e2e failure screenshot.
+# The SSH-browser globe of the 24px rail. The rail buttons are 24x44px;
+# the globe is the fourth one and its orange icon spans y=182..195 in the
+# SFTP e2e failure screenshot. The same point opens and retracts the browser.
+SSH_BROWSER_RAIL_X="${SSH_BROWSER_RAIL_X:-12}"
+SSH_BROWSER_RAIL_Y="${SSH_BROWSER_RAIL_Y:-190}"
+
+# The SFTP browser of an SSH tab. It lives in the left sidebar: 24px rail
+# plus a 436px pane. There is no SFTP chip in the tab strip; the orange
+# globe of the rail opens it, and the MobaXterm-style layout is a single
+# remote list: an icon-only toolbar (hover tooltips in Chinese), the remote
+# path box, a sortable header row, the list, then the status line and the
+# conflict strip at the bottom. The upload files and the download directory
+# come from the system pickers, which in the e2e run are answered from the
+# COMTOOL_E2E_PICK_FILES / COMTOOL_E2E_PICK_FOLDER environment (set in
+# start_app). The coordinates below assume that the sidebar panel is
+# collapsed, so the browser opens at x=24 without the sessions list.
+# The toolbar, path row and first list row below are window-relative pixels
+# in the 1000x650 window, measured from the SFTP e2e failure screenshot.
 SFTP_TOOLBAR_Y="${SFTP_TOOLBAR_Y:-50}"
 SFTP_NEWFOLDER_X="${SFTP_NEWFOLDER_X:-129}"
 SFTP_RENAME_X="${SFTP_RENAME_X:-156}"
@@ -1104,11 +1108,13 @@ wait_for_sidebar_visible() {
     return 1
 }
 
-# The sidebar is docked and shifts the whole tab strip 223px while expanded.
-# Collapse it explicitly through the title-bar sessions button so tab
-# coordinates are deterministic. The probe tolerates the panel already being
-# collapsed (a prior click or a restored preference) and retries a missed
-# button click.
+# The SSH-browser globe appears only after the port poll sees a live SSH
+# transport. Wait for its orange icon in the rail before clicking it.
+wait_for_ssh_browser_rail() {
+    local timeout_s="${1:-10}"
+    wait_for_window_color "ff9800" 4 178 16 24 "$timeout_s"
+}
+
 # Wait until the sidebar shows the SSH browser. The browser pane is 460px
 # wide, so (300,300) is its file list; a visible session sidebar is only
 # 220px wide and leaves (300,300) on the dark terminal.
@@ -1133,6 +1139,11 @@ wait_for_sftp_browser_visible() {
     return 1
 }
 
+# The sidebar is docked and shifts the whole tab strip 223px while expanded.
+# Collapse it explicitly through the title-bar sessions button so tab
+# coordinates are deterministic. The probe tolerates the panel already being
+# collapsed (a prior click or a restored preference) and retries a missed
+# button click.
 collapse_sidebar_for_tabs() {
     local attempt
     local probe_status
