@@ -587,6 +587,42 @@ and the visible state and width are restored on launch:
 - interactive Windows confirmation is WIN-26 (工具菜单文案、扫描仪对话框
   布局与深度扫描行为对照实机 MobaXterm 22.1 核对，桌面解锁后补拍)。
 
+### 2026-10-23 — 网络扫描/端口扫描仪按实跑 MobaXterm v22.1 截图 1:1 重做
+
+- commits: `fb74d89` (feat) + `fe0f977` (docs)；
+- 依据 172.16.66.163 上实跑 MobaXterm Professional v22.1 的对话框截图
+  （网络扫描/端口扫描仪）推翻原"起始/结束 IP + 自由端口列表 + 延迟列"设计：
+  - 网络扫描仪 = 五段"IP 地址范围"（前三段固定+末段范围，默认 192.168.1.1→254，
+    移除本机网段自动探测）+ 固定 10 列表格（IP 地址/名称/SSH/RDP/VNC/FTP/
+    Telnet/Rlogin/HTTP/其他端口；服务端口 22/3389/5900/21/23/513/80，
+    其他端口 443/445/135/139/1433/3306/5432/8080/8443/6000）
+    + ▶ Start scan（英文标签同实测）+ ✗ 关闭（取消扫描并返回工具菜单）；
+  - 端口扫描仪（原第 7 项"暂不支持"，深度扫描功能归入此工具）= IP 地址严格
+    点分 IPv4 单输入框 + 单选"仅扫描已知端口"（默认，35 项 IANA 风格表）/
+    "扫描端口范围 [1]→[65535]"（即深度扫描，进度 N/total + 停止）；
+    结果行格式 1:1 "- Port #22 (ssh): listening"（未知端口不带服务名）；
+  - 布局修复：窄侧栏（~158px 内容区）中横排按钮/输入行溢出卡片，
+    停止按钮被挤出可点区域（headless 测试 hit-test 抓到）——按钮改竖排、
+    八段框收窄至 24px、范围框单列一行；
+- 两处 1:1 假设（截图未覆盖的渲染细节）：
+  1. 网络扫描"有结果"的填充格子未实测拍到，✓/✗ 沿用 FA f00c/f00d +
+     绿 #43a047/灰 #9e9e9e；
+  2. 端口扫描仪"仅扫描已知端口"完整表未实测，取 35 项 IANA 风格近似集
+     （覆盖实测出现的全部端口 22/123/139/445/3389/993/995/6000）；
+- test evidence: full gate PASS — 388 tests (Core 47, SFTP 40, Connections
+  66, Terminal 11, ZMODEM 32, TestGate 49, App 143), Linux Xvfb E2E 13/13
+  （测试 389→388：NetworkScannerTests 12→11，SidebarRailTests 保持 17，
+  5 个旧扫描/深扫测试重写为服务网格+端口扫描仪已知/范围/停止+非法输入）;
+- deployment 2026-10-23 (in-place overwrite, no `.bak-*`):
+  - exe `COMTool.App-singlepane.exe` published from `fe0f977`;
+  - size: 208,888,652 bytes;
+  - SHA256: `DEE698A7D252FBE32D00D7F4978C03DEBDAA8B1F5838DFCCEE486233D73DF8F1`;
+  - WORK and DESKTOP copies both matched that hash via `Get-FileHash`;
+  - `BAK_COUNT=0`;
+  - smoke test: process started, `Responding=True`, then stopped;
+- interactive Windows confirmation is WIN-26 (五段 IP 范围表单、10 列服务
+  网格、端口扫描仪两种模式与深度扫描行为对照实机 MobaXterm 22.1 核对)。
+
 The previously packaged release zip is 74,795,557 bytes with SHA256:
 
 ```text
