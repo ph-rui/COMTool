@@ -54,6 +54,22 @@ public sealed class ComtoolConfig
     [JsonPropertyName("sessionSidebar")]
     public SessionSidebarConfig SessionSidebar { get; set; } = new();
 
+    /// <summary>
+    /// The user's global macro list shown in the sidebar Macros tab. Macros
+    /// are optional: configs written before the tab existed simply load an
+    /// empty list.
+    /// </summary>
+    [JsonPropertyName("macros")]
+    public List<MacroConfig> Macros { get; set; } = new();
+
+    /// <summary>
+    /// Recently opened saved sessions, most recent first. Only kind and id
+    /// are stored; the display data is resolved from the session stores so a
+    /// removed session never leaves a stale clickable row behind.
+    /// </summary>
+    [JsonPropertyName("recentSessions")]
+    public List<RecentSessionConfig> RecentSessions { get; set; } = new();
+
     [JsonPropertyName("window")]
     public WindowConfig Window { get; set; } = new();
 
@@ -106,6 +122,39 @@ public sealed class SessionSidebarConfig
 
     [JsonPropertyName("width")]
     public int Width { get; set; } = 200;
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? Extra { get; set; }
+}
+
+public sealed class MacroConfig
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = "";
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = "";
+
+    [JsonPropertyName("text")]
+    public string Text { get; set; } = "";
+
+    [JsonPropertyName("appendEnter")]
+    public bool AppendEnter { get; set; } = true;
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? Extra { get; set; }
+}
+
+public sealed class RecentSessionConfig
+{
+    [JsonPropertyName("kind")]
+    public string Kind { get; set; } = "";
+
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = "";
+
+    [JsonPropertyName("at")]
+    public long At { get; set; }
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? Extra { get; set; }

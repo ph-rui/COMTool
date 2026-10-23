@@ -3,152 +3,475 @@
              xmlns:vm="using:COMTool.App.ViewModels"
              x:Class="COMTool.App.Views.SessionSidebar"
              x:DataType="vm:MainViewModel">
-  <Grid RowDefinitions="28,5,*" Margin="0,5,0,0">
-    <!-- Header mirrors session_sidebar.py: star + user + "User sessions". -->
-    <Grid Grid.Row="0" Margin="10,2,8,2" ColumnDefinitions="Auto,6,Auto,6,*,6,Auto">
-      <TextBlock Grid.Column="0"
-                 Text="&#xf005;"
-                 FontFamily="{DynamicResource IconFontAwesome}"
-                 FontSize="15"
-                 Foreground="#f2b01e"
-                 VerticalAlignment="Center" />
-      <TextBlock Grid.Column="2"
-                 Text="&#xf007;"
-                 FontFamily="{DynamicResource IconFontAwesome}"
-                 FontSize="15"
-                 Foreground="#5b8fd6"
-                 VerticalAlignment="Center" />
-      <TextBlock Grid.Column="4"
-                 Classes="SidebarTitle"
-                 Text="User sessions" />
-      <Button Grid.Column="6"
-              Name="SidebarAddSessionButton"
-              Classes="SidebarAddButton"
-              ToolTip.Tip="New session">
-        <Button.Flyout>
-          <MenuFlyout Placement="BottomEdgeAlignedRight">
-            <MenuItem Header="Serial" Tag="Serial" Click="OnNewSessionMenuItemClick">
-              <MenuItem.Icon>
-                <TextBlock Text="&#xf1e6;"
-                           FontFamily="{DynamicResource IconFontAwesome}"
-                           FontSize="14"
-                           Foreground="#43a047"
-                           VerticalAlignment="Center" />
-              </MenuItem.Icon>
-            </MenuItem>
-            <MenuItem Header="SSH" Tag="SSH" Click="OnNewSessionMenuItemClick">
-              <MenuItem.Icon>
-                <TextBlock Text="&#xf233;"
-                           FontFamily="{DynamicResource IconFontAwesome}"
-                           FontSize="14"
-                           Foreground="#1976d2"
-                           VerticalAlignment="Center" />
-              </MenuItem.Icon>
-            </MenuItem>
-            <MenuItem Header="Telnet" Tag="Telnet" Click="OnNewSessionMenuItemClick">
-              <MenuItem.Icon>
-                <TextBlock Text="&#xf120;"
-                           FontFamily="{DynamicResource IconFontAwesome}"
-                           FontSize="14"
-                           Foreground="#00897b"
-                           VerticalAlignment="Center" />
-              </MenuItem.Icon>
-            </MenuItem>
-            <MenuItem Header="TCP" Tag="TCP" Click="OnNewSessionMenuItemClick">
-              <MenuItem.Icon>
-                <TextBlock Text="&#xf0ac;"
-                           FontFamily="{DynamicResource IconFontAwesome}"
-                           FontSize="14"
-                           Foreground="#f57c00"
-                           VerticalAlignment="Center" />
-              </MenuItem.Icon>
-            </MenuItem>
-            <MenuItem Header="Local terminal" Tag="Local" Click="OnNewSessionMenuItemClick">
-              <MenuItem.Icon>
-                <TextBlock Text="&#xf108;"
-                           FontFamily="{DynamicResource IconFontAwesome}"
-                           FontSize="14"
-                           Foreground="#607d8b"
-                           VerticalAlignment="Center" />
-              </MenuItem.Icon>
-            </MenuItem>
-          </MenuFlyout>
-        </Button.Flyout>
-        <TextBlock Text="&#xf067;"
+  <Grid ColumnDefinitions="24,*" Margin="0,5,0,0">
+    <!-- MobaXterm-style icon rail: Sessions / Tools / Macros / History. -->
+    <Border Grid.Column="0"
+            Name="SidebarRail"
+            Background="{DynamicResource SidebarRailBackgroundBrush}"
+            CornerRadius="3,0,0,3">
+      <StackPanel>
+        <Button Name="RailSessionsButton"
+                Classes="RailButton"
+                Classes.active="{Binding IsSessionsTab}"
+                Tag="Sessions"
+                Click="OnRailTabClick"
+                ToolTip.Tip="会话">
+          <TextBlock Text="&#xf005;"
+                     FontFamily="{DynamicResource IconFontAwesome}"
+                     FontSize="14"
+                     Foreground="#f2b01e" />
+        </Button>
+        <Button Name="RailToolsButton"
+                Classes="RailButton"
+                Classes.active="{Binding IsToolsTab}"
+                Tag="Tools"
+                Click="OnRailTabClick"
+                ToolTip.Tip="工具">
+          <TextBlock Text="&#xf7d9;"
+                     FontFamily="{DynamicResource IconFontAwesome}"
+                     FontSize="14"
+                     Foreground="#d9534f" />
+        </Button>
+        <Button Name="RailMacrosButton"
+                Classes="RailButton"
+                Classes.active="{Binding IsMacrosTab}"
+                Tag="Macros"
+                Click="OnRailTabClick"
+                ToolTip.Tip="宏">
+          <TextBlock Text="&#xf1d8;"
+                     FontFamily="{DynamicResource IconFontAwesome}"
+                     FontSize="14"
+                     Foreground="#2f7ed8" />
+        </Button>
+        <Button Name="RailHistoryButton"
+                Classes="RailButton"
+                Classes.active="{Binding IsHistoryTab}"
+                Tag="History"
+                Click="OnRailTabClick"
+                ToolTip.Tip="历史">
+          <TextBlock Text="&#xf1da;"
+                     FontFamily="{DynamicResource IconFontAwesome}"
+                     FontSize="14"
+                     Foreground="#e0a526" />
+        </Button>
+      </StackPanel>
+    </Border>
+
+    <!-- Panel content: a header plus exactly one visible body per tab. -->
+    <Grid Grid.Column="1" RowDefinitions="28,5,*">
+      <Grid Grid.Row="0" Margin="8,2,6,2" ColumnDefinitions="Auto,6,*,6,Auto">
+        <TextBlock Grid.Column="0"
+                   Text="&#xf007;"
                    FontFamily="{DynamicResource IconFontAwesome}"
-                   FontSize="13"
-                   Foreground="White" />
-      </Button>
-    </Grid>
+                   FontSize="15"
+                   Foreground="#5b8fd6"
+                   VerticalAlignment="Center"
+                   IsVisible="{Binding IsSessionsTab}" />
+        <TextBlock Grid.Column="2"
+                   Classes="SidebarTitle"
+                   Text="{Binding SidebarTitle}"
+                   TextTrimming="CharacterEllipsis" />
+        <Button Grid.Column="4"
+                Name="SidebarAddSessionButton"
+                Classes="SidebarAddButton"
+                IsVisible="{Binding IsSessionsTab}"
+                ToolTip.Tip="New session">
+          <Button.Flyout>
+            <MenuFlyout Placement="BottomEdgeAlignedRight">
+              <MenuItem Header="Serial" Tag="Serial" Click="OnNewSessionMenuItemClick">
+                <MenuItem.Icon>
+                  <TextBlock Text="&#xf1e6;"
+                             FontFamily="{DynamicResource IconFontAwesome}"
+                             FontSize="14"
+                             Foreground="#43a047"
+                             VerticalAlignment="Center" />
+                </MenuItem.Icon>
+              </MenuItem>
+              <MenuItem Header="SSH" Tag="SSH" Click="OnNewSessionMenuItemClick">
+                <MenuItem.Icon>
+                  <TextBlock Text="&#xf233;"
+                             FontFamily="{DynamicResource IconFontAwesome}"
+                             FontSize="14"
+                             Foreground="#1976d2"
+                             VerticalAlignment="Center" />
+                </MenuItem.Icon>
+              </MenuItem>
+              <MenuItem Header="Telnet" Tag="Telnet" Click="OnNewSessionMenuItemClick">
+                <MenuItem.Icon>
+                  <TextBlock Text="&#xf120;"
+                             FontFamily="{DynamicResource IconFontAwesome}"
+                             FontSize="14"
+                             Foreground="#00897b"
+                             VerticalAlignment="Center" />
+                </MenuItem.Icon>
+              </MenuItem>
+              <MenuItem Header="TCP" Tag="TCP" Click="OnNewSessionMenuItemClick">
+                <MenuItem.Icon>
+                  <TextBlock Text="&#xf0ac;"
+                             FontFamily="{DynamicResource IconFontAwesome}"
+                             FontSize="14"
+                             Foreground="#f57c00"
+                             VerticalAlignment="Center" />
+                </MenuItem.Icon>
+              </MenuItem>
+              <MenuItem Header="Local terminal" Tag="Local" Click="OnNewSessionMenuItemClick">
+                <MenuItem.Icon>
+                  <TextBlock Text="&#xf108;"
+                             FontFamily="{DynamicResource IconFontAwesome}"
+                             FontSize="14"
+                             Foreground="#607d8b"
+                             VerticalAlignment="Center" />
+                </MenuItem.Icon>
+              </MenuItem>
+            </MenuFlyout>
+          </Button.Flyout>
+          <TextBlock Text="&#xf067;"
+                     FontFamily="{DynamicResource IconFontAwesome}"
+                     FontSize="13"
+                     Foreground="White" />
+        </Button>
+        <Button Grid.Column="4"
+                Name="SidebarAddMacroButton"
+                Classes="SidebarAddButton"
+                IsVisible="{Binding IsMacrosTab}"
+                Click="OnAddMacroClick"
+                ToolTip.Tip="新建宏">
+          <TextBlock Text="&#xf067;"
+                     FontFamily="{DynamicResource IconFontAwesome}"
+                     FontSize="13"
+                     Foreground="White" />
+        </Button>
+        <Button Grid.Column="4"
+                Name="SidebarClearHistoryButton"
+                Classes="SidebarTextButton"
+                IsVisible="{Binding IsHistoryTab}"
+                Click="OnClearHistoryClick"
+                ToolTip.Tip="清空历史">
+          <TextBlock Text="清空" FontSize="11" />
+        </Button>
+      </Grid>
 
-    <Grid Grid.Row="2" Margin="16,0,0,0">
-      <Border Name="SessionListFrame"
-              Background="{DynamicResource SidebarListBackgroundBrush}"
-              BorderBrush="{DynamicResource SidebarBorderBrush}"
-              BorderThickness="1"
-              CornerRadius="3"
-              Padding="2">
-        <Grid>
-          <ScrollViewer HorizontalScrollBarVisibility="Disabled"
-                        VerticalScrollBarVisibility="Auto">
-            <ItemsControl ItemsSource="{Binding Sections}">
-              <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="vm:SidebarSection">
-                  <StackPanel>
-                    <TextBlock Classes="SectionHeader"
-                               Text="{Binding Title}"
-                               IsVisible="{Binding ShowHeader}" />
-                    <ItemsControl ItemsSource="{Binding Items}">
-                      <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="vm:SessionItem">
-                          <Grid MinHeight="40"
-                                ColumnDefinitions="16,*,Auto"
-                                Background="Transparent"
-                                Cursor="Hand"
-                                Tapped="OnSessionTapped">
-                            <TextBlock Grid.Column="0"
-                                       Text="{Binding IconGlyph}"
-                                       FontFamily="{DynamicResource IconFontAwesome}"
-                                       FontSize="14"
-                                       Foreground="{Binding IconBrush}"
-                                       VerticalAlignment="Center"
-                                       Margin="6,0,0,0" />
-                            <StackPanel Grid.Column="1"
-                                        Margin="6,3,4,3"
-                                        VerticalAlignment="Center"
-                                        Spacing="0">
-                              <TextBlock Classes="SessionName" Text="{Binding Name}" />
-                              <TextBlock Classes="SessionDetail"
-                                         Text="{Binding Detail}"
-                                         IsVisible="{Binding Detail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-                              <TextBlock Classes="SessionDetail"
-                                         Text="{Binding SerialSettings}"
-                                         IsVisible="{Binding SerialSettings, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-                            </StackPanel>
-                            <TextBlock Grid.Column="2"
-                                       Classes="SessionConnecting"
-                                       Text="Connecting..."
-                                       IsVisible="{Binding IsConnecting}"
-                                       VerticalAlignment="Center"
-                                       Margin="0,0,6,0" />
-                          </Grid>
-                        </DataTemplate>
-                      </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                  </StackPanel>
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
-          </ScrollViewer>
+      <!-- Sessions -->
+      <Grid Grid.Row="2" Name="SessionsPanel" Margin="4,0,2,0" IsVisible="{Binding IsSessionsTab}">
+        <Border Name="SessionListFrame"
+                Background="{DynamicResource SidebarListBackgroundBrush}"
+                BorderBrush="{DynamicResource SidebarBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="3"
+                Padding="2">
+          <Grid>
+            <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                          VerticalScrollBarVisibility="Auto">
+              <ItemsControl ItemsSource="{Binding Sections}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:SidebarSection">
+                    <StackPanel>
+                      <TextBlock Classes="SectionHeader"
+                                 Text="{Binding Title}"
+                                 IsVisible="{Binding ShowHeader}" />
+                      <ItemsControl ItemsSource="{Binding Items}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="vm:SessionItem">
+                            <Grid MinHeight="40"
+                                  ColumnDefinitions="16,*,Auto"
+                                  Background="Transparent"
+                                  Cursor="Hand"
+                                  Tapped="OnSessionTapped">
+                              <TextBlock Grid.Column="0"
+                                         Text="{Binding IconGlyph}"
+                                         FontFamily="{DynamicResource IconFontAwesome}"
+                                         FontSize="14"
+                                         Foreground="{Binding IconBrush}"
+                                         VerticalAlignment="Center"
+                                         Margin="6,0,0,0" />
+                              <StackPanel Grid.Column="1"
+                                          Margin="6,3,4,3"
+                                          VerticalAlignment="Center"
+                                          Spacing="0">
+                                <TextBlock Classes="SessionName" Text="{Binding Name}" />
+                                <TextBlock Classes="SessionDetail"
+                                           Text="{Binding Detail}"
+                                           IsVisible="{Binding Detail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                <TextBlock Classes="SessionDetail"
+                                           Text="{Binding SerialSettings}"
+                                           IsVisible="{Binding SerialSettings, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                              </StackPanel>
+                              <TextBlock Grid.Column="2"
+                                         Classes="SessionConnecting"
+                                         Text="Connecting..."
+                                         IsVisible="{Binding IsConnecting}"
+                                         VerticalAlignment="Center"
+                                         Margin="0,0,6,0" />
+                            </Grid>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </StackPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
 
-          <TextBlock Text="No saved sessions"
-                     FontSize="12"
-                     Foreground="{DynamicResource WindowTextBrush}"
-                     Margin="4,8,4,0"
-                     VerticalAlignment="Top"
-                     IsVisible="{Binding !HasSessions}" />
-        </Grid>
-      </Border>
+            <TextBlock Text="No saved sessions"
+                       FontSize="12"
+                       Foreground="{DynamicResource WindowTextBrush}"
+                       Margin="4,8,4,0"
+                       VerticalAlignment="Top"
+                       IsVisible="{Binding !HasSessions}" />
+          </Grid>
+        </Border>
+      </Grid>
+
+      <!-- Tools: network scanner -->
+      <Grid Grid.Row="2" Name="ToolsPanel" RowDefinitions="Auto,*" Margin="4,0,2,0" IsVisible="{Binding IsToolsTab}">
+        <Border Grid.Row="0"
+                Classes="SidebarCard"
+                Margin="0,0,0,4">
+          <StackPanel Spacing="4">
+            <TextBlock Classes="SidebarFieldLabel" Text="目标（IP / CIDR / 范围，逗号分隔）" />
+            <TextBox Name="ScanTargetBox"
+                     Text="{Binding ScanTarget}"
+                     PlaceholderText="192.168.1.0/24"
+                     FontSize="11" />
+            <TextBlock Classes="SidebarFieldLabel" Text="端口（逗号分隔）" />
+            <TextBox Name="ScanPortsBox"
+                     Text="{Binding ScanPorts}"
+                     PlaceholderText="22,23"
+                     FontSize="11" />
+            <StackPanel Orientation="Horizontal"
+                        Spacing="6"
+                        Margin="0,2,0,0">
+              <Button Name="ScanStartButton"
+                      Classes="SidebarActionButton"
+                      Content="扫描"
+                      IsEnabled="{Binding !IsScanning}"
+                      Click="OnScanStartClick" />
+              <Button Name="ScanStopButton"
+                      Classes="SidebarActionButton"
+                      Content="停止"
+                      IsEnabled="{Binding IsScanning}"
+                      Click="OnScanStopClick" />
+            </StackPanel>
+            <TextBlock Classes="SidebarError"
+                       Text="{Binding ScanError}"
+                       IsVisible="{Binding ScanError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+          </StackPanel>
+        </Border>
+        <Border Grid.Row="1"
+                Background="{DynamicResource SidebarListBackgroundBrush}"
+                BorderBrush="{DynamicResource SidebarBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="3"
+                Padding="2">
+          <Grid>
+            <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                          VerticalScrollBarVisibility="Auto">
+              <StackPanel>
+                <TextBlock Classes="SidebarDetail"
+                           Text="{Binding ScanStatus}"
+                           Margin="4,4,4,0" />
+                <ItemsControl ItemsSource="{Binding ScanResults}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ScanResultItem">
+                      <Grid Margin="4,3,4,3" ColumnDefinitions="*,Auto">
+                        <StackPanel Grid.Column="0" Spacing="0">
+                          <TextBlock Classes="SessionName"
+                                     Text="{Binding Address}"
+                                     FontSize="11" />
+                          <TextBlock Classes="SessionDetail"
+                                     Text="{Binding HostName}"
+                                     IsVisible="{Binding HasHostName}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1"
+                                    Spacing="0"
+                                    VerticalAlignment="Center">
+                          <TextBlock Classes="SessionDetail"
+                                     Text="{Binding Ports}"
+                                     IsVisible="{Binding HasPorts}" />
+                          <TextBlock Classes="SessionDetail"
+                                     Text="{Binding Latency}"
+                                     IsVisible="{Binding HasLatency}" />
+                        </StackPanel>
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </ScrollViewer>
+            <TextBlock Text="点击扫描开始"
+                       FontSize="12"
+                       Foreground="{DynamicResource WindowTextBrush}"
+                       Margin="4,8,4,0"
+                       VerticalAlignment="Top"
+                       IsVisible="{Binding !HasScanResults}" />
+          </Grid>
+        </Border>
+      </Grid>
+
+      <!-- Macros -->
+      <Grid Grid.Row="2" Name="MacrosPanel" RowDefinitions="Auto,*" Margin="4,0,2,0" IsVisible="{Binding IsMacrosTab}">
+        <Border Grid.Row="0"
+                Classes="SidebarCard"
+                Margin="0,0,0,4"
+                IsVisible="{Binding IsMacroEditorOpen}">
+          <StackPanel Spacing="4">
+            <TextBlock Classes="SidebarFieldLabel" Text="宏名称" />
+            <TextBox Name="MacroNameBox"
+                     Text="{Binding MacroEditorName}"
+                     PlaceholderText="例如：重启"
+                     FontSize="11" />
+            <TextBlock Classes="SidebarFieldLabel" Text="命令" />
+            <TextBox Name="MacroTextBox"
+                     Text="{Binding MacroEditorText}"
+                     PlaceholderText="要发送的命令"
+                     FontSize="11"
+                     AcceptsReturn="True"
+                     Height="48" />
+            <CheckBox Content="发送后回车"
+                      IsChecked="{Binding MacroEditorAppendEnter}"
+                      FontSize="11" />
+            <TextBlock Classes="SidebarError"
+                       Text="{Binding MacroEditorError}"
+                       IsVisible="{Binding MacroEditorError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            <StackPanel Orientation="Horizontal"
+                        Spacing="6"
+                        Margin="0,2,0,0">
+              <Button Name="MacroSaveButton"
+                      Classes="SidebarActionButton"
+                      Content="保存"
+                      Click="OnMacroSaveClick" />
+              <Button Name="MacroCancelButton"
+                      Classes="SidebarActionButton"
+                      Content="取消"
+                      Click="OnMacroCancelClick" />
+            </StackPanel>
+          </StackPanel>
+        </Border>
+        <Border Grid.Row="1"
+                Background="{DynamicResource SidebarListBackgroundBrush}"
+                BorderBrush="{DynamicResource SidebarBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="3"
+                Padding="2">
+          <Grid>
+            <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                          VerticalScrollBarVisibility="Auto">
+              <ItemsControl ItemsSource="{Binding Macros}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:MacroItem">
+                    <Grid Margin="4,2,2,2"
+                          ColumnDefinitions="*,Auto,Auto,Auto"
+                          Background="Transparent">
+                      <StackPanel Grid.Column="0"
+                                  Margin="0,0,4,0"
+                                  VerticalAlignment="Center"
+                                  Spacing="0">
+                        <TextBlock Classes="SessionName"
+                                   Text="{Binding Name}"
+                                   FontSize="11" />
+                        <TextBlock Classes="SessionDetail"
+                                   Text="{Binding Text}"
+                                   TextTrimming="CharacterEllipsis" />
+                      </StackPanel>
+                      <Button Grid.Column="1"
+                              Classes="SidebarIconButton"
+                              ToolTip.Tip="发送到当前终端"
+                              IsEnabled="{Binding $parent[UserControl].DataContext.CanSendMacro}"
+                              Click="OnMacroSendClick">
+                        <TextBlock Text="&#xf1d8;"
+                                   FontFamily="{DynamicResource IconFontAwesome}"
+                                   FontSize="12"
+                                   Foreground="#2f7ed8" />
+                      </Button>
+                      <Button Grid.Column="2"
+                              Classes="SidebarIconButton"
+                              ToolTip.Tip="编辑"
+                              Click="OnMacroEditClick">
+                        <TextBlock Text="&#xf044;"
+                                   FontFamily="{DynamicResource IconFontAwesome}"
+                                   FontSize="12"
+                                   Foreground="#607d8b" />
+                      </Button>
+                      <Button Grid.Column="3"
+                              Classes="SidebarIconButton"
+                              ToolTip.Tip="删除"
+                              Click="OnMacroDeleteClick">
+                        <TextBlock Text="&#xf1f8;"
+                                   FontFamily="{DynamicResource IconFontAwesome}"
+                                   FontSize="12"
+                                   Foreground="#c62828" />
+                      </Button>
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+            <TextBlock Text="暂无宏"
+                       FontSize="12"
+                       Foreground="{DynamicResource WindowTextBrush}"
+                       Margin="4,8,4,0"
+                       VerticalAlignment="Top"
+                       IsVisible="{Binding !HasMacros}" />
+          </Grid>
+        </Border>
+      </Grid>
+
+      <!-- History -->
+      <Grid Grid.Row="2" Name="HistoryPanel" Margin="4,0,2,0" IsVisible="{Binding IsHistoryTab}">
+        <Border Background="{DynamicResource SidebarListBackgroundBrush}"
+                BorderBrush="{DynamicResource SidebarBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="3"
+                Padding="2">
+          <Grid>
+            <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                          VerticalScrollBarVisibility="Auto">
+              <ItemsControl ItemsSource="{Binding History}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:HistoryEntry">
+                    <Grid Margin="4,2,2,2"
+                          MinHeight="30"
+                          ColumnDefinitions="16,*,Auto"
+                          Background="Transparent"
+                          Cursor="Hand"
+                          Tapped="OnHistoryTapped">
+                      <TextBlock Grid.Column="0"
+                                 Text="{Binding IconGlyph}"
+                                 FontFamily="{DynamicResource IconFontAwesome}"
+                                 FontSize="13"
+                                 Foreground="#607d8b"
+                                 VerticalAlignment="Center"
+                                 Margin="4,0,0,0" />
+                      <StackPanel Grid.Column="1"
+                                  Margin="4,0,4,0"
+                                  VerticalAlignment="Center"
+                                  Spacing="0">
+                        <TextBlock Classes="SessionName"
+                                   Text="{Binding Name}"
+                                   FontSize="11" />
+                        <TextBlock Classes="SessionDetail"
+                                   Text="{Binding Detail}"
+                                   IsVisible="{Binding Detail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                      </StackPanel>
+                      <TextBlock Grid.Column="2"
+                                 Classes="SessionDetail"
+                                 Text="{Binding TimeText}"
+                                 VerticalAlignment="Center"
+                                 Margin="0,0,4,0" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+            <TextBlock Text="暂无最近会话"
+                       FontSize="12"
+                       Foreground="{DynamicResource WindowTextBrush}"
+                       Margin="4,8,4,0"
+                       VerticalAlignment="Top"
+                       IsVisible="{Binding !HasHistory}" />
+          </Grid>
+        </Border>
+      </Grid>
     </Grid>
   </Grid>
 </UserControl>

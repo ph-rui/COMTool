@@ -87,6 +87,90 @@
     <Setter Property="Background" Value="{DynamicResource AccentHoverBrush}" />
   </Style>
 
+  <!-- MobaXterm-style sidebar icon rail cells. -->
+  <Style Selector="Button.RailButton">
+    <Setter Property="Width" Value="24" />
+    <Setter Property="Height" Value="44" />
+    <Setter Property="MinWidth" Value="0" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="{DynamicResource SidebarBorderBrush}" />
+    <Setter Property="BorderThickness" Value="0,0,0,1" />
+    <Setter Property="CornerRadius" Value="0" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+  <Style Selector="Button.RailButton:pointerover">
+    <Setter Property="Background" Value="{DynamicResource SidebarRailActiveBrush}" />
+  </Style>
+  <Style Selector="Button.RailButton.active">
+    <Setter Property="Background" Value="{DynamicResource SidebarRailActiveBrush}" />
+    <Setter Property="BorderThickness" Value="0" />
+  </Style>
+
+  <!-- Sidebar sub-panels (Tools / Macros). -->
+  <Style Selector="Border.SidebarCard">
+    <Setter Property="Background" Value="{DynamicResource SidebarListBackgroundBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource SidebarBorderBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="3" />
+    <Setter Property="Padding" Value="6" />
+  </Style>
+  <Style Selector="TextBlock.SidebarFieldLabel">
+    <Setter Property="FontSize" Value="10" />
+    <Setter Property="Foreground" Value="{DynamicResource SidebarSectionBrush}" />
+  </Style>
+  <Style Selector="TextBlock.SidebarError">
+    <Setter Property="FontSize" Value="10" />
+    <Setter Property="Foreground" Value="#c62828" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+  </Style>
+  <Style Selector="TextBlock.SidebarDetail">
+    <Setter Property="FontSize" Value="10" />
+    <Setter Property="Foreground" Value="{DynamicResource SessionDetailBrush}" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+  </Style>
+  <Style Selector="Button.SidebarActionButton">
+    <Setter Property="Padding" Value="8,2" />
+    <Setter Property="FontSize" Value="11" />
+    <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+    <Setter Property="Foreground" Value="White" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="CornerRadius" Value="3" />
+  </Style>
+  <Style Selector="Button.SidebarActionButton:pointerover">
+    <Setter Property="Background" Value="{DynamicResource AccentHoverBrush}" />
+  </Style>
+  <Style Selector="Button.SidebarActionButton:disabled">
+    <Setter Property="Opacity" Value="0.5" />
+  </Style>
+  <Style Selector="Button.SidebarTextButton">
+    <Setter Property="Padding" Value="6,2" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+  </Style>
+  <Style Selector="Button.SidebarTextButton:pointerover">
+    <Setter Property="Background" Value="{DynamicResource TitleBarHoverBrush}" />
+  </Style>
+  <Style Selector="Button.SidebarIconButton">
+    <Setter Property="Width" Value="22" />
+    <Setter Property="Height" Value="22" />
+    <Setter Property="MinWidth" Value="0" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="CornerRadius" Value="3" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+  <Style Selector="Button.SidebarIconButton:pointerover">
+    <Setter Property="Background" Value="{DynamicResource TitleBarHoverBrush}" />
+  </Style>
+
   <Style Selector="Border.TabItemBorder">
     <Setter Property="Height" Value="36" />
     <Setter Property="MinWidth" Value="112" />

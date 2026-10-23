@@ -10,6 +10,7 @@ using Avalonia.VisualTree;
 using COMTool.App.Services;
 using COMTool.App.ViewModels;
 using COMTool.Connections;
+using COMTool.Connections.NetworkScan;
 using COMTool.Core.Config;
 using COMTool.Sftp;
 using COMTool.Terminal;
@@ -38,11 +39,16 @@ public partial class MainWindow : Window
     private readonly Dictionary<TerminalTab, SerialTabState> _serialTabs = new();
     private readonly HashSet<TerminalTab> _sshRestarts = new();
     private readonly HashSet<TerminalTab> _telnetRestarts = new();
+    private CancellationTokenSource? _scanCts;
+    private INetworkScanner? _scanner;
+    private string _historySignature = "";
 
     internal Func<SerialConnectionConfig, ISerialConnection> SerialConnectionFactory { get; set; } =
         config => SerialConnection.Open(config);
 
     internal Func<SessionItem, Task>? SessionActivationOverrideForTests { get; set; }
+
+    internal INetworkScanner? NetworkScannerForTests { get; set; }
     private static readonly IBrush StatusInfoBrush =
         new SolidColorBrush(Color.Parse("#008200"));
     private static readonly IBrush StatusWarningBrush =
@@ -77,6 +83,14 @@ public partial class MainWindow : Window
         Sidebar.EditRequested += OnSessionEditRequested;
         Sidebar.RemoveRequested += OnSessionRemoveRequested;
         Sidebar.NewSessionRequested += OnSidebarNewSessionRequested;
+        Sidebar.MacroSendRequested += OnMacroSendRequested;
+        Sidebar.MacroDeleteRequested += OnMacroDeleteRequested;
+        Sidebar.MacroSaveRequested += OnMacroSaveRequested;
+        Sidebar.MacroCancelRequested += OnMacroCancelRequested;
+        Sidebar.HistoryActivated += OnHistoryActivated;
+        Sidebar.HistoryClearRequested += OnHistoryClearRequested;
+        Sidebar.ScanStartRequested += OnScanStartRequested;
+        Sidebar.ScanStopRequested += OnScanStopRequested;
         Opened += OnOpened;
     }
 
@@ -113,6 +127,8 @@ public partial class MainWindow : Window
                 ApplySidebarConfig();
                 ApplyWindowSizeConfig();
                 RefreshSidebar();
+                LoadSidebarData();
+                viewModel.ScanTarget = NetworkScanTargets.DetectLocalCidr();
                 _portTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
                 _portTimer.Tick += (_, _) => RefreshPorts();
                 _portTimer.Start();
@@ -306,6 +322,10 @@ public partial class MainWindow : Window
 
         var (serial, ssh, telnet, tcp) = ConnectedSessions();
         viewModel.LoadSessions(_config, serial, ssh, tcp, telnet);
+        // Keep the History tab in sync: prune entries whose saved session was
+        // removed, and pick up newly added sessions. Cheap no-op when nothing
+        // changed (signature compare), so the 2s port-scan refresh is fine.
+        RefreshHistory(viewModel);
     }
 
     private async void OnSessionActivated(object? sender, SessionItem item) =>
@@ -318,6 +338,13 @@ public partial class MainWindow : Window
             || item.IsConnecting)
         {
             return;
+        }
+
+        // Every activation of a saved session is a "recent" event. Local
+        // terminals have no saved session behind them and are not recorded.
+        if (item.Kind != SessionKind.Local)
+        {
+            RecordHistory(viewModel, item);
         }
 
         // SSH, Telnet and TCP clients are saved endpoints, not a single
@@ -2833,6 +2860,490 @@ public partial class MainWindow : Window
         config.Visible = _sidebarVisible;
         config.Width = (int)Math.Round(ClampSidebarWidth(_sidebarWidth));
         _config.Save();
+    }
+
+    // ------------------------------------------------------------------
+    // Sidebar rail data: Macros / History / Tools (network scanner)
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// Loads the persisted macro list into the view model and refreshes the
+    /// History tab. Called once after the config is available.
+    /// </summary>
+    private void LoadSidebarData()
+    {
+        if (_config is null || DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        viewModel.Macros.Clear();
+        var idAssigned = false;
+        foreach (var macro in _config.Config.Macros)
+        {
+            if (string.IsNullOrWhiteSpace(macro.Name) || string.IsNullOrEmpty(macro.Text))
+            {
+                continue;
+            }
+
+            if (string.IsNullOrEmpty(macro.Id))
+            {
+                macro.Id = Guid.NewGuid().ToString("N");
+                idAssigned = true;
+            }
+
+            viewModel.Macros.Add(new MacroItem
+            {
+                Id = macro.Id,
+                Name = macro.Name,
+                Text = macro.Text,
+                AppendEnter = macro.AppendEnter,
+            });
+        }
+
+        if (idAssigned)
+        {
+            _config.Save();
+        }
+
+        RefreshHistory(viewModel, force: true);
+    }
+
+    private void RecordHistory(MainViewModel viewModel, SessionItem item)
+    {
+        if (_config is null)
+        {
+            return;
+        }
+
+        var kind = item.Kind.ToString();
+        var entries = _config.Config.RecentSessions;
+        entries.RemoveAll(entry =>
+            entry.Kind == kind
+            && string.Equals(entry.Id, item.SessionId, StringComparison.OrdinalIgnoreCase));
+        entries.Insert(0, new RecentSessionConfig
+        {
+            Kind = kind,
+            Id = item.SessionId,
+            At = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+        });
+        while (entries.Count > MaxHistoryEntries)
+        {
+            entries.RemoveAt(entries.Count - 1);
+        }
+
+        _config.Save();
+        RefreshHistory(viewModel, force: true);
+    }
+
+    private const int MaxHistoryEntries = 20;
+
+    /// <summary>
+    /// Rebuilds the History tab from the persisted entries, resolving each
+    /// kind|id against the live sidebar (preferred) or the saved session
+    /// stores. Entries whose session no longer exists are pruned. When the
+    /// resolved set is unchanged the view model is left alone, so the
+    /// periodic port-scan refresh stays a no-op.
+    /// </summary>
+    private void RefreshHistory(MainViewModel viewModel, bool force = false)
+    {
+        if (_config is null)
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var entries = _config.Config.RecentSessions;
+        var kept = new List<RecentSessionConfig>();
+        var history = new List<HistoryEntry>();
+        foreach (var entry in entries)
+        {
+            if (ResolveHistorySession(entry) is not { } item)
+            {
+                continue;
+            }
+
+            kept.Add(entry);
+            history.Add(new HistoryEntry
+            {
+                Kind = entry.Kind,
+                Id = entry.Id,
+                At = entry.At,
+                Session = item,
+                TimeText = MainViewModel.FormatRelativeTime(entry.At, now),
+            });
+        }
+
+        if (kept.Count > MaxHistoryEntries)
+        {
+            // An older version (or a hand-edited file) may hold more than the
+            // cap; trim the oldest entries and persist the result.
+            kept.RemoveRange(MaxHistoryEntries, kept.Count - MaxHistoryEntries);
+            history.RemoveRange(MaxHistoryEntries, history.Count - MaxHistoryEntries);
+        }
+
+        if (kept.Count != entries.Count)
+        {
+            // At least one referenced session was deleted: persist the prune.
+            _config.Config.RecentSessions = kept;
+            _config.Save();
+            force = true;
+        }
+
+        var signature = string.Join('\u0001', history.Select(h => $"{h.Kind}|{h.Id}|{h.At}"));
+        if (!force && signature == _historySignature)
+        {
+            return;
+        }
+
+        _historySignature = signature;
+        viewModel.History.Clear();
+        foreach (var item in history)
+        {
+            viewModel.History.Add(item);
+        }
+    }
+
+    private SessionItem? ResolveHistorySession(RecentSessionConfig entry)
+    {
+        // Prefer the live sidebar item so connection state stays current.
+        if (DataContext is MainViewModel viewModel)
+        {
+            foreach (var section in viewModel.Sections)
+            {
+                foreach (var item in section.Items)
+                {
+                    if (item.Kind.ToString() == entry.Kind
+                        && string.Equals(item.SessionId, entry.Id, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return item;
+                    }
+                }
+            }
+        }
+
+        if (_config is null)
+        {
+            return null;
+        }
+
+        switch (entry.Kind)
+        {
+            case nameof(SessionKind.Serial):
+                if (_config.SerialSessions.Get(entry.Id) is not { } serial)
+                {
+                    return null;
+                }
+
+                var detail = serial.Name;
+                if (string.IsNullOrWhiteSpace(detail)
+                    || string.Equals(detail, serial.Port, StringComparison.OrdinalIgnoreCase))
+                {
+                    detail = null;
+                }
+
+                return new SessionItem
+                {
+                    Name = serial.Port,
+                    SessionId = serial.Port,
+                    Kind = SessionKind.Serial,
+                    Detail = detail,
+                    SerialSettings = SerialSessionRules.ConnectionSummary(serial.Serial),
+                };
+
+            case nameof(SessionKind.Ssh):
+                return _config.SshSessions.Get(entry.Id) is { } ssh
+                    ? new SessionItem
+                    {
+                        Name = SshSessionRules.DisplayName(ssh),
+                        SessionId = ssh.Key,
+                        Kind = SessionKind.Ssh,
+                        Detail = SshSessionRules.Detail(ssh),
+                    }
+                    : null;
+
+            case nameof(SessionKind.Telnet):
+                return _config.TelnetSessions.Get(entry.Id) is { } telnet
+                    ? new SessionItem
+                    {
+                        Name = TelnetSessionRules.DisplayName(telnet),
+                        SessionId = telnet.Key,
+                        Kind = SessionKind.Telnet,
+                        Detail = TelnetSessionRules.Detail(telnet),
+                    }
+                    : null;
+
+            case nameof(SessionKind.Tcp):
+                return _config.TcpSessions.Get(entry.Id) is { } tcp
+                    ? new SessionItem
+                    {
+                        Name = TcpSessionRules.DisplayName(tcp),
+                        SessionId = tcp.Key,
+                        Kind = SessionKind.Tcp,
+                        Detail = TcpSessionRules.Detail(tcp),
+                    }
+                    : null;
+
+            default:
+                return null;
+        }
+    }
+
+    private void OnHistoryActivated(object? sender, HistoryEntry entry)
+    {
+        // The entry always carries the best resolved session item (live
+        // sidebar item first, saved-store fallback second).
+        _ = ActivateSessionAsync(entry.Session);
+    }
+
+    private void OnHistoryClearRequested(object? sender, EventArgs e)
+    {
+        if (_config is null || DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        _config.Config.RecentSessions.Clear();
+        _config.Save();
+        _historySignature = "";
+        viewModel.History.Clear();
+    }
+
+    private void OnMacroSaveRequested(object? sender, EventArgs e)
+    {
+        if (_config is null || DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        var name = viewModel.MacroEditorName.Trim();
+        var text = viewModel.MacroEditorText;
+        if (name.Length == 0 || string.IsNullOrEmpty(text))
+        {
+            viewModel.MacroEditorError = "名称和命令不能为空";
+            return;
+        }
+
+        var id = viewModel.EditingMacroId;
+        if (id is not null
+            && _config.Config.Macros.FirstOrDefault(m => m.Id == id) is { } existing)
+        {
+            existing.Name = name;
+            existing.Text = text;
+            existing.AppendEnter = viewModel.MacroEditorAppendEnter;
+            var item = viewModel.FindMacro(id);
+            if (item is not null)
+            {
+                item.Name = name;
+                item.Text = text;
+                item.AppendEnter = viewModel.MacroEditorAppendEnter;
+            }
+        }
+        else
+        {
+            var stored = new MacroConfig
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Name = name,
+                Text = text,
+                AppendEnter = viewModel.MacroEditorAppendEnter,
+            };
+            _config.Config.Macros.Add(stored);
+            viewModel.Macros.Add(new MacroItem
+            {
+                Id = stored.Id,
+                Name = name,
+                Text = text,
+                AppendEnter = viewModel.MacroEditorAppendEnter,
+            });
+        }
+
+        _config.Save();
+        viewModel.CloseMacroEditor();
+    }
+
+    private void OnMacroDeleteRequested(object? sender, MacroItem item)
+    {
+        if (_config is null || DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        viewModel.Macros.Remove(item);
+        _config.Config.Macros.RemoveAll(m => m.Id == item.Id);
+        _config.Save();
+    }
+
+    private async void OnMacroSendRequested(object? sender, MacroItem item)
+    {
+        if (DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        var terminal = viewModel.SelectedTab?.Terminal;
+        if (terminal is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await terminal.SendInputAsync(
+                item.AppendEnter ? item.Text + "\r" : item.Text);
+        }
+        catch (Exception ex)
+        {
+            _ = ShowErrorAsync($"发送宏失败：{ex.Message}");
+        }
+    }
+
+    private void OnMacroCancelRequested(object? sender, EventArgs e)
+    {
+        // The view already closed the editor; nothing to persist.
+    }
+
+    private INetworkScanner ActiveScanner =>
+        NetworkScannerForTests ?? (_scanner ??= new NetworkScanner());
+
+    private async void OnScanStartRequested(object? sender, EventArgs e)
+    {
+        if (_scanCts is not null || DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        if (!NetworkScanTargets.TryParse(viewModel.ScanTarget, out var targets, out var targetError))
+        {
+            viewModel.ScanError = targetError;
+            return;
+        }
+
+        if (!TryParseScanPorts(viewModel.ScanPorts, out var ports, out var portError))
+        {
+            viewModel.ScanError = portError;
+            return;
+        }
+
+        viewModel.ScanError = null;
+        viewModel.ScanResults.Clear();
+        viewModel.ScanStatus = $"扫描中… 0/{targets.Count}";
+        viewModel.IsScanning = true;
+        _scanCts = new CancellationTokenSource();
+
+        var progress = new UiProgress<NetworkScanProgress>(p =>
+        {
+            if (p.Host is { } host)
+            {
+                viewModel.ScanResults.Add(ToScanResultItem(host));
+            }
+
+            if (p.Completed >= p.Total)
+            {
+                // The final progress report closes the scan out. Writing the
+                // terminal state here (not after the await) keeps it ordered
+                // after every incremental update, on any thread context.
+                viewModel.IsScanning = false;
+                _scanCts?.Dispose();
+                _scanCts = null;
+                viewModel.ScanStatus = $"完成：发现 {viewModel.ScanResults.Count} 台在线设备";
+            }
+            else
+            {
+                viewModel.ScanStatus = $"扫描中… {p.Completed}/{p.Total}";
+            }
+        });
+
+        try
+        {
+            await ActiveScanner.ScanAsync(targets, ports, progress, _scanCts.Token);
+            // Fallback for a scanner that never reports its final count.
+            if (viewModel.IsScanning)
+            {
+                viewModel.IsScanning = false;
+                _scanCts?.Dispose();
+                _scanCts = null;
+                viewModel.ScanStatus = $"完成：发现 {viewModel.ScanResults.Count} 台在线设备";
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            viewModel.IsScanning = false;
+            _scanCts?.Dispose();
+            _scanCts = null;
+            viewModel.ScanStatus = $"已停止（已发现 {viewModel.ScanResults.Count} 台）";
+        }
+        catch (Exception ex)
+        {
+            viewModel.IsScanning = false;
+            _scanCts?.Dispose();
+            _scanCts = null;
+            viewModel.ScanError = ex.Message;
+            viewModel.ScanStatus = "";
+        }
+    }
+
+    private void OnScanStopRequested(object? sender, EventArgs e) =>
+        _scanCts?.Cancel();
+
+    /// <summary>
+    /// Reports progress on the UI thread regardless of the ambient
+    /// synchronization context, which keeps headless tests deterministic.
+    /// </summary>
+    private sealed class UiProgress<T>(Action<T> action) : IProgress<T>
+    {
+        public void Report(T value) =>
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => action(value));
+    }
+
+    private static ScanResultItem ToScanResultItem(NetworkScanHost host) => new()
+    {
+        Address = host.Address.ToString(),
+        HostName = host.HostName ?? "",
+        Ports = host.OpenPorts.Count > 0 ? string.Join(",", host.OpenPorts) : "",
+        Latency = host.RoundTripMs is { } ms ? $"{ms} ms" : "",
+    };
+
+    private static bool TryParseScanPorts(
+        string? text,
+        out IReadOnlyList<int> ports,
+        out string? error)
+    {
+        ports = Array.Empty<int>();
+        error = null;
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            error = "端口不能为空";
+            return false;
+        }
+
+        var list = new List<int>();
+        foreach (var rawToken in text.Split(
+                     new[] { ',', ';', ' ', '\t' },
+                     StringSplitOptions.RemoveEmptyEntries))
+        {
+            var token = rawToken.Trim();
+            if (!int.TryParse(token, out var port) || port is < 1 or > 65535)
+            {
+                error = $"无效端口：{token}";
+                return false;
+            }
+
+            if (!list.Contains(port))
+            {
+                list.Add(port);
+            }
+
+            if (list.Count > 16)
+            {
+                error = "最多支持 16 个端口";
+                return false;
+            }
+        }
+
+        ports = list;
+        return true;
     }
 
     private void OnMinimizeClick(object? sender, RoutedEventArgs e)

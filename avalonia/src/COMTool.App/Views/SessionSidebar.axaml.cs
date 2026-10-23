@@ -26,7 +26,108 @@ public partial class SessionSidebar : UserControl
 
     public event EventHandler<string>? NewSessionRequested;
 
+    public event EventHandler<MacroItem>? MacroSendRequested;
+
+    public event EventHandler<MacroItem>? MacroEditRequested;
+
+    public event EventHandler<MacroItem>? MacroDeleteRequested;
+
+    public event EventHandler? MacroSaveRequested;
+
+    public event EventHandler? MacroCancelRequested;
+
+    public event EventHandler<HistoryEntry>? HistoryActivated;
+
+    public event EventHandler? HistoryClearRequested;
+
+    public event EventHandler? ScanStartRequested;
+
+    public event EventHandler? ScanStopRequested;
+
     public bool HasOpenNewSessionMenu => SidebarAddSessionButton.Flyout is { IsOpen: true };
+
+    internal SidebarTab SelectedSidebarTabForTests =>
+        DataContext is MainViewModel vm ? vm.SidebarTab : SidebarTab.Sessions;
+
+    private void OnRailTabClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string tag }
+            || DataContext is not MainViewModel viewModel
+            || !Enum.TryParse<SidebarTab>(tag, out var tab))
+        {
+            return;
+        }
+
+        viewModel.SidebarTab = tab;
+    }
+
+    private void OnAddMacroClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel viewModel)
+        {
+            viewModel.OpenMacroEditor();
+        }
+    }
+
+    private void OnMacroSaveClick(object? sender, RoutedEventArgs e) =>
+        MacroSaveRequested?.Invoke(this, EventArgs.Empty);
+
+    private void OnMacroCancelClick(object? sender, RoutedEventArgs e)
+    {
+        MacroCancelRequested?.Invoke(this, EventArgs.Empty);
+        if (DataContext is MainViewModel viewModel)
+        {
+            viewModel.CloseMacroEditor();
+        }
+    }
+
+    private MacroItem? MacroOf(object? sender) =>
+        sender is Control { DataContext: MacroItem item } ? item : null;
+
+    private void OnMacroSendClick(object? sender, RoutedEventArgs e)
+    {
+        if (MacroOf(sender) is { } item)
+        {
+            MacroSendRequested?.Invoke(this, item);
+        }
+    }
+
+    private void OnMacroEditClick(object? sender, RoutedEventArgs e)
+    {
+        if (MacroOf(sender) is { } item)
+        {
+            MacroEditRequested?.Invoke(this, item);
+            if (DataContext is MainViewModel viewModel)
+            {
+                viewModel.OpenMacroEditor(item);
+            }
+        }
+    }
+
+    private void OnMacroDeleteClick(object? sender, RoutedEventArgs e)
+    {
+        if (MacroOf(sender) is { } item)
+        {
+            MacroDeleteRequested?.Invoke(this, item);
+        }
+    }
+
+    private void OnHistoryTapped(object? sender, TappedEventArgs e)
+    {
+        if (sender is Control { DataContext: HistoryEntry entry })
+        {
+            HistoryActivated?.Invoke(this, entry);
+        }
+    }
+
+    private void OnClearHistoryClick(object? sender, RoutedEventArgs e) =>
+        HistoryClearRequested?.Invoke(this, EventArgs.Empty);
+
+    private void OnScanStartClick(object? sender, RoutedEventArgs e) =>
+        ScanStartRequested?.Invoke(this, EventArgs.Empty);
+
+    private void OnScanStopClick(object? sender, RoutedEventArgs e) =>
+        ScanStopRequested?.Invoke(this, EventArgs.Empty);
 
     private void OnNewSessionMenuItemClick(object? sender, RoutedEventArgs e)
     {
