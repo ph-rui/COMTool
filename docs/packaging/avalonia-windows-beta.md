@@ -667,13 +667,16 @@ and the visible state and width are restored on launch:
   "扫描完成：发现 N 个开放端口"，迟到的进度上报不会覆盖完成状态；
 - test evidence: full gate PASS — 406 tests (Core 49, SFTP 40, Connections
   77, Terminal 11, ZMODEM 32, TestGate 49, App 148), Linux Xvfb E2E 13/13,
-  results `20261023T111625Z` 与 `20261023T151916Z`（欢迎页标题移除后复跑）；UI16 重写为三项菜单 + 开窗/单例/重开断言，
+  results `20261023T111625Z`、`20261023T151916Z`（欢迎页标题移除后复跑）
+  与 `20261023T153512Z`（侧栏工具图标改为螺丝刀+扳手后复跑）；UI16 重写为三项菜单 + 开窗/单例/重开断言，
   PORT01 增加完成状态断言；SRV01 ×5、HTTP ×7、TFTP ×4、ServerSettings ×2
   全部通过；
 - deployment 2026-10-23 (in-place overwrite, no `.bak-*`):
   - exe `COMTool.App-tools.exe` published from the commit above;
   - size: 209,290,060 bytes;
-  - SHA256: `A5807CC6D1EBCA3C620919CF919CF71BA3FC953425C0BE460F3EC2D3AA58EFD6`;
+  - SHA256: `F64ACC29B2F8E79D3F6CEBE80DDD0A9DC0CE77D0397B9ADD2B46DD53CBBECC46`
+    （最终版：侧栏工具图标由剪刀改为螺丝刀+扳手 `f7d9`，橙色 `#e8734a`，
+    与 MobaXterm 左栏一致）；
   - WORK and DESKTOP copies both matched that hash via `Get-FileHash`;
   - `BAK_COUNT=0`;
   - smoke test: process started, `Responding=True`, then stopped;

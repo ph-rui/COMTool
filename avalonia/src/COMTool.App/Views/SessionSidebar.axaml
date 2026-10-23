@@ -27,11 +27,11 @@
                 Classes.active="{Binding IsToolsTab}"
                 Tag="Tools"
                 Click="OnRailTabClick"
-                ToolTip.Tip="工具（网络扫描仪）">
-          <TextBlock Text="&#xf0c4;"
+                ToolTip.Tip="工具（网络服务器/扫描仪）">
+          <TextBlock Text="&#xf7d9;"
                      FontFamily="{DynamicResource IconFontAwesome}"
                      FontSize="16"
-                     Foreground="#d9534f" />
+                     Foreground="#e8734a" />
         </Button>
         <Button Name="RailMacrosButton"
                 Classes="RailButton"
