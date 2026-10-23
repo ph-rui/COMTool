@@ -152,7 +152,7 @@ public sealed class SidebarRailTests
     }
 
     [AvaloniaFact]
-    public void UI16_ToolsMenuShowsEightItems()
+    public void UI16_ToolsMenuMatchesMobaXtermDropdown()
     {
         using var env = new TestEnvironment();
         MainWindow? window = null;
@@ -168,17 +168,49 @@ public sealed class SidebarRailTests
                 vm.SidebarTab = SidebarTab.Tools;
                 RunJobs(window);
 
-                // 工具页默认显示 8 项菜单（1:1 MobaXterm 工具下拉），
-                // 网络扫描仪 + 端口扫描仪可用，其余 6 项"暂不支持"
+                // 工具页默认显示菜单（1:1 MobaXterm "工具"下拉）：
+                // 三组 系统/文本/网络 + 19 项，按 MobaXterm 顺序与图标
                 Assert.True(sidebar.FindControl<Border>("ToolsMenuView")!.IsVisible);
                 Assert.False(sidebar.FindControl<Grid>("NetworkScannerView")!.IsVisible);
                 Assert.False(sidebar.FindControl<Grid>("PortScannerView")!.IsVisible);
-                Assert.Equal(8, vm.ToolMenu.Count);
-                Assert.Equal("网络扫描仪", vm.ToolMenu[5].Name);
-                Assert.True(vm.ToolMenu[5].IsEnabled);
-                Assert.Equal("端口扫描仪", vm.ToolMenu[6].Name);
-                Assert.True(vm.ToolMenu[6].IsEnabled);
-                Assert.Equal(6, vm.ToolMenu.Count(t => !t.IsEnabled));
+                Assert.Equal(22, vm.ToolMenu.Count);
+                Assert.Equal("系统", vm.ToolMenu[0].Name);
+                Assert.True(vm.ToolMenu[0].IsHeader);
+                Assert.Equal("文本", vm.ToolMenu[9].Name);
+                Assert.True(vm.ToolMenu[9].IsHeader);
+                Assert.Equal("网络", vm.ToolMenu[13].Name);
+                Assert.True(vm.ToolMenu[13].IsHeader);
+                Assert.Equal(new[]
+                {
+                    "MobaPkg 包管理器 (实验性)",
+                    "带 Dwm 的 X11 标签页",
+                    "带 Fvwm 的 X11 窗口",
+                    "带 Twm 的 X11 窗口",
+                    "列出硬件设备",
+                    "列出运行中的进程",
+                    "命令提示符 (管理员)",
+                    "Windows Powershell (管理员)",
+                    "MobaTextEditor",
+                    "MobaDiff",
+                    "Ascii table",
+                    "网络服务器",
+                    "MobaSSHtunnel (端口转发)",
+                    "MobaKeyGen (SSH 密钥生成器)",
+                    "列出开放的网络端口",
+                    "网络唤醒",
+                    "网络扫描仪",
+                    "端口扫描仪",
+                    "网络数据包捕获",
+                },
+                    vm.ToolMenu.Where(t => !t.IsHeader).Select(t => t.Name).ToArray());
+
+                // 仅 网络扫描仪/端口扫描仪 可用；每一项都有图标
+                Assert.Equal(
+                    new[] { "scanner", "port-scanner" },
+                    vm.ToolMenu.Where(t => !t.IsHeader && t.IsEnabled).Select(t => t.Id).ToArray());
+                Assert.Equal(17, vm.ToolMenu.Count(t => !t.IsHeader && !t.IsEnabled));
+                Assert.All(vm.ToolMenu.Where(t => !t.IsHeader),
+                    t => Assert.False(string.IsNullOrEmpty(t.Glyph)));
 
                 // 点选"网络扫描仪"进入网络扫描页（IP 地址范围五段框）
                 OpenScannerView(window, vm);
@@ -961,6 +993,7 @@ public sealed class SidebarRailTests
     /// <summary>Clicks the 网络扫描仪 entry in the tools menu, opening the scanner view.</summary>
     private static void OpenScannerView(MainWindow window, MainViewModel vm)
     {
+        ScrollMenuToBottom(window);
         var scannerItem = window.GetVisualDescendants()
             .OfType<Button>()
             .First(b => b.Tag is string s && s == "scanner");
@@ -972,11 +1005,24 @@ public sealed class SidebarRailTests
     /// <summary>Clicks the 端口扫描仪 entry in the tools menu, opening the port scanner view.</summary>
     private static void OpenPortScannerView(MainWindow window, MainViewModel vm)
     {
+        ScrollMenuToBottom(window);
         var item = window.GetVisualDescendants()
             .OfType<Button>()
             .First(b => b.Tag is string s && s == "port-scanner");
         Click(window, item);
         Assert.Equal(ToolsView.PortScanner, vm.ToolsView);
+        RunJobs(window);
+    }
+
+    /// <summary>
+    /// The 1:1 menu (22 rows) is taller than the panel viewport, so the
+    /// scanner entries live below the fold: scroll the menu to the bottom
+    /// before clicking them (real users scroll the same way).
+    /// </summary>
+    private static void ScrollMenuToBottom(MainWindow window)
+    {
+        var scroller = Sidebar(window).FindControl<ScrollViewer>("ToolMenuScroll")!;
+        scroller.Offset = new Vector(0, scroller.Extent.Height);
         RunJobs(window);
     }
 

@@ -51,16 +51,26 @@ public sealed class HistoryEntry
 }
 
 /// <summary>
-/// One entry of the MobaXterm-style tool menu. 网络扫描仪 and 端口扫描仪 are
-/// wired up; the remaining entries mirror MobaXterm's dropdown and are marked
-/// 暂不支持.
+/// One entry of the MobaXterm-style tool menu. Headers (系统/文本/网络) mark
+/// the group rows; item rows carry the MobaXterm icon glyph + color.
+/// 网络扫描仪 and 端口扫描仪 are wired up; the remaining entries mirror
+/// MobaXterm's dropdown and are marked 暂不支持.
 /// </summary>
 public sealed class ToolMenuItem
 {
     public required string Id { get; init; }
     public required string Name { get; init; }
-    public required bool IsEnabled { get; init; }
+    public bool IsEnabled { get; init; }
     public string ToolTip { get; init; } = "";
+
+    /// <summary>True for group header rows (系统/文本/网络).</summary>
+    public bool IsHeader { get; init; }
+
+    /// <summary>FontAwesome 6 solid glyph (e.g. "\uf0ac"); empty for headers.</summary>
+    public string Glyph { get; init; } = "";
+
+    /// <summary>Icon color (hex), matching MobaXterm's colored menu icons.</summary>
+    public string GlyphColor { get; init; } = "";
 }
 
 /// <summary>
@@ -187,19 +197,48 @@ public partial class MainViewModel
 
     private void InitToolMenu()
     {
-        void Add(string id, string name, bool enabled, string tip) =>
-            ToolMenu.Add(new ToolMenuItem { Id = id, Name = name, IsEnabled = enabled, ToolTip = tip });
+        void Header(string name) =>
+            ToolMenu.Add(new ToolMenuItem { Id = "header-" + name, Name = name, IsHeader = true });
 
-        // Mirrors MobaXterm's "Tools" dropdown order; the network scanner and
-        // port scanner are implemented, the rest stay 暂不支持.
-        Add("net-server", "网络服务器", false, "暂不支持");
-        Add("ssh-tunnel", "MobaSshTunnel (端口转发)", false, "暂不支持");
-        Add("keygen", "MobaKeyGen (SSH 密钥生成器)", false, "暂不支持");
-        Add("list-ports", "列出开放的网络端口", false, "暂不支持");
-        Add("wol", "网络唤醒", false, "暂不支持");
-        Add("scanner", "网络扫描仪", true, "扫描局域网在线设备与端口");
-        Add("port-scanner", "端口扫描仪", true, "扫描指定 IP 的开放端口");
-        Add("packet-capture", "网络数据包捕获", false, "暂不支持");
+        void Add(string id, string name, bool enabled, string tip, string glyph, string color) =>
+            ToolMenu.Add(new ToolMenuItem
+            {
+                Id = id,
+                Name = name,
+                IsEnabled = enabled,
+                ToolTip = tip,
+                Glyph = glyph,
+                GlyphColor = color,
+            });
+
+        // 1:1 with the MobaXterm "工具" dropdown (measured on MobaXterm
+        // Professional v22.1): three groups 系统/文本/网络, 19 entries in
+        // dropdown order with their colored icons. Only 网络扫描仪 and
+        // 端口扫描仪 are implemented; the rest stay 暂不支持.
+        Header("系统");
+        Add("mobapkg", "MobaPkg 包管理器 (实验性)", false, "暂不支持", "\uf06b", "#1565c0");
+        Add("x11-dwm", "带 Dwm 的 X11 标签页", false, "暂不支持", "\uf2d0", "#1976d2");
+        Add("x11-fvwm", "带 Fvwm 的 X11 窗口", false, "暂不支持", "\uf2d0", "#1976d2");
+        Add("x11-twm", "带 Twm 的 X11 窗口", false, "暂不支持", "\uf2d0", "#1976d2");
+        Add("list-hw", "列出硬件设备", false, "暂不支持", "\uf108", "#43a047");
+        Add("list-procs", "列出运行中的进程", false, "暂不支持", "\uf70c", "#1976d2");
+        Add("cmd-admin", "命令提示符 (管理员)", false, "暂不支持", "\uf121", "#616161");
+        Add("powershell-admin", "Windows Powershell (管理员)", false, "暂不支持", "\uf121", "#1565c0");
+
+        Header("文本");
+        Add("text-editor", "MobaTextEditor", false, "暂不支持", "\uf303", "#fb8c00");
+        Add("moba-diff", "MobaDiff", false, "暂不支持", "\uf15b", "#1976d2");
+        Add("ascii-table", "Ascii table", false, "暂不支持", "\uf031", "#1976d2");
+
+        Header("网络");
+        Add("net-server", "网络服务器", false, "暂不支持", "\uf013", "#00897b");
+        Add("ssh-tunnel", "MobaSSHtunnel (端口转发)", false, "暂不支持", "\uf121", "#43a047");
+        Add("keygen", "MobaKeyGen (SSH 密钥生成器)", false, "暂不支持", "\uf084", "#f9a825");
+        Add("list-ports", "列出开放的网络端口", false, "暂不支持", "\uf0ac", "#1976d2");
+        Add("wol", "网络唤醒", false, "暂不支持", "\uf0f3", "#1976d2");
+        Add("scanner", "网络扫描仪", true, "扫描局域网在线设备与端口", "\uf7c0", "#5e35b1");
+        Add("port-scanner", "端口扫描仪", true, "扫描指定 IP 的开放端口", "\uf1eb", "#1976d2");
+        Add("packet-capture", "网络数据包捕获", false, "暂不支持", "\uf0e7", "#7b1fa2");
     }
 
     partial void OnSidebarTabChanged(SidebarTab value)
