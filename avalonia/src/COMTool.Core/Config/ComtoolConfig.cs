@@ -55,6 +55,13 @@ public sealed class ComtoolConfig
     public SessionSidebarConfig SessionSidebar { get; set; } = new();
 
     /// <summary>
+    /// Settings of the tools "网络服务器" dialog (HTTP/TFTP servers). Missing
+    /// from older config files, in which case the defaults apply.
+    /// </summary>
+    [JsonPropertyName("servers")]
+    public ServerSettings Servers { get; set; } = new();
+
+    /// <summary>
     /// The user's global macro list shown in the sidebar Macros tab. Macros
     /// are optional: configs written before the tab existed simply load an
     /// empty list.
