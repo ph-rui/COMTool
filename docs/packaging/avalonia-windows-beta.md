@@ -695,6 +695,35 @@ and the visible state and width are restored on launch:
     端文件内容 `from-linux-tftp`（15 字节）；日志显示
     `Download: hello.txt (15 bytes)` 与 `Upload: tftp-up.txt (15 bytes)`。
 
+### 2026-10-24 — 侧栏按 MobaXterm 实机修正（固定三格 + SSH 浏览器；移除历史页）
+
+- 依据用户对 MobaXterm 22.1 实机的核对：左侧图标栏固定三格
+  会话（星星）/工具（螺丝刀+扳手）/宏（纸飞机），**没有历史图标**；
+  SSH 登录成功后才会动态出现第四格——橙色地球（`f57d`，提示
+  "SSH 浏览器（SFTP）"），点击展开当前 SSH 会话的 SFTP 面板
+  （当前标签不是 SSH 时先切到最近的已连接 SSH 标签）；
+  SSH 全部断开/关闭后第四格隐藏；
+- 按用户要求删除历史页：`SidebarTab.History`、History 面板与清空按钮、
+  `HistoryEntry`、`RecentSessions` 配置字段与持久化、HIST-01 测试全部移除；
+  旧 config.json 里的 `recentSessions` 字段下次保存时自然消失；
+- 新增 `MainViewModel.IsSshBrowserVisible`，由现有
+  `UpdateConnectionStates()`/`LoadSessions()` 的已连接 SSH 集合驱动，
+  不新增轮询；`Sidebar.SshBrowserRequested` → `MainWindow.OnSshBrowserRequested`
+  展开 SFTP 面板并调用 `EnsureLoadedAsync`；
+- test evidence: full gate PASS — 403 tests (Core 49, SFTP 40, Connections
+  77, Terminal 11, ZMODEM 32, TestGate 49, App 145), Linux Xvfb E2E 13/13,
+  results `20261023T163029Z`；新增
+  `SidebarRailTests.UI16_SshBrowserIconAppearsOnlyWithAConnectedSshSession`
+  （无 SSH 隐藏 → 连接后显示 → 点击展开 SFTP → 断开后隐藏），
+  UI16 页签测试改为三格；
+- deployment 2026-10-24 (in-place overwrite, no `.bak-*`):
+  - exe `COMTool.App-tools.exe` published from the commit above;
+  - size: 209,253,196 bytes;
+  - SHA256: `2CA548A55DE3EB6E9D83246231646C1999CD21A35C1AB1741D6C1AF38B3CE99A`;
+  - WORK and DESKTOP copies both matched that hash via `Get-FileHash`;
+  - `BAK_COUNT=0`;
+  - smoke test: process started, `Responding=True`, then stopped.
+
 The previously packaged release zip is 74,795,557 bytes with SHA256:
 
 ```text
