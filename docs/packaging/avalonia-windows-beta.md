@@ -623,6 +623,32 @@ and the visible state and width are restored on launch:
 - interactive Windows confirmation is WIN-26 (五段 IP 范围表单、10 列服务
   网格、端口扫描仪两种模式与深度扫描行为对照实机 MobaXterm 22.1 核对)。
 
+### 2026-10-23 — 工具菜单补全为 MobaXterm 完整下拉（三组 19 项 + 彩色图标）
+
+- commits: `45051f9` (feat) + `bd59381` (docs)；
+- 依据用户实机 MobaXterm 22.1 工具菜单截图逐项核对：原 8 项菜单只是
+  "网络"组，完整下拉为 系统 8 项（MobaPkg 包管理器(实验性)/带 Dwm/Fvwm/Twm
+  的 X11/列出硬件设备/列出运行中的进程/命令提示符(管理员)/Windows
+  Powershell(管理员)）+ 文本 3 项（MobaTextEditor/MobaDiff/Ascii table）+
+  网络 8 项；`MobaSshTunnel` 更正为 `MobaSSHtunnel`；
+- 实现：ToolMenuItem 增加 IsHeader/Glyph/GlyphColor，菜单 22 行（3 组
+  标题条 + 19 项，FA6 solid 图标近似 MobaXterm 彩色图标）；主题新增
+  SidebarGroupHeaderBrush；仅 网络扫描仪/端口扫描仪 可用，其余 17 项置灰
+  "暂不支持"（已批准例外）；
+- test evidence: full gate PASS — 388 tests (Core 47, SFTP 40, Connections
+  66, Terminal 11, ZMODEM 32, TestGate 49, App 143), Linux Xvfb E2E 13/13
+  （UI16_ToolsMenuShowsEightItems 重写为 UI16_ToolsMenuMatchesMobaXtermDropdown：
+  22 行、组序、19 项全名顺序、仅 2 项可用、图标非空）；
+- deployment 2026-10-23 (in-place overwrite, no `.bak-*`):
+  - exe `COMTool.App-singlepane.exe` published from `bd59381`;
+  - size: 208,892,748 bytes;
+  - SHA256: `08C27BBE34857DB5238337DBAD5F4DF37F924A932BD2BC660378CAFB4A458A28`;
+  - WORK and DESKTOP copies both matched that hash via `Get-FileHash`;
+  - `BAK_COUNT=0`;
+  - smoke test: process started, `Responding=True`, then stopped;
+- interactive Windows confirmation is WIN-26（工具菜单三组 19 项与图标、
+  两扫描仪对话框对照实机 MobaXterm 22.1 核对）。
+
 The previously packaged release zip is 74,795,557 bytes with SHA256:
 
 ```text
