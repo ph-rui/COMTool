@@ -29,7 +29,7 @@ public static class NetworkScanTargets
 
         if (string.IsNullOrWhiteSpace(text))
         {
-            error = "目标不能为空";
+            error = "IP 地址范围不能为空";
             return false;
         }
 
@@ -54,6 +54,103 @@ public static class NetworkScanTargets
 
         targets = found;
         return true;
+    }
+
+    /// <summary>
+    /// MobaXterm "IP address range" dialog form: a start IP and an optional
+    /// end IP. With an end given, both must be single IPv4 addresses and the
+    /// range is inclusive, capped at <see cref="MaxHosts"/>. Without an end,
+    /// the start may use any form accepted by the single-text overload
+    /// (single IP / CIDR / ranges / comma list).
+    /// </summary>
+    public static bool TryParse(
+        string? startText,
+        string? endText,
+        out IReadOnlyList<IPAddress> targets,
+        out string? error)
+    {
+        targets = Array.Empty<IPAddress>();
+        error = null;
+
+        var start = (startText ?? "").Trim();
+        var end = (endText ?? "").Trim();
+
+        if (end.Length == 0)
+        {
+            return TryParse(start, out targets, out error);
+        }
+
+        if (start.Length == 0)
+        {
+            error = "起始 IP 不能为空";
+            return false;
+        }
+
+        if (!TryParseIpv4(start, out var startAddr, out _))
+        {
+            error = "起始地址必须是单个 IPv4 地址（填范围/CIDR 时请留空结束地址）";
+            return false;
+        }
+
+        if (!TryParseIpv4(end, out var endAddr, out _))
+        {
+            error = "结束地址必须是单个 IPv4 地址";
+            return false;
+        }
+
+        if (endAddr < startAddr)
+        {
+            error = "结束地址不能小于起始地址";
+            return false;
+        }
+
+        var count = (long)endAddr - startAddr + 1;
+        if (count > MaxHosts)
+        {
+            error = $"目标主机数超过上限 {MaxHosts}";
+            return false;
+        }
+
+        var list = new List<IPAddress>((int)count);
+        for (var addr = startAddr; addr <= endAddr; addr++)
+        {
+            list.Add(MakeIp(addr));
+        }
+
+        targets = list;
+        return true;
+    }
+
+    /// <summary>
+    /// Splits a detected local CIDR ("192.168.1.0/24") into the dialog's
+    /// start/end fields: the network base and the broadcast address. A bare
+    /// IP or unparseable input maps to start=value, end="".
+    /// </summary>
+    public static void SplitCidrForFields(string? cidr, out string start, out string end)
+    {
+        start = cidr ?? "";
+        end = "";
+
+        var slash = start.IndexOf('/');
+        if (slash <= 0 || slash >= start.Length - 1)
+        {
+            return;
+        }
+
+        if (!int.TryParse(start[(slash + 1)..], out var prefix) || prefix is < 0 or > 32)
+        {
+            return;
+        }
+
+        if (!TryParseIpv4(start[..slash], out var baseAddr, out _))
+        {
+            return;
+        }
+
+        var mask = prefix == 0 ? 0u : uint.MaxValue << (32 - prefix);
+        var network = baseAddr & mask;
+        start = MakeIp(network).ToString();
+        end = MakeIp(network | ~mask).ToString();
     }
 
     /// <summary>

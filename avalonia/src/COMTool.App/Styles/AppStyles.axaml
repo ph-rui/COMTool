@@ -171,6 +171,30 @@
     <Setter Property="Background" Value="{DynamicResource TitleBarHoverBrush}" />
   </Style>
 
+  <!-- Tools menu entry (MobaXterm-style dropdown item) -->
+  <Style Selector="Button.ToolMenuItemButton">
+    <Setter Property="HorizontalContentAlignment" Value="Left" />
+    <Setter Property="Padding" Value="8,5" />
+    <Setter Property="FontSize" Value="11" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Foreground" Value="{DynamicResource WindowTextBrush}" />
+  </Style>
+  <Style Selector="Button.ToolMenuItemButton:pointerover">
+    <Setter Property="Background" Value="{DynamicResource TitleBarHoverBrush}" />
+  </Style>
+  <Style Selector="Button.ToolMenuItemButton:disabled">
+    <Setter Property="Opacity" Value="0.45" />
+  </Style>
+
+  <!-- Scan result grid row (host x port cells) -->
+  <Style Selector="StackPanel.ScanRow">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="StackPanel.ScanRow.selected">
+    <Setter Property="Background" Value="{DynamicResource SidebarRailActiveBrush}" />
+  </Style>
+
   <Style Selector="Border.TabItemBorder">
     <Setter Property="Height" Value="36" />
     <Setter Property="MinWidth" Value="112" />
