@@ -17,6 +17,13 @@ public sealed class NetworkScannerTests
         public void Report(NetworkScanProgress value) => _action(value);
     }
 
+    private sealed class IntSyncProgress : IProgress<int>
+    {
+        private readonly Action<int> _action;
+        public IntSyncProgress(Action<int> action) => _action = action;
+        public void Report(int value) => _action(value);
+    }
+
     private static IReadOnlyList<IPAddress> Ips(params string[] ips)
     {
         var list = new List<IPAddress>();
@@ -177,6 +184,84 @@ public sealed class NetworkScannerTests
         var ex = await Record.ExceptionAsync(async () =>
             await new NetworkScanner().ScanAsync(
                 Ips("127.0.0.1", "127.0.0.2"), [22], progress, cts.Token));
+
+        Assert.IsAssignableFrom<OperationCanceledException>(ex);
+    }
+
+    [Fact]
+    public void NET05_StartEndRangeExpandsToAllHosts()
+    {
+        Assert.True(
+            NetworkScanTargets.TryParse("127.0.0.1", "127.0.0.5", out var targets, out var error),
+            $"parse failed: {error}");
+        Assert.Equal(5, targets.Count);
+        Assert.Equal("127.0.0.1", targets[0].ToString());
+        Assert.Equal("127.0.0.5", targets[4].ToString());
+
+        // 结束地址留空时保持旧单字段全部格式
+        Assert.True(NetworkScanTargets.TryParse("192.168.1.0/24", "", out var cidr, out _));
+        Assert.Equal(256, cidr.Count);
+
+        Assert.True(NetworkScanTargets.TryParse("10.0.0.1, 10.0.0.9", "", out var list, out _));
+        Assert.Equal(2, list.Count);
+    }
+
+    [Fact]
+    public void NET05_StartEndRejectsInvalid()
+    {
+        // 两字段皆空
+        Assert.False(NetworkScanTargets.TryParse("", "", out _, out var e1));
+        Assert.NotNull(e1);
+
+        // 起始不是 IP
+        Assert.False(NetworkScanTargets.TryParse("not-an-ip", "10.0.0.2", out _, out var e2));
+        Assert.NotNull(e2);
+
+        // 起始填 CIDR/范围 且结束地址非空 → 冲突
+        Assert.False(NetworkScanTargets.TryParse("192.168.1.0/24", "192.168.1.20", out _, out var e3));
+        Assert.NotNull(e3);
+
+        // 结束小于起始
+        Assert.False(NetworkScanTargets.TryParse("192.168.1.50", "10.0.0.10", out _, out var e4));
+        Assert.NotNull(e4);
+        Assert.False(NetworkScanTargets.TryParse("192.168.1.50", "192.168.1.10", out _, out var e4b));
+        Assert.NotNull(e4b);
+
+        // 范围超 1024 上限 (10.0.0.1..10.0.5.1 = 1281 台)
+        Assert.False(NetworkScanTargets.TryParse("10.0.0.1", "10.0.5.1", out _, out var e5));
+        Assert.NotNull(e5);
+    }
+
+    [Fact]
+    public async Task NET05_DeepScanFindsOpenPortOnLoopback()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+
+        var seen = 0;
+        var progress = new IntSyncProgress(n => seen = n);
+
+        // 只扫监听端口附近的小窗口（随机端口可能是高位端口，扫 1..port 会过慢）
+        var open = await new NetworkScanner().ScanHostPortsAsync(
+            IPAddress.Loopback, port - 3, port + 3, progress, default);
+
+        Assert.Single(open);
+        Assert.Equal(port, open[0]);
+        Assert.Equal(7, seen);
+
+        listener.Stop();
+    }
+
+    [Fact]
+    public async Task NET05_DeepScanWithCancelledToken()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        var ex = await Record.ExceptionAsync(async () =>
+            await new NetworkScanner().ScanHostPortsAsync(
+                IPAddress.Loopback, 1, 100, null, cts.Token));
 
         Assert.IsAssignableFrom<OperationCanceledException>(ex);
     }

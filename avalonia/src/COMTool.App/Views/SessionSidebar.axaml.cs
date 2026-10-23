@@ -44,6 +44,8 @@ public partial class SessionSidebar : UserControl
 
     public event EventHandler? ScanStopRequested;
 
+    public event EventHandler? DeepScanRequested;
+
     public bool HasOpenNewSessionMenu => SidebarAddSessionButton.Flyout is { IsOpen: true };
 
     internal SidebarTab SelectedSidebarTabForTests =>
@@ -128,6 +130,36 @@ public partial class SessionSidebar : UserControl
 
     private void OnScanStopClick(object? sender, RoutedEventArgs e) =>
         ScanStopRequested?.Invoke(this, EventArgs.Empty);
+
+    private void OnDeepScanClick(object? sender, RoutedEventArgs e) =>
+        DeepScanRequested?.Invoke(this, EventArgs.Empty);
+
+    private void OnToolMenuClick(object? sender, RoutedEventArgs e)
+    {
+        // Only 网络扫描仪 is implemented; the other menu entries are disabled.
+        if (sender is Button { Tag: string id } && id == "scanner"
+            && DataContext is MainViewModel viewModel)
+        {
+            viewModel.ToolsView = ToolsView.Scanner;
+        }
+    }
+
+    private void OnBackToToolsMenuClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel viewModel)
+        {
+            viewModel.ToolsView = ToolsView.Menu;
+        }
+    }
+
+    private void OnScanRowTapped(object? sender, TappedEventArgs e)
+    {
+        if (sender is Control { DataContext: ScanGridRow row }
+            && DataContext is MainViewModel viewModel)
+        {
+            viewModel.SelectedScanAddress = row.Address;
+        }
+    }
 
     private void OnNewSessionMenuItemClick(object? sender, RoutedEventArgs e)
     {

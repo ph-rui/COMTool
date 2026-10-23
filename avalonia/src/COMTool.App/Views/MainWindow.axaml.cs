@@ -40,6 +40,7 @@ public partial class MainWindow : Window
     private readonly HashSet<TerminalTab> _sshRestarts = new();
     private readonly HashSet<TerminalTab> _telnetRestarts = new();
     private CancellationTokenSource? _scanCts;
+    private CancellationTokenSource? _deepCts;
     private INetworkScanner? _scanner;
     private string _historySignature = "";
 
@@ -91,6 +92,7 @@ public partial class MainWindow : Window
         Sidebar.HistoryClearRequested += OnHistoryClearRequested;
         Sidebar.ScanStartRequested += OnScanStartRequested;
         Sidebar.ScanStopRequested += OnScanStopRequested;
+        Sidebar.DeepScanRequested += OnDeepScanRequested;
         Opened += OnOpened;
     }
 
@@ -128,7 +130,13 @@ public partial class MainWindow : Window
                 ApplyWindowSizeConfig();
                 RefreshSidebar();
                 LoadSidebarData();
-                viewModel.ScanTarget = NetworkScanTargets.DetectLocalCidr();
+                // Pre-fill the scanner's start/end fields from the local
+                // subnet (MobaXterm-style "IP address range" dialog).
+                NetworkScanTargets.SplitCidrForFields(
+                    NetworkScanTargets.DetectLocalCidr(),
+                    out var scanStart, out var scanEnd);
+                viewModel.ScanStartIp = scanStart;
+                viewModel.ScanEndIp = scanEnd;
                 _portTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
                 _portTimer.Tick += (_, _) => RefreshPorts();
                 _portTimer.Start();
@@ -3208,12 +3216,12 @@ public partial class MainWindow : Window
 
     private async void OnScanStartRequested(object? sender, EventArgs e)
     {
-        if (_scanCts is not null || DataContext is not MainViewModel viewModel)
+        if (_scanCts is not null || _deepCts is not null || DataContext is not MainViewModel viewModel)
         {
             return;
         }
 
-        if (!NetworkScanTargets.TryParse(viewModel.ScanTarget, out var targets, out var targetError))
+        if (!NetworkScanTargets.TryParse(viewModel.ScanStartIp, viewModel.ScanEndIp, out var targets, out var targetError))
         {
             viewModel.ScanError = targetError;
             return;
@@ -3226,7 +3234,11 @@ public partial class MainWindow : Window
         }
 
         viewModel.ScanError = null;
-        viewModel.ScanResults.Clear();
+        viewModel.ScanPortLabels = ports.Select(p => p.ToString()).ToList();
+        viewModel.ScanRows.Clear();
+        viewModel.SelectedScanAddress = null;
+        viewModel.DeepScanStatus = "";
+        viewModel.DeepScanResult = "";
         viewModel.ScanStatus = $"扫描中… 0/{targets.Count}";
         viewModel.IsScanning = true;
         _scanCts = new CancellationTokenSource();
@@ -3235,7 +3247,7 @@ public partial class MainWindow : Window
         {
             if (p.Host is { } host)
             {
-                viewModel.ScanResults.Add(ToScanResultItem(host));
+                viewModel.ScanRows.Add(ToScanGridRow(host, ports));
             }
 
             if (p.Completed >= p.Total)
@@ -3246,7 +3258,7 @@ public partial class MainWindow : Window
                 viewModel.IsScanning = false;
                 _scanCts?.Dispose();
                 _scanCts = null;
-                viewModel.ScanStatus = $"完成：发现 {viewModel.ScanResults.Count} 台在线设备";
+                viewModel.ScanStatus = $"完成：发现 {viewModel.ScanRows.Count} 台在线设备";
             }
             else
             {
@@ -3263,7 +3275,7 @@ public partial class MainWindow : Window
                 viewModel.IsScanning = false;
                 _scanCts?.Dispose();
                 _scanCts = null;
-                viewModel.ScanStatus = $"完成：发现 {viewModel.ScanResults.Count} 台在线设备";
+                viewModel.ScanStatus = $"完成：发现 {viewModel.ScanRows.Count} 台在线设备";
             }
         }
         catch (OperationCanceledException)
@@ -3271,7 +3283,7 @@ public partial class MainWindow : Window
             viewModel.IsScanning = false;
             _scanCts?.Dispose();
             _scanCts = null;
-            viewModel.ScanStatus = $"已停止（已发现 {viewModel.ScanResults.Count} 台）";
+            viewModel.ScanStatus = $"已停止（已发现 {viewModel.ScanRows.Count} 台）";
         }
         catch (Exception ex)
         {
@@ -3283,8 +3295,11 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnScanStopRequested(object? sender, EventArgs e) =>
+    private void OnScanStopRequested(object? sender, EventArgs e)
+    {
         _scanCts?.Cancel();
+        _deepCts?.Cancel();
+    }
 
     /// <summary>
     /// Reports progress on the UI thread regardless of the ambient
@@ -3296,13 +3311,81 @@ public partial class MainWindow : Window
             Avalonia.Threading.Dispatcher.UIThread.Post(() => action(value));
     }
 
-    private static ScanResultItem ToScanResultItem(NetworkScanHost host) => new()
+    /// <summary>
+    /// Deep scan (MobaXterm "Deep scan"): probes all 65535 ports on the
+    /// selected host; the result is the sorted list of open ports.
+    /// </summary>
+    private async void OnDeepScanRequested(object? sender, EventArgs e)
     {
-        Address = host.Address.ToString(),
-        HostName = host.HostName ?? "",
-        Ports = host.OpenPorts.Count > 0 ? string.Join(",", host.OpenPorts) : "",
-        Latency = host.RoundTripMs is { } ms ? $"{ms} ms" : "",
-    };
+        if (_deepCts is not null || _scanCts is not null || DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(viewModel.SelectedScanAddress) ||
+            !System.Net.IPAddress.TryParse(viewModel.SelectedScanAddress, out var host))
+        {
+            return;
+        }
+
+        viewModel.DeepScanStatus = $"深度扫描 {host}：0/65535";
+        viewModel.DeepScanResult = "";
+        viewModel.IsDeepScanning = true;
+        _deepCts = new CancellationTokenSource();
+
+        var progress = new UiProgress<int>(done =>
+        {
+            if (done >= 65535)
+            {
+                viewModel.IsDeepScanning = false;
+                _deepCts?.Dispose();
+                _deepCts = null;
+                viewModel.DeepScanStatus = "";
+            }
+            else
+            {
+                viewModel.DeepScanStatus = $"深度扫描 {host}：{done}/65535";
+            }
+        });
+
+        try
+        {
+            var openPorts = await ActiveScanner.ScanHostPortsAsync(host, 1, 65535, progress, _deepCts.Token);
+            viewModel.DeepScanResult = openPorts.Count == 0
+                ? $"深度扫描完成：{host} 未发现开放端口"
+                : $"深度扫描完成：{host} 开放端口 {string.Join(",", openPorts)}（共 {openPorts.Count} 个）";
+        }
+        catch (OperationCanceledException)
+        {
+            viewModel.DeepScanStatus = "";
+            viewModel.DeepScanResult = $"深度扫描已停止（{host}）";
+        }
+        catch (Exception ex)
+        {
+            viewModel.DeepScanStatus = "";
+            viewModel.DeepScanResult = $"深度扫描失败：{ex.Message}";
+        }
+        finally
+        {
+            viewModel.IsDeepScanning = false;
+            _deepCts?.Dispose();
+            _deepCts = null;
+        }
+    }
+
+    private static ScanGridRow ToScanGridRow(NetworkScanHost host, IReadOnlyList<int> ports)
+    {
+        var openPorts = new HashSet<int>(host.OpenPorts);
+        return new ScanGridRow
+        {
+            Address = host.Address.ToString(),
+            HostName = host.HostName ?? "",
+            Latency = host.RoundTripMs is { } ms ? $"{ms} ms" : "",
+            Cells = ports
+                .Select(p => new PortCell { Label = p.ToString(), IsOpen = openPorts.Contains(p) })
+                .ToList(),
+        };
+    }
 
     private static bool TryParseScanPorts(
         string? text,
