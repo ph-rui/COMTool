@@ -29,6 +29,17 @@ public interface INetworkScanner
         int toPort,
         IProgress<int>? scannedProgress,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Probes an explicit (sparse) list of ports on a single host, bounded by
+    /// Concurrency. Progress reports the number of ports probed so far.
+    /// Used by 端口扫描仪 "仅扫描已知端口" mode.
+    /// </summary>
+    Task<IReadOnlyList<int>> ScanHostPortsAsync(
+        IPAddress host,
+        IReadOnlyList<int> ports,
+        IProgress<int>? scannedProgress,
+        CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -92,7 +103,7 @@ public sealed class NetworkScanner : INetworkScanner
         await Task.WhenAll(tasks);
     }
 
-    public async Task<IReadOnlyList<int>> ScanHostPortsAsync(
+    public Task<IReadOnlyList<int>> ScanHostPortsAsync(
         IPAddress host,
         int fromPort,
         int toPort,
@@ -105,34 +116,54 @@ public sealed class NetworkScanner : INetworkScanner
             throw new ArgumentOutOfRangeException(nameof(fromPort), "端口范围必须在 1..65535 内且起始不大于结束");
         }
 
+        var ports = System.Linq.Enumerable.Range(fromPort, toPort - fromPort + 1).ToArray();
+        return ScanPortsCoreAsync(host, ports, scannedProgress, cancellationToken);
+    }
+
+    public Task<IReadOnlyList<int>> ScanHostPortsAsync(
+        IPAddress host,
+        IReadOnlyList<int> ports,
+        IProgress<int>? scannedProgress,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(host);
+        ArgumentNullException.ThrowIfNull(ports);
+        return ScanPortsCoreAsync(host, ports, scannedProgress, cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<int>> ScanPortsCoreAsync(
+        IPAddress host,
+        IReadOnlyList<int> ports,
+        IProgress<int>? scannedProgress,
+        CancellationToken cancellationToken)
+    {
         using var gate = new SemaphoreSlim(Math.Max(1, Concurrency));
         var openPorts = new System.Collections.Concurrent.ConcurrentBag<int>();
         int scanned = 0;
-        var total = toPort - fromPort + 1;
+        var total = ports.Count;
 
-        var tasks = System.Linq.Enumerable.Range(fromPort, total)
-            .Select(async port =>
+        var tasks = ports.Select(async port =>
+        {
+            await gate.WaitAsync(cancellationToken);
+            try
             {
-                await gate.WaitAsync(cancellationToken);
-                try
+                if (await ConnectAsync(host, port, cancellationToken))
                 {
-                    if (await ConnectAsync(host, port, cancellationToken))
-                    {
-                        openPorts.Add(port);
-                    }
+                    openPorts.Add(port);
+                }
 
-                    var done = Interlocked.Increment(ref scanned);
-                    if (done == total || done % 512 == 0)
-                    {
-                        scannedProgress?.Report(done);
-                    }
-                }
-                finally
+                var done = Interlocked.Increment(ref scanned);
+                // 小列表（已知端口模式）逐个上报；大列表（65535 全端口）每 512 报一次
+                if (total <= 64 || done == total || done % 512 == 0)
                 {
-                    gate.Release();
+                    scannedProgress?.Report(done);
                 }
-            })
-            .ToArray();
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }).ToArray();
 
         await Task.WhenAll(tasks);
         return openPorts.OrderBy(p => p).ToList();

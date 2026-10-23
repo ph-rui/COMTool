@@ -36,87 +36,93 @@ public sealed class NetworkScannerTests
     }
 
     [Fact]
-    public void NET05_ParsesSingleCidrRangeAndCommaLists()
+    public void NET05_SubnetRangeExpandsLastOctet()
     {
-        var cases = new (string Input, string[] Expected)[]
-        {
-            ("192.168.1.5", new[] { "192.168.1.5" }),
-            ("10.0.0.1, 10.0.0.2", new[] { "10.0.0.1", "10.0.0.2" }),
-            ("192.168.1.10-13", new[] { "192.168.1.10", "192.168.1.11", "192.168.1.12", "192.168.1.13" }),
-            ("192.168.1.10-192.168.1.11", new[] { "192.168.1.10", "192.168.1.11" }),
-        };
-        foreach (var (input, expectedIps) in cases)
-        {
-            Assert.True(NetworkScanTargets.TryParse(input, out var targets, out var error),
-                $"parse failed '{input}': {error}");
-            Assert.Equal(expectedIps.Length, targets.Count);
-            for (var i = 0; i < expectedIps.Length; i++)
-            {
-                Assert.Equal(expectedIps[i], targets[i].ToString());
-            }
-        }
-    }
-
-    [Fact]
-    public void NET05_CidrExpandsToAllHosts()
-    {
-        foreach (var input in new[] { "192.168.1.0/24", "10.0.0.0/24" })
-        {
-            Assert.True(NetworkScanTargets.TryParse(input, out var targets, out var error),
-                $"parse failed '{input}': {error}");
-            Assert.Equal(256, targets.Count);
-            Assert.Equal(input.Split('/')[0], targets[0].ToString());
-        }
-    }
-
-    [Fact]
-    public void NET05_RangeExpandsToAllHosts()
-    {
-        Assert.True(NetworkScanTargets.TryParse("10.0.0.10-10.0.0.12", out var targets, out var error),
+        // MobaXterm 网络扫描仪 "IP 地址范围"：前三段固定 + 末段范围
+        Assert.True(
+            NetworkScanTargets.TryParseSubnet("192", "168", "1", "1", "254", out var targets, out var error),
             $"parse failed: {error}");
-        Assert.Equal(3, targets.Count);
-        Assert.Equal("10.0.0.10", targets[0].ToString());
-        Assert.Equal("10.0.0.12", targets[2].ToString());
+        Assert.Equal(254, targets.Count);
+        Assert.Equal("192.168.1.1", targets[0].ToString());
+        Assert.Equal("192.168.1.254", targets[253].ToString());
+
+        Assert.True(
+            NetworkScanTargets.TryParseSubnet("10", "13", "1", "1", "10", out var small, out var smallError),
+            $"parse failed: {smallError}");
+        Assert.Equal(10, small.Count);
+        Assert.Equal("10.13.1.1", small[0].ToString());
+        Assert.Equal("10.13.1.10", small[9].ToString());
     }
 
     [Fact]
-    public void NET05_RejectsInvalidTargets()
+    public void NET05_SubnetRangeRejectsInvalid()
     {
-        var invalid = new[]
+        var invalid = new (string, string, string, string, string)[]
         {
-            "",
-            "   ",
-            "not-an-ip",
-            "192.168.1",
-            "192.168.1.256",
-            "192.168.1.0/33",
-            "10.0.0.1-10.0.0.2000",
-            "192.168.1.50-192.168.1.10",
-            "fe80::1",
+            ("", "168", "1", "1", "254"),       // 段为空
+            ("abc", "168", "1", "1", "254"),    // 非数字
+            ("256", "168", "1", "1", "254"),    // 段超范围
+            ("192", "168", "1", "1", "300"),    // 末段结束超范围
+            ("192", "168", "1", "200", "10"),   // 结束小于起始
         };
-        foreach (var input in invalid)
+        foreach (var (a, b, c, f, t) in invalid)
         {
-            Assert.False(NetworkScanTargets.TryParse(input, out _, out var error),
-                $"unexpectedly accepted '{input}'");
+            Assert.False(
+                NetworkScanTargets.TryParseSubnet(a, b, c, f, t, out _, out var error),
+                $"unexpectedly accepted {a}.{b}.{c}.{f}->{t}");
             Assert.NotNull(error);
         }
     }
 
     [Fact]
-    public void NET05_CapsHostCountAt1024()
+    public void NET05_TryParseIpAcceptsStrictIpv4Only()
     {
-        // /23 = 512 hosts is allowed; /22 = 1024 is right at the cap: allowed.
-        Assert.True(NetworkScanTargets.TryParse("10.0.0.0/23", out _, out var okErr));
-        Assert.Null(okErr);
-        Assert.True(NetworkScanTargets.TryParse("10.0.0.0/22", out _, out var atCapErr));
-        Assert.Null(atCapErr);
+        Assert.True(NetworkScanTargets.TryParseIp("172.16.66.163", out var ip, out _));
+        Assert.Equal("172.16.66.163", ip.ToString());
 
-        // /21 = 2048 hosts exceeds the cap.
-        Assert.False(NetworkScanTargets.TryParse("10.0.0.0/21", out _, out var overErr));
-        Assert.NotNull(overErr);
+        // 传统 2/3 段与 32 位写法必须拒绝（与 MobaXterm 严格格式一致）
+        foreach (var bad in new[]
+                 {
+                     "", "   ", "not-an-ip", "192.168.1", "192.168.1.256",
+                     "1.2.3.4.5", "10.0.0.2000", "fe80::1",
+                 })
+        {
+            Assert.False(NetworkScanTargets.TryParseIp(bad, out _, out var error),
+                $"unexpectedly accepted '{bad}'");
+            Assert.NotNull(error);
+        }
+    }
 
-        // 1024 + 512 = 1536 > cap when combined.
-        Assert.False(NetworkScanTargets.TryParse("10.0.0.0/22,10.4.0.0/23", out _, out _));
+    [Fact]
+    public void NET05_ServiceColumnsMatchMobaXterm()
+    {
+        // 网络扫描仪固定服务列顺序与端口（1:1 实测 MobaXterm v22.1）
+        Assert.Equal(
+            new[] { 22, 3389, 5900, 21, 23, 513, 80 },
+            NetworkServices.ServiceColumns.Select(c => c.Port).ToArray());
+        Assert.Equal(
+            new[] { "SSH", "RDP", "VNC", "FTP", "Telnet", "Rlogin", "HTTP" },
+            NetworkServices.ServiceColumns.Select(c => c.Name).ToArray());
+
+        // AllProbePorts = 7 个服务端口 + "其他端口" 探测集
+        Assert.Equal(7 + NetworkServices.OtherPorts.Length, NetworkServices.AllProbePorts.Length);
+        Assert.All(NetworkServices.AllProbePorts, p => Assert.InRange(p, 1, 65535));
+    }
+
+    [Fact]
+    public void NET05_FormatPortLineMatchesMobaXterm()
+    {
+        // 端口扫描仪结果行格式（实测）: "- Port #22 (ssh): listening"
+        Assert.Equal("- Port #22 (ssh): listening", NetworkServices.FormatPortLine(22));
+        Assert.Equal("- Port #6000 (x11 :0): listening", NetworkServices.FormatPortLine(6000));
+        // 未知端口不带服务名
+        Assert.Equal("- Port #12345: listening", NetworkServices.FormatPortLine(12345));
+
+        // 已知端口表必须覆盖实测出现的端口
+        foreach (var p in new[] { 22, 123, 139, 445, 3389, 993, 995, 6000 })
+        {
+            Assert.Contains(p, NetworkServices.KnownPortNumbers);
+        }
     }
 
     [Fact]
@@ -143,6 +149,8 @@ public sealed class NetworkScannerTests
         Assert.Equal([port], hosts[0].OpenPorts);
         // ICMP is best effort: RTT is reported only when ping is allowed.
         Assert.True(hosts[0].RoundTripMs is null || hosts[0].RoundTripMs >= 0);
+
+        listener.Stop();
     }
 
     [Fact]
@@ -189,47 +197,20 @@ public sealed class NetworkScannerTests
     }
 
     [Fact]
-    public void NET05_StartEndRangeExpandsToAllHosts()
+    public async Task NET05_KnownPortListProbeFindsOpenPort()
     {
-        Assert.True(
-            NetworkScanTargets.TryParse("127.0.0.1", "127.0.0.5", out var targets, out var error),
-            $"parse failed: {error}");
-        Assert.Equal(5, targets.Count);
-        Assert.Equal("127.0.0.1", targets[0].ToString());
-        Assert.Equal("127.0.0.5", targets[4].ToString());
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
 
-        // 结束地址留空时保持旧单字段全部格式
-        Assert.True(NetworkScanTargets.TryParse("192.168.1.0/24", "", out var cidr, out _));
-        Assert.Equal(256, cidr.Count);
+        // 显式端口列表（端口扫描仪"仅扫描已知端口"模式）：
+        // 一个开放端口 + 一个关闭端口（端口 1），结果只含开放端口且升序
+        var ports = new[] { 1, port }.OrderBy(p => p).ToArray();
+        var open = await new NetworkScanner().ScanHostPortsAsync(
+            IPAddress.Loopback, ports, null, default);
+        Assert.Equal(new[] { port }, open);
 
-        Assert.True(NetworkScanTargets.TryParse("10.0.0.1, 10.0.0.9", "", out var list, out _));
-        Assert.Equal(2, list.Count);
-    }
-
-    [Fact]
-    public void NET05_StartEndRejectsInvalid()
-    {
-        // 两字段皆空
-        Assert.False(NetworkScanTargets.TryParse("", "", out _, out var e1));
-        Assert.NotNull(e1);
-
-        // 起始不是 IP
-        Assert.False(NetworkScanTargets.TryParse("not-an-ip", "10.0.0.2", out _, out var e2));
-        Assert.NotNull(e2);
-
-        // 起始填 CIDR/范围 且结束地址非空 → 冲突
-        Assert.False(NetworkScanTargets.TryParse("192.168.1.0/24", "192.168.1.20", out _, out var e3));
-        Assert.NotNull(e3);
-
-        // 结束小于起始
-        Assert.False(NetworkScanTargets.TryParse("192.168.1.50", "10.0.0.10", out _, out var e4));
-        Assert.NotNull(e4);
-        Assert.False(NetworkScanTargets.TryParse("192.168.1.50", "192.168.1.10", out _, out var e4b));
-        Assert.NotNull(e4b);
-
-        // 范围超 1024 上限 (10.0.0.1..10.0.5.1 = 1281 台)
-        Assert.False(NetworkScanTargets.TryParse("10.0.0.1", "10.0.5.1", out _, out var e5));
-        Assert.NotNull(e5);
+        listener.Stop();
     }
 
     [Fact]

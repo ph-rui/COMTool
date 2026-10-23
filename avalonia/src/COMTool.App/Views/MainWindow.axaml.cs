@@ -40,7 +40,7 @@ public partial class MainWindow : Window
     private readonly HashSet<TerminalTab> _sshRestarts = new();
     private readonly HashSet<TerminalTab> _telnetRestarts = new();
     private CancellationTokenSource? _scanCts;
-    private CancellationTokenSource? _deepCts;
+    private CancellationTokenSource? _portScanCts;
     private INetworkScanner? _scanner;
     private string _historySignature = "";
 
@@ -90,9 +90,10 @@ public partial class MainWindow : Window
         Sidebar.MacroCancelRequested += OnMacroCancelRequested;
         Sidebar.HistoryActivated += OnHistoryActivated;
         Sidebar.HistoryClearRequested += OnHistoryClearRequested;
-        Sidebar.ScanStartRequested += OnScanStartRequested;
-        Sidebar.ScanStopRequested += OnScanStopRequested;
-        Sidebar.DeepScanRequested += OnDeepScanRequested;
+        Sidebar.NetScanStartRequested += OnNetScanStartRequested;
+        Sidebar.PortScanStartRequested += OnPortScanStartRequested;
+        Sidebar.PortScanStopRequested += OnPortScanStopRequested;
+        Sidebar.ToolCloseRequested += OnToolCloseRequested;
         Opened += OnOpened;
     }
 
@@ -130,13 +131,6 @@ public partial class MainWindow : Window
                 ApplyWindowSizeConfig();
                 RefreshSidebar();
                 LoadSidebarData();
-                // Pre-fill the scanner's start/end fields from the local
-                // subnet (MobaXterm-style "IP address range" dialog).
-                NetworkScanTargets.SplitCidrForFields(
-                    NetworkScanTargets.DetectLocalCidr(),
-                    out var scanStart, out var scanEnd);
-                viewModel.ScanStartIp = scanStart;
-                viewModel.ScanEndIp = scanEnd;
                 _portTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
                 _portTimer.Tick += (_, _) => RefreshPorts();
                 _portTimer.Start();
@@ -3214,31 +3208,30 @@ public partial class MainWindow : Window
     private INetworkScanner ActiveScanner =>
         NetworkScannerForTests ?? (_scanner ??= new NetworkScanner());
 
-    private async void OnScanStartRequested(object? sender, EventArgs e)
+    /// <summary>
+    /// 网络扫描仪 Start scan: expands the octet range (MobaXterm /24 form)
+    /// and probes the fixed MobaXterm service set + "other ports" per host.
+    /// </summary>
+    private async void OnNetScanStartRequested(object? sender, EventArgs e)
     {
-        if (_scanCts is not null || _deepCts is not null || DataContext is not MainViewModel viewModel)
+        if (_scanCts is not null || _portScanCts is not null || DataContext is not MainViewModel viewModel)
         {
             return;
         }
 
-        if (!NetworkScanTargets.TryParse(viewModel.ScanStartIp, viewModel.ScanEndIp, out var targets, out var targetError))
+        if (!NetworkScanTargets.TryParseSubnet(
+                viewModel.ScanOctet1, viewModel.ScanOctet2, viewModel.ScanOctet3,
+                viewModel.ScanOctetFrom, viewModel.ScanOctetTo,
+                out var targets, out var targetError))
         {
             viewModel.ScanError = targetError;
             return;
         }
 
-        if (!TryParseScanPorts(viewModel.ScanPorts, out var ports, out var portError))
-        {
-            viewModel.ScanError = portError;
-            return;
-        }
+        var ports = NetworkServices.AllProbePorts;
 
         viewModel.ScanError = null;
-        viewModel.ScanPortLabels = ports.Select(p => p.ToString()).ToList();
         viewModel.ScanRows.Clear();
-        viewModel.SelectedScanAddress = null;
-        viewModel.DeepScanStatus = "";
-        viewModel.DeepScanResult = "";
         viewModel.ScanStatus = $"扫描中… 0/{targets.Count}";
         viewModel.IsScanning = true;
         _scanCts = new CancellationTokenSource();
@@ -3247,14 +3240,12 @@ public partial class MainWindow : Window
         {
             if (p.Host is { } host)
             {
-                viewModel.ScanRows.Add(ToScanGridRow(host, ports));
+                viewModel.ScanRows.Add(ToScanGridRow(host));
             }
 
             if (p.Completed >= p.Total)
             {
-                // The final progress report closes the scan out. Writing the
-                // terminal state here (not after the await) keeps it ordered
-                // after every incremental update, on any thread context.
+                // 最终进度上报时写终止状态，保证与增量更新顺序一致
                 viewModel.IsScanning = false;
                 _scanCts?.Dispose();
                 _scanCts = null;
@@ -3269,7 +3260,7 @@ public partial class MainWindow : Window
         try
         {
             await ActiveScanner.ScanAsync(targets, ports, progress, _scanCts.Token);
-            // Fallback for a scanner that never reports its final count.
+            // 兜底：若扫描器未上报最终计数
             if (viewModel.IsScanning)
             {
                 viewModel.IsScanning = false;
@@ -3295,10 +3286,23 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnScanStopRequested(object? sender, EventArgs e)
+    private void OnPortScanStopRequested(object? sender, EventArgs e)
     {
-        _scanCts?.Cancel();
-        _deepCts?.Cancel();
+        _portScanCts?.Cancel();
+    }
+
+    /// <summary>
+    /// 关闭按钮 / 返回箭头：取消正在运行的扫描并返回工具菜单
+    /// （MobaXterm 关闭对话框即终止扫描）。
+    /// </summary>
+    private void OnToolCloseRequested(object? sender, EventArgs e)
+    {
+        if (DataContext is MainViewModel viewModel)
+        {
+            _scanCts?.Cancel();
+            _portScanCts?.Cancel();
+            viewModel.ToolsView = ToolsView.Menu;
+        }
     }
 
     /// <summary>
@@ -3312,121 +3316,112 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Deep scan (MobaXterm "Deep scan"): probes all 65535 ports on the
-    /// selected host; the result is the sorted list of open ports.
+    /// 端口扫描仪 Start scan: known-ports mode probes the fixed service table;
+    /// range mode probes every port in [from..to] (1..65535 = MobaXterm deep
+    /// scan). Results are MobaXterm-style lines: "- Port #22 (ssh): listening".
     /// </summary>
-    private async void OnDeepScanRequested(object? sender, EventArgs e)
+    private async void OnPortScanStartRequested(object? sender, EventArgs e)
     {
-        if (_deepCts is not null || _scanCts is not null || DataContext is not MainViewModel viewModel)
+        if (_portScanCts is not null || _scanCts is not null || DataContext is not MainViewModel viewModel)
         {
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(viewModel.SelectedScanAddress) ||
-            !System.Net.IPAddress.TryParse(viewModel.SelectedScanAddress, out var host))
+        if (!NetworkScanTargets.TryParseIp(viewModel.PortScanIp, out var host, out var ipError))
         {
+            viewModel.PortScanError = ipError;
             return;
         }
 
-        viewModel.DeepScanStatus = $"深度扫描 {host}：0/65535";
-        viewModel.DeepScanResult = "";
-        viewModel.IsDeepScanning = true;
-        _deepCts = new CancellationTokenSource();
+        int from = 0;
+        int to = 0;
+        if (viewModel.PortScanRangeMode)
+        {
+            if (!int.TryParse(viewModel.PortScanFrom, out from) || from is < 1 or > 65535)
+            {
+                viewModel.PortScanError = "起始端口无效（须为 1~65535 的整数）";
+                return;
+            }
+            if (!int.TryParse(viewModel.PortScanTo, out to) || to is < 1 or > 65535)
+            {
+                viewModel.PortScanError = "结束端口无效（须为 1~65535 的整数）";
+                return;
+            }
+            if (from > to)
+            {
+                viewModel.PortScanError = "起始端口不能大于结束端口";
+                return;
+            }
+        }
+
+        var total = viewModel.PortScanRangeMode
+            ? to - from + 1
+            : NetworkServices.KnownPortNumbers.Length;
+        viewModel.PortScanError = null;
+        viewModel.PortScanResult = "";
+        viewModel.PortScanStatus = $"正在扫描 {host}：0/{total}";
+        viewModel.IsPortScanning = true;
+        _portScanCts = new CancellationTokenSource();
 
         var progress = new UiProgress<int>(done =>
         {
-            if (done >= 65535)
-            {
-                viewModel.IsDeepScanning = false;
-                _deepCts?.Dispose();
-                _deepCts = null;
-                viewModel.DeepScanStatus = "";
-            }
-            else
-            {
-                viewModel.DeepScanStatus = $"深度扫描 {host}：{done}/65535";
-            }
+            viewModel.PortScanStatus =
+                $"正在扫描 {host}：{Math.Min(done, total)}/{total}";
         });
 
         try
         {
-            var openPorts = await ActiveScanner.ScanHostPortsAsync(host, 1, 65535, progress, _deepCts.Token);
-            viewModel.DeepScanResult = openPorts.Count == 0
-                ? $"深度扫描完成：{host} 未发现开放端口"
-                : $"深度扫描完成：{host} 开放端口 {string.Join(",", openPorts)}（共 {openPorts.Count} 个）";
+            IReadOnlyList<int> openPorts = viewModel.PortScanRangeMode
+                ? await ActiveScanner.ScanHostPortsAsync(host, from, to, progress, _portScanCts.Token)
+                : await ActiveScanner.ScanHostPortsAsync(host, NetworkServices.KnownPortNumbers, progress, _portScanCts.Token);
+            viewModel.PortScanResult = FormatPortResults(openPorts);
         }
         catch (OperationCanceledException)
         {
-            viewModel.DeepScanStatus = "";
-            viewModel.DeepScanResult = $"深度扫描已停止（{host}）";
+            viewModel.PortScanResult = "扫描已停止";
         }
         catch (Exception ex)
         {
-            viewModel.DeepScanStatus = "";
-            viewModel.DeepScanResult = $"深度扫描失败：{ex.Message}";
+            viewModel.PortScanResult = "";
+            viewModel.PortScanError = ex.Message;
         }
         finally
         {
-            viewModel.IsDeepScanning = false;
-            _deepCts?.Dispose();
-            _deepCts = null;
+            viewModel.IsPortScanning = false;
+            viewModel.PortScanStatus = "";
+            _portScanCts?.Dispose();
+            _portScanCts = null;
         }
     }
 
-    private static ScanGridRow ToScanGridRow(NetworkScanHost host, IReadOnlyList<int> ports)
+    private static string FormatPortResults(IReadOnlyList<int> openPorts)
+    {
+        if (openPorts.Count == 0)
+        {
+            return "未发现开放端口";
+        }
+
+        var sb = new System.Text.StringBuilder();
+        foreach (var port in openPorts)
+        {
+            sb.AppendLine(NetworkServices.FormatPortLine(port));
+        }
+        return sb.ToString().TrimEnd();
+    }
+
+    private static ScanGridRow ToScanGridRow(NetworkScanHost host)
     {
         var openPorts = new HashSet<int>(host.OpenPorts);
+        var otherPorts = NetworkServices.OtherPorts.Where(p => openPorts.Contains(p)).ToList();
         return new ScanGridRow
         {
             Address = host.Address.ToString(),
             HostName = host.HostName ?? "",
-            Latency = host.RoundTripMs is { } ms ? $"{ms} ms" : "",
-            Cells = ports
-                .Select(p => new PortCell { Label = p.ToString(), IsOpen = openPorts.Contains(p) })
+            Cells = NetworkServices.ServiceColumns
+                .Select(c => new PortCell { Label = c.Name, IsOpen = openPorts.Contains(c.Port) })
                 .ToList(),
+            OtherPorts = otherPorts.Count == 0 ? "" : string.Join(", ", otherPorts),
         };
-    }
-
-    private static bool TryParseScanPorts(
-        string? text,
-        out IReadOnlyList<int> ports,
-        out string? error)
-    {
-        ports = Array.Empty<int>();
-        error = null;
-
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            error = "端口不能为空";
-            return false;
-        }
-
-        var list = new List<int>();
-        foreach (var rawToken in text.Split(
-                     new[] { ',', ';', ' ', '\t' },
-                     StringSplitOptions.RemoveEmptyEntries))
-        {
-            var token = rawToken.Trim();
-            if (!int.TryParse(token, out var port) || port is < 1 or > 65535)
-            {
-                error = $"无效端口：{token}";
-                return false;
-            }
-
-            if (!list.Contains(port))
-            {
-                list.Add(port);
-            }
-
-            if (list.Count > 16)
-            {
-                error = "最多支持 16 个端口";
-                return false;
-            }
-        }
-
-        ports = list;
-        return true;
     }
 
     private void OnMinimizeClick(object? sender, RoutedEventArgs e)

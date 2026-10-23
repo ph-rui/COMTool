@@ -66,8 +66,8 @@
                 Classes="SidebarTextButton"
                 Content="← 返回"
                 FontSize="11"
-                IsVisible="{Binding IsToolsScanner}"
-                Click="OnBackToToolsMenuClick"
+                IsVisible="{Binding IsToolsSubView}"
+                Click="OnToolCloseClick"
                 ToolTip.Tip="返回工具列表" />
         <TextBlock Grid.Column="0"
                    Text="&#xf007;"
@@ -260,45 +260,75 @@
           </ScrollViewer>
         </Border>
 
-        <!-- Network scanner dialog -->
-        <Grid Name="ToolsScannerView"
-              IsVisible="{Binding IsToolsScanner}"
+        <!-- 网络扫描仪 (1:1 MobaXterm "网络扫描": IP 地址范围 octet 输入 + 固定服务列 + Start scan) -->
+        <Grid Name="NetworkScannerView"
+              IsVisible="{Binding IsNetworkScannerView}"
               RowDefinitions="Auto,*,Auto">
           <Border Grid.Row="0"
                   Classes="SidebarCard"
                   Margin="0,0,0,4">
             <StackPanel Spacing="4">
               <TextBlock Classes="SidebarFieldLabel" Text="IP 地址范围" />
-              <Grid ColumnDefinitions="*,8,*">
-                <TextBox Grid.Column="0"
-                         Name="ScanStartBox"
-                         Text="{Binding ScanStartIp}"
-                         PlaceholderText="192.168.1.0"
-                         FontSize="11" />
-                <TextBox Grid.Column="2"
-                         Name="ScanEndBox"
-                         Text="{Binding ScanEndIp}"
-                         PlaceholderText="192.168.1.255"
-                         FontSize="11" />
-              </Grid>
-              <TextBlock Classes="SidebarFieldLabel" Text="端口（逗号分隔，最多 16 个）" />
-              <TextBox Name="ScanPortsBox"
-                       Text="{Binding ScanPorts}"
-                       PlaceholderText="22,23"
-                       FontSize="11" />
+              <!-- 窄侧栏适配：5 段框 + 点 + 箭头总计 ~154px，卡片内容区 ~158px -->
+              <StackPanel Orientation="Horizontal"
+                          Spacing="1"
+                          VerticalAlignment="Center">
+                <TextBox Name="ScanOctet1Box"
+                         Text="{Binding ScanOctet1}"
+                         FontSize="10"
+                         Width="24"
+                         HorizontalContentAlignment="Center" />
+                <TextBlock Text="."
+                           FontSize="10"
+                           VerticalAlignment="Center" />
+                <TextBox Name="ScanOctet2Box"
+                         Text="{Binding ScanOctet2}"
+                         FontSize="10"
+                         Width="24"
+                         HorizontalContentAlignment="Center" />
+                <TextBlock Text="."
+                           FontSize="10"
+                           VerticalAlignment="Center" />
+                <TextBox Name="ScanOctet3Box"
+                         Text="{Binding ScanOctet3}"
+                         FontSize="10"
+                         Width="24"
+                         HorizontalContentAlignment="Center" />
+                <TextBlock Text="."
+                           FontSize="10"
+                           VerticalAlignment="Center" />
+                <TextBox Name="ScanOctetFromBox"
+                         Text="{Binding ScanOctetFrom}"
+                         FontSize="10"
+                         Width="24"
+                         HorizontalContentAlignment="Center" />
+                <TextBlock Text="--&gt;"
+                           FontSize="10"
+                           VerticalAlignment="Center" />
+                <TextBox Name="ScanOctetToBox"
+                         Text="{Binding ScanOctetTo}"
+                         FontSize="10"
+                         Width="24"
+                         HorizontalContentAlignment="Center" />
+              </StackPanel>
               <StackPanel Orientation="Horizontal"
                           Spacing="6"
                           Margin="0,2,0,0">
                 <Button Name="ScanStartButton"
                         Classes="SidebarActionButton"
-                        Content="开始扫描"
                         IsEnabled="{Binding !IsBusy}"
-                        Click="OnScanStartClick" />
-                <Button Name="ScanStopButton"
-                        Classes="SidebarActionButton"
-                        Content="停止"
-                        IsEnabled="{Binding IsBusy}"
-                        Click="OnScanStopClick" />
+                        Click="OnNetScanStartClick"
+                        ToolTip.Tip="Start scan">
+                  <StackPanel Orientation="Horizontal"
+                              Spacing="4"
+                              HorizontalAlignment="Center">
+                    <TextBlock Text="&#xf04b;"
+                               FontFamily="{DynamicResource IconFontAwesome}"
+                               FontSize="10"
+                               Foreground="White" />
+                    <TextBlock Text="Start scan" />
+                  </StackPanel>
+                </Button>
               </StackPanel>
               <TextBlock Classes="SidebarError"
                          Text="{Binding ScanError}"
@@ -318,50 +348,77 @@
                 <StackPanel>
                   <TextBlock Classes="SidebarDetail"
                              Text="{Binding ScanStatus}"
-                             Margin="4,4,4,0" />
+                             Margin="4,4,4,0"
+                             IsVisible="{Binding ScanStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                  <!-- 列头 1:1 MobaXterm: IP 地址 | 名称 | SSH | RDP | VNC | FTP | Telnet | Rlogin | HTTP | 其他端口 -->
                   <StackPanel Orientation="Horizontal"
-                              Margin="4,4,4,2"
-                              IsVisible="{Binding HasScanPortLabels}">
+                              Margin="4,4,4,2">
                     <TextBlock Text="IP 地址"
-                               Width="84"
-                               FontSize="10"
+                               Width="88"
+                               FontSize="9"
                                Foreground="{DynamicResource SidebarSectionBrush}"
                                TextTrimming="CharacterEllipsis" />
-                    <ItemsControl ItemsSource="{Binding ScanPortLabels}">
-                      <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                          <StackPanel Orientation="Horizontal" />
-                        </ItemsPanelTemplate>
-                      </ItemsControl.ItemsPanel>
-                      <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="sys:String">
-                          <TextBlock Text="{Binding}"
-                                     Width="22"
-                                     FontSize="10"
-                                     HorizontalAlignment="Center"
-                                     Foreground="{DynamicResource SidebarSectionBrush}" />
-                        </DataTemplate>
-                      </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                    <TextBlock Text="延迟"
-                               Width="44"
-                               FontSize="10"
-                               HorizontalAlignment="Right"
+                    <TextBlock Text="名称"
+                               Width="36"
+                               FontSize="9"
                                Foreground="{DynamicResource SidebarSectionBrush}" />
+                    <TextBlock Text="SSH"
+                               Width="28"
+                               FontSize="9"
+                               HorizontalAlignment="Center"
+                               Foreground="{DynamicResource SidebarSectionBrush}" />
+                    <TextBlock Text="RDP"
+                               Width="28"
+                               FontSize="9"
+                               HorizontalAlignment="Center"
+                               Foreground="{DynamicResource SidebarSectionBrush}" />
+                    <TextBlock Text="VNC"
+                               Width="28"
+                               FontSize="9"
+                               HorizontalAlignment="Center"
+                               Foreground="{DynamicResource SidebarSectionBrush}" />
+                    <TextBlock Text="FTP"
+                               Width="28"
+                               FontSize="9"
+                               HorizontalAlignment="Center"
+                               Foreground="{DynamicResource SidebarSectionBrush}" />
+                    <TextBlock Text="Telnet"
+                               Width="28"
+                               FontSize="9"
+                               HorizontalAlignment="Center"
+                               Foreground="{DynamicResource SidebarSectionBrush}"
+                               TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="Rlogin"
+                               Width="28"
+                               FontSize="9"
+                               HorizontalAlignment="Center"
+                               Foreground="{DynamicResource SidebarSectionBrush}"
+                               TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="HTTP"
+                               Width="28"
+                               FontSize="9"
+                               HorizontalAlignment="Center"
+                               Foreground="{DynamicResource SidebarSectionBrush}" />
+                    <TextBlock Text="其他端口"
+                               Width="52"
+                               FontSize="9"
+                               Foreground="{DynamicResource SidebarSectionBrush}"
+                               TextTrimming="CharacterEllipsis" />
                   </StackPanel>
                   <ItemsControl ItemsSource="{Binding ScanRows}">
                     <ItemsControl.ItemTemplate>
                       <DataTemplate x:DataType="vm:ScanGridRow">
                         <StackPanel Orientation="Horizontal"
-                                    Margin="4,2,4,0"
-                                    Cursor="Hand"
-                                    Tapped="OnScanRowTapped"
-                                    Classes="ScanRow"
-                                    Classes.selected="{Binding IsSelected}">
+                                    Margin="4,2,4,0">
                           <TextBlock Text="{Binding Address}"
-                                     Width="84"
-                                     FontSize="11"
+                                     Width="88"
+                                     FontSize="10"
                                      Classes="SessionName"
+                                     TextTrimming="CharacterEllipsis" />
+                          <TextBlock Text="{Binding HostName}"
+                                     Width="36"
+                                     FontSize="9"
+                                     Classes="SidebarDetail"
                                      TextTrimming="CharacterEllipsis"
                                      ToolTip.Tip="{Binding HostName}" />
                           <ItemsControl ItemsSource="{Binding Cells}">
@@ -373,26 +430,28 @@
                             <ItemsControl.ItemTemplate>
                               <DataTemplate x:DataType="vm:PortCell">
                                 <TextBlock Text="{Binding Glyph}"
-                                           Width="22"
+                                           Width="28"
                                            FontSize="11"
                                            HorizontalAlignment="Center"
                                            FontFamily="{DynamicResource IconFontAwesome}"
-                                           Foreground="{Binding Foreground}" />
+                                           Foreground="{Binding Foreground}"
+                                           ToolTip.Tip="{Binding Label}" />
                               </DataTemplate>
                             </ItemsControl.ItemTemplate>
                           </ItemsControl>
-                          <TextBlock Text="{Binding Latency}"
-                                     Width="44"
-                                     FontSize="10"
-                                     HorizontalAlignment="Right"
-                                     Classes="SidebarDetail" />
+                          <TextBlock Text="{Binding OtherPorts}"
+                                     Width="52"
+                                     FontSize="9"
+                                     Classes="SidebarDetail"
+                                     TextTrimming="CharacterEllipsis"
+                                     ToolTip.Tip="{Binding OtherPorts}" />
                         </StackPanel>
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
                   </ItemsControl>
                 </StackPanel>
               </ScrollViewer>
-              <TextBlock Text="点击「开始扫描」开始"
+              <TextBlock Text="点击 Start scan 开始扫描"
                          FontSize="12"
                          Foreground="{DynamicResource WindowTextBrush}"
                          Margin="4,8,4,0"
@@ -401,20 +460,140 @@
             </Grid>
           </Border>
 
-          <StackPanel Grid.Row="2" Spacing="3" Margin="0,4,0,0">
-            <Button Name="DeepScanButton"
-                    Classes="SidebarActionButton"
-                    Content="深度扫描"
-                    IsEnabled="{Binding IsDeepScanEnabled}"
-                    Click="OnDeepScanClick"
-                    ToolTip.Tip="扫描所选主机的全部 65535 个端口" />
-            <TextBlock Classes="SidebarDetail"
-                       Text="{Binding DeepScanStatus}"
-                       IsVisible="{Binding DeepScanStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-            <TextBlock Classes="SidebarDetail"
-                       Text="{Binding DeepScanResult}"
-                       IsVisible="{Binding DeepScanResult, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-          </StackPanel>
+          <Button Grid.Row="2"
+                  Name="NetScanCloseButton"
+                  Classes="SidebarActionButton"
+                  Margin="0,4,0,0"
+                  HorizontalAlignment="Center"
+                  Click="OnToolCloseClick">
+            <StackPanel Orientation="Horizontal"
+                        Spacing="4"
+                        HorizontalAlignment="Center">
+              <TextBlock Text="&#xf00d;"
+                         FontFamily="{DynamicResource IconFontAwesome}"
+                         FontSize="10"
+                         Foreground="White" />
+              <TextBlock Text="关闭" />
+            </StackPanel>
+          </Button>
+        </Grid>
+
+        <!-- 端口扫描仪 (1:1 MobaXterm "端口扫描仪": IP 地址 + 已知端口/端口范围 + Start scan) -->
+        <Grid Name="PortScannerView"
+              IsVisible="{Binding IsPortScannerView}"
+              RowDefinitions="Auto,*,Auto">
+          <Border Grid.Row="0"
+                  Classes="SidebarCard"
+                  Margin="0,0,0,4">
+            <StackPanel Spacing="4">
+              <TextBlock Classes="SidebarFieldLabel" Text="IP 地址" />
+              <TextBox Name="PortScanIpBox"
+                       Text="{Binding PortScanIp}"
+                       PlaceholderText="192.168.1.100"
+                       FontSize="11" />
+              <RadioButton Name="PortScanKnownRadio"
+                           GroupName="PortScanMode"
+                           IsChecked="True"
+                           Content="仅扫描已知端口"
+                           FontSize="11"
+                           Margin="0,2,0,0" />
+              <RadioButton Name="PortScanRangeRadio"
+                           GroupName="PortScanMode"
+                           IsChecked="{Binding PortScanRangeMode, Mode=TwoWay}"
+                           Content="扫描端口范围"
+                           FontSize="11" />
+              <!-- 范围框单列一行（窄侧栏放不下与单选同行）；IsEnabled 必须绑在输入框自身 -->
+              <StackPanel Orientation="Horizontal"
+                          Spacing="4"
+                          VerticalAlignment="Center">
+                <TextBox Name="PortScanFromBox"
+                         Text="{Binding PortScanFrom}"
+                         FontSize="11"
+                         Width="46"
+                         HorizontalContentAlignment="Center"
+                         IsEnabled="{Binding PortScanRangeMode}" />
+                <TextBlock Text="--&gt;"
+                           FontSize="11"
+                           VerticalAlignment="Center" />
+                <TextBox Name="PortScanToBox"
+                         Text="{Binding PortScanTo}"
+                         FontSize="11"
+                         Width="54"
+                         HorizontalContentAlignment="Center"
+                         IsEnabled="{Binding PortScanRangeMode}" />
+              </StackPanel>
+              <!-- 竖排：两按钮横排(~182px)超出卡片内容区(~158px)，停止按钮会被挤出可点区域 -->
+              <StackPanel Spacing="4"
+                          Margin="0,2,0,0">
+                <Button Name="PortScanStartButton"
+                        Classes="SidebarActionButton"
+                        IsEnabled="{Binding !IsBusy}"
+                        Click="OnPortScanStartClick"
+                        ToolTip.Tip="Start scan">
+                  <StackPanel Orientation="Horizontal"
+                              Spacing="4"
+                              HorizontalAlignment="Center">
+                    <TextBlock Text="&#xf04b;"
+                               FontFamily="{DynamicResource IconFontAwesome}"
+                               FontSize="10"
+                               Foreground="White" />
+                    <TextBlock Text="Start scan" />
+                  </StackPanel>
+                </Button>
+                <Button Name="PortScanStopButton"
+                        Classes="SidebarActionButton"
+                        Content="停止"
+                        IsEnabled="{Binding IsPortScanning}"
+                        Click="OnPortScanStopClick" />
+              </StackPanel>
+              <TextBlock Classes="SidebarError"
+                         Text="{Binding PortScanError}"
+                         IsVisible="{Binding PortScanError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+              <TextBlock Classes="SidebarDetail"
+                         Text="{Binding PortScanStatus}"
+                         IsVisible="{Binding PortScanStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            </StackPanel>
+          </Border>
+
+          <Border Grid.Row="1"
+                  Background="{DynamicResource SidebarListBackgroundBrush}"
+                  BorderBrush="{DynamicResource SidebarBorderBrush}"
+                  BorderThickness="1"
+                  CornerRadius="3"
+                  Padding="2">
+            <Grid>
+              <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                            VerticalScrollBarVisibility="Auto">
+                <TextBlock Text="{Binding PortScanResult}"
+                           FontSize="10"
+                           TextWrapping="NoWrap"
+                           Margin="6,4" />
+              </ScrollViewer>
+              <TextBlock Text="点击 Start scan 开始扫描"
+                         FontSize="12"
+                         Foreground="{DynamicResource WindowTextBrush}"
+                         Margin="4,8,4,0"
+                         VerticalAlignment="Top"
+                         IsVisible="{Binding !HasPortScanResult}" />
+            </Grid>
+          </Border>
+
+          <Button Grid.Row="2"
+                  Name="PortScanCloseButton"
+                  Classes="SidebarActionButton"
+                  Margin="0,4,0,0"
+                  HorizontalAlignment="Center"
+                  Click="OnToolCloseClick">
+            <StackPanel Orientation="Horizontal"
+                        Spacing="4"
+                        HorizontalAlignment="Center">
+              <TextBlock Text="&#xf00d;"
+                         FontFamily="{DynamicResource IconFontAwesome}"
+                         FontSize="10"
+                         Foreground="White" />
+              <TextBlock Text="关闭" />
+            </StackPanel>
+          </Button>
         </Grid>
       </Grid>
 

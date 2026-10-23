@@ -14,13 +14,14 @@ public enum SidebarTab
 }
 
 /// <summary>
-/// Content of the Tools tab: the MobaXterm-style tool menu, or the network
-/// scanner dialog after 网络扫描仪 is picked.
+/// Content of the Tools tab: the MobaXterm-style tool menu, the 网络扫描仪
+/// dialog, or the 端口扫描仪 dialog.
 /// </summary>
 public enum ToolsView
 {
     Menu,
-    Scanner
+    NetworkScanner,
+    PortScanner
 }
 
 public sealed partial class MacroItem : ObservableObject
@@ -50,8 +51,9 @@ public sealed class HistoryEntry
 }
 
 /// <summary>
-/// One entry of the MobaXterm-style tool menu. Only 网络扫描仪 is wired up;
-/// the remaining entries mirror MobaXterm's dropdown and are marked 暂不支持.
+/// One entry of the MobaXterm-style tool menu. 网络扫描仪 and 端口扫描仪 are
+/// wired up; the remaining entries mirror MobaXterm's dropdown and are marked
+/// 暂不支持.
 /// </summary>
 public sealed class ToolMenuItem
 {
@@ -62,8 +64,8 @@ public sealed class ToolMenuItem
 }
 
 /// <summary>
-/// One cell (host, port) of the scan result grid: green check when open,
-/// gray cross when closed, matching MobaXterm's scanner result table.
+/// One cell of the 网络扫描仪 result grid (host × service): green check when
+/// open, gray cross when closed, matching MobaXterm's scanner result table.
 /// </summary>
 public sealed class PortCell
 {
@@ -74,20 +76,18 @@ public sealed class PortCell
 }
 
 /// <summary>
-/// One row of the scan result grid: a probed host with one cell per scanned
-/// port, plus optional hostname and latency.
+/// One row of the 网络扫描仪 result grid: a probed host, one cell per fixed
+/// service column (SSH/RDP/VNC/FTP/Telnet/Rlogin/HTTP), hostname and the
+/// extra open ports (MobaXterm "其他端口" column).
 /// </summary>
-public sealed partial class ScanGridRow : ObservableObject
+public sealed class ScanGridRow
 {
     public required string Address { get; init; }
     public string HostName { get; init; } = "";
-    public string Latency { get; init; } = "";
     public required IReadOnlyList<PortCell> Cells { get; init; }
+    public string OtherPorts { get; init; } = "";
     public bool HasHostName => HostName.Length > 0;
-    public bool HasLatency => Latency.Length > 0;
-
-    [ObservableProperty]
-    private bool _isSelected;
+    public bool HasOtherPorts => OtherPorts.Length > 0;
 }
 
 public partial class MainViewModel
@@ -116,14 +116,22 @@ public partial class MainViewModel
     [ObservableProperty]
     private string? _editingMacroId;
 
+    // ---- 网络扫描仪 (MobaXterm "IP 地址范围" five-segment form: three fixed
+    //      octets + last-octet range; default 192.168.1.1 -> 254) ----
     [ObservableProperty]
-    private string _scanStartIp = "";
+    private string _scanOctet1 = "192";
 
     [ObservableProperty]
-    private string _scanEndIp = "";
+    private string _scanOctet2 = "168";
 
     [ObservableProperty]
-    private string _scanPorts = "22,23";
+    private string _scanOctet3 = "1";
+
+    [ObservableProperty]
+    private string _scanOctetFrom = "1";
+
+    [ObservableProperty]
+    private string _scanOctetTo = "254";
 
     [ObservableProperty]
     private string _scanStatus = "";
@@ -134,20 +142,30 @@ public partial class MainViewModel
     [ObservableProperty]
     private bool _isScanning;
 
+    // ---- 端口扫描仪 (MobaXterm "IP 地址" + known-ports / port-range modes) ----
     [ObservableProperty]
-    private bool _isDeepScanning;
+    private string _portScanIp = "";
 
     [ObservableProperty]
-    private string _deepScanStatus = "";
+    private bool _portScanRangeMode;
 
     [ObservableProperty]
-    private string _deepScanResult = "";
+    private string _portScanFrom = "1";
 
     [ObservableProperty]
-    private string? _selectedScanAddress;
+    private string _portScanTo = "65535";
 
     [ObservableProperty]
-    private List<string> _scanPortLabels = new();
+    private string _portScanStatus = "";
+
+    [ObservableProperty]
+    private string? _portScanError;
+
+    [ObservableProperty]
+    private bool _isPortScanning;
+
+    [ObservableProperty]
+    private string _portScanResult = "";
 
     public ObservableCollection<MacroItem> Macros { get; } = new();
     public ObservableCollection<HistoryEntry> History { get; } = new();
@@ -172,15 +190,15 @@ public partial class MainViewModel
         void Add(string id, string name, bool enabled, string tip) =>
             ToolMenu.Add(new ToolMenuItem { Id = id, Name = name, IsEnabled = enabled, ToolTip = tip });
 
-        // Mirrors MobaXterm's "Tools" dropdown order; only the network
-        // scanner is implemented so far, the rest stay 暂不支持.
+        // Mirrors MobaXterm's "Tools" dropdown order; the network scanner and
+        // port scanner are implemented, the rest stay 暂不支持.
         Add("net-server", "网络服务器", false, "暂不支持");
         Add("ssh-tunnel", "MobaSshTunnel (端口转发)", false, "暂不支持");
         Add("keygen", "MobaKeyGen (SSH 密钥生成器)", false, "暂不支持");
         Add("list-ports", "列出开放的网络端口", false, "暂不支持");
         Add("wol", "网络唤醒", false, "暂不支持");
         Add("scanner", "网络扫描仪", true, "扫描局域网在线设备与端口");
-        Add("port-scanner", "端口扫描仪", false, "暂不支持");
+        Add("port-scanner", "端口扫描仪", true, "扫描指定 IP 的开放端口");
         Add("packet-capture", "网络数据包捕获", false, "暂不支持");
     }
 
@@ -196,40 +214,32 @@ public partial class MainViewModel
     partial void OnToolsViewChanged(ToolsView value)
     {
         OnPropertyChanged(nameof(IsToolsMenu));
-        OnPropertyChanged(nameof(IsToolsScanner));
+        OnPropertyChanged(nameof(IsNetworkScannerView));
+        OnPropertyChanged(nameof(IsPortScannerView));
+        OnPropertyChanged(nameof(IsToolsSubView));
     }
 
-    partial void OnSelectedScanAddressChanged(string? value)
-    {
-        foreach (var row in ScanRows)
-        {
-            row.IsSelected = row.Address == value;
-        }
-
-        OnPropertyChanged(nameof(IsDeepScanEnabled));
-    }
-
-    partial void OnIsScanningChanged(bool value)
-    {
+    partial void OnIsScanningChanged(bool value) =>
         OnPropertyChanged(nameof(IsBusy));
-        OnPropertyChanged(nameof(IsDeepScanEnabled));
-    }
 
-    partial void OnIsDeepScanningChanged(bool value)
-    {
+    partial void OnIsPortScanningChanged(bool value) =>
         OnPropertyChanged(nameof(IsBusy));
-        OnPropertyChanged(nameof(IsDeepScanEnabled));
-    }
 
-    partial void OnScanPortLabelsChanged(List<string> value) =>
-        OnPropertyChanged(nameof(HasScanPortLabels));
+    partial void OnPortScanRangeModeChanged(bool value) =>
+        OnPropertyChanged(nameof(IsPortScanKnownMode));
+
+    partial void OnPortScanResultChanged(string value) =>
+        OnPropertyChanged(nameof(HasPortScanResult));
 
     public bool IsSessionsTab => SidebarTab == SidebarTab.Sessions;
     public bool IsToolsTab => SidebarTab == SidebarTab.Tools;
     public bool IsMacrosTab => SidebarTab == SidebarTab.Macros;
     public bool IsHistoryTab => SidebarTab == SidebarTab.History;
     public bool IsToolsMenu => ToolsView == ToolsView.Menu;
-    public bool IsToolsScanner => ToolsView == ToolsView.Scanner;
+    public bool IsNetworkScannerView => ToolsView == ToolsView.NetworkScanner;
+    public bool IsPortScannerView => ToolsView == ToolsView.PortScanner;
+    public bool IsToolsSubView => ToolsView != ToolsView.Menu;
+    public bool IsPortScanKnownMode => !PortScanRangeMode;
 
     public string SidebarTitle => SidebarTab switch
     {
@@ -254,9 +264,8 @@ public partial class MainViewModel
     public bool HasMacros => Macros.Count > 0;
     public bool HasHistory => History.Count > 0;
     public bool HasScanRows => ScanRows.Count > 0;
-    public bool HasScanPortLabels => ScanPortLabels.Count > 0;
-    public bool IsBusy => IsScanning || IsDeepScanning;
-    public bool IsDeepScanEnabled => SelectedScanAddress is not null && !IsBusy;
+    public bool HasPortScanResult => PortScanResult.Length > 0;
+    public bool IsBusy => IsScanning || IsPortScanning;
 
     /// <summary>
     /// Opens the inline macro editor, optionally pre-filled for editing an
