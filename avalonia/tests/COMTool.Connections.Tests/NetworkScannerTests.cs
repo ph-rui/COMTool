@@ -28,32 +28,38 @@ public sealed class NetworkScannerTests
         return list;
     }
 
-    [Theory]
-    [InlineData("192.168.1.5", "192.168.1.5")]
-    [InlineData("10.0.0.1, 10.0.0.2", "10.0.0.1|10.0.0.2")]
-    [InlineData("192.168.1.10-13", "192.168.1.10|192.168.1.11|192.168.1.12|192.168.1.13")]
-    [InlineData("192.168.1.10-192.168.1.11", "192.168.1.10|192.168.1.11")]
-    public void NET05_ParsesSingleCidrRangeAndCommaLists(string input, string expected)
+    [Fact]
+    public void NET05_ParsesSingleCidrRangeAndCommaLists()
     {
-        var expectedIps = expected.Split('|');
-        Assert.True(NetworkScanTargets.TryParse(input, out var targets, out var error),
-            $"parse failed: {error}");
-        Assert.Equal(expectedIps.Length, targets.Count);
-        for (var i = 0; i < expectedIps.Length; i++)
+        var cases = new (string Input, string[] Expected)[]
         {
-            Assert.Equal(expectedIps[i], targets[i].ToString());
+            ("192.168.1.5", new[] { "192.168.1.5" }),
+            ("10.0.0.1, 10.0.0.2", new[] { "10.0.0.1", "10.0.0.2" }),
+            ("192.168.1.10-13", new[] { "192.168.1.10", "192.168.1.11", "192.168.1.12", "192.168.1.13" }),
+            ("192.168.1.10-192.168.1.11", new[] { "192.168.1.10", "192.168.1.11" }),
+        };
+        foreach (var (input, expectedIps) in cases)
+        {
+            Assert.True(NetworkScanTargets.TryParse(input, out var targets, out var error),
+                $"parse failed '{input}': {error}");
+            Assert.Equal(expectedIps.Length, targets.Count);
+            for (var i = 0; i < expectedIps.Length; i++)
+            {
+                Assert.Equal(expectedIps[i], targets[i].ToString());
+            }
         }
     }
 
-    [Theory]
-    [InlineData("192.168.1.0/24")]
-    [InlineData("10.0.0.0/24")]
-    public void NET05_CidrExpandsToAllHosts(string input)
+    [Fact]
+    public void NET05_CidrExpandsToAllHosts()
     {
-        Assert.True(NetworkScanTargets.TryParse(input, out var targets, out var error),
-            $"parse failed: {error}");
-        Assert.Equal(256, targets.Count);
-        Assert.Equal(input.Split('/')[0], targets[0].ToString());
+        foreach (var input in new[] { "192.168.1.0/24", "10.0.0.0/24" })
+        {
+            Assert.True(NetworkScanTargets.TryParse(input, out var targets, out var error),
+                $"parse failed '{input}': {error}");
+            Assert.Equal(256, targets.Count);
+            Assert.Equal(input.Split('/')[0], targets[0].ToString());
+        }
     }
 
     [Fact]
@@ -66,20 +72,27 @@ public sealed class NetworkScannerTests
         Assert.Equal("10.0.0.12", targets[2].ToString());
     }
 
-    [Theory]
-    [InlineData("")]
-    [InlineData("   ")]
-    [InlineData("not-an-ip")]
-    [InlineData("192.168.1")]
-    [InlineData("192.168.1.256")]
-    [InlineData("192.168.1.0/33")]
-    [InlineData("10.0.0.1-10.0.0.2000")]
-    [InlineData("192.168.1.50-192.168.1.10")]
-    [InlineData("fe80::1")]
-    public void NET05_RejectsInvalidTargets(string input)
+    [Fact]
+    public void NET05_RejectsInvalidTargets()
     {
-        Assert.False(NetworkScanTargets.TryParse(input, out _, out var error));
-        Assert.NotNull(error);
+        var invalid = new[]
+        {
+            "",
+            "   ",
+            "not-an-ip",
+            "192.168.1",
+            "192.168.1.256",
+            "192.168.1.0/33",
+            "10.0.0.1-10.0.0.2000",
+            "192.168.1.50-192.168.1.10",
+            "fe80::1",
+        };
+        foreach (var input in invalid)
+        {
+            Assert.False(NetworkScanTargets.TryParse(input, out _, out var error),
+                $"unexpectedly accepted '{input}'");
+            Assert.NotNull(error);
+        }
     }
 
     [Fact]

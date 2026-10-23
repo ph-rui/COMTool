@@ -15,7 +15,7 @@
                 Classes.active="{Binding IsSessionsTab}"
                 Tag="Sessions"
                 Click="OnRailTabClick"
-                ToolTip.Tip="会话">
+                ToolTip.Tip="会话（保存的会话列表）">
           <TextBlock Text="&#xf005;"
                      FontFamily="{DynamicResource IconFontAwesome}"
                      FontSize="14"
@@ -26,7 +26,7 @@
                 Classes.active="{Binding IsToolsTab}"
                 Tag="Tools"
                 Click="OnRailTabClick"
-                ToolTip.Tip="工具">
+                ToolTip.Tip="工具（网络扫描仪）">
           <TextBlock Text="&#xf7d9;"
                      FontFamily="{DynamicResource IconFontAwesome}"
                      FontSize="14"
@@ -37,7 +37,7 @@
                 Classes.active="{Binding IsMacrosTab}"
                 Tag="Macros"
                 Click="OnRailTabClick"
-                ToolTip.Tip="宏">
+                ToolTip.Tip="宏（命令一键发送）">
           <TextBlock Text="&#xf1d8;"
                      FontFamily="{DynamicResource IconFontAwesome}"
                      FontSize="14"
@@ -48,7 +48,7 @@
                 Classes.active="{Binding IsHistoryTab}"
                 Tag="History"
                 Click="OnRailTabClick"
-                ToolTip.Tip="历史">
+                ToolTip.Tip="历史（最近打开的会话）">
           <TextBlock Text="&#xf1da;"
                      FontFamily="{DynamicResource IconFontAwesome}"
                      FontSize="14"
@@ -172,7 +172,9 @@
                       <ItemsControl ItemsSource="{Binding Items}">
                         <ItemsControl.ItemTemplate>
                           <DataTemplate x:DataType="vm:SessionItem">
-                            <Grid MinHeight="40"
+                            <!-- MobaXterm-style compact row: line 1 = name (detail),
+                                 line 2 = serial params. -->
+                            <Grid MinHeight="28"
                                   ColumnDefinitions="16,*,Auto"
                                   Background="Transparent"
                                   Cursor="Hand"
@@ -180,18 +182,18 @@
                               <TextBlock Grid.Column="0"
                                          Text="{Binding IconGlyph}"
                                          FontFamily="{DynamicResource IconFontAwesome}"
-                                         FontSize="14"
+                                         FontSize="13"
                                          Foreground="{Binding IconBrush}"
                                          VerticalAlignment="Center"
                                          Margin="6,0,0,0" />
                               <StackPanel Grid.Column="1"
-                                          Margin="6,3,4,3"
+                                          Margin="6,1,4,1"
                                           VerticalAlignment="Center"
                                           Spacing="0">
-                                <TextBlock Classes="SessionName" Text="{Binding Name}" />
-                                <TextBlock Classes="SessionDetail"
-                                           Text="{Binding Detail}"
-                                           IsVisible="{Binding Detail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                <TextBlock Classes="SessionName"
+                                           Text="{Binding RowTitle}"
+                                           FontSize="11"
+                                           TextTrimming="CharacterEllipsis" />
                                 <TextBlock Classes="SessionDetail"
                                            Text="{Binding SerialSettings}"
                                            IsVisible="{Binding SerialSettings, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />

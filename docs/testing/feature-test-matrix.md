@@ -107,7 +107,7 @@
 | PKG-04 | 部分 | - | manual | all | manual | WIN-08 | Windows/Linux 安装、升级、卸载和保留 Beta 配置需真实桌面安装环境，无法自动化 |
 | PKG-05 | 部分 | - | manual | all | manual | WIN-21 | 包体积和启动时间需真实 Windows/Linux 桌面测量并与性能基线对照，无法自动化 |
 | PKG-06 | 部分 | - | manual | all | manual | WIN-16 | CI 流水线需在托管 CI 实际运行并核对日志，本地门禁无法自动化 |
-| TST-01 | 完成 | CI01_SerializesCandidateInfo | verify | all | dotnet test | - | 完整套件 393 项通过（Core 47/SFTP 40/Connections 75/Terminal 11/ZMODEM 32/TestGate 49/App 139）；CI01 覆盖 TestGate 候选元数据 |
+| TST-01 | 完成 | CI01_SerializesCandidateInfo | verify | all | dotnet test | - | 完整套件 381 项通过（Core 47/SFTP 40/Connections 63/Terminal 11/ZMODEM 32/TestGate 49/App 139）；CI01 覆盖 TestGate 候选元数据 |
 | TST-02 | 完成 | TerminalEmulatorTests.MatchesPythonPyteGoldenScreen | verify | all | dotnet test | - | 同一字节流与 Python pyte 0.8.2 的 60x20 屏幕快照一致 |
 | TST-03 | 完成 | ZmodemTransferTests.SenderAndReceiverTransferFile,LrzszZmodemTests.RealSzFileIsReceived,LrzszZmodemTests.RealRzReceivesSentFile | verify | all | dotnet test | - | 模拟双向和真实 lrzsz 双向 64KB 二进制文件集成测试覆盖 |
 | TST-04 | 部分 | SshIntegrationTests.KeyAuthShellOutputResizeAndReconnect,SerialPtyIntegrationTests.SerialConnectionReadsAndWritesThroughPty,SerialOpenBufferTests.SER07_OpeningSerialSessionDiscardsQueuedStaleBytes | verify | linux | dotnet test | WIN-17 | Linux sshd/PTY 集成及串口打开清空残留缓冲区已自动化；Windows COM99 已实测打开并显示干净提示符；Windows 实机 SSH/串口回环集成依赖真实硬件，无法自动化 |
