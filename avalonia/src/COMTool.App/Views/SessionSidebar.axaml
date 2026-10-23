@@ -18,7 +18,7 @@
                 ToolTip.Tip="会话（保存的会话列表）">
           <TextBlock Text="&#xf005;"
                      FontFamily="{DynamicResource IconFontAwesome}"
-                     FontSize="14"
+                     FontSize="16"
                      Foreground="#f2b01e" />
         </Button>
         <Button Name="RailToolsButton"
@@ -29,7 +29,7 @@
                 ToolTip.Tip="工具（网络扫描仪）">
           <TextBlock Text="&#xf7d9;"
                      FontFamily="{DynamicResource IconFontAwesome}"
-                     FontSize="14"
+                     FontSize="16"
                      Foreground="#d9534f" />
         </Button>
         <Button Name="RailMacrosButton"
@@ -40,7 +40,7 @@
                 ToolTip.Tip="宏（命令一键发送）">
           <TextBlock Text="&#xf1d8;"
                      FontFamily="{DynamicResource IconFontAwesome}"
-                     FontSize="14"
+                     FontSize="16"
                      Foreground="#2f7ed8" />
         </Button>
         <Button Name="RailHistoryButton"
@@ -51,7 +51,7 @@
                 ToolTip.Tip="历史（最近打开的会话）">
           <TextBlock Text="&#xf1da;"
                      FontFamily="{DynamicResource IconFontAwesome}"
-                     FontSize="14"
+                     FontSize="16"
                      Foreground="#e0a526" />
         </Button>
       </StackPanel>
