@@ -40,11 +40,13 @@ public partial class SessionSidebar : UserControl
 
     public event EventHandler? HistoryClearRequested;
 
-    public event EventHandler? ScanStartRequested;
+    public event EventHandler? NetScanStartRequested;
 
-    public event EventHandler? ScanStopRequested;
+    public event EventHandler? PortScanStartRequested;
 
-    public event EventHandler? DeepScanRequested;
+    public event EventHandler? PortScanStopRequested;
+
+    public event EventHandler? ToolCloseRequested;
 
     public bool HasOpenNewSessionMenu => SidebarAddSessionButton.Flyout is { IsOpen: true };
 
@@ -125,40 +127,37 @@ public partial class SessionSidebar : UserControl
     private void OnClearHistoryClick(object? sender, RoutedEventArgs e) =>
         HistoryClearRequested?.Invoke(this, EventArgs.Empty);
 
-    private void OnScanStartClick(object? sender, RoutedEventArgs e) =>
-        ScanStartRequested?.Invoke(this, EventArgs.Empty);
+    private void OnNetScanStartClick(object? sender, RoutedEventArgs e) =>
+        NetScanStartRequested?.Invoke(this, EventArgs.Empty);
 
-    private void OnScanStopClick(object? sender, RoutedEventArgs e) =>
-        ScanStopRequested?.Invoke(this, EventArgs.Empty);
+    private void OnPortScanStartClick(object? sender, RoutedEventArgs e) =>
+        PortScanStartRequested?.Invoke(this, EventArgs.Empty);
 
-    private void OnDeepScanClick(object? sender, RoutedEventArgs e) =>
-        DeepScanRequested?.Invoke(this, EventArgs.Empty);
+    private void OnPortScanStopClick(object? sender, RoutedEventArgs e) =>
+        PortScanStopRequested?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>
+    /// Both tool dialogs' 关闭 button (and the sidebar back arrow): cancels
+    /// any running scan and returns to the tool menu.
+    /// </summary>
+    private void OnToolCloseClick(object? sender, RoutedEventArgs e) =>
+        ToolCloseRequested?.Invoke(this, EventArgs.Empty);
 
     private void OnToolMenuClick(object? sender, RoutedEventArgs e)
     {
-        // Only 网络扫描仪 is implemented; the other menu entries are disabled.
-        if (sender is Button { Tag: string id } && id == "scanner"
-            && DataContext is MainViewModel viewModel)
+        // 网络扫描仪 / 端口扫描仪 implemented; the other entries are 暂不支持.
+        if (sender is not Button { Tag: string id }
+            || DataContext is not MainViewModel viewModel)
         {
-            viewModel.ToolsView = ToolsView.Scanner;
+            return;
         }
-    }
 
-    private void OnBackToToolsMenuClick(object? sender, RoutedEventArgs e)
-    {
-        if (DataContext is MainViewModel viewModel)
+        viewModel.ToolsView = id switch
         {
-            viewModel.ToolsView = ToolsView.Menu;
-        }
-    }
-
-    private void OnScanRowTapped(object? sender, TappedEventArgs e)
-    {
-        if (sender is Control { DataContext: ScanGridRow row }
-            && DataContext is MainViewModel viewModel)
-        {
-            viewModel.SelectedScanAddress = row.Address;
-        }
+            "scanner"      => ToolsView.NetworkScanner,
+            "port-scanner" => ToolsView.PortScanner,
+            _              => viewModel.ToolsView,
+        };
     }
 
     private void OnNewSessionMenuItemClick(object? sender, RoutedEventArgs e)

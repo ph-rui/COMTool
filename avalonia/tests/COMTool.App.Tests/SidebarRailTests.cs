@@ -117,7 +117,7 @@ public sealed class SidebarRailTests
     }
 
     [AvaloniaFact]
-    public void UI16_ScanRangeDefaultsToLocalSubnet()
+    public void UI16_NetScanDefaultsMatchMobaXterm()
     {
         using var env = new TestEnvironment();
         MainWindow? window = null;
@@ -129,10 +129,19 @@ public sealed class SidebarRailTests
                 window = CreateWindow(env);
                 var vm = Vm(window);
 
-                Assert.NotEmpty(vm.ScanStartIp);
+                // 默认值 1:1 MobaXterm：192 . 168 . 1 . 1 --> 254
+                Assert.Equal("192", vm.ScanOctet1);
+                Assert.Equal("168", vm.ScanOctet2);
+                Assert.Equal("1", vm.ScanOctet3);
+                Assert.Equal("1", vm.ScanOctetFrom);
+                Assert.Equal("254", vm.ScanOctetTo);
                 Assert.True(
-                    NetworkScanTargets.TryParse(vm.ScanStartIp, vm.ScanEndIp, out _, out var error),
+                    NetworkScanTargets.TryParseSubnet(vm.ScanOctet1, vm.ScanOctet2, vm.ScanOctet3,
+                        vm.ScanOctetFrom, vm.ScanOctetTo, out var targets, out var error),
                     $"default range not parseable: {error}");
+                Assert.Equal(254, targets.Count);
+                Assert.Equal("192.168.1.1", targets[0].ToString());
+                Assert.Equal("192.168.1.254", targets[253].ToString());
             });
         }
         finally
@@ -159,22 +168,40 @@ public sealed class SidebarRailTests
                 vm.SidebarTab = SidebarTab.Tools;
                 RunJobs(window);
 
-                // 工具页默认显示 8 项菜单，仅"网络扫描仪"可用
+                // 工具页默认显示 8 项菜单（1:1 MobaXterm 工具下拉），
+                // 网络扫描仪 + 端口扫描仪可用，其余 6 项"暂不支持"
                 Assert.True(sidebar.FindControl<Border>("ToolsMenuView")!.IsVisible);
-                Assert.False(sidebar.FindControl<Grid>("ToolsScannerView")!.IsVisible);
+                Assert.False(sidebar.FindControl<Grid>("NetworkScannerView")!.IsVisible);
+                Assert.False(sidebar.FindControl<Grid>("PortScannerView")!.IsVisible);
                 Assert.Equal(8, vm.ToolMenu.Count);
                 Assert.Equal("网络扫描仪", vm.ToolMenu[5].Name);
                 Assert.True(vm.ToolMenu[5].IsEnabled);
-                Assert.Equal(7, vm.ToolMenu.Count(t => !t.IsEnabled));
+                Assert.Equal("端口扫描仪", vm.ToolMenu[6].Name);
+                Assert.True(vm.ToolMenu[6].IsEnabled);
+                Assert.Equal(6, vm.ToolMenu.Count(t => !t.IsEnabled));
 
-                // 点选"网络扫描仪"进入扫描表单
+                // 点选"网络扫描仪"进入网络扫描页（IP 地址范围五段框）
                 OpenScannerView(window, vm);
-                Assert.Equal(ToolsView.Scanner, vm.ToolsView);
-                Assert.True(sidebar.FindControl<TextBox>("ScanStartBox")!.IsVisible);
-                Assert.True(sidebar.FindControl<TextBox>("ScanEndBox")!.IsVisible);
+                Assert.Equal(ToolsView.NetworkScanner, vm.ToolsView);
+                Assert.True(sidebar.FindControl<TextBox>("ScanOctet1Box")!.IsVisible);
+                Assert.True(sidebar.FindControl<TextBox>("ScanOctetFromBox")!.IsVisible);
+                Assert.True(sidebar.FindControl<Button>("ScanStartButton")!.IsEnabled);
+                Assert.True(sidebar.FindControl<Button>("NetScanCloseButton")!.IsVisible);
 
-                // 返回工具菜单
+                // 返回工具菜单，再打开"端口扫描仪"
                 Click(window, sidebar.FindControl<Button>("SidebarBackToolsButton")!);
+                Assert.Equal(ToolsView.Menu, vm.ToolsView);
+                RunJobs(window);
+                OpenPortScannerView(window, vm);
+                Assert.Equal(ToolsView.PortScanner, vm.ToolsView);
+                Assert.True(sidebar.FindControl<TextBox>("PortScanIpBox")!.IsVisible);
+                Assert.True(sidebar.FindControl<Button>("PortScanStartButton")!.IsVisible);
+                // 默认"仅扫描已知端口"，范围框禁用
+                Assert.False(vm.PortScanRangeMode);
+                Assert.False(sidebar.FindControl<TextBox>("PortScanFromBox")!.IsEnabled);
+
+                // 关闭返回工具菜单
+                Click(window, sidebar.FindControl<Button>("PortScanCloseButton")!);
                 Assert.Equal(ToolsView.Menu, vm.ToolsView);
             });
         }
@@ -570,26 +597,27 @@ public sealed class SidebarRailTests
                 RunJobs(window);
                 OpenScannerView(window, vm);
 
-                // 起始地址不是 IP
-                vm.ScanStartIp = "not-an-ip";
-                vm.ScanEndIp = "";
+                // 段值非法：非数字
+                vm.ScanOctet1 = "abc";
+                vm.ScanError = null;
                 Click(window, sidebar.FindControl<Button>("ScanStartButton")!);
                 Assert.NotNull(vm.ScanError);
                 Assert.False(vm.IsScanning);
                 Assert.Empty(vm.ScanRows);
 
-                // 结束地址小于起始地址
-                vm.ScanStartIp = "192.168.1.50";
-                vm.ScanEndIp = "192.168.1.10";
+                // 段值超范围
+                vm.ScanOctet1 = "256";
+                vm.ScanError = null;
                 RunJobs(window);
                 Click(window, sidebar.FindControl<Button>("ScanStartButton")!);
                 Assert.NotNull(vm.ScanError);
                 Assert.False(vm.IsScanning);
 
-                // 无效端口
-                vm.ScanStartIp = "127.0.0.1";
-                vm.ScanEndIp = "";
-                vm.ScanPorts = "99999";
+                // 末段范围：结束小于起始
+                vm.ScanOctet1 = "192";
+                vm.ScanOctetFrom = "200";
+                vm.ScanOctetTo = "10";
+                vm.ScanError = null;
                 RunJobs(window);
                 Click(window, sidebar.FindControl<Button>("ScanStartButton")!);
                 Assert.NotNull(vm.ScanError);
@@ -604,7 +632,7 @@ public sealed class SidebarRailTests
     }
 
     [AvaloniaFact]
-    public void NET05_ScanShowsResultsFromScanner()
+    public void NET05_ScanShowsServiceGridResults()
     {
         using var env = new TestEnvironment();
         MainWindow? window = null;
@@ -619,15 +647,12 @@ public sealed class SidebarRailTests
                 vm.SidebarTab = SidebarTab.Tools;
                 RunJobs(window);
                 OpenScannerView(window, vm);
-                vm.ScanStartIp = "127.0.0.1";
-                vm.ScanEndIp = "127.0.0.2";
 
-                // DelayMs > 0 keeps the scan asynchronous so progress reports
-                // are processed on the UI thread before the completion status.
+                // 网络扫描 1:1 MobaXterm：固定 7 服务列 + “其他端口”列
                 window.NetworkScannerForTests = new FakeScanner(new List<NetworkScanHost>
                 {
-                    new(new IPAddress(new byte[] { 127, 0, 0, 1 }), "loopback", new[] { 22 }, 1),
-                    new(new IPAddress(new byte[] { 127, 0, 0, 2 }), null, Array.Empty<int>(), null),
+                    new(new IPAddress(new byte[] { 127, 0, 0, 1 }), "loopback", new[] { 22, 80, 443 }, 1),
+                    new(new IPAddress(new byte[] { 127, 0, 0, 2 }), null, Array.Empty<int>(), 2),
                 }) { DelayMs = 1 };
 
                 Click(window, sidebar.FindControl<Button>("ScanStartButton")!);
@@ -640,13 +665,19 @@ public sealed class SidebarRailTests
                 Assert.Equal(2, vm.ScanRows.Count);
                 Assert.Equal("127.0.0.1", vm.ScanRows[0].Address);
                 Assert.Equal("loopback", vm.ScanRows[0].HostName);
-                Assert.Equal("1 ms", vm.ScanRows[0].Latency);
-                // 默认端口 22,23 → 两列：22 开放（绿勾），23 关闭（灰叉）
-                Assert.Equal(2, vm.ScanRows[0].Cells.Count);
-                Assert.True(vm.ScanRows[0].Cells[0].IsOpen);
-                Assert.False(vm.ScanRows[0].Cells[1].IsOpen);
+                // 7 个固定服务列：SSH(22) 与 HTTP(80) 开放，其余关闭
+                Assert.Equal(7, vm.ScanRows[0].Cells.Count);
+                Assert.True(vm.ScanRows[0].Cells[0].IsOpen);   // SSH
+                Assert.False(vm.ScanRows[0].Cells[1].IsOpen);  // RDP
+                Assert.False(vm.ScanRows[0].Cells[2].IsOpen);  // VNC
+                Assert.False(vm.ScanRows[0].Cells[3].IsOpen);  // FTP
+                Assert.False(vm.ScanRows[0].Cells[4].IsOpen);  // Telnet
+                Assert.False(vm.ScanRows[0].Cells[5].IsOpen);  // Rlogin
+                Assert.True(vm.ScanRows[0].Cells[6].IsOpen);   // HTTP
+                Assert.Equal("443", vm.ScanRows[0].OtherPorts);
                 Assert.Equal("127.0.0.2", vm.ScanRows[1].Address);
                 Assert.All(vm.ScanRows[1].Cells, c => Assert.False(c.IsOpen));
+                Assert.Equal("", vm.ScanRows[1].OtherPorts);
                 Assert.Equal("完成：发现 2 台在线设备", vm.ScanStatus);
             });
         }
@@ -658,7 +689,7 @@ public sealed class SidebarRailTests
     }
 
     [AvaloniaFact]
-    public void NET05_StopCancelsScan()
+    public void NET05_NetScanCloseCancelsScan()
     {
         using var env = new TestEnvironment();
         MainWindow? window = null;
@@ -673,18 +704,19 @@ public sealed class SidebarRailTests
                 vm.SidebarTab = SidebarTab.Tools;
                 RunJobs(window);
                 OpenScannerView(window, vm);
-                vm.ScanStartIp = "127.0.0.1";
-                vm.ScanEndIp = "127.0.0.30";
 
                 window.NetworkScannerForTests =
                     new FakeScanner(Array.Empty<NetworkScanHost>()) { DelayMs = 5000 };
 
                 Click(window, sidebar.FindControl<Button>("ScanStartButton")!);
                 WaitUntil(() => vm.IsScanning, "scan to start");
-                Click(window, sidebar.FindControl<Button>("ScanStopButton")!);
+                // MobaXterm：关闭对话框即终止扫描并返回工具菜单
+                Click(window, sidebar.FindControl<Button>("NetScanCloseButton")!);
                 WaitUntil(() => !vm.IsScanning, "scan to stop");
 
                 Assert.StartsWith("已停止", vm.ScanStatus);
+                Assert.Equal(ToolsView.Menu, vm.ToolsView);
+                Assert.False(vm.IsBusy);
             });
         }
         finally
@@ -695,7 +727,7 @@ public sealed class SidebarRailTests
     }
 
     [AvaloniaFact]
-    public void NET05_DeepScanRequiresRowSelection()
+    public void PORT01_PortScanKnownModeFormatsListeningLines()
     {
         using var env = new TestEnvironment();
         MainWindow? window = null;
@@ -709,30 +741,31 @@ public sealed class SidebarRailTests
                 var sidebar = Sidebar(window);
                 vm.SidebarTab = SidebarTab.Tools;
                 RunJobs(window);
-                OpenScannerView(window, vm);
-                vm.ScanStartIp = "127.0.0.1";
-                vm.ScanEndIp = "";
+                OpenPortScannerView(window, vm);
+                vm.PortScanIp = "127.0.0.1";
 
-                window.NetworkScannerForTests = new FakeScanner(new List<NetworkScanHost>
+                // 默认“仅扫描已知端口”，范围框禁用
+                Assert.False(vm.PortScanRangeMode);
+                Assert.False(sidebar.FindControl<TextBox>("PortScanFromBox")!.IsEnabled);
+                Assert.False(sidebar.FindControl<TextBox>("PortScanToBox")!.IsEnabled);
+
+                window.NetworkScannerForTests = new FakeScanner(Array.Empty<NetworkScanHost>())
                 {
-                    new(new IPAddress(new byte[] { 127, 0, 0, 1 }), null, new[] { 22 }, 1),
-                }) { DelayMs = 1 };
+                    DeepDelayMs = 1,
+                    DeepPorts = new[] { 22, 80 },
+                };
 
-                Click(window, sidebar.FindControl<Button>("ScanStartButton")!);
-                WaitUntilTry(() => vm.ScanStatus.Contains("完成"), 10);
+                Click(window, sidebar.FindControl<Button>("PortScanStartButton")!);
+                var done = WaitUntilTry(
+                    () => !vm.IsPortScanning && vm.PortScanResult.Length > 0, 10);
+                Assert.True(done,
+                    $"port scan did not finish: status='{vm.PortScanStatus}' result='{vm.PortScanResult}'");
                 RunJobs(window);
-                Assert.Single(vm.ScanRows);
 
-                // No row selected → deep scan disabled.
-                Assert.True(vm.SelectedScanAddress is null);
-                Assert.False(vm.IsDeepScanEnabled);
-                Assert.False(sidebar.FindControl<Button>("DeepScanButton")!.IsEnabled);
-
-                // Selecting a row enables it.
-                Click(window, ScanRowControl(window, "127.0.0.1"));
-                Assert.Equal("127.0.0.1", vm.SelectedScanAddress);
-                Assert.True(vm.IsDeepScanEnabled);
-                Assert.True(sidebar.FindControl<Button>("DeepScanButton")!.IsEnabled);
+                // MobaXterm 行格式：- Port #22 (ssh): listening，升序
+                Assert.Equal(
+                    "- Port #22 (ssh): listening\n- Port #80 (http): listening",
+                    vm.PortScanResult);
             });
         }
         finally
@@ -743,7 +776,7 @@ public sealed class SidebarRailTests
     }
 
     [AvaloniaFact]
-    public void NET05_DeepScanShowsOpenPorts()
+    public void PORT01_PortScanRangeModeScansDeep()
     {
         using var env = new TestEnvironment();
         MainWindow? window = null;
@@ -757,34 +790,34 @@ public sealed class SidebarRailTests
                 var sidebar = Sidebar(window);
                 vm.SidebarTab = SidebarTab.Tools;
                 RunJobs(window);
-                OpenScannerView(window, vm);
-                vm.ScanStartIp = "127.0.0.1";
-                vm.ScanEndIp = "";
+                OpenPortScannerView(window, vm);
+                vm.PortScanIp = "127.0.0.1";
 
-                window.NetworkScannerForTests = new FakeScanner(new List<NetworkScanHost>
+                // 切到“扫描端口范围”1→65535（即深度扫描模式），范围框启用
+                sidebar.FindControl<RadioButton>("PortScanRangeRadio")!.IsChecked = true;
+                RunJobs(window);
+                Assert.True(vm.PortScanRangeMode);
+                Assert.True(sidebar.FindControl<TextBox>("PortScanFromBox")!.IsEnabled);
+                Assert.True(sidebar.FindControl<TextBox>("PortScanToBox")!.IsEnabled);
+                vm.PortScanFrom = "1";
+                vm.PortScanTo = "65535";
+
+                window.NetworkScannerForTests = new FakeScanner(Array.Empty<NetworkScanHost>())
                 {
-                    new(new IPAddress(new byte[] { 127, 0, 0, 1 }), null, new[] { 22 }, 1),
-                })
-                {
-                    DelayMs = 1,
+                    DeepDelayMs = 1,
                     DeepPorts = new[] { 80, 443 },
                 };
 
-                Click(window, sidebar.FindControl<Button>("ScanStartButton")!);
-                WaitUntilTry(() => vm.ScanStatus.Contains("完成"), 10);
-                RunJobs(window);
-                Click(window, ScanRowControl(window, "127.0.0.1"));
-                Assert.True(vm.IsDeepScanEnabled);
-
-                Click(window, sidebar.FindControl<Button>("DeepScanButton")!);
+                Click(window, sidebar.FindControl<Button>("PortScanStartButton")!);
                 var done = WaitUntilTry(
-                    () => !vm.IsDeepScanning && vm.DeepScanResult.Length > 0, 10);
+                    () => !vm.IsPortScanning && vm.PortScanResult.Length > 0, 10);
                 Assert.True(done,
-                    $"deep scan did not finish: status='{vm.DeepScanStatus}' result='{vm.DeepScanResult}'");
-                Assert.Contains("80", vm.DeepScanResult);
-                Assert.Contains("443", vm.DeepScanResult);
-                Assert.StartsWith("深度扫描完成：127.0.0.1", vm.DeepScanResult);
-                Assert.False(vm.IsDeepScanning);
+                    $"port scan did not finish: status='{vm.PortScanStatus}' result='{vm.PortScanResult}'");
+                RunJobs(window);
+
+                Assert.Equal(
+                    "- Port #80 (http): listening\n- Port #443 (https): listening",
+                    vm.PortScanResult);
             });
         }
         finally
@@ -795,7 +828,7 @@ public sealed class SidebarRailTests
     }
 
     [AvaloniaFact]
-    public void NET05_DeepScanStopCancels()
+    public void PORT01_PortScanStopAndInvalidInput()
     {
         using var env = new TestEnvironment();
         MainWindow? window = null;
@@ -809,32 +842,45 @@ public sealed class SidebarRailTests
                 var sidebar = Sidebar(window);
                 vm.SidebarTab = SidebarTab.Tools;
                 RunJobs(window);
-                OpenScannerView(window, vm);
-                vm.ScanStartIp = "127.0.0.1";
-                vm.ScanEndIp = "";
+                OpenPortScannerView(window, vm);
+                vm.PortScanIp = "127.0.0.1";
 
-                window.NetworkScannerForTests = new FakeScanner(new List<NetworkScanHost>
+                // 1) 范围模式（1→65535 深度扫描）用“停止”按钮取消
+                sidebar.FindControl<RadioButton>("PortScanRangeRadio")!.IsChecked = true;
+                RunJobs(window);
+                vm.PortScanFrom = "1";
+                vm.PortScanTo = "65535";
+                window.NetworkScannerForTests = new FakeScanner(Array.Empty<NetworkScanHost>())
                 {
-                    new(new IPAddress(new byte[] { 127, 0, 0, 1 }), null, new[] { 22 }, 1),
-                })
-                {
-                    DelayMs = 1,
                     DeepDelayMs = 5000,
                     DeepPorts = Array.Empty<int>(),
                 };
 
-                Click(window, sidebar.FindControl<Button>("ScanStartButton")!);
-                WaitUntilTry(() => vm.ScanStatus.Contains("完成"), 10);
-                RunJobs(window);
-                Click(window, ScanRowControl(window, "127.0.0.1"));
+                Click(window, sidebar.FindControl<Button>("PortScanStartButton")!);
+                WaitUntil(() => vm.IsPortScanning, "port scan to start");
+                Click(window, sidebar.FindControl<Button>("PortScanStopButton")!);
+                WaitUntil(() => !vm.IsPortScanning, "port scan to stop");
 
-                Click(window, sidebar.FindControl<Button>("DeepScanButton")!);
-                WaitUntil(() => vm.IsDeepScanning, "deep scan to start");
-                Click(window, sidebar.FindControl<Button>("ScanStopButton")!);
-                WaitUntil(() => !vm.IsDeepScanning, "deep scan to stop");
-
-                Assert.StartsWith("深度扫描已停止", vm.DeepScanResult);
+                Assert.Equal("扫描已停止", vm.PortScanResult);
                 Assert.False(vm.IsBusy);
+
+                // 2) 非法 IP 地址
+                vm.PortScanIp = "not-an-ip";
+                vm.PortScanError = null;
+                RunJobs(window);
+                Click(window, sidebar.FindControl<Button>("PortScanStartButton")!);
+                Assert.NotNull(vm.PortScanError);
+                Assert.False(vm.IsPortScanning);
+
+                // 3) 起始端口大于结束端口
+                vm.PortScanIp = "127.0.0.1";
+                vm.PortScanFrom = "100";
+                vm.PortScanTo = "10";
+                vm.PortScanError = null;
+                RunJobs(window);
+                Click(window, sidebar.FindControl<Button>("PortScanStartButton")!);
+                Assert.NotNull(vm.PortScanError);
+                Assert.False(vm.IsPortScanning);
             });
         }
         finally
@@ -873,6 +919,23 @@ public sealed class SidebarRailTests
             return DeepPorts;
         }
 
+        public async Task<IReadOnlyList<int>> ScanHostPortsAsync(
+            IPAddress host,
+            IReadOnlyList<int> ports,
+            IProgress<int>? scannedProgress,
+            CancellationToken cancellationToken)
+        {
+            if (DeepDelayMs > 0)
+            {
+                await Task.Delay(DeepDelayMs, cancellationToken);
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            var open = ports.Where(p => DeepPorts.Contains(p)).OrderBy(p => p).ToList();
+            scannedProgress?.Report(ports.Count);
+            return open;
+        }
+
         public async Task ScanAsync(
             IReadOnlyList<IPAddress> targets,
             IReadOnlyList<int> ports,
@@ -902,18 +965,19 @@ public sealed class SidebarRailTests
             .OfType<Button>()
             .First(b => b.Tag is string s && s == "scanner");
         Click(window, scannerItem);
-        Assert.Equal(ToolsView.Scanner, vm.ToolsView);
+        Assert.Equal(ToolsView.NetworkScanner, vm.ToolsView);
         RunJobs(window);
     }
 
-    /// <summary>Finds the scan-result row control for the given address.</summary>
-    private static Control ScanRowControl(MainWindow window, string address)
+    /// <summary>Clicks the 端口扫描仪 entry in the tools menu, opening the port scanner view.</summary>
+    private static void OpenPortScannerView(MainWindow window, MainViewModel vm)
     {
-        var row = window.GetVisualDescendants()
-            .OfType<Control>()
-            .First(c => c.DataContext is ScanGridRow r && r.Address == address);
-        Assert.NotNull(row);
-        return row;
+        var item = window.GetVisualDescendants()
+            .OfType<Button>()
+            .First(b => b.Tag is string s && s == "port-scanner");
+        Click(window, item);
+        Assert.Equal(ToolsView.PortScanner, vm.ToolsView);
+        RunJobs(window);
     }
 
     private static MainWindow CreateWindow(TestEnvironment env)

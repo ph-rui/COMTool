@@ -1,120 +1,71 @@
 using System.Net;
-using System.Net.NetworkInformation;
-using System.Net.Sockets;
 
 namespace COMTool.Connections.NetworkScan;
 
 /// <summary>
-/// Parses the user-entered scan target. Accepted forms (comma / semicolon /
-/// whitespace separated, any mix):
-///   - a single IPv4 address:      192.168.1.5
-///   - a CIDR block:               192.168.1.0/24
-///   - a last-octet range:         192.168.1.10-50
-///   - a full-IP range:            192.168.1.10-192.168.1.50
+/// Parsers for the MobaXterm-style tool dialogs:
+///  - 网络扫描仪 "IP 地址范围" form: three fixed octets plus a last-octet
+///    range (MobaXterm scans a single /24, e.g. 192.168.1.1 -&gt; 254).
+///  - 端口扫描仪 "IP 地址" form: a single strict dotted-quad IPv4 address.
 /// Only strict dotted-quad IPv4 is accepted; the legacy 2/3-part and 32-bit
-/// forms ("192.168.1", "10.0.0.2000") are rejected. The total host count is
-/// capped at <see cref="MaxHosts"/>.
+/// forms ("192.168.1", "10.0.0.2000") are rejected.
 /// </summary>
 public static class NetworkScanTargets
 {
-    public const int MaxHosts = 1024;
-
-    public static bool TryParse(
-        string? text,
-        out IReadOnlyList<IPAddress> targets,
-        out string? error)
-    {
-        targets = Array.Empty<IPAddress>();
-        error = null;
-
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            error = "IP 地址范围不能为空";
-            return false;
-        }
-
-        var found = new List<IPAddress>();
-        var seen = new HashSet<uint>();
-        foreach (var rawToken in text.Split(
-                     new[] { ',', ';', ' ', '\t' },
-                     StringSplitOptions.RemoveEmptyEntries))
-        {
-            var token = rawToken.Trim();
-            if (!TryParseToken(token, found, seen, out error))
-            {
-                return false;
-            }
-        }
-
-        if (found.Count == 0)
-        {
-            error = "没有有效的目标地址";
-            return false;
-        }
-
-        targets = found;
-        return true;
-    }
-
     /// <summary>
-    /// MobaXterm "IP address range" dialog form: a start IP and an optional
-    /// end IP. With an end given, both must be single IPv4 addresses and the
-    /// range is inclusive, capped at <see cref="MaxHosts"/>. Without an end,
-    /// the start may use any form accepted by the single-text overload
-    /// (single IP / CIDR / ranges / comma list).
+    /// MobaXterm 网络扫描仪 "IP 地址范围" form: [o1] . [o2] . [o3] .
+    /// [from] --&gt; [to]. The first three octets are fixed, only the last
+    /// octet forms an inclusive range. Returns the expanded host list.
     /// </summary>
-    public static bool TryParse(
-        string? startText,
-        string? endText,
+    public static bool TryParseSubnet(
+        string? firstOctet,
+        string? secondOctet,
+        string? thirdOctet,
+        string? fromOctet,
+        string? toOctet,
         out IReadOnlyList<IPAddress> targets,
         out string? error)
     {
         targets = Array.Empty<IPAddress>();
         error = null;
 
-        var start = (startText ?? "").Trim();
-        var end = (endText ?? "").Trim();
-
-        if (end.Length == 0)
+        if (!TryParseOctet(firstOctet, out var o1, out error))
         {
-            return TryParse(start, out targets, out error);
-        }
-
-        if (start.Length == 0)
-        {
-            error = "起始 IP 不能为空";
             return false;
         }
 
-        if (!TryParseIpv4(start, out var startAddr, out _))
+        if (!TryParseOctet(secondOctet, out var o2, out error))
         {
-            error = "起始地址必须是单个 IPv4 地址（填范围/CIDR 时请留空结束地址）";
             return false;
         }
 
-        if (!TryParseIpv4(end, out var endAddr, out _))
+        if (!TryParseOctet(thirdOctet, out var o3, out error))
         {
-            error = "结束地址必须是单个 IPv4 地址";
             return false;
         }
 
-        if (endAddr < startAddr)
+        if (!TryParseOctet(fromOctet, out var o4From, out error))
         {
-            error = "结束地址不能小于起始地址";
             return false;
         }
 
-        var count = (long)endAddr - startAddr + 1;
-        if (count > MaxHosts)
+        if (!TryParseOctet(toOctet, out var o4To, out error))
         {
-            error = $"目标主机数超过上限 {MaxHosts}";
             return false;
         }
 
-        var list = new List<IPAddress>((int)count);
-        for (var addr = startAddr; addr <= endAddr; addr++)
+        if (o4To < o4From)
         {
-            list.Add(MakeIp(addr));
+            error = "范围结束值不能小于起始值";
+            return false;
+        }
+
+        var baseAddr = ((uint)o1 << 24) | ((uint)o2 << 16) | ((uint)o3 << 8);
+        var count = o4To - o4From + 1;
+        var list = new List<IPAddress>(count);
+        for (var o4 = o4From; o4 <= o4To; o4++)
+        {
+            list.Add(MakeIp(baseAddr | (uint)o4));
         }
 
         targets = list;
@@ -122,193 +73,43 @@ public static class NetworkScanTargets
     }
 
     /// <summary>
-    /// Splits a detected local CIDR ("192.168.1.0/24") into the dialog's
-    /// start/end fields: the network base and the broadcast address. A bare
-    /// IP or unparseable input maps to start=value, end="".
+    /// 端口扫描仪 "IP 地址" field: a single strict IPv4 address.
     /// </summary>
-    public static void SplitCidrForFields(string? cidr, out string start, out string end)
+    public static bool TryParseIp(string? text, out IPAddress ip, out string? error)
     {
-        start = cidr ?? "";
-        end = "";
-
-        var slash = start.IndexOf('/');
-        if (slash <= 0 || slash >= start.Length - 1)
-        {
-            return;
-        }
-
-        if (!int.TryParse(start[(slash + 1)..], out var prefix) || prefix is < 0 or > 32)
-        {
-            return;
-        }
-
-        if (!TryParseIpv4(start[..slash], out var baseAddr, out _))
-        {
-            return;
-        }
-
-        var mask = prefix == 0 ? 0u : uint.MaxValue << (32 - prefix);
-        var network = baseAddr & mask;
-        start = MakeIp(network).ToString();
-        end = MakeIp(network | ~mask).ToString();
-    }
-
-    /// <summary>
-    /// Detects the first usable local IPv4 subnet (e.g. "192.168.1.0/24") to
-    /// use as the default scan target. Falls back to loopback when no
-    /// suitable interface is present.
-    /// </summary>
-    public static string DetectLocalCidr()
-    {
-        try
-        {
-            foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
-            {
-                if (ni.OperationalStatus != OperationalStatus.Up)
-                {
-                    continue;
-                }
-
-                if (ni.NetworkInterfaceType is NetworkInterfaceType.Loopback
-                    or NetworkInterfaceType.Tunnel)
-                {
-                    continue;
-                }
-
-                foreach (var ua in ni.GetIPProperties().UnicastAddresses)
-                {
-                    if (ua.Address.AddressFamily != AddressFamily.InterNetwork)
-                    {
-                        continue;
-                    }
-
-                    var bytes = ua.Address.GetAddressBytes();
-                    if (bytes[0] == 127 || (bytes[0] == 169 && bytes[1] == 254))
-                    {
-                        continue;
-                    }
-
-                    var maskBytes = ua.IPv4Mask?.GetAddressBytes();
-                    if (maskBytes is null)
-                    {
-                        continue;
-                    }
-
-                    var ip = ToUInt32(bytes);
-                    var mask = ToUInt32(maskBytes);
-                    var prefix = PopCount(mask);
-                    var network = ip & mask;
-                    return $"{MakeIp(network)}/{prefix}";
-                }
-            }
-        }
-        catch
-        {
-            // Enumeration can fail on restricted platforms; use the fallback.
-        }
-
-        return "127.0.0.1";
-    }
-
-    private static bool TryParseToken(string token, List<IPAddress> found, HashSet<uint> seen, out string? error)
-    {
+        ip = IPAddress.Any;
         error = null;
 
-        // CIDR form.
-        var slash = token.IndexOf('/');
-        if (slash >= 0)
+        if (string.IsNullOrWhiteSpace(text))
         {
-            var basePart = token[..slash];
-            var prefixPart = token[(slash + 1)..];
-            if (!TryParseIpv4(basePart, out var baseAddr, out error)
-                || !int.TryParse(prefixPart, out var prefix)
-                || prefix is < 0 or > 32)
-            {
-                error ??= $"无效的 CIDR 表示：{token}";
-                return false;
-            }
-
-            var hostCount = 1u << (32 - prefix);
-            if (found.Count + hostCount > MaxHosts)
-            {
-                error = $"目标主机数超过上限 {MaxHosts}";
-                return false;
-            }
-
-            var mask = prefix == 0 ? 0u : uint.MaxValue << (32 - prefix);
-            var network = baseAddr & mask;
-            for (var i = 0u; i < hostCount; i++)
-            {
-                AddHost(network + i, found, seen);
-            }
-
-            return true;
-        }
-
-        // Range form.
-        var dash = token.IndexOf('-');
-        if (dash >= 0)
-        {
-            var startPart = token[..dash];
-            var endPart = token[(dash + 1)..];
-            if (!TryParseIpv4(startPart, out var start, out error))
-            {
-                error ??= $"无效的范围起始地址：{token}";
-                return false;
-            }
-
-            uint end;
-            if (int.TryParse(endPart, out var lastOctet) && lastOctet is >= 0 and <= 255)
-            {
-                // Short form: "192.168.1.10-50".
-                end = (start & 0xFFFFFF00) | (uint)lastOctet;
-            }
-            else if (!TryParseIpv4(endPart, out end, out _))
-            {
-                error = $"无效的范围结束地址：{token}";
-                return false;
-            }
-
-            if (end < start)
-            {
-                error = $"范围结束地址小于起始地址：{token}";
-                return false;
-            }
-
-            var count = (long)end - start + 1;
-            if (count > MaxHosts - found.Count)
-            {
-                error = $"目标主机数超过上限 {MaxHosts}";
-                return false;
-            }
-
-            for (var addr = start; addr <= end; addr++)
-            {
-                AddHost(addr, found, seen);
-            }
-
-            return true;
-        }
-
-        // Single address form.
-        if (!TryParseIpv4(token, out var single, out _))
-        {
-            error = $"无效的地址：{token}（仅支持 IPv4）";
+            error = "IP 地址不能为空";
             return false;
         }
 
-        AddHost(single, found, seen);
+        if (!TryParseIpv4(text.Trim(), out var value, out _))
+        {
+            error = "IP 地址无效（仅支持 IPv4 点分十进制）";
+            return false;
+        }
+
+        ip = MakeIp(value);
         return true;
     }
 
-    private static void AddHost(uint addr, List<IPAddress> found, HashSet<uint> seen)
+    private static bool TryParseOctet(string? text, out int value, out string? error)
     {
-        if (!seen.Add(addr))
+        value = 0;
+        error = null;
+
+        if (!int.TryParse((text ?? "").Trim(), System.Globalization.NumberStyles.None, null, out var o)
+            || o is < 0 or > 255)
         {
-            return;
+            error = "IP 地址段无效（须为 0~255 的整数）";
+            return false;
         }
 
-        found.Add(MakeIp(addr));
+        value = o;
+        return true;
     }
 
     /// <summary>
@@ -343,25 +144,10 @@ public static class NetworkScanTargets
         return true;
     }
 
-    private static uint ToUInt32(byte[] bytes) =>
-        (uint)(bytes[0] << 24 | bytes[1] << 16 | bytes[2] << 8 | bytes[3]);
-
     private static IPAddress MakeIp(uint value) =>
         new(new byte[]
         {
             (byte)(value >> 24), (byte)(value >> 16),
             (byte)(value >> 8),  (byte)value,
         });
-
-    private static int PopCount(uint value)
-    {
-        var count = 0;
-        while (value != 0)
-        {
-            count += (int)(value & 1u);
-            value >>= 1;
-        }
-
-        return count;
-    }
 }
