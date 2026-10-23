@@ -541,6 +541,36 @@ and the visible state and width are restored on launch:
   - `BAK_COUNT=0`;
   - smoke test: process started, `Responding=True`, then stopped.
 
+## 2026-10-23 — visual fixes (MobaXterm look)
+
+- user feedback on the deployed rail build: icons and CJK labels rendered
+  soft, 16px white band left of the rail, rail icons unclear;
+- fixes:
+  - `app.manifest` gained `PerMonitorV2` DPI awareness — without it Windows
+    bitmap-scales the whole window on scaled desktops, blurring every glyph
+    and icon (root cause of 发虚);
+  - `UiFontFamily` now `Microsoft YaHei UI, Microsoft YaHei, DejaVu Sans`
+    (native crisp CJK on Windows, DejaVu fallback on Linux);
+  - `BodyGrid` left margin 16→0 so the sidebar rail is flush on the window
+    edge (white band gone); content column margin compensates (+16) so tab
+    strip and terminal positions are unchanged — E2E coordinates untouched;
+  - session rows compressed MobaXterm-style: line 1 = `Name (Detail)`, line
+    2 = serial params only (MinHeight 40→28);
+  - rail icons 14→16 px; rail tooltips now descriptive Chinese
+    (会话/工具（网络扫描仪）/宏（命令一键发送）/历史（最近打开的会话）);
+- test evidence: full gate PASS — 381 tests (Core 47, SFTP 40, Connections
+  63, Terminal 11, ZMODEM 32, TestGate 49, App 139), Linux Xvfb E2E 13/13
+  (the new rail and row layout did not move any E2E hit points);
+- deployment 2026-10-23 (in-place overwrite, no `.bak-*`):
+  - exe published from `be28a12`;
+  - size: 208,741,196 bytes;
+  - SHA256: `97E350617D547E52F66C56A425385A6DD1077A07CFFC86660244905FC39149DF`;
+  - WORK and DESKTOP copies both matched that hash via `Get-FileHash`;
+  - `BAK_COUNT=0`;
+  - smoke test: process started, `Responding=True`, then stopped;
+- interactive Windows confirmation is WIN-26 (includes checking icons/labels
+  render crisp on the real desktop).
+
 The previously packaged release zip is 74,795,557 bytes with SHA256:
 
 ```text
