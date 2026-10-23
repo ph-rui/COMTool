@@ -20,6 +20,7 @@
   <SolidColorBrush x:Key="SessionDisconnectedBrush" Color="#90a4ae" />
   <SolidColorBrush x:Key="SidebarRailBackgroundBrush" Color="#e6e6e6" />
   <SolidColorBrush x:Key="SidebarRailActiveBrush" Color="#ffffff" />
+  <SolidColorBrush x:Key="SidebarGroupHeaderBrush" Color="#eeeeee" />
   <SolidColorBrush x:Key="TabBarBackgroundBrush" Color="#e6e6e6" />
   <SolidColorBrush x:Key="TabSelectedBrush" Color="#0f88eb" />
   <SolidColorBrush x:Key="TabForegroundBrush" Color="#0f88eb" />
