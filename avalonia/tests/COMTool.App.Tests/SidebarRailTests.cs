@@ -755,42 +755,40 @@ public sealed class SidebarRailTests
     public void PORT01_PortScanKnownModeFormatsListeningLines()
     {
         using var env = new TestEnvironment();
-        MainWindow? window = null;
+        PortScanWindow? window = null;
         try
         {
             env.Run(() =>
             {
-                env.SeedConfig(new ComtoolConfig());
-                window = CreateWindow(env);
-                var vm = Vm(window);
-                var sidebar = Sidebar(window);
-                vm.SidebarTab = SidebarTab.Tools;
-                RunJobs(window);
-                OpenPortScannerView(window, vm);
-                vm.PortScanIp = "127.0.0.1";
+                window = new PortScanWindow
+                {
+                    ScannerForTests = new FakeScanner(Array.Empty<NetworkScanHost>())
+                    {
+                        DeepDelayMs = 1,
+                        DeepPorts = new[] { 22, 80 },
+                    },
+                };
+                window.Show();
+                Dispatcher.UIThread.RunJobs();
+                var vm = window.ViewModel;
+                vm.Ip = "127.0.0.1";
 
                 // 默认“仅扫描已知端口”，范围框禁用
-                Assert.False(vm.PortScanRangeMode);
-                Assert.False(sidebar.FindControl<TextBox>("PortScanFromBox")!.IsEnabled);
-                Assert.False(sidebar.FindControl<TextBox>("PortScanToBox")!.IsEnabled);
+                Assert.False(vm.RangeMode);
+                Assert.False(window.FindControl<TextBox>("PortScanFromBox")!.IsEnabled);
+                Assert.False(window.FindControl<TextBox>("PortScanToBox")!.IsEnabled);
 
-                window.NetworkScannerForTests = new FakeScanner(Array.Empty<NetworkScanHost>())
-                {
-                    DeepDelayMs = 1,
-                    DeepPorts = new[] { 22, 80 },
-                };
-
-                Click(window, sidebar.FindControl<Button>("PortScanStartButton")!);
+                Click(window, window.FindControl<Button>("PortScanStartButton")!);
                 var done = WaitUntilTry(
-                    () => !vm.IsPortScanning && vm.PortScanResult.Length > 0, 10);
+                    () => !vm.IsScanning && vm.Result.Length > 0, 10);
                 Assert.True(done,
-                    $"port scan did not finish: status='{vm.PortScanStatus}' result='{vm.PortScanResult}'");
+                    $"port scan did not finish: status='{vm.Status}' result='{vm.Result}'");
                 RunJobs(window);
 
                 // MobaXterm 行格式：- Port #22 (ssh): listening，升序
                 Assert.Equal(
                     "- Port #22 (ssh): listening\n- Port #80 (http): listening",
-                    vm.PortScanResult);
+                    vm.Result);
             });
         }
         finally
@@ -804,45 +802,43 @@ public sealed class SidebarRailTests
     public void PORT01_PortScanRangeModeScansDeep()
     {
         using var env = new TestEnvironment();
-        MainWindow? window = null;
+        PortScanWindow? window = null;
         try
         {
             env.Run(() =>
             {
-                env.SeedConfig(new ComtoolConfig());
-                window = CreateWindow(env);
-                var vm = Vm(window);
-                var sidebar = Sidebar(window);
-                vm.SidebarTab = SidebarTab.Tools;
-                RunJobs(window);
-                OpenPortScannerView(window, vm);
-                vm.PortScanIp = "127.0.0.1";
+                window = new PortScanWindow
+                {
+                    ScannerForTests = new FakeScanner(Array.Empty<NetworkScanHost>())
+                    {
+                        DeepDelayMs = 1,
+                        DeepPorts = new[] { 80, 443 },
+                    },
+                };
+                window.Show();
+                Dispatcher.UIThread.RunJobs();
+                var vm = window.ViewModel;
+                vm.Ip = "127.0.0.1";
 
                 // 切到“扫描端口范围”1→65535（即深度扫描模式），范围框启用
-                sidebar.FindControl<RadioButton>("PortScanRangeRadio")!.IsChecked = true;
+                window.FindControl<RadioButton>("PortScanRangeRadio")!.IsChecked = true;
                 RunJobs(window);
-                Assert.True(vm.PortScanRangeMode);
-                Assert.True(sidebar.FindControl<TextBox>("PortScanFromBox")!.IsEnabled);
-                Assert.True(sidebar.FindControl<TextBox>("PortScanToBox")!.IsEnabled);
-                vm.PortScanFrom = "1";
-                vm.PortScanTo = "65535";
+                Assert.True(vm.RangeMode);
+                Assert.True(window.FindControl<TextBox>("PortScanFromBox")!.IsEnabled);
+                Assert.True(window.FindControl<TextBox>("PortScanToBox")!.IsEnabled);
+                vm.From = "1";
+                vm.To = "65535";
 
-                window.NetworkScannerForTests = new FakeScanner(Array.Empty<NetworkScanHost>())
-                {
-                    DeepDelayMs = 1,
-                    DeepPorts = new[] { 80, 443 },
-                };
-
-                Click(window, sidebar.FindControl<Button>("PortScanStartButton")!);
+                Click(window, window.FindControl<Button>("PortScanStartButton")!);
                 var done = WaitUntilTry(
-                    () => !vm.IsPortScanning && vm.PortScanResult.Length > 0, 10);
+                    () => !vm.IsScanning && vm.Result.Length > 0, 10);
                 Assert.True(done,
-                    $"port scan did not finish: status='{vm.PortScanStatus}' result='{vm.PortScanResult}'");
+                    $"port scan did not finish: status='{vm.Status}' result='{vm.Result}'");
                 RunJobs(window);
 
                 Assert.Equal(
                     "- Port #80 (http): listening\n- Port #443 (https): listening",
-                    vm.PortScanResult);
+                    vm.Result);
             });
         }
         finally
@@ -856,56 +852,54 @@ public sealed class SidebarRailTests
     public void PORT01_PortScanStopAndInvalidInput()
     {
         using var env = new TestEnvironment();
-        MainWindow? window = null;
+        PortScanWindow? window = null;
         try
         {
             env.Run(() =>
             {
-                env.SeedConfig(new ComtoolConfig());
-                window = CreateWindow(env);
-                var vm = Vm(window);
-                var sidebar = Sidebar(window);
-                vm.SidebarTab = SidebarTab.Tools;
-                RunJobs(window);
-                OpenPortScannerView(window, vm);
-                vm.PortScanIp = "127.0.0.1";
+                window = new PortScanWindow
+                {
+                    ScannerForTests = new FakeScanner(Array.Empty<NetworkScanHost>())
+                    {
+                        DeepDelayMs = 5000,
+                        DeepPorts = Array.Empty<int>(),
+                    },
+                };
+                window.Show();
+                Dispatcher.UIThread.RunJobs();
+                var vm = window.ViewModel;
+                vm.Ip = "127.0.0.1";
 
                 // 1) 范围模式（1→65535 深度扫描）用“停止”按钮取消
-                sidebar.FindControl<RadioButton>("PortScanRangeRadio")!.IsChecked = true;
+                window.FindControl<RadioButton>("PortScanRangeRadio")!.IsChecked = true;
                 RunJobs(window);
-                vm.PortScanFrom = "1";
-                vm.PortScanTo = "65535";
-                window.NetworkScannerForTests = new FakeScanner(Array.Empty<NetworkScanHost>())
-                {
-                    DeepDelayMs = 5000,
-                    DeepPorts = Array.Empty<int>(),
-                };
+                vm.From = "1";
+                vm.To = "65535";
 
-                Click(window, sidebar.FindControl<Button>("PortScanStartButton")!);
-                WaitUntil(() => vm.IsPortScanning, "port scan to start");
-                Click(window, sidebar.FindControl<Button>("PortScanStopButton")!);
-                WaitUntil(() => !vm.IsPortScanning, "port scan to stop");
+                Click(window, window.FindControl<Button>("PortScanStartButton")!);
+                WaitUntil(() => vm.IsScanning, "port scan to start");
+                Click(window, window.FindControl<Button>("PortScanStopButton")!);
+                WaitUntil(() => !vm.IsScanning, "port scan to stop");
 
-                Assert.Equal("扫描已停止", vm.PortScanResult);
-                Assert.False(vm.IsBusy);
+                Assert.Equal("扫描已停止", vm.Result);
 
                 // 2) 非法 IP 地址
-                vm.PortScanIp = "not-an-ip";
-                vm.PortScanError = null;
+                vm.Ip = "not-an-ip";
+                vm.Error = null;
                 RunJobs(window);
-                Click(window, sidebar.FindControl<Button>("PortScanStartButton")!);
-                Assert.NotNull(vm.PortScanError);
-                Assert.False(vm.IsPortScanning);
+                Click(window, window.FindControl<Button>("PortScanStartButton")!);
+                Assert.NotNull(vm.Error);
+                Assert.False(vm.IsScanning);
 
                 // 3) 起始端口大于结束端口
-                vm.PortScanIp = "127.0.0.1";
-                vm.PortScanFrom = "100";
-                vm.PortScanTo = "10";
-                vm.PortScanError = null;
+                vm.Ip = "127.0.0.1";
+                vm.From = "100";
+                vm.To = "10";
+                vm.Error = null;
                 RunJobs(window);
-                Click(window, sidebar.FindControl<Button>("PortScanStartButton")!);
-                Assert.NotNull(vm.PortScanError);
-                Assert.False(vm.IsPortScanning);
+                Click(window, window.FindControl<Button>("PortScanStartButton")!);
+                Assert.NotNull(vm.Error);
+                Assert.False(vm.IsScanning);
             });
         }
         finally
