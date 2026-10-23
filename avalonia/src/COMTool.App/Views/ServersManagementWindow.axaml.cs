@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using COMTool.App.Services;
 using COMTool.App.ViewModels.Tools;
 using COMTool.Connections.Servers;
@@ -26,6 +27,8 @@ public partial class ServersManagementWindow : Window
         InitializeComponent();
         _config = config;
         DataContext = new ServersManagementViewModel(config);
+        ViewModel.HttpLog.CollectionChanged += (_, _) => ScrollLogToEnd(HttpLogBox);
+        ViewModel.TftpLog.CollectionChanged += (_, _) => ScrollLogToEnd(TftpLogBox);
     }
 
     internal ServersManagementViewModel ViewModel =>
@@ -89,6 +92,17 @@ public partial class ServersManagementWindow : Window
         {
             ViewModel.TftpRoot = path;
         }
+    }
+
+    /// <summary>MobaXterm keeps the newest log line in view.</summary>
+    private static void ScrollLogToEnd(ListBox box)
+    {
+        if (box.ItemCount == 0)
+        {
+            return;
+        }
+
+        Dispatcher.UIThread.Post(() => box.ScrollIntoView(box.ItemCount - 1));
     }
 
     private static ServerRowViewModel? RowOf(object? sender) =>

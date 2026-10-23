@@ -4,8 +4,8 @@
         x:Class="COMTool.App.Views.ServersManagementWindow"
         x:DataType="tools:ServersManagementViewModel"
         Title="Servers management"
-        Width="736"
-        Height="475"
+        Width="741"
+        Height="444"
         CanResize="False"
         ShowInTaskbar="False"
         WindowStartupLocation="CenterOwner"
@@ -25,9 +25,21 @@
       <Setter Property="HorizontalContentAlignment" Value="Center" />
       <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
+    <!-- Compact controls: the Fluent theme's default MinHeight (32) makes the
+         MobaXterm-style 22-24px form rows too tall. -->
+    <Style Selector="CheckBox">
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="TextBox">
+      <Setter Property="MinHeight" Value="0" />
+    </Style>
+    <Style Selector="NumericUpDown">
+      <Setter Property="MinHeight" Value="0" />
+    </Style>
     <Style Selector="Button.ServerOkButton">
-      <Setter Property="Width" Value="72" />
-      <Setter Property="Height" Value="26" />
+      <Setter Property="Width" Value="70" />
+      <Setter Property="Height" Value="27" />
       <Setter Property="Padding" Value="0" />
       <Setter Property="CornerRadius" Value="0" />
       <Setter Property="Background" Value="#f0f0f0" />
@@ -38,14 +50,14 @@
     </Style>
   </Window.Styles>
 
-  <Grid RowDefinitions="*,52" ColumnDefinitions="300,*">
+  <Grid RowDefinitions="*,68" ColumnDefinitions="300,*">
     <!-- Left: nine MobaXterm server rows with play / stop / gears -->
     <ItemsControl Grid.Row="0" Grid.Column="0"
                   ItemsSource="{Binding Rows}"
-                  Margin="0,50,0,0">
+                  Margin="0,16,0,0">
       <ItemsControl.ItemTemplate>
         <DataTemplate x:DataType="tools:ServerRowViewModel">
-          <Grid Height="40" Margin="22,0,8,0" ColumnDefinitions="*,Auto,52">
+          <Grid Height="40" Margin="28,0,17,0" ColumnDefinitions="*,Auto,52">
             <TextBlock Grid.Column="0"
                        Text="{Binding Name}"
                        VerticalAlignment="Center"
@@ -100,8 +112,8 @@
 
     <!-- Right: configuration panel (welcome / HTTP / TFTP) -->
     <Border Grid.Row="0" Grid.Column="1"
-            Margin="4,70,14,0"
-            Height="301"
+            Margin="4,48,28,0"
+            Height="300"
             VerticalAlignment="Top"
             Background="{DynamicResource SidebarListBackgroundBrush}"
             BorderBrush="#a0a0a0"
@@ -116,46 +128,43 @@
                      Margin="14,10,0,0"
                      HorizontalAlignment="Left"
                      VerticalAlignment="Top" />
-          <Grid ColumnDefinitions="*,180" VerticalAlignment="Center">
-            <StackPanel Grid.Column="0"
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        Spacing="2">
-              <TextBlock Text="欢迎使用"
-                         FontSize="13"
-                         HorizontalAlignment="Center"
-                         Foreground="{DynamicResource WindowTextBrush}" />
-              <TextBlock Text="MobaXterm 网络服务器"
-                         FontSize="13"
-                         HorizontalAlignment="Center"
-                         Foreground="{DynamicResource WindowTextBrush}" />
-            </StackPanel>
-            <Canvas Grid.Column="1"
-                    Width="140"
-                    Height="110"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center">
-              <Line StartPoint="70,55" EndPoint="105,55" Stroke="#d9d9d9" StrokeThickness="4" />
-              <Line StartPoint="70,55" EndPoint="87.5,85.3" Stroke="#d9d9d9" StrokeThickness="4" />
-              <Line StartPoint="70,55" EndPoint="52.5,85.3" Stroke="#d9d9d9" StrokeThickness="4" />
-              <Line StartPoint="70,55" EndPoint="35,55" Stroke="#d9d9d9" StrokeThickness="4" />
-              <Line StartPoint="70,55" EndPoint="52.5,24.7" Stroke="#d9d9d9" StrokeThickness="4" />
-              <Line StartPoint="70,55" EndPoint="87.5,24.7" Stroke="#d9d9d9" StrokeThickness="4" />
-              <Ellipse Canvas.Left="57" Canvas.Top="42" Width="26" Height="26" Fill="#2b3f9e" />
-              <Ellipse Canvas.Left="95" Canvas.Top="45" Width="20" Height="20" Fill="#22c3e6" />
-              <Ellipse Canvas.Left="77.5" Canvas.Top="75.3" Width="20" Height="20" Fill="#22c3e6" />
-              <Ellipse Canvas.Left="42.5" Canvas.Top="75.3" Width="20" Height="20" Fill="#22c3e6" />
-              <Ellipse Canvas.Left="25" Canvas.Top="45" Width="20" Height="20" Fill="#22c3e6" />
-              <Ellipse Canvas.Left="42.5" Canvas.Top="14.7" Width="20" Height="20" Fill="#22c3e6" />
-              <Ellipse Canvas.Left="77.5" Canvas.Top="14.7" Width="20" Height="20" Fill="#22c3e6" />
-            </Canvas>
-          </Grid>
+          <!-- 分子球：1:1 MobaXterm 欢迎页（5 个卫星球 + 深蓝中心球 + 浅灰键线） -->
+          <StackPanel Width="292"
+                      HorizontalAlignment="Left"
+                      VerticalAlignment="Center"
+                      Spacing="2">
+            <TextBlock Text="欢迎使用"
+                       FontSize="13"
+                       HorizontalAlignment="Center"
+                       Foreground="{DynamicResource WindowTextBrush}" />
+            <TextBlock Text="MobaXterm 网络服务器"
+                       FontSize="13"
+                       HorizontalAlignment="Center"
+                       Foreground="{DynamicResource WindowTextBrush}" />
+          </StackPanel>
+          <Canvas Width="120"
+                  Height="100"
+                  HorizontalAlignment="Right"
+                  VerticalAlignment="Center"
+                  Margin="0,0,52,0">
+            <Line StartPoint="60,50" EndPoint="60,25" Stroke="#d5d9d9" StrokeThickness="2.5" />
+            <Line StartPoint="60,50" EndPoint="36,33" Stroke="#d5d9d9" StrokeThickness="2.5" />
+            <Line StartPoint="60,50" EndPoint="81,45" Stroke="#d5d9d9" StrokeThickness="2.5" />
+            <Line StartPoint="60,50" EndPoint="41,73" Stroke="#d5d9d9" StrokeThickness="2.5" />
+            <Line StartPoint="60,50" EndPoint="75,71" Stroke="#d5d9d9" StrokeThickness="2.5" />
+            <Ellipse Canvas.Left="50.5" Canvas.Top="40.5" Width="19" Height="19" Fill="#3f4fa5" />
+            <Ellipse Canvas.Left="53" Canvas.Top="18" Width="14" Height="14" Fill="#1fc3d8" />
+            <Ellipse Canvas.Left="29" Canvas.Top="26" Width="14" Height="14" Fill="#1fc3d8" />
+            <Ellipse Canvas.Left="74" Canvas.Top="38" Width="14" Height="14" Fill="#1fc3d8" />
+            <Ellipse Canvas.Left="34" Canvas.Top="66" Width="14" Height="14" Fill="#1fc3d8" />
+            <Ellipse Canvas.Left="68" Canvas.Top="64" Width="14" Height="14" Fill="#1fc3d8" />
+          </Canvas>
         </Grid>
 
         <!-- HTTP configuration -->
         <ScrollViewer IsVisible="{Binding IsHttpSelected}"
                       HorizontalScrollBarVisibility="Disabled"
-                      VerticalScrollBarVisibility="Auto">
+                      VerticalScrollBarVisibility="Hidden">
           <StackPanel Margin="12,8">
             <TextBlock Text="HTTP 服务器配置"
                        FontSize="13"
@@ -163,13 +172,21 @@
                        HorizontalAlignment="Center"
                        Margin="0,0,0,10"
                        Foreground="{DynamicResource WindowTextBrush}" />
-            <Grid ColumnDefinitions="72,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
+            <Grid ColumnDefinitions="90,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
               <TextBlock Grid.Row="0" Grid.Column="0" Text="根目录:"
-                         VerticalAlignment="Center" Margin="0,0,6,4" />
+                         VerticalAlignment="Center" TextAlignment="Right"
+                         Margin="0,0,6,4" />
               <DockPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,4">
                 <Button DockPanel.Dock="Right" Name="HttpBrowseButton"
-                        Content="..." Width="26" Height="22" Margin="4,0,0,0"
-                        Click="OnBrowseHttpRoot" />
+                        Width="26" Height="22" Margin="4,0,0,0"
+                        Padding="0" HorizontalContentAlignment="Center"
+                        ToolTip.Tip="浏览…"
+                        Click="OnBrowseHttpRoot">
+                  <TextBlock Text="&#xf07b;"
+                             FontFamily="{DynamicResource IconFontAwesome}"
+                             FontSize="11"
+                             Foreground="#f9a825" />
+                </Button>
                 <TextBox Name="HttpRootBox" Text="{Binding HttpRoot}" FontSize="11" Height="22" />
               </DockPanel>
 
@@ -181,12 +198,12 @@
                         Margin="0,2" />
 
               <TextBlock Grid.Row="2" Grid.Column="0" Text="监听端口:"
-                         VerticalAlignment="Center" Margin="0,0,6,4" />
+                         VerticalAlignment="Center" TextAlignment="Right" Margin="0,0,6,4" />
               <NumericUpDown Grid.Row="2" Grid.Column="1"
                              Name="HttpPortBox"
                              Value="{Binding HttpPort}"
                              Minimum="1" Maximum="65535" FormatString="0"
-                             Width="96" Height="24" HorizontalAlignment="Left"
+                             Width="120" Height="24" HorizontalAlignment="Left"
                              Margin="0,0,0,4" />
 
               <StackPanel Grid.Row="3" Grid.Column="1"
@@ -198,7 +215,7 @@
                 <NumericUpDown Name="HttpSecondsBox"
                                Value="{Binding HttpRuntimeSeconds}"
                                Minimum="1" Maximum="86400" FormatString="0"
-                               Width="86" Height="24"
+                               Width="132" Height="24"
                                IsEnabled="{Binding HttpRuntimeEnabled}" />
                 <TextBlock Text="秒" VerticalAlignment="Center" />
               </StackPanel>
@@ -208,7 +225,7 @@
               <ListBox Grid.Row="5" Grid.ColumnSpan="2"
                        Name="HttpLogBox"
                        ItemsSource="{Binding HttpLog}"
-                       Height="104"
+                       Height="92"
                        FontFamily="Consolas,Menlo,DejaVu Sans Mono,monospace"
                        FontSize="11" />
             </Grid>
@@ -218,7 +235,7 @@
         <!-- TFTP configuration -->
         <ScrollViewer IsVisible="{Binding IsTftpSelected}"
                       HorizontalScrollBarVisibility="Disabled"
-                      VerticalScrollBarVisibility="Auto">
+                      VerticalScrollBarVisibility="Hidden">
           <StackPanel Margin="12,8">
             <TextBlock Text="TFTP 服务器配置"
                        FontSize="13"
@@ -226,13 +243,21 @@
                        HorizontalAlignment="Center"
                        Margin="0,0,0,10"
                        Foreground="{DynamicResource WindowTextBrush}" />
-            <Grid ColumnDefinitions="72,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
+            <Grid ColumnDefinitions="90,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
               <TextBlock Grid.Row="0" Grid.Column="0" Text="根目录:"
-                         VerticalAlignment="Center" Margin="0,0,6,4" />
+                         VerticalAlignment="Center" TextAlignment="Right"
+                         Margin="0,0,6,4" />
               <DockPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,4">
                 <Button DockPanel.Dock="Right" Name="TftpBrowseButton"
-                        Content="..." Width="26" Height="22" Margin="4,0,0,0"
-                        Click="OnBrowseTftpRoot" />
+                        Width="26" Height="22" Margin="4,0,0,0"
+                        Padding="0" HorizontalContentAlignment="Center"
+                        ToolTip.Tip="浏览…"
+                        Click="OnBrowseTftpRoot">
+                  <TextBlock Text="&#xf07b;"
+                             FontFamily="{DynamicResource IconFontAwesome}"
+                             FontSize="11"
+                             Foreground="#f9a825" />
+                </Button>
                 <TextBox Name="TftpRootBox" Text="{Binding TftpRoot}" FontSize="11" Height="22" />
               </DockPanel>
 
@@ -251,12 +276,12 @@
                         Margin="0,2" />
 
               <TextBlock Grid.Row="3" Grid.Column="0" Text="监听端口:"
-                         VerticalAlignment="Center" Margin="0,0,6,4" />
+                         VerticalAlignment="Center" TextAlignment="Right" Margin="0,0,6,4" />
               <NumericUpDown Grid.Row="3" Grid.Column="1"
                              Name="TftpPortBox"
                              Value="{Binding TftpPort}"
                              Minimum="1" Maximum="65535" FormatString="0"
-                             Width="96" Height="24" HorizontalAlignment="Left"
+                             Width="120" Height="24" HorizontalAlignment="Left"
                              Margin="0,0,0,4" />
 
               <StackPanel Grid.Row="4" Grid.Column="1"
@@ -268,7 +293,7 @@
                 <NumericUpDown Name="TftpSecondsBox"
                                Value="{Binding TftpRuntimeSeconds}"
                                Minimum="1" Maximum="86400" FormatString="0"
-                               Width="86" Height="24"
+                               Width="132" Height="24"
                                IsEnabled="{Binding TftpRuntimeEnabled}" />
                 <TextBlock Text="秒" VerticalAlignment="Center" />
               </StackPanel>
@@ -278,7 +303,7 @@
             </Grid>
             <ListBox Name="TftpLogBox"
                      ItemsSource="{Binding TftpLog}"
-                     Height="96"
+                     Height="68"
                      FontFamily="Consolas,Menlo,DejaVu Sans Mono,monospace"
                      FontSize="11" />
           </StackPanel>
@@ -291,7 +316,8 @@
             Name="ServersOkButton"
             Classes="ServerOkButton"
             HorizontalAlignment="Center"
-            VerticalAlignment="Center"
+            VerticalAlignment="Top"
+            Margin="0,9,0,0"
             Click="OnOkClick">
       <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
         <TextBlock Text="&#xf058;"
