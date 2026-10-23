@@ -1,0 +1,9 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="COMTool.App.Views.SshBrowserPanel"
+             ClipToBounds="True">
+  <!-- The SSH browser takes the whole sidebar panel, as in MobaXterm. -->
+  <Border Background="{DynamicResource SidebarListBackgroundBrush}">
+    <ContentControl Name="PaneHost" />
+  </Border>
+</UserControl>

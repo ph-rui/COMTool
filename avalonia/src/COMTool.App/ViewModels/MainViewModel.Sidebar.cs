@@ -9,7 +9,13 @@ public enum SidebarTab
 {
     Sessions,
     Tools,
-    Macros
+    Macros,
+
+    /// <summary>
+    /// The SFTP browser of the selected SSH session. It takes the place
+    /// of the sessions/tools/macros panel, the rail stays visible.
+    /// </summary>
+    SshBrowser,
 }
 
 public sealed partial class MacroItem : ObservableObject
@@ -112,17 +118,44 @@ public partial class MainViewModel
         OnPropertyChanged(nameof(IsSessionsTab));
         OnPropertyChanged(nameof(IsToolsTab));
         OnPropertyChanged(nameof(IsMacrosTab));
+        OnPropertyChanged(nameof(IsSshBrowserTab));
         OnPropertyChanged(nameof(SidebarTitle));
+
+        if (value == SidebarTab.SshBrowser)
+        {
+            if (SshBrowserPane is not { } pane)
+            {
+                // The browser belongs to an SSH session; an empty rail
+                // cannot keep it open.
+                SidebarTab = SidebarTab.Sessions;
+                return;
+            }
+
+            pane.IsExpanded = true;
+            _ = pane.EnsureLoadedAsync(CancellationToken.None);
+        }
+        else
+        {
+            SshBrowserPane?.IsExpanded = false;
+        }
     }
+
+    /// <summary>
+    /// The SFTP browser that the sidebar shows. It is the panel of the
+    /// selected tab, which is an SSH tab whenever the browser is open.
+    /// </summary>
+    public SftpPaneViewModel? SshBrowserPane => SelectedTab?.SftpPane;
 
     public bool IsSessionsTab => SidebarTab == SidebarTab.Sessions;
     public bool IsToolsTab => SidebarTab == SidebarTab.Tools;
     public bool IsMacrosTab => SidebarTab == SidebarTab.Macros;
+    public bool IsSshBrowserTab => SidebarTab == SidebarTab.SshBrowser;
 
     public string SidebarTitle => SidebarTab switch
     {
         SidebarTab.Tools => "Tools",
         SidebarTab.Macros => "Macros",
+        SidebarTab.SshBrowser => "SSH browser",
         _ => "User sessions",
     };
 

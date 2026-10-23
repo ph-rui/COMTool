@@ -117,7 +117,6 @@ public sealed class SshTabFocusTests
         var sessionView = new SshSessionView
         {
             Terminal = terminal,
-            SftpPane = pane,
         };
         var tab = new TerminalTab
         {

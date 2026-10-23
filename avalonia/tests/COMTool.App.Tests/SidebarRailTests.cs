@@ -116,15 +116,22 @@ public sealed class SidebarRailTests
                 Assert.Same(tab, vm.SelectedTab);
                 Assert.False(pane.IsExpanded);
 
-                // 点图标 = 打开当前 SSH 会话的 SFTP 浏览器。
+                // 点图标 = 左侧栏切换成当前 SSH 会话的 SFTP 浏览器。
                 Click(window, browser);
+                Assert.Equal(SidebarTab.SshBrowser, vm.SidebarTab);
                 Assert.True(pane.IsExpanded);
 
-                // 连接断开后第四格消失。
+                var panel = sidebar.FindControl<SshBrowserPanel>("SshBrowserPanel")!;
+                Assert.True(panel.IsVisible);
+                Assert.Same(pane, panel.SftpPaneControl?.ViewModel);
+                Assert.Same(pane, vm.SshBrowserPane);
+
+                // 连接断开后第四格消失，左栏回到会话列表。
                 tab.IsAlive = false;
                 window.UpdateConnectionStatesForTests();
                 RunJobs(window);
                 Assert.False(browser.IsVisible);
+                Assert.Equal(SidebarTab.Sessions, vm.SidebarTab);
             });
         }
         finally
@@ -1107,7 +1114,7 @@ public sealed class SidebarRailTests
             Title = "ssh",
             SessionId = "ssh",
             Kind = SessionKind.Ssh,
-            Content = new SshSessionView { Terminal = terminal, SftpPane = pane },
+            Content = new SshSessionView { Terminal = terminal },
             Terminal = terminal,
             SftpPane = pane,
             IsTransportOpen = () => true,

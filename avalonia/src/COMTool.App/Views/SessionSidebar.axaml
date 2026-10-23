@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:COMTool.App.ViewModels"
+             xmlns:views="using:COMTool.App.Views"
              xmlns:sys="using:System"
              x:Class="COMTool.App.Views.SessionSidebar"
              x:DataType="vm:MainViewModel">
@@ -48,6 +49,7 @@
         <!-- MobaXterm shows this globe only while an SSH login is live. -->
         <Button Name="RailSshBrowserButton"
                 Classes="RailButton"
+                Classes.active="{Binding IsSshBrowserTab}"
                 IsVisible="{Binding IsSshBrowserVisible}"
                 Click="OnRailSshBrowserClick"
                 ToolTip.Tip="SSH 浏览器（SFTP）">
@@ -365,5 +367,12 @@
         </Border>
       </Grid>
     </Grid>
+
+    <!-- The SSH browser covers the whole panel, header included, while the
+         rail keeps its place. -->
+    <views:SshBrowserPanel Grid.Column="1"
+                           Name="SshBrowserPanel"
+                           IsVisible="{Binding IsSshBrowserTab}"
+                           Pane="{Binding SshBrowserPane}" />
   </Grid>
 </UserControl>

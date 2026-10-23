@@ -77,6 +77,21 @@ public sealed class SftpPaneViewModelTests
     }
 
     [AvaloniaFact]
+    public async Task GoHomeReturnsToTheRemoteHome()
+    {
+        var (viewModel, remote, _) = NewViewModel();
+        remote.AddDirectory("/remote/sub");
+        await viewModel.LoadAsync(CancellationToken.None);
+        await viewModel.EnterRemoteAsync(viewModel.RemoteEntries.Single(entry => entry.Name == "sub"));
+        Assert.Equal("/remote/sub", viewModel.RemotePath);
+
+        await viewModel.GoHomeRemoteAsync();
+
+        Assert.Equal(RemoteHome, viewModel.RemotePath);
+        Assert.Contains(viewModel.RemoteEntries, entry => entry.Name == "sub");
+    }
+
+    [AvaloniaFact]
     public async Task EnsureLoadedAsyncTriesAgainAfterAFailure()
     {
         var calls = 0;

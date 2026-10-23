@@ -230,6 +230,8 @@ public partial class MainViewModel : ViewModelBase
             // Let the view preserve its live connection before that happens.
             SelectedTabChanging?.Invoke(_selectedTab);
 
+            var previousPane = _selectedTab?.SftpPane;
+
             if (_selectedTab is not null)
             {
                 _selectedTab.IsSelected = false;
@@ -242,7 +244,28 @@ public partial class MainViewModel : ViewModelBase
             }
 
             OnPropertyChanged();
+            OnPropertyChanged(nameof(SshBrowserPane));
             OnPropertyChanged(nameof(CanSendMacro));
+
+            if (previousPane is not null && !ReferenceEquals(previousPane, _selectedTab?.SftpPane))
+            {
+                previousPane.IsExpanded = false;
+            }
+
+            if (SidebarTab == SidebarTab.SshBrowser)
+            {
+                if (_selectedTab?.SftpPane is { } pane)
+                {
+                    pane.IsExpanded = true;
+                    _ = pane.EnsureLoadedAsync(CancellationToken.None);
+                }
+                else
+                {
+                    // A serial or local tab has no remote side, so the
+                    // rail goes back to the sessions panel.
+                    SidebarTab = SidebarTab.Sessions;
+                }
+            }
         }
     }
 
@@ -317,6 +340,18 @@ public partial class MainViewModel : ViewModelBase
         // The rail browser icon follows live connections, including quick
         // connections that have no saved session behind them.
         IsSshBrowserVisible = connectedSsh.Count > 0;
+        LeaveBrowserWhenNoSshIsLeft();
+    }
+
+    /// <summary>
+    /// The browser cannot stay open after the last SSH login is gone.
+    /// </summary>
+    private void LeaveBrowserWhenNoSshIsLeft()
+    {
+        if (!IsSshBrowserVisible && SidebarTab == SidebarTab.SshBrowser)
+        {
+            SidebarTab = SidebarTab.Sessions;
+        }
     }
 
     public void LoadSessions(
@@ -328,6 +363,7 @@ public partial class MainViewModel : ViewModelBase
     {
         Sections.Clear();
         IsSshBrowserVisible = connectedSsh.Count > 0;
+        LeaveBrowserWhenNoSshIsLeft();
 
         var serial = new SidebarSection { Title = "Serial", ShowHeader = true };
         var availableSerial = config.PortScanSucceeded

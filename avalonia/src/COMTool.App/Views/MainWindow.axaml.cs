@@ -26,8 +26,15 @@ public partial class MainWindow : Window
     private static readonly Cursor NorthSouthCursor = new(StandardCursorType.SizeNorthSouth);
     private static readonly Cursor NorthWestSouthEastCursor = new(StandardCursorType.TopLeftCorner);
     private static readonly Cursor NorthEastSouthWestCursor = new(StandardCursorType.TopRightCorner);
+    private const double DefaultBrowserSidebarWidth = 460;
+
     private bool _sidebarVisible = true;
     private double _sidebarWidth = 220;
+
+    // The SSH browser needs the room of MobaXterm's panel. The width of
+    // the sessions panel is kept apart, so closing the browser brings the
+    // sessions list back at its own size.
+    private double _browserSidebarWidth = DefaultBrowserSidebarWidth;
     private bool _loaded;
     private bool _applyingEncoding;
     private AppConfigService? _config;
@@ -109,6 +116,7 @@ public partial class MainWindow : Window
 
         _loaded = true;
         viewModel.SelectedTabChanging += OnSelectedTabChanging;
+        viewModel.PropertyChanged += OnViewModelPropertyChanged;
         if (Environment.GetCommandLineArgs().Contains("--demo"))
         {
             viewModel.LoadDemoSessions();
@@ -746,7 +754,7 @@ public partial class MainWindow : Window
         var pane = new SftpPaneViewModel(
             () => connection.CreateSftpFileSystem(),
             new SystemLocalFileSystem());
-        var sessionView = new SshSessionView { Terminal = terminal, SftpPane = pane };
+        var sessionView = new SshSessionView { Terminal = terminal };
         var tab = new TerminalTab
         {
             Title = SshSessionRules.DisplayName(session),
@@ -2506,36 +2514,32 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Folds the drawer of the SSH session away or opens it again. The
-    /// button lives in the tab strip, so its context is the view model of
-    /// the window and not the tab.
+    /// Opens or closes the SSH browser in the left sidebar. The button
+    /// lives in the tab strip, so its context is the view model of the
+    /// window and not the tab.
     /// </summary>
     private void OnSftpToggleClick(object? sender, RoutedEventArgs e)
     {
-        var pane = (sender as Button)?.DataContext is MainViewModel viewModel
-            ? viewModel.SelectedTab?.SftpPane
-            : null;
-
-        if (pane is null)
+        if ((sender as Button)?.DataContext is not MainViewModel viewModel
+            || viewModel.SelectedTab?.SftpPane is null)
         {
             return;
         }
 
-        pane.IsExpanded = !pane.IsExpanded;
-
-        // The panel asks the server for the sftp subsystem only when it is
-        // shown, so an SSH session that never opens it keeps the one
-        // connection of the shell.
-        if (pane.IsExpanded)
+        if (!_sidebarVisible)
         {
-            _ = pane.EnsureLoadedAsync(CancellationToken.None);
+            SetSidebarVisible(true);
         }
+
+        viewModel.SidebarTab = viewModel.IsSshBrowserTab
+            ? SidebarTab.Sessions
+            : SidebarTab.SshBrowser;
     }
 
     /// <summary>
-    /// The SSH-browser icon of the rail opens the SFTP pane of the current
-    /// SSH session. When the current tab is not an SSH tab, the most recent
-    /// connected SSH tab is selected first.
+    /// The SSH-browser icon of the rail opens the SFTP browser of the
+    /// current SSH session in the sidebar. When the current tab is not an
+    /// SSH tab, the most recent connected SSH tab is selected first.
     /// </summary>
     private void OnSshBrowserRequested(object? sender, EventArgs e)
     {
@@ -2551,9 +2555,14 @@ public partial class MainWindow : Window
                 candidate => candidate.IsSshTab && IsTabConnected(candidate));
         }
 
-        if (tab?.SftpPane is not { } pane)
+        if (tab?.SftpPane is null)
         {
             return;
+        }
+
+        if (!_sidebarVisible)
+        {
+            SetSidebarVisible(true);
         }
 
         if (!ReferenceEquals(viewModel.SelectedTab, tab))
@@ -2561,8 +2570,7 @@ public partial class MainWindow : Window
             viewModel.SelectedTab = tab;
         }
 
-        pane.IsExpanded = true;
-        _ = pane.EnsureLoadedAsync(CancellationToken.None);
+        viewModel.SidebarTab = SidebarTab.SshBrowser;
     }
 
     private void OnEncodingChanged(object? sender, SelectionChangedEventArgs e)
@@ -2651,7 +2659,7 @@ public partial class MainWindow : Window
         Sidebar.IsVisible = visible;
         SidebarSplitter.IsVisible = visible;
         BodyGrid.ColumnDefinitions[0].Width = visible
-            ? new GridLength(ClampSidebarWidth(_sidebarWidth))
+            ? new GridLength(CurrentSidebarWidth())
             : new GridLength(0);
         BodyGrid.ColumnDefinitions[1].Width = visible ? new GridLength(3) : new GridLength(0);
 
@@ -2659,6 +2667,50 @@ public partial class MainWindow : Window
         {
             PersistSidebarConfig();
         }
+    }
+
+    /// <summary>
+    /// The sidebar becomes the SSH browser and back. The rail keeps its
+    /// place, the content starts at the splitter while the browser is
+    /// open, and the terminal gets the whole right side.
+    /// </summary>
+    private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(MainViewModel.IsSshBrowserTab))
+        {
+            return;
+        }
+
+        ApplySidebarMode();
+    }
+
+    private void ApplySidebarMode()
+    {
+        var browser = (DataContext as MainViewModel)?.IsSshBrowserTab == true;
+
+        if (_sidebarVisible)
+        {
+            BodyGrid.ColumnDefinitions[0].Width = new GridLength(CurrentSidebarWidth());
+        }
+
+        ContentArea.Margin = browser
+            ? new Thickness(0, 0, 0, 0)
+            : new Thickness(32, 0, 0, 0);
+    }
+
+    private double CurrentSidebarWidth() =>
+        (DataContext as MainViewModel)?.IsSshBrowserTab == true
+            ? BrowserSidebarWidth()
+            : ClampSidebarWidth(_sidebarWidth);
+
+    private double BrowserSidebarWidth()
+    {
+        var available = Bounds.Width > 0 ? Bounds.Width : DefaultWindowWidth;
+        var limit = Math.Max(300, available - 260);
+        return Math.Clamp(
+            _browserSidebarWidth,
+            Math.Min(360, limit),
+            Math.Min(720, limit));
     }
 
     internal void SetSidebarWidthForTests(double width)
@@ -2862,7 +2914,17 @@ public partial class MainWindow : Window
 
     private void OnSidebarSplitterDragCompleted(object? sender, VectorEventArgs e)
     {
-        _sidebarWidth = ClampSidebarWidth(BodyGrid.ColumnDefinitions[0].ActualWidth);
+        var width = BodyGrid.ColumnDefinitions[0].ActualWidth;
+
+        if ((DataContext as MainViewModel)?.IsSshBrowserTab == true)
+        {
+            // The browser width is a property of this session, not of the
+            // saved sessions panel, so it is not written to the config.
+            _browserSidebarWidth = width;
+            return;
+        }
+
+        _sidebarWidth = ClampSidebarWidth(width);
         PersistSidebarConfig();
     }
 
@@ -3373,6 +3435,7 @@ public partial class MainWindow : Window
 
         if (DataContext is MainViewModel viewModel)
         {
+            viewModel.PropertyChanged -= OnViewModelPropertyChanged;
             foreach (var tab in viewModel.Tabs.ToList())
             {
                 CloseTab(tab);

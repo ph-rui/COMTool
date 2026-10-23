@@ -404,6 +404,22 @@ public sealed partial class SftpPaneViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Goes to the home directory of the remote login. MobaXterm's path
+    /// menu offers the same jump.
+    /// </summary>
+    public async Task GoHomeRemoteAsync()
+    {
+        var remote = _remote;
+        if (remote is null)
+        {
+            return;
+        }
+
+        RemotePath = remote.HomeDirectory;
+        await RefreshRemoteAsync();
+    }
+
+    /// <summary>
     /// Creates a directory on the remote side.
     /// </summary>
     public async Task NewRemoteFolderAsync(string name)

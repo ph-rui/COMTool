@@ -59,6 +59,12 @@ public sealed class InMemoryFileSystem : ISftpFileSystem, ILocalFileSystem
     public bool IncludeDotEntries { get; set; }
 
     /// <summary>
+    /// The owner that the listed entries report. A test sets it to make
+    /// the owner column of the browser show a known name.
+    /// </summary>
+    public string Owner { get; set; } = "";
+
+    /// <summary>
     /// Sets the write time of a file or directory.
     /// </summary>
     public void SetLastWriteTimeUtc(string path, DateTime timeUtc)
@@ -204,7 +210,8 @@ public sealed class InMemoryFileSystem : ISftpFileSystem, ILocalFileSystem
                 child.Kind == NodeKind.Symlink,
                 child.Kind == NodeKind.File ? child.Content.LongLength : 0,
                 child.LastWriteTimeUtc,
-                SftpPermission.FromOctal(child.Mode)));
+                SftpPermission.FromOctal(child.Mode),
+                Owner));
         }
 
         return Task.FromResult<IReadOnlyList<SftpEntry>>(entries);

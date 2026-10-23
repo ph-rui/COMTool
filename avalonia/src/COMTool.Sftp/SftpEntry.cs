@@ -10,6 +10,11 @@ namespace COMTool.Sftp;
 /// <param name="Size">The size in bytes, zero for a directory.</param>
 /// <param name="LastWriteTimeUtc">The last write time in UTC.</param>
 /// <param name="Permission">The nine permission bits.</param>
+/// <param name="Owner">
+/// The owner of the entry when the file system can tell it. The remote
+/// side resolves the uid through <c>/etc/passwd</c> and falls back to the
+/// number.
+/// </param>
 public sealed record SftpEntry(
     string Name,
     string Path,
@@ -17,4 +22,5 @@ public sealed record SftpEntry(
     bool IsSymbolicLink,
     long Size,
     DateTime LastWriteTimeUtc,
-    SftpPermission Permission);
+    SftpPermission Permission,
+    string Owner = "");

@@ -724,6 +724,47 @@ and the visible state and width are restored on launch:
   - `BAK_COUNT=0`;
   - smoke test: process started, `Responding=True`, then stopped.
 
+### 2026-10-24 — SSH 浏览器移入左侧栏（MobaXterm 22.1 一比一）
+
+- 按 MobaXterm Professional 22.1 实机截图：SFTP 浏览器不再嵌在 SSH 标签
+  内容里，而是替换左侧栏面板（图标栏保留），终端占满右侧；浏览器宽度默认
+  460px，与会话栏宽度分开记忆，进入浏览器模式时内容区左边距由 32 变 0；
+- 左侧栏固定 会话/工具/宏 三格；SSH 登录成功后动态出现第四格橙色地球
+  （`f57d`，`#ff9800`，提示 "SSH 浏览器（SFTP）"），全部断开后隐藏；
+  点击地球打开当前 SSH 会话的浏览器，当前标签不是 SSH 时先切到最近的
+  已连接 SSH 标签；切回非 SSH 标签或最后一条 SSH 断开时自动回到会话栏；
+- `SftpPane` 与截图对齐：彩色图标工具栏、橙色地球 + `/home/用户名` 路径栏
+  （右侧下拉含 上级目录/主目录）、列 `名称 | 大小 (KB) | 最后修改 | 权限 |
+  所有者`、`..` 行、黄色文件夹、18–20px 紧凑行高、11px 字号、右侧滚动条；
+  所有者列首次列目录读取 `/etc/passwd` 解析 uid→用户名，读不到时显示数字；
+- SSH 标签内容只保留终端（`SshSessionViewShowsOnlyTheTerminal`），SFTP
+  面板不再占用标签宽度；
+- 冲突条改为紧凑单行按钮，避免窄侧栏里 Cancel 按钮溢出到终端区域；
+- test evidence: full gate PASS — 409 tests (Core 49, SFTP 42, Connections 77,
+  Terminal 11, ZMODEM 32, TestGate 49, App 149), Linux Xvfb E2E 13/13,
+  results `20261023T171227Z`；新增/改名测试：
+  `SftpPaneLayoutTests.BrowserIsClosedByDefault`,
+  `SftpPaneLayoutTests.ToggleButtonOpensTheBrowserInTheSidebar`,
+  `SftpPaneLayoutTests.OpeningTheBrowserLoadsTheRemoteSide`,
+  `SftpPaneLayoutTests.SelectingANonSshTabLeavesTheBrowser`,
+  `SftpPaneLayoutTests.SwitchingSshTabsMovesTheBrowserToTheSelectedSession`,
+  `SftpPaneLayoutTests.HeaderMatchesMobaXtermAndShowsTheOwner`,
+  `SftpPaneLayoutTests.ParentRowGoesToTheParentDirectory`,
+  `SftpPaneLayoutTests.PathMenuOffersTheParentAndTheHome`,
+  `SshSessionViewTests.SshSessionViewShowsOnlyTheTerminal`,
+  `SidebarRailTests.UI16_SshBrowserIconAppearsOnlyWithAConnectedSshSession`,
+  `PasswdUserMapTests.ParseReadsNamesAndSkipsMalformedLines`,
+  `PasswdUserMapTests.ParseOfAnEmptyOrMissingFileIsEmpty`；
+  SFTP01/SFTP02 的 Linux Xvfb 坐标按侧栏布局重测并通过（打开侧栏浏览器、
+  路径跳转、下载、上传、冲突覆盖、新建/重命名/两步删除）；
+- deployment 2026-10-24 (in-place overwrite, no `.bak-*`):
+  - exe `COMTool.App-tools.exe` published win-x64 single-file R2R;
+  - size: 209,277,772 bytes;
+  - SHA256: `2E8BFC77EEBD8A92A1B3E3C4F05DB80D5DD42434BC6CEF5665FFC59B7912FDCC`;
+  - WORK and DESKTOP copies both matched that hash via `Get-FileHash`;
+  - `BAK_COUNT=0`;
+  - smoke test: process started, `Responding=True`, then stopped.
+
 The previously packaged release zip is 74,795,557 bytes with SHA256:
 
 ```text

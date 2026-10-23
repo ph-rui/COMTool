@@ -691,13 +691,13 @@ run_sftp01_browser_transfer() {
 
     log "Running $test_id"
 
-    # The panel of a new SSH tab stays folded away. The button in the tab
-    # strip opens it, and only then does the app ask the server for the
-    # sftp subsystem.
+    # The browser of a new SSH tab stays closed. The button in the tab
+    # strip opens it in the left sidebar, and only then does the app ask
+    # the server for the sftp subsystem.
     ensure_first_shell "$test_id"
 
-    # The panel has to have its place before the first click: the
-    # sidebar shifts the whole content when it retracts.
+    # Keep the tab strip at its stable collapsed-sidebar position before
+    # the first click. Opening the browser docks the sidebar at 460px.
     collapse_sidebar_for_tabs || fail "$test_id" "could not collapse the sidebar"
 
     click_window "$SFTP_TOGGLE_X" "$SFTP_TOGGLE_Y" \
@@ -706,6 +706,8 @@ run_sftp01_browser_transfer() {
     if ! wait_for_sshd_log "subsystem 'sftp'" 20; then
         fail "$test_id" "the panel did not ask the server for the sftp subsystem"
     fi
+    wait_for_sftp_browser_visible 10 \
+        || fail "$test_id" "the browser did not open in the sidebar"
 
     rm -rf -- "$remote_dir"
     mkdir -p "$remote_dir" "$local_up_dir" "$local_down_dir"
@@ -780,13 +782,11 @@ run_sftp02_file_management() {
 
     log "Running $test_id"
 
-    # The SFTP coordinates assume a folded sidebar. SFTP01 leaves the panel
-    # open, and an open panel at x 0..420 makes the sidebar probe at
-    # (200,300) read bright and misread the state. Close the panel first:
-    # (300,300) is bright if and only if the panel is open (the panel always
-    # covers x=300 for any width in 320..640, and the sidebar never does).
-    # If the sidebar is still expanded, the toggle click below misses it and
-    # lands on the empty tab strip, which is harmless.
+    # SFTP01 leaves the browser open in the sidebar. The probe at (300,300)
+    # is bright while the browser is up (its pane covers x=24..460) and
+    # dark for the terminal when it is closed. Close the browser first so
+    # the toggle below opens it again instead of switching the sidebar to
+    # the session list.
     if ! window_region_is_dark 300 300; then
         click_window "$SFTP_TOGGLE_X" "$SFTP_TOGGLE_Y" || true
         sleep 0.5
@@ -794,15 +794,21 @@ run_sftp02_file_management() {
     collapse_sidebar_for_tabs \
         || fail "$test_id" "could not collapse the sidebar"
 
-    # The panel may be closed (standalone run) or was just closed above;
-    # open it and wait for the sftp subsystem.
-    if window_region_is_dark 300 300; then
+    # A standalone run can start with the browser closed. A run after
+    # SFTP01 has it open; the sidebar may still be hiding it, in which case
+    # the first toggle shows the session list and the second shows the
+    # browser again. Accept either starting state.
+    click_window "$SFTP_TOGGLE_X" "$SFTP_TOGGLE_Y" \
+        || fail "$test_id" "could not click the SFTP button of the tab strip"
+    if ! wait_for_sftp_browser_visible 10; then
         click_window "$SFTP_TOGGLE_X" "$SFTP_TOGGLE_Y" \
             || fail "$test_id" "could not click the SFTP button of the tab strip"
-        wait_for_sshd_log "subsystem 'sftp'" 20 \
-            || fail "$test_id" "the panel did not ask the server for the sftp subsystem"
-        sleep 1
+        wait_for_sftp_browser_visible 10 \
+            || fail "$test_id" "the browser did not open in the sidebar"
     fi
+    wait_for_sshd_log "subsystem 'sftp'" 20 \
+        || fail "$test_id" "the panel did not ask the server for the sftp subsystem"
+    sleep 1
 
     rm -rf -- "$remote_dir"
     mkdir -p -- "$remote_dir"

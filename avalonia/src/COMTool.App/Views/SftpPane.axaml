@@ -10,8 +10,8 @@
          text of a button lives in its tooltip, so the row stays small in
          a narrow panel. -->
     <Style Selector="Button.SftpTool, ToggleButton.SftpTool">
-      <Setter Property="Width" Value="28" />
-      <Setter Property="Height" Value="26" />
+      <Setter Property="Width" Value="27" />
+      <Setter Property="Height" Value="23" />
       <Setter Property="MinWidth" Value="0" />
       <Setter Property="MinHeight" Value="0" />
       <Setter Property="Padding" Value="0" />
@@ -35,7 +35,7 @@
     </Style>
     <Style Selector="TextBlock.SftpIcon">
       <Setter Property="FontFamily" Value="{DynamicResource IconFontAwesome}" />
-      <Setter Property="FontSize" Value="13" />
+      <Setter Property="FontSize" Value="12" />
       <Setter Property="Foreground" Value="#2b579a" />
     </Style>
     <Style Selector="Button.SftpTool:disabled TextBlock.SftpIcon">
@@ -56,100 +56,107 @@
     <Style Selector="Button.SftpHeader:pointerover /template/ ContentPresenter">
       <Setter Property="Background" Value="#e4edf7" />
     </Style>
-    <Style Selector="ListBox.SftpList ListBoxItem">
-      <Setter Property="Padding" Value="6,2" />
+    <Style Selector="Button.SftpParentRow">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="6,0" />
       <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Height" Value="18" />
+      <Setter Property="CornerRadius" Value="0" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="Button.SftpParentRow:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#eef4fb" />
+    </Style>
+    <Style Selector="ListBox.SftpList ListBoxItem">
+      <Setter Property="Padding" Value="6,0" />
+      <Setter Property="MinHeight" Value="0" />
+    </Style>
+    <Style Selector="ListBox.SftpList ListBoxItem TextBlock">
+      <Setter Property="FontSize" Value="11" />
     </Style>
   </UserControl.Styles>
 
-  <Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto">
+  <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto,Auto">
     <!-- The icon toolbar. The buttons work on the remote side, the local
          side of a transfer comes from a system dialog. -->
     <Border Grid.Row="0"
             Background="#f4f4f4"
             BorderBrush="#d4d4d4"
             BorderThickness="0,0,0,1"
-            Padding="2">
+            Padding="2,1">
       <WrapPanel Orientation="Horizontal">
-        <Button Name="UpButton"
-                Classes="SftpTool"
-                ToolTip.Tip="返回上级目录"
-                Click="OnUpClick">
-          <TextBlock Classes="SftpIcon" Text="&#xf148;" />
-        </Button>
+        <!-- MobaXterm colours every icon of the browser toolbar, so the
+             row is recognisable without reading the tooltips. -->
         <Button Name="RefreshButton"
                 Classes="SftpTool"
                 ToolTip.Tip="刷新当前目录"
                 Click="OnRefreshClick">
-          <TextBlock Classes="SftpIcon" Text="&#xf021;" />
-        </Button>
-        <Rectangle Width="1"
-                   Height="16"
-                   Margin="4,0"
-                   Fill="#d4d4d4"
-                   VerticalAlignment="Center" />
-        <Button Name="NewFolderButton"
-                Classes="SftpTool"
-                ToolTip.Tip="新建文件夹"
-                Click="OnNewFolderClick">
-          <TextBlock Classes="SftpIcon" Text="&#xf067;" />
-        </Button>
-        <Button Name="RenameButton"
-                Classes="SftpTool"
-                ToolTip.Tip="重命名"
-                IsEnabled="False"
-                Click="OnRenameClick">
-          <TextBlock Classes="SftpIcon" Text="&#xf044;" />
-        </Button>
-        <Button Name="DeleteButton"
-                Classes="SftpTool"
-                ToolTip.Tip="删除"
-                IsEnabled="False"
-                Click="OnDeleteClick">
-          <TextBlock Classes="SftpIcon" Text="&#xf014;" />
-        </Button>
-        <Button Name="ChmodButton"
-                Classes="SftpTool"
-                ToolTip.Tip="修改权限"
-                IsEnabled="False"
-                Click="OnChmodClick">
-          <TextBlock Classes="SftpIcon" Text="&#xf084;" />
-        </Button>
-        <Rectangle Width="1"
-                   Height="16"
-                   Margin="4,0"
-                   Fill="#d4d4d4"
-                   VerticalAlignment="Center" />
-        <Button Name="UploadButton"
-                Classes="SftpTool"
-                ToolTip.Tip="上传到当前文件夹"
-                IsEnabled="{Binding CanUpload}"
-                Click="OnUploadClick">
-          <TextBlock Classes="SftpIcon" Text="&#xf093;" />
+          <TextBlock Classes="SftpIcon" Foreground="#2e7d32" Text="&#xf021;" />
         </Button>
         <Button Name="DownloadButton"
                 Classes="SftpTool"
                 ToolTip.Tip="下载到本地"
                 IsEnabled="{Binding CanDownload}"
                 Click="OnDownloadClick">
-          <TextBlock Classes="SftpIcon" Text="&#xf019;" />
+          <TextBlock Classes="SftpIcon" Foreground="#1976d2" Text="&#xf019;" />
+        </Button>
+        <Button Name="UploadButton"
+                Classes="SftpTool"
+                ToolTip.Tip="上传到当前文件夹"
+                IsEnabled="{Binding CanUpload}"
+                Click="OnUploadClick">
+          <TextBlock Classes="SftpIcon" Foreground="#1976d2" Text="&#xf093;" />
         </Button>
         <Rectangle Width="1"
-                   Height="16"
-                   Margin="4,0"
+                   Height="15"
+                   Margin="3,0"
+                   Fill="#d4d4d4"
+                   VerticalAlignment="Center" />
+        <Button Name="NewFolderButton"
+                Classes="SftpTool"
+                ToolTip.Tip="新建文件夹"
+                Click="OnNewFolderClick">
+          <TextBlock Classes="SftpIcon" Foreground="#f9a825" Text="&#xf07b;" />
+        </Button>
+        <Button Name="RenameButton"
+                Classes="SftpTool"
+                ToolTip.Tip="重命名"
+                IsEnabled="False"
+                Click="OnRenameClick">
+          <TextBlock Classes="SftpIcon" Foreground="#1976d2" Text="&#xf044;" />
+        </Button>
+        <Button Name="DeleteButton"
+                Classes="SftpTool"
+                ToolTip.Tip="删除"
+                IsEnabled="False"
+                Click="OnDeleteClick">
+          <TextBlock Classes="SftpIcon" Foreground="#c62828" Text="&#xf014;" />
+        </Button>
+        <Button Name="ChmodButton"
+                Classes="SftpTool"
+                ToolTip.Tip="修改权限"
+                IsEnabled="False"
+                Click="OnChmodClick">
+          <TextBlock Classes="SftpIcon" Foreground="#f57c00" Text="&#xf084;" />
+        </Button>
+        <Rectangle Width="1"
+                   Height="15"
+                   Margin="3,0"
                    Fill="#d4d4d4"
                    VerticalAlignment="Center" />
         <ToggleButton Name="FollowLinksButton"
                       Classes="SftpTool"
                       ToolTip.Tip="跟随符号链接"
                       IsChecked="{Binding FollowSymbolicLinks, Mode=TwoWay}">
-          <TextBlock Classes="SftpIcon" Text="&#xf0c1;" />
+          <TextBlock Classes="SftpIcon" Foreground="#00897b" Text="&#xf0c1;" />
         </ToggleButton>
         <ToggleButton Name="ShowHiddenButton"
                       Classes="SftpTool"
                       ToolTip.Tip="显示隐藏文件"
                       IsChecked="{Binding ShowHidden, Mode=TwoWay}">
-          <TextBlock Classes="SftpIcon" Text="&#xf06e;" />
+          <TextBlock Classes="SftpIcon" Foreground="#607d8b" Text="&#xf06e;" />
         </ToggleButton>
       </WrapPanel>
     </Border>
@@ -193,11 +200,53 @@
       </Grid>
     </Border>
 
-    <TextBox Grid.Row="2"
-             Name="RemotePathBox"
-             Margin="3"
-             Text="{Binding RemotePath, Mode=TwoWay}"
-             KeyDown="OnRemotePathKeyDown" />
+    <!-- MobaXterm puts the orange globe in front of the path and a small
+         menu at its right. -->
+    <Border Grid.Row="2"
+            Margin="3,2"
+            Height="23"
+            Background="White"
+            BorderBrush="#b8c4cc"
+            BorderThickness="1"
+            CornerRadius="2">
+      <Grid ColumnDefinitions="Auto,*,Auto">
+        <TextBlock Grid.Column="0"
+                   Text="&#xf57d;"
+                   FontFamily="{DynamicResource IconFontAwesome}"
+                   FontSize="12"
+                   Foreground="#ff9800"
+                   Margin="5,0,4,0"
+                   VerticalAlignment="Center" />
+        <TextBox Grid.Column="1"
+                 Name="RemotePathBox"
+                 Background="Transparent"
+                 BorderThickness="0"
+                 Padding="0"
+                 MinHeight="0"
+                 Height="21"
+                 FontSize="11"
+                 VerticalContentAlignment="Center"
+                 Text="{Binding RemotePath, Mode=TwoWay}"
+                 KeyDown="OnRemotePathKeyDown" />
+        <Button Grid.Column="2"
+                Name="PathMenuButton"
+                Classes="SftpTool"
+                Width="18"
+                Height="21"
+                ToolTip.Tip="路径操作">
+          <Button.Flyout>
+            <MenuFlyout Placement="BottomEdgeAlignedRight">
+              <MenuItem Header="上级目录" Click="OnUpClick" />
+              <MenuItem Header="主目录" Click="OnPathHomeClick" />
+            </MenuFlyout>
+          </Button.Flyout>
+          <TextBlock Classes="SftpIcon"
+                     Text="&#xf078;"
+                     FontSize="9"
+                     Foreground="#555555" />
+        </Button>
+      </Grid>
+    </Border>
 
     <!-- The headers of the list order it. The arrows show the column and
          the direction that is in use. -->
@@ -206,16 +255,16 @@
             BorderBrush="#d4d4d4"
             BorderThickness="0,0,0,1"
             Padding="6,2">
-      <Grid ColumnDefinitions="18,*,64,112,80">
+      <Grid ColumnDefinitions="18,*,58,98,54,70">
         <Button Grid.Column="1"
                 Name="NameHeaderButton"
                 Classes="SftpHeader"
                 Click="OnSortNameClick">
           <StackPanel Orientation="Horizontal" Spacing="2">
-            <TextBlock Text="名称" />
+            <TextBlock Text="名称" FontSize="11" />
             <TextBlock Name="NameSortGlyph"
                        Text="{Binding NameSortGlyph}"
-                       FontSize="9"
+                       FontSize="8"
                        Foreground="#2b579a"
                        VerticalAlignment="Center" />
           </StackPanel>
@@ -225,10 +274,10 @@
                 Classes="SftpHeader"
                 Click="OnSortSizeClick">
           <StackPanel Orientation="Horizontal" Spacing="2">
-            <TextBlock Text="大小 (KB)" />
+            <TextBlock Text="大小 (KB)" FontSize="11" />
             <TextBlock Name="SizeSortGlyph"
                        Text="{Binding SizeSortGlyph}"
-                       FontSize="9"
+                       FontSize="8"
                        Foreground="#2b579a"
                        VerticalAlignment="Center" />
           </StackPanel>
@@ -238,10 +287,10 @@
                 Classes="SftpHeader"
                 Click="OnSortModifiedClick">
           <StackPanel Orientation="Horizontal" Spacing="2">
-            <TextBlock Text="最后修改" />
+            <TextBlock Text="最后修改" FontSize="11" />
             <TextBlock Name="ModifiedSortGlyph"
                        Text="{Binding ModifiedSortGlyph}"
-                       FontSize="9"
+                       FontSize="8"
                        Foreground="#2b579a"
                        VerticalAlignment="Center" />
           </StackPanel>
@@ -251,20 +300,48 @@
                 Classes="SftpHeader"
                 Click="OnSortPermissionsClick">
           <StackPanel Orientation="Horizontal" Spacing="2">
-            <TextBlock Text="所有权限" />
+            <TextBlock Text="权限" FontSize="11" />
             <TextBlock Name="PermissionsSortGlyph"
                        Text="{Binding PermissionsSortGlyph}"
-                       FontSize="9"
+                       FontSize="8"
                        Foreground="#2b579a"
                        VerticalAlignment="Center" />
           </StackPanel>
         </Button>
+        <TextBlock Grid.Column="5"
+                   Name="OwnerHeader"
+                   Text="所有者"
+                   FontSize="11"
+                   VerticalAlignment="Center"
+                   Margin="2,0,0,0" />
       </Grid>
     </Border>
 
+    <!-- The ".." row that MobaXterm puts above the entries. It goes to
+         the parent of the current remote directory. -->
+    <Button Grid.Row="4"
+            Name="ParentRowButton"
+            Classes="SftpParentRow"
+            ToolTip.Tip="返回上级目录"
+            Click="OnUpClick">
+      <Grid ColumnDefinitions="18,*,58,98,54,70">
+        <TextBlock Grid.Column="0"
+                   Text="&#xf148;"
+                   FontFamily="{DynamicResource IconFontAwesome}"
+                   FontSize="11"
+                   Foreground="#43a047"
+                   VerticalAlignment="Center" />
+        <TextBlock Grid.Column="1"
+                   Text=".."
+                   FontSize="11"
+                   Foreground="#333333"
+                   VerticalAlignment="Center" />
+      </Grid>
+    </Button>
+
     <!-- The one list of the panel: the entries of the remote directory.
          A double click enters a directory. -->
-    <ListBox Grid.Row="4"
+    <ListBox Grid.Row="5"
              Name="RemoteList"
              Classes="SftpList"
              Padding="0"
@@ -273,12 +350,12 @@
              DoubleTapped="OnRemoteListDoubleTapped">
       <ListBox.ItemTemplate>
         <DataTemplate x:DataType="sftp:SftpEntry">
-          <Grid ColumnDefinitions="18,*,64,112,80">
+          <Grid ColumnDefinitions="18,*,58,98,54,70" MinHeight="18">
             <TextBlock Grid.Column="0"
                        Text="{Binding Converter={x:Static views:SftpEntryIconConverter.Instance}}"
                        Foreground="{Binding Converter={x:Static views:SftpEntryIconBrushConverter.Instance}}"
                        FontFamily="{DynamicResource IconFontAwesome}"
-                       FontSize="12"
+                       FontSize="11"
                        VerticalAlignment="Center" />
             <TextBlock Grid.Column="1"
                        Text="{Binding Converter={x:Static views:SftpEntryNameConverter.Instance}}"
@@ -293,6 +370,10 @@
             <TextBlock Grid.Column="4"
                        Text="{Binding Converter={x:Static views:SftpEntryPermissionConverter.Instance}}"
                        VerticalAlignment="Center" />
+            <TextBlock Grid.Column="5"
+                       Text="{Binding Owner}"
+                       VerticalAlignment="Center"
+                       TextTrimming="CharacterEllipsis" />
           </Grid>
         </DataTemplate>
       </ListBox.ItemTemplate>
@@ -300,7 +381,7 @@
 
     <!-- The line that tells what happened, the progress of a transfer that
          runs and the question about a target that already exists. -->
-    <Grid Grid.Row="5" RowDefinitions="Auto,Auto">
+    <Grid Grid.Row="6" RowDefinitions="Auto,Auto">
       <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto">
         <TextBlock Grid.Column="0"
                    Name="StatusText"
@@ -340,63 +421,71 @@
               BorderThickness="1"
               Padding="6"
               IsVisible="{Binding IsConflictVisible}">
-        <Grid RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="*,Auto,Auto,Auto,Auto">
+        <Grid RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="*,Auto">
           <TextBlock Grid.Row="0"
                      Grid.Column="0"
                      Name="ConflictMessageText"
+                     Margin="0,0,8,0"
                      Text="{Binding ConflictMessage}"
                      VerticalAlignment="Center"
                      TextTrimming="CharacterEllipsis" />
 
+          <!-- The four answers stay on one line.  The default button
+               padding is too wide for the narrow browser column, so they
+               carry a compact padding of their own. -->
+          <StackPanel Grid.Row="0"
+                      Grid.Column="1"
+                      Orientation="Horizontal"
+                      Spacing="4"
+                      VerticalAlignment="Center">
+            <Button Name="ConflictOverwriteButton"
+                    Content="Overwrite"
+                    Padding="8,2"
+                    MinWidth="0"
+                    FontSize="11"
+                    Click="OnConflictOverwriteClick" />
+            <Button Name="ConflictSkipButton"
+                    Content="Skip"
+                    Padding="8,2"
+                    MinWidth="0"
+                    FontSize="11"
+                    Click="OnConflictSkipClick" />
+            <Button Name="ConflictRenameButton"
+                    Content="Rename"
+                    Padding="8,2"
+                    MinWidth="0"
+                    FontSize="11"
+                    Click="OnConflictRenameClick" />
+            <Button Name="ConflictCancelButton"
+                    Content="Cancel"
+                    Padding="8,2"
+                    MinWidth="0"
+                    FontSize="11"
+                    Click="OnConflictCancelClick" />
+          </StackPanel>
+
           <TextBox Grid.Row="1"
                    Grid.Column="0"
+                   Grid.ColumnSpan="2"
                    Name="ConflictRenameBox"
                    Width="160"
                    HorizontalAlignment="Left"
                    Margin="0,4,0,0"
                    Text="{Binding ConflictRenameText, Mode=TwoWay}" />
 
-          <CheckBox Grid.Row="2"
-                    Grid.Column="0"
-                    Name="ApplyToAllBox"
-                    Content="Apply to all"
-                    Margin="0,4,0,0"
-                    IsChecked="{Binding ApplyToAll}" />
-          <CheckBox Grid.Row="2"
-                    Grid.Column="1"
-                    Name="NeverAskAgainBox"
-                    Content="Never ask again"
-                    Margin="0,4,0,0"
-                    IsChecked="{Binding NeverAskAgain}" />
-
-          <Button Grid.Row="0"
-                  Grid.Column="1"
-                  Name="ConflictOverwriteButton"
-                  Content="Overwrite"
-                  Margin="4,0,0,0"
-                  VerticalAlignment="Center"
-                  Click="OnConflictOverwriteClick" />
-          <Button Grid.Row="0"
-                  Grid.Column="2"
-                  Name="ConflictSkipButton"
-                  Content="Skip"
-                  Margin="4,0,0,0"
-                  VerticalAlignment="Center"
-                  Click="OnConflictSkipClick" />
-          <Button Grid.Row="0"
-                  Grid.Column="3"
-                  Name="ConflictRenameButton"
-                  Content="Rename"
-                  Margin="4,0,0,0"
-                  VerticalAlignment="Center"
-                  Click="OnConflictRenameClick" />
-          <Button Grid.Row="0"
-                  Grid.Column="4"
-                  Name="ConflictCancelButton"
-                  Content="Cancel"
-                  Margin="4,0,0,0"
-                  VerticalAlignment="Center"
-                  Click="OnConflictCancelClick" />
+          <StackPanel Grid.Row="2"
+                      Grid.Column="0"
+                      Grid.ColumnSpan="2"
+                      Orientation="Horizontal"
+                      Spacing="12"
+                      Margin="0,4,0,0">
+            <CheckBox Name="ApplyToAllBox"
+                      Content="Apply to all"
+                      IsChecked="{Binding ApplyToAll}" />
+            <CheckBox Name="NeverAskAgainBox"
+                      Content="Never ask again"
+                      IsChecked="{Binding NeverAskAgain}" />
+          </StackPanel>
         </Grid>
       </Border>
     </Grid>

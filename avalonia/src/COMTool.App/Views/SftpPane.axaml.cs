@@ -84,7 +84,9 @@ public sealed partial class SftpPane : UserControl
 
     internal TextBox RemotePathBoxControl => RemotePathBox;
 
-    internal Button UpButtonControl => UpButton;
+    internal Button ParentRowButtonControl => ParentRowButton;
+
+    internal Button PathMenuButtonControl => PathMenuButton;
 
     internal Button RefreshButtonControl => RefreshButton;
 
@@ -121,6 +123,8 @@ public sealed partial class SftpPane : UserControl
     internal Button ModifiedHeaderButtonControl => ModifiedHeaderButton;
 
     internal Button PermissionsHeaderButtonControl => PermissionsHeaderButton;
+
+    internal TextBlock OwnerHeaderControl => OwnerHeader;
 
     internal TextBlock NameSortGlyphControl => NameSortGlyph;
 
@@ -189,6 +193,14 @@ public sealed partial class SftpPane : UserControl
         if (ViewModel is { } viewModel)
         {
             _ = viewModel.RefreshRemoteAsync();
+        }
+    }
+
+    private void OnPathHomeClick(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is { } viewModel)
+        {
+            _ = viewModel.GoHomeRemoteAsync();
         }
     }
 
