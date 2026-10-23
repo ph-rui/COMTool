@@ -353,35 +353,5 @@
         </Grid>
       </Grid>
     </Grid>
-
-    <Border Grid.Row="1"
-            Name="SessionHoverStrip"
-            ZIndex="9"
-            Width="10"
-            HorizontalAlignment="Left"
-            VerticalAlignment="Stretch"
-            Margin="6,0,0,10"
-            Background="Transparent"
-            IsVisible="False"
-            PointerEntered="OnSessionHoverStripEntered" />
-
-    <Button Grid.Row="1"
-            Name="SessionHandle"
-            Classes="SessionHandle"
-            ZIndex="10"
-            HorizontalAlignment="Left"
-            VerticalAlignment="Center"
-            Margin="6,0,0,10"
-            ToolTip.Tip="Show/hide sessions"
-            PointerEntered="OnSessionHandlePointerEntered"
-            Click="OnSessionHandleClick">
-      <TextBlock Name="SessionHandleIcon"
-                 Text="&#xf053;"
-                 FontFamily="{DynamicResource IconFontAwesome}"
-                 FontSize="7"
-                 Foreground="White"
-                 HorizontalAlignment="Center"
-                 VerticalAlignment="Center" />
-    </Button>
   </Grid>
 </Window>

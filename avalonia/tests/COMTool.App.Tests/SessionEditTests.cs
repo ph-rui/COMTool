@@ -62,7 +62,6 @@ public sealed class SessionEditTests
                 window.Show();
                 Dispatcher.UIThread.RunJobs();
                 window.StopPortTimerForTests();
-                window.StopSidebarHoverTimerForTests();
 
                 var viewModel = (MainViewModel)window.DataContext!;
                 var item = viewModel.Sections
@@ -126,7 +125,6 @@ public sealed class SessionEditTests
                 window = new MainWindow { DataContext = viewModel };
                 window.Show();
                 window.StopPortTimerForTests();
-                window.StopSidebarHoverTimerForTests();
                 viewModel.AddTab(first);
                 viewModel.AddTab(second);
                 viewModel.SelectedTab = second;

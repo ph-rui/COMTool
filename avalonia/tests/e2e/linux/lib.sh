@@ -47,10 +47,9 @@ SIDEBAR_SESSION_Y="${SIDEBAR_SESSION_Y:-118}"
 
 # The tab strip is the first 36px row of MainStack. UI05 collapses the sidebar
 # first: MainStack then starts at x=32 (16px body margin + 16px content
-# margin), the settings button is 27px, the tab list has a 10px left margin and
-# each tab is at least 112px wide with a 2px right margin. Keeping the sidebar
-# collapsed makes these coordinates stable; leaving it expanded lets auto-hide
-# shift every tab 223px left while the test is running.
+# margin), the tab list has a 10px left margin and each tab is at least 112px
+# wide with a 2px right margin. Keeping the dock collapsed makes these
+# coordinates stable; leaving it expanded shifts every tab 223px right.
 FIRST_TAB_X="${FIRST_TAB_X:-125}"
 SECOND_TAB_X="${SECOND_TAB_X:-239}"
 TAB_STRIP_Y="${TAB_STRIP_Y:-53}"
@@ -709,7 +708,7 @@ seed_ssh_config() {
     }
   ],
   "sshSessionsMigrated": true,
-  "sessionSidebar": { "visible": false, "width": 220 },
+  "sessionSidebar": { "visible": true, "width": 220 },
   "window": { "width": 1000, "height": 650 }
 }
 EOF
@@ -1098,11 +1097,11 @@ wait_for_sidebar_visible() {
     return 1
 }
 
-# The sidebar auto-hides as soon as the pointer moves right towards the tabs,
-# which shifts the whole tab strip 223px left mid-test. Collapse it explicitly
-# through the title-bar sessions button so tab coordinates are deterministic.
-# The probe tolerates the panel already being collapsed (auto-hide or a prior
-# run) and retries a missed button click.
+# The sidebar is docked and shifts the whole tab strip 223px while expanded.
+# Collapse it explicitly through the title-bar sessions button so tab
+# coordinates are deterministic. The probe tolerates the panel already being
+# collapsed (a prior click or a restored preference) and retries a missed
+# button click.
 collapse_sidebar_for_tabs() {
     local attempt
     local probe_status

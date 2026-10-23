@@ -24,7 +24,7 @@ public sealed class MainWindowHeadlessTests
             env.Run(() =>
             {
                 var config = new ComtoolConfig();
-                config.SessionSidebar.Visible = false;
+                config.SessionSidebar.Visible = true;
                 config.SessionSidebar.Width = 240;
                 env.SeedConfig(config);
 
@@ -35,6 +35,39 @@ public sealed class MainWindowHeadlessTests
                 var sidebar = window.FindControl<SessionSidebar>("Sidebar")!;
                 Assert.True(sidebar.IsVisible);
                 Assert.Equal(240, sidebar.Bounds.Width, precision: 1);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public void UI02_CollapsedSidebarStaysCollapsedOnLaunch()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                var config = new ComtoolConfig();
+                config.SessionSidebar.Visible = false;
+                config.SessionSidebar.Width = 240;
+                env.SeedConfig(config);
+
+                window = new MainWindow { DataContext = new MainViewModel() };
+                window.Show();
+                Dispatcher.UIThread.RunJobs();
+
+                var body = window.FindControl<Grid>("BodyGrid")!;
+                var sidebar = window.FindControl<SessionSidebar>("Sidebar")!;
+                // The dock is manual-only now, so a collapsed state survives a
+                // restart instead of being overridden on launch.
+                Assert.False(sidebar.IsVisible);
+                Assert.Equal(0, body.ColumnDefinitions[0].ActualWidth, precision: 1);
             });
         }
         finally
