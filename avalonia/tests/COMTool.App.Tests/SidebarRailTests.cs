@@ -8,8 +8,10 @@ using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using COMTool.App.ViewModels;
+using COMTool.App.ViewModels.Tools;
 using COMTool.App.Views;
 using COMTool.Connections.NetworkScan;
+using COMTool.Connections.Servers;
 using COMTool.Core.Config;
 using Iciclecreek.Terminal;
 
@@ -907,6 +909,276 @@ public sealed class SidebarRailTests
             window?.Close();
             Dispatcher.UIThread.RunJobs();
         }
+    }
+
+    // --- Servers management (SRV-01) ---------------------------------------
+
+    [AvaloniaFact]
+    public void SRV01_ServersManagementShowsNineRows()
+    {
+        using var env = new TestEnvironment();
+        ServersManagementWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                window = new ServersManagementWindow();
+                window.Show();
+                Dispatcher.UIThread.RunJobs();
+                var vm = window.ViewModel;
+
+                Assert.Equal(9, vm.Rows.Count);
+                Assert.Equal(
+                    new[] { "tftp", "ftp", "http", "ssh", "telnet", "nfs", "vnc", "cron", "iperf" },
+                    vm.Rows.Select(r => r.Id));
+                Assert.Equal(
+                    new[]
+                    {
+                        "TFTP 服务器", "FTP 服务器", "HTTP 服务器", "SSH/SFTP 服务器",
+                        "Telnet 服务器", "NFS 服务器", "VNC 服务器", "Cron 服务器",
+                        "Iperf 服务器",
+                    },
+                    vm.Rows.Select(r => r.Name));
+                Assert.True(vm.Find("http")!.IsImplemented);
+                Assert.True(vm.Find("tftp")!.IsImplemented);
+                Assert.Equal(7, vm.Rows.Count(r => !r.IsImplemented));
+                Assert.Equal("暂不支持（框架已预留）", vm.Find("ftp")!.ToolTipText);
+
+                // 初始显示欢迎页，底部有“确定”
+                Assert.True(vm.IsWelcome);
+                Assert.NotNull(window.FindControl<Button>("ServersOkButton"));
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public void SRV01_SelectingRowShowsMatchingConfig()
+    {
+        using var env = new TestEnvironment();
+        ServersManagementWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                window = new ServersManagementWindow();
+                window.Show();
+                Dispatcher.UIThread.RunJobs();
+                var vm = window.ViewModel;
+
+                Click(window, ServerRowButton(window, "tftp", "ServerGear"));
+                Assert.True(vm.IsTftpSelected);
+                Assert.False(vm.IsWelcome);
+                Assert.Equal(69, vm.TftpPort);
+                Assert.True(vm.TftpRuntimeEnabled);
+                Assert.Equal(3600, vm.TftpRuntimeSeconds);
+
+                Click(window, ServerRowButton(window, "http", "ServerGear"));
+                Assert.True(vm.IsHttpSelected);
+                Assert.False(vm.IsTftpSelected);
+                Assert.Equal(80, vm.HttpPort);
+                Assert.True(vm.HttpAllowListing);
+                Assert.Equal(3600, vm.HttpRuntimeSeconds);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public void SRV01_HttpConfigStartsWithStopAndLog()
+    {
+        using var env = new TestEnvironment();
+        ServersManagementWindow? window = null;
+        var root = Path.Combine(Path.GetTempPath(), "comtool-srv-http",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            env.Run(() =>
+            {
+                var fake = new FakeServerHost();
+                window = new ServersManagementWindow { ServerFactoryForTests = _ => fake };
+                window.Show();
+                Dispatcher.UIThread.RunJobs();
+                var vm = window.ViewModel;
+                vm.Http.RootDirectory = root;
+
+                Click(window, ServerRowButton(window, "http", "ServerGear"));
+                Assert.True(vm.IsHttpSelected);
+
+                Click(window, ServerRowButton(window, "http", "ServerPlay"));
+                WaitUntil(() => vm.HttpRow.IsRunning, "HTTP server to start");
+                Assert.Equal(1, fake.StartCount);
+                WaitUntil(() => vm.HttpLog.Any(line => line.Contains("HTTP server started")),
+                    "HTTP start log line");
+                Assert.NotNull(vm.HttpRow.RemainingSeconds);
+                Assert.StartsWith("(", vm.HttpRow.CountdownText);
+
+                Click(window, ServerRowButton(window, "http", "ServerStop"));
+                WaitUntil(() => !vm.HttpRow.IsRunning, "HTTP server to stop");
+                Assert.Equal(1, fake.StopCount);
+                WaitUntil(() => vm.HttpLog.Any(line => line.Contains("HTTP server stopped")),
+                    "HTTP stop log line");
+                Assert.Null(vm.HttpRow.RemainingSeconds);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+            try
+            {
+                Directory.Delete(root, recursive: true);
+            }
+            catch (IOException)
+            {
+                // best effort
+            }
+        }
+    }
+
+    [AvaloniaFact]
+    public void SRV01_StartFailureIsLogged()
+    {
+        using var env = new TestEnvironment();
+        ServersManagementWindow? window = null;
+        var root = Path.Combine(Path.GetTempPath(), "comtool-srv-fail",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            env.Run(() =>
+            {
+                var fake = new FakeServerHost
+                {
+                    StartException = new InvalidOperationException("port already in use"),
+                };
+                window = new ServersManagementWindow { ServerFactoryForTests = _ => fake };
+                window.Show();
+                Dispatcher.UIThread.RunJobs();
+                var vm = window.ViewModel;
+                vm.Http.RootDirectory = root;
+
+                Click(window, ServerRowButton(window, "http", "ServerPlay"));
+                WaitUntil(() => vm.HttpLog.Any(line => line.Contains("port already in use")),
+                    "bind failure log line");
+                Assert.False(vm.HttpRow.IsRunning);
+                Assert.Null(vm.HttpRow.RemainingSeconds);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+            try
+            {
+                Directory.Delete(root, recursive: true);
+            }
+            catch (IOException)
+            {
+                // best effort
+            }
+        }
+    }
+
+    [AvaloniaFact]
+    public void SRV01_ClosingWindowStopsServers()
+    {
+        using var env = new TestEnvironment();
+        ServersManagementWindow? window = null;
+        var root = Path.Combine(Path.GetTempPath(), "comtool-srv-close",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            env.Run(() =>
+            {
+                var fake = new FakeServerHost();
+                window = new ServersManagementWindow { ServerFactoryForTests = _ => fake };
+                window.Show();
+                Dispatcher.UIThread.RunJobs();
+                window.ViewModel.Http.RootDirectory = root;
+
+                Click(window, ServerRowButton(window, "http", "ServerPlay"));
+                WaitUntil(() => window.ViewModel.HttpRow.IsRunning, "HTTP server to start");
+
+                window.Close();
+                WaitUntil(() => fake.StopCount == 1, "stop on window close");
+                RunJobs(window);
+                Assert.Equal(1, fake.StopCount);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+            try
+            {
+                Directory.Delete(root, recursive: true);
+            }
+            catch (IOException)
+            {
+                // best effort
+            }
+        }
+    }
+
+    private static Button ServerRowButton(ServersManagementWindow window, string id,
+        string cssClass)
+    {
+        var button = window.GetVisualDescendants()
+            .OfType<Button>()
+            .FirstOrDefault(b => b.Tag is string tag && tag == id && b.Classes.Contains(cssClass));
+        Assert.NotNull(button);
+        return button!;
+    }
+
+    private sealed class FakeServerHost : IServerHost
+    {
+        public string Name => "HTTP server";
+
+        public bool IsRunning { get; private set; }
+
+        public int Port => 0;
+
+        public int StartCount { get; private set; }
+
+        public int StopCount { get; private set; }
+
+        public Exception? StartException { get; init; }
+
+        public event Action<string>? LogMessage;
+
+        public Task StartAsync(CancellationToken cancellationToken = default)
+        {
+            StartCount++;
+            if (StartException is not null)
+            {
+                throw StartException;
+            }
+
+            IsRunning = true;
+            LogMessage?.Invoke("HTTP server started");
+            return Task.CompletedTask;
+        }
+
+        public Task StopAsync()
+        {
+            StopCount++;
+            IsRunning = false;
+            LogMessage?.Invoke("HTTP server stopped");
+            return Task.CompletedTask;
+        }
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
     private sealed class FakeScanner : INetworkScanner

@@ -1,0 +1,306 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:tools="using:COMTool.App.ViewModels.Tools"
+        x:Class="COMTool.App.Views.ServersManagementWindow"
+        x:DataType="tools:ServersManagementViewModel"
+        Title="Servers management"
+        Width="736"
+        Height="475"
+        CanResize="False"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource WindowBackgroundBrush}"
+        FontSize="12">
+  <Window.Styles>
+    <Style Selector="Button.ServerButton">
+      <Setter Property="Width" Value="23" />
+      <Setter Property="Height" Value="20" />
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="CornerRadius" Value="0" />
+      <Setter Property="Background" Value="#f0f0f0" />
+      <Setter Property="BorderBrush" Value="#adadad" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.ServerOkButton">
+      <Setter Property="Width" Value="72" />
+      <Setter Property="Height" Value="26" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="CornerRadius" Value="0" />
+      <Setter Property="Background" Value="#f0f0f0" />
+      <Setter Property="BorderBrush" Value="#adadad" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+  </Window.Styles>
+
+  <Grid RowDefinitions="*,52" ColumnDefinitions="300,*">
+    <!-- Left: nine MobaXterm server rows with play / stop / gears -->
+    <ItemsControl Grid.Row="0" Grid.Column="0"
+                  ItemsSource="{Binding Rows}"
+                  Margin="0,50,0,0">
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="tools:ServerRowViewModel">
+          <Grid Height="40" Margin="22,0,8,0" ColumnDefinitions="*,Auto,52">
+            <TextBlock Grid.Column="0"
+                       Text="{Binding Name}"
+                       VerticalAlignment="Center"
+                       FontSize="12"
+                       Foreground="{DynamicResource WindowTextBrush}" />
+            <StackPanel Grid.Column="1"
+                        Orientation="Horizontal"
+                        Spacing="6"
+                        VerticalAlignment="Center">
+              <Button Classes="ServerButton ServerPlay"
+                      Tag="{Binding Id}"
+                      IsEnabled="{Binding IsImplemented}"
+                      ToolTip.Tip="{Binding ToolTipText}"
+                      Click="OnPlayClick">
+                <TextBlock Text="&#xf144;"
+                           FontFamily="{DynamicResource IconFontAwesome}"
+                           FontSize="10"
+                           Foreground="#1976d2" />
+              </Button>
+              <Button Classes="ServerButton ServerStop"
+                      Tag="{Binding Id}"
+                      IsEnabled="{Binding IsImplemented}"
+                      ToolTip.Tip="{Binding ToolTipText}"
+                      Click="OnStopClick">
+                <TextBlock Text="&#xf28d;"
+                           FontFamily="{DynamicResource IconFontAwesome}"
+                           FontSize="10"
+                           Foreground="#607d8b" />
+              </Button>
+              <Button Classes="ServerButton ServerGear"
+                      Tag="{Binding Id}"
+                      IsEnabled="{Binding IsImplemented}"
+                      ToolTip.Tip="{Binding ToolTipText}"
+                      Click="OnGearClick">
+                <TextBlock Text="&#xf085;"
+                           FontFamily="{DynamicResource IconFontAwesome}"
+                           FontSize="10"
+                           Foreground="#1976d2" />
+              </Button>
+            </StackPanel>
+            <TextBlock Grid.Column="2"
+                       Text="{Binding CountdownText}"
+                       FontSize="11"
+                       VerticalAlignment="Center"
+                       HorizontalAlignment="Right"
+                       Margin="0,0,4,0"
+                       Foreground="{DynamicResource WindowTextBrush}" />
+          </Grid>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+
+    <!-- Right: configuration panel (welcome / HTTP / TFTP) -->
+    <Border Grid.Row="0" Grid.Column="1"
+            Margin="4,70,14,0"
+            Height="301"
+            VerticalAlignment="Top"
+            Background="{DynamicResource SidebarListBackgroundBrush}"
+            BorderBrush="#a0a0a0"
+            BorderThickness="1">
+      <Panel>
+        <!-- Welcome pane -->
+        <Grid IsVisible="{Binding IsWelcome}">
+          <TextBlock Text="网络服务器"
+                     Foreground="#e00000"
+                     FontWeight="Bold"
+                     FontSize="13"
+                     Margin="14,10,0,0"
+                     HorizontalAlignment="Left"
+                     VerticalAlignment="Top" />
+          <Grid ColumnDefinitions="*,180" VerticalAlignment="Center">
+            <StackPanel Grid.Column="0"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Spacing="2">
+              <TextBlock Text="欢迎使用"
+                         FontSize="13"
+                         HorizontalAlignment="Center"
+                         Foreground="{DynamicResource WindowTextBrush}" />
+              <TextBlock Text="MobaXterm 网络服务器"
+                         FontSize="13"
+                         HorizontalAlignment="Center"
+                         Foreground="{DynamicResource WindowTextBrush}" />
+            </StackPanel>
+            <Canvas Grid.Column="1"
+                    Width="140"
+                    Height="110"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+              <Line StartPoint="70,55" EndPoint="105,55" Stroke="#d9d9d9" StrokeThickness="4" />
+              <Line StartPoint="70,55" EndPoint="87.5,85.3" Stroke="#d9d9d9" StrokeThickness="4" />
+              <Line StartPoint="70,55" EndPoint="52.5,85.3" Stroke="#d9d9d9" StrokeThickness="4" />
+              <Line StartPoint="70,55" EndPoint="35,55" Stroke="#d9d9d9" StrokeThickness="4" />
+              <Line StartPoint="70,55" EndPoint="52.5,24.7" Stroke="#d9d9d9" StrokeThickness="4" />
+              <Line StartPoint="70,55" EndPoint="87.5,24.7" Stroke="#d9d9d9" StrokeThickness="4" />
+              <Ellipse Canvas.Left="57" Canvas.Top="42" Width="26" Height="26" Fill="#2b3f9e" />
+              <Ellipse Canvas.Left="95" Canvas.Top="45" Width="20" Height="20" Fill="#22c3e6" />
+              <Ellipse Canvas.Left="77.5" Canvas.Top="75.3" Width="20" Height="20" Fill="#22c3e6" />
+              <Ellipse Canvas.Left="42.5" Canvas.Top="75.3" Width="20" Height="20" Fill="#22c3e6" />
+              <Ellipse Canvas.Left="25" Canvas.Top="45" Width="20" Height="20" Fill="#22c3e6" />
+              <Ellipse Canvas.Left="42.5" Canvas.Top="14.7" Width="20" Height="20" Fill="#22c3e6" />
+              <Ellipse Canvas.Left="77.5" Canvas.Top="14.7" Width="20" Height="20" Fill="#22c3e6" />
+            </Canvas>
+          </Grid>
+        </Grid>
+
+        <!-- HTTP configuration -->
+        <ScrollViewer IsVisible="{Binding IsHttpSelected}"
+                      HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto">
+          <StackPanel Margin="12,8">
+            <TextBlock Text="HTTP 服务器配置"
+                       FontSize="13"
+                       FontWeight="SemiBold"
+                       HorizontalAlignment="Center"
+                       Margin="0,0,0,10"
+                       Foreground="{DynamicResource WindowTextBrush}" />
+            <Grid ColumnDefinitions="72,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
+              <TextBlock Grid.Row="0" Grid.Column="0" Text="根目录:"
+                         VerticalAlignment="Center" Margin="0,0,6,4" />
+              <DockPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,4">
+                <Button DockPanel.Dock="Right" Name="HttpBrowseButton"
+                        Content="..." Width="26" Height="22" Margin="4,0,0,0"
+                        Click="OnBrowseHttpRoot" />
+                <TextBox Name="HttpRootBox" Text="{Binding HttpRoot}" FontSize="11" Height="22" />
+              </DockPanel>
+
+              <CheckBox Grid.Row="1" Grid.Column="1"
+                        Name="HttpListingBox"
+                        Content="允许用户列出文件夹内容"
+                        IsChecked="{Binding HttpAllowListing}"
+                        FontSize="11"
+                        Margin="0,2" />
+
+              <TextBlock Grid.Row="2" Grid.Column="0" Text="监听端口:"
+                         VerticalAlignment="Center" Margin="0,0,6,4" />
+              <NumericUpDown Grid.Row="2" Grid.Column="1"
+                             Name="HttpPortBox"
+                             Value="{Binding HttpPort}"
+                             Minimum="1" Maximum="65535" FormatString="0"
+                             Width="96" Height="24" HorizontalAlignment="Left"
+                             Margin="0,0,0,4" />
+
+              <StackPanel Grid.Row="3" Grid.Column="1"
+                          Orientation="Horizontal" Spacing="6" Margin="0,4">
+                <CheckBox Name="HttpRuntimeBox"
+                          Content="服务器运行时间"
+                          IsChecked="{Binding HttpRuntimeEnabled}"
+                          FontSize="11" />
+                <NumericUpDown Name="HttpSecondsBox"
+                               Value="{Binding HttpRuntimeSeconds}"
+                               Minimum="1" Maximum="86400" FormatString="0"
+                               Width="86" Height="24"
+                               IsEnabled="{Binding HttpRuntimeEnabled}" />
+                <TextBlock Text="秒" VerticalAlignment="Center" />
+              </StackPanel>
+
+              <TextBlock Grid.Row="4" Grid.ColumnSpan="2" Text="服务器输出:"
+                         Margin="0,6,0,2" />
+              <ListBox Grid.Row="5" Grid.ColumnSpan="2"
+                       Name="HttpLogBox"
+                       ItemsSource="{Binding HttpLog}"
+                       Height="104"
+                       FontFamily="Consolas,Menlo,DejaVu Sans Mono,monospace"
+                       FontSize="11" />
+            </Grid>
+          </StackPanel>
+        </ScrollViewer>
+
+        <!-- TFTP configuration -->
+        <ScrollViewer IsVisible="{Binding IsTftpSelected}"
+                      HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto">
+          <StackPanel Margin="12,8">
+            <TextBlock Text="TFTP 服务器配置"
+                       FontSize="13"
+                       FontWeight="SemiBold"
+                       HorizontalAlignment="Center"
+                       Margin="0,0,0,10"
+                       Foreground="{DynamicResource WindowTextBrush}" />
+            <Grid ColumnDefinitions="72,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
+              <TextBlock Grid.Row="0" Grid.Column="0" Text="根目录:"
+                         VerticalAlignment="Center" Margin="0,0,6,4" />
+              <DockPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,4">
+                <Button DockPanel.Dock="Right" Name="TftpBrowseButton"
+                        Content="..." Width="26" Height="22" Margin="4,0,0,0"
+                        Click="OnBrowseTftpRoot" />
+                <TextBox Name="TftpRootBox" Text="{Binding TftpRoot}" FontSize="11" Height="22" />
+              </DockPanel>
+
+              <CheckBox Grid.Row="1" Grid.Column="1"
+                        Name="TftpDownloadBox"
+                        Content="下载成功后显示信息"
+                        IsChecked="{Binding TftpShowDownload}"
+                        FontSize="11"
+                        Margin="0,2" />
+
+              <CheckBox Grid.Row="2" Grid.Column="1"
+                        Name="TftpUploadBox"
+                        Content="上传成功后显示信息"
+                        IsChecked="{Binding TftpShowUpload}"
+                        FontSize="11"
+                        Margin="0,2" />
+
+              <TextBlock Grid.Row="3" Grid.Column="0" Text="监听端口:"
+                         VerticalAlignment="Center" Margin="0,0,6,4" />
+              <NumericUpDown Grid.Row="3" Grid.Column="1"
+                             Name="TftpPortBox"
+                             Value="{Binding TftpPort}"
+                             Minimum="1" Maximum="65535" FormatString="0"
+                             Width="96" Height="24" HorizontalAlignment="Left"
+                             Margin="0,0,0,4" />
+
+              <StackPanel Grid.Row="4" Grid.Column="1"
+                          Orientation="Horizontal" Spacing="6" Margin="0,4">
+                <CheckBox Name="TftpRuntimeBox"
+                          Content="服务器运行时间"
+                          IsChecked="{Binding TftpRuntimeEnabled}"
+                          FontSize="11" />
+                <NumericUpDown Name="TftpSecondsBox"
+                               Value="{Binding TftpRuntimeSeconds}"
+                               Minimum="1" Maximum="86400" FormatString="0"
+                               Width="86" Height="24"
+                               IsEnabled="{Binding TftpRuntimeEnabled}" />
+                <TextBlock Text="秒" VerticalAlignment="Center" />
+              </StackPanel>
+
+              <TextBlock Grid.Row="5" Grid.ColumnSpan="2" Text="服务器输出:"
+                         Margin="0,6,0,2" />
+            </Grid>
+            <ListBox Name="TftpLogBox"
+                     ItemsSource="{Binding TftpLog}"
+                     Height="96"
+                     FontFamily="Consolas,Menlo,DejaVu Sans Mono,monospace"
+                     FontSize="11" />
+          </StackPanel>
+        </ScrollViewer>
+      </Panel>
+    </Border>
+
+    <!-- Bottom: 确定 -->
+    <Button Grid.Row="1" Grid.ColumnSpan="2"
+            Name="ServersOkButton"
+            Classes="ServerOkButton"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            Click="OnOkClick">
+      <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
+        <TextBlock Text="&#xf058;"
+                   FontFamily="{DynamicResource IconFontAwesome}"
+                   FontSize="11"
+                   Foreground="#2e7d32"
+                   VerticalAlignment="Center" />
+        <TextBlock Text="确定" VerticalAlignment="Center" />
+      </StackPanel>
+    </Button>
+  </Grid>
+</Window>
