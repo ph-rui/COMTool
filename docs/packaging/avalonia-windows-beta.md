@@ -531,7 +531,15 @@ and the visible state and width are restored on launch:
   reported open, cancellation), `ConfigTests` macro/history round-trip;
   the automated suite passes 393 tests (App 139) and Linux Xvfb E2E passes
   13/13 with the rail in place;
-- interactive Windows confirmation of the docked panel is WIN-25.
+- interactive Windows confirmation is WIN-26 (rail tabs, real-LAN scan,
+  macro send, history reopen across restart);
+- deployment 2026-10-23 (in-place overwrite, no `.bak-*`):
+  - exe `COMTool.App-singlepane.exe` published from `16258e3`;
+  - size: 208,741,196 bytes;
+  - SHA256: `7E085D17F0EB663038BE4AC736CB1CAA87792FB1731E3C5A5F43ECF3DD63B1E6`;
+  - WORK and DESKTOP copies both matched that hash via `Get-FileHash`;
+  - `BAK_COUNT=0`;
+  - smoke test: process started, `Responding=True`, then stopped.
 
 The previously packaged release zip is 74,795,557 bytes with SHA256:
 
