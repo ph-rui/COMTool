@@ -836,6 +836,39 @@ and the visible state and width are restored on launch:
   - `BAK_COUNT=0`;
   - smoke test: process started, `Responding=True`, then stopped.
 
+### 2026-10-24 — 图标栏 24→40px（用户红线批注）
+
+- 用户截图批注：两条红线夹住的左侧图标栏不够宽；栏内的 FontAwesome
+  图标仍为 16px，问题在栏宽而不是面板宽度；
+- UI 调整：
+  - `SessionSidebar` 根 Grid 的 rail 列 24→40，`Button.RailButton`
+    宽 24→40（高仍 44），图标继续居中；
+  - 面板收起时 `BodyGrid` 仍保留 40px 图标栏；内容区左边距仍为 8px，
+    所以 `MainStack` 左边由 32 变为 48px（40 + 8）；
+  - 会话/工具/宏共用的面板默认/最小宽度仍为 260px；SSH 浏览器侧栏总宽
+    仍为 460px（图标栏加宽后，SFTP 面板内容为 420px）；
+  - `SidebarRail` 左侧圆角仍为 0，栏背景继续贴住客户端 x=0；
+- test evidence: full gate PASS — 410 tests (Core 49, SFTP 42, Connections 77,
+  Terminal 11, ZMODEM 32, TestGate 49, App 150), Linux Xvfb E2E 13/13,
+  results `20261024T074249Z`；`SidebarRailTests.UI16_ToolsMenuUsesReadableSizesAndWiderPanel`
+  现同时断言 rail 宽 40，`SidebarDockTests`/`MainWindowHeadlessTests`/
+  `SftpPaneLayoutTests` 的收起宽度断言同步为 40；E2E 的 SFTP 工具栏
+  x 坐标整体 +16（新建 145、重命名 172、删除 199、上传 118、下载 90），
+  收起/展开标签位移注释 263→247；
+- Windows 实机核对（Windows 10 1909，build 18363.535）：
+  - `PrintWindow` 截图
+    `docs/fixtures/phase1/tools-menu-260-850x500.png`：工具页图标栏
+    40px、面板 260px，图标栏背景从客户端 x=0 开始，面板卡片从 x=40 开始；
+  - 同一构建 `GetWindowRect` 与 `GetClientRect` 均为 850x500、原点相同；
+- deployment 2026-10-24 (in-place overwrite, no `.bak-*`):
+  - build commit: `f3ff07c`;
+  - exe `COMTool.App-tools.exe` published win-x64 single-file R2R;
+  - size: 209,265,484 bytes;
+  - SHA256: `52889CBE000BDFB984CB9CCC4E201BBF05F38057DE48C6A6CB070795F409219D`;
+  - WORK and DESKTOP copies both matched that hash via `Get-FileHash`;
+  - `BAK_COUNT=0`;
+  - smoke test: process started, `Responding=True`, then stopped.
+
 The previously packaged release zip is 74,795,557 bytes with SHA256:
 
 ```text
