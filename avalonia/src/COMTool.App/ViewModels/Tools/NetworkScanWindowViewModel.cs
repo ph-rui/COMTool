@@ -17,17 +17,14 @@ public sealed class PortCell
 
 /// <summary>
 /// One row of the 网络扫描仪 result grid: a probed host, one cell per fixed
-/// service column (SSH/RDP/VNC/FTP/Telnet/Rlogin/HTTP), hostname and the
-/// extra open ports (MobaXterm "其他端口" column).
+/// service column (SSH/RDP/VNC/FTP/Telnet/Rlogin/HTTP), and hostname.
 /// </summary>
 public sealed class ScanGridRow
 {
     public required string Address { get; init; }
     public string HostName { get; init; } = "";
     public required IReadOnlyList<PortCell> Cells { get; init; }
-    public string OtherPorts { get; init; } = "";
     public bool HasHostName => HostName.Length > 0;
-    public bool HasOtherPorts => OtherPorts.Length > 0;
 }
 
 /// <summary>

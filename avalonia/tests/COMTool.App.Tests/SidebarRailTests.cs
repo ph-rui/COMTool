@@ -621,7 +621,7 @@ public sealed class SidebarRailTests
             {
                 window = new NetworkScanWindow
                 {
-                    // 网络扫描 1:1 MobaXterm：固定 7 服务列 + “其他端口”列
+                    // 网络扫描只保留固定 7 服务列，不再探测/显示“其他端口”
                     ScannerForTests = new FakeScanner(new List<NetworkScanHost>
                     {
                         new(new IPAddress(new byte[] { 127, 0, 0, 1 }), "loopback", new[] { 22, 80, 443 }, 1),
@@ -651,11 +651,16 @@ public sealed class SidebarRailTests
                 Assert.False(vm.Rows[0].Cells[4].IsOpen);  // Telnet
                 Assert.False(vm.Rows[0].Cells[5].IsOpen);  // Rlogin
                 Assert.True(vm.Rows[0].Cells[6].IsOpen);   // HTTP
-                Assert.Equal("443", vm.Rows[0].OtherPorts);
                 Assert.Equal("127.0.0.2", vm.Rows[1].Address);
                 Assert.All(vm.Rows[1].Cells, c => Assert.False(c.IsOpen));
-                Assert.Equal("", vm.Rows[1].OtherPorts);
                 Assert.Equal("完成：发现 2 台在线设备", vm.Status);
+
+                // 10 列减为 9 列：IP/名称 + 七个服务状态列
+                var header = window.FindControl<Grid>("ScanHeaderGrid")!;
+                Assert.Equal(9, header.ColumnDefinitions.Count);
+                Assert.DoesNotContain(
+                    window.GetVisualDescendants().OfType<TextBlock>(),
+                    text => text.Text == "其他端口");
             });
         }
         finally
