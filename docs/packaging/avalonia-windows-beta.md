@@ -941,6 +941,47 @@ and the visible state and width are restored on launch:
   - `BAK_COUNT=0`;
   - smoke test: process started, `Responding=True`, then stopped.
 
+### 2026-10-24 — 网络扫描结果表列对齐、名称列主机名与 IP 范围记忆
+
+- 用户复核后仍有三处问题（对照 MobaXterm 截图）：结果表整体偏左、
+  名称列不显示主机名、输入的 IP 地址范围没有记忆；
+- 结果表：名称列 90 → 160px（像素测量 MobaXterm 名称列约 160、
+  SSH 列中心约 317.5；改动后本实现 SSH 列中心约 318），
+  "IP 地址/名称"表头居中，表头与数据行同步 `120,160,60×7`；
+- 名称列：根因是反向 DNS 无 PTR 记录（实测 `Dns.GetHostEntry` 对该网段
+  直接 Unknown host）；新增 NetBIOS NBSTAT 兜底（`NetbiosNameResolver`，
+  UDP 137 节点状态请求，400ms 上限，取工作站名、忽略组名、转小写），
+  仅在反向 DNS 为空且主机存活时触发，拖慢扫描的代价可忽略；
+  Linux 实网验证（192.0.2.0/24，发现 68 台，名称列显示
+  `host-a`/`winhost2`/`host-c-linux` 等）：
+  `docs/fixtures/phase1/network-scan-name-column-linux-2026-10-24.png`；
+- IP 范围记忆：`ComtoolConfig.networkScan` 持久化五段值，点 Start scan
+  与关窗两条路径保存（仅合法范围落盘，非法值不覆盖），窗口打开时恢复；
+  Linux 实网验证：改为 10.13.1.20→40 关窗后重开自动恢复：
+  `docs/fixtures/phase1/network-scan-ip-memory-linux-2026-10-24.png`；
+- test evidence: full gate PASS — 425 tests (Core 51, SFTP 42,
+  Connections 81, Terminal 11, ZMODEM 32, TestGate 49, App 159),
+  Linux Xvfb E2E 13/13, results `20261024T134431Z`；新增测试：
+  `NetworkScannerTests.NET05_NetbiosNameParsesCapturedReply`、
+  `NET05_NetbiosQueryResolvesStationNameOverUdp`、
+  `NET05_NetbiosQueryIgnoresGroupNamesOnly`、
+  `NET05_NetbiosQueryReturnsNullWithoutAnswer`、
+  `SidebarRailTests.NET05_ScanResultColumnsMatchMobaXtermWidths`、
+  `NET05_ScanRangeIsRememberedOnCloseAndRestored`、
+  `NET05_ScanRangeIsRememberedOnStartScan`、
+  `ConfigTests.SaveAndLoad_RoundTripsNetworkScanRange`、
+  `ConfigTests.Load_ConfigWithoutNetworkScan_UsesDefaults`；
+- deployment 2026-10-24 (in-place overwrite, no `.bak-*`):
+  - build commit: `1f196a1`;
+  - exe `COMTool.App-tools.exe` published win-x64 single-file R2R;
+  - size: 209,290,060 bytes;
+  - SHA256: `FD33B145FDCB7C8E597ECB5D9A2937D3F3E4B67CA1F67B04324B4E8AA16E7858`;
+  - WORK and DESKTOP copies both matched that hash via `Get-FileHash`;
+  - `BAK_COUNT=0`;
+  - smoke test: process started, `Responding=True`, then stopped.
+  - Windows 实机名称列与列宽效果待用户在 192.0.2.x 网段扫描后确认
+    （Linux 实网已验证机制可用）。
+
 The previously packaged release zip is 74,795,557 bytes with SHA256:
 
 ```text
