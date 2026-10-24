@@ -908,6 +908,39 @@ and the visible state and width are restored on launch:
   - `BAK_COUNT=0`;
   - smoke test: process started, `Responding=True`, then stopped.
 
+### 2026-10-24 — 网络扫描 IP 行紧凑布局与三位自动跳格
+
+- 只调整网络扫描窗口顶部 IP 行：外层继续承载 `Start scan`/`Stop`，内层
+  `StackPanel` 整体右移 110px，标签宽 90px 且右对齐；五个输入框改为
+  32x24、`MinWidth=0`、`Padding=0`，`Start scan` 仍保持原来的水平位置，
+  `Stop` 紧邻其右；结果表、端口列和网络服务器数值控件不变；
+- 输入框统一 `MaxLength=3`；`TextChanged` 仅在输入框聚焦时检查内容，
+  满 3 位且数值在 0–255 时把焦点移到下一框；`999` 等无效值不跳格，
+  末段不越界；获得焦点时全选原值，便于直接覆盖；
+- test evidence: full gate PASS — 416 tests (Core 49, SFTP 42,
+  Connections 77, Terminal 11, ZMODEM 32, TestGate 49, App 156),
+  Linux Xvfb E2E 13/13, results `20261024T115402Z`；新增/更新测试：
+  `SidebarRailTests.NET05_ScanIpRowIsCompactAndShiftedRight`、
+  `SidebarRailTests.NET05_ScanOctetAutoAdvancesAtThreeDigits`、
+  `SidebarRailTests.NET05_ScanNumericInputsAreCenteredAndEqualWidth`；
+- Windows 实机核对（Windows 10 1909，build 18363.535，交互式 RDP）：
+  - `PrintWindow` 截图显示标签右移到结果表“名称”列附近（约 x=165），
+    五个输入框各 32px、紧排居中，`Start scan` 仍在 x≈485、
+    `Stop` 在 x≈587：
+    `docs/fixtures/phase1/network-scan-ip-row-2026-10-24.png`；
+  - 同一截图的顶部局部对照：
+    `docs/fixtures/phase1/network-scan-ip-row-crop-2026-10-24.png`；
+  - 输入态自动跳格由 headless 聚焦测试 3/3 覆盖（有效三位数跳下一框、
+    无效值停留、末段不越界、聚焦全选）；
+- deployment 2026-10-24 (in-place overwrite, no `.bak-*`):
+  - build commit: `491cd06`;
+  - exe `COMTool.App-tools.exe` published win-x64 single-file R2R;
+  - size: 209,273,676 bytes;
+  - SHA256: `5757AAAA3ABC9EA2F835685E43D7F23AA1EC583A39BD4416F3DBD2F1F0513609`;
+  - WORK and DESKTOP copies both matched that hash via `Get-FileHash`;
+  - `BAK_COUNT=0`;
+  - smoke test: process started, `Responding=True`, then stopped.
+
 The previously packaged release zip is 74,795,557 bytes with SHA256:
 
 ```text
