@@ -5,7 +5,7 @@
              xmlns:sys="using:System"
              x:Class="COMTool.App.Views.SessionSidebar"
              x:DataType="vm:MainViewModel">
-  <Grid ColumnDefinitions="24,*" Margin="0,5,0,0">
+  <Grid ColumnDefinitions="40,*" Margin="0,5,0,0">
     <!-- MobaXterm-style icon rail: Sessions / Tools / Macros, plus the
          SSH-browser icon that only exists while an SSH session is connected. -->
     <Border Grid.Column="0"
@@ -63,7 +63,7 @@
 
     <!-- Panel content: a header plus exactly one visible body per tab.
          ClipToBounds keeps the panel out of the terminal while the dock
-         is collapsed to the 24px rail (its star column becomes zero). -->
+         is collapsed to the 40px rail (its star column becomes zero). -->
     <Grid Grid.Column="1"
           RowDefinitions="28,5,*"
           ClipToBounds="True">

@@ -163,10 +163,10 @@ public sealed class SidebarRailTests
                 Assert.NotNull(sidebar.FindControl<Border>("SidebarRail"));
                 Click(window, toggle);
 
-                // Only the panel is retracted; the rail stays at 24px.
+                // Only the panel is retracted; the rail stays at 40px.
                 Assert.True(sidebar.IsVisible);
                 Assert.NotNull(sidebar.FindControl<Border>("SidebarRail"));
-                Assert.Equal(24, body.ColumnDefinitions[0].ActualWidth, precision: 1);
+                Assert.Equal(40, body.ColumnDefinitions[0].ActualWidth, precision: 1);
 
                 Click(window, toggle);
                 Assert.True(sidebar.IsVisible);
@@ -217,7 +217,7 @@ public sealed class SidebarRailTests
                 Assert.Equal(SidebarTab.Tools, Vm(window).SidebarTab);
                 Assert.True(sidebar.IsVisible);
                 Assert.NotNull(sidebar.FindControl<Border>("SidebarRail"));
-                Assert.Equal(24, body.ColumnDefinitions[0].ActualWidth, precision: 1);
+                Assert.Equal(40, body.ColumnDefinitions[0].ActualWidth, precision: 1);
                 Assert.Equal(8, content.Margin.Left);
                 Assert.False(splitter.IsVisible);
 
@@ -232,7 +232,7 @@ public sealed class SidebarRailTests
                 Assert.Equal(SidebarTab.Sessions, Vm(window).SidebarTab);
                 Assert.True(sidebar.FindControl<Grid>("SessionsPanel")!.IsVisible);
                 Click(window, sessions);
-                Assert.Equal(24, body.ColumnDefinitions[0].ActualWidth, precision: 1);
+                Assert.Equal(40, body.ColumnDefinitions[0].ActualWidth, precision: 1);
                 Click(window, sessions);
                 Assert.Equal(260, body.ColumnDefinitions[0].ActualWidth, precision: 1);
             });
@@ -383,6 +383,7 @@ public sealed class SidebarRailTests
                 // that would expose a light line at the left.
                 var rail = sidebar.FindControl<Border>("SidebarRail")!;
                 Assert.Equal(new CornerRadius(0), rail.CornerRadius);
+                Assert.Equal(40, rail.Bounds.Width, precision: 1);
 
                 var button = sidebar.GetVisualDescendants()
                     .OfType<Button>()

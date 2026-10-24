@@ -2721,7 +2721,7 @@ public partial class MainWindow : Window
     /// The sidebar becomes the SSH browser and back. The rail keeps its
     /// place, the content starts at the splitter while the browser is
     /// open, and the terminal gets the whole right side. When the panel
-    /// is collapsed only the 24px rail remains; the content inset shrinks
+    /// is collapsed only the 40px rail remains; the content inset shrinks
     /// by the same amount, so the terminal keeps its absolute position.
     /// </summary>
     private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -2743,7 +2743,7 @@ public partial class MainWindow : Window
         // column when the dock is collapsed.
         Sidebar.IsVisible = true;
         BodyGrid.ColumnDefinitions[0].Width = new GridLength(
-            _sidebarVisible ? CurrentSidebarWidth() : 24);
+            _sidebarVisible ? CurrentSidebarWidth() : 40);
         SidebarSplitter.IsVisible = _sidebarVisible;
         BodyGrid.ColumnDefinitions[1].Width = new GridLength(_sidebarVisible ? 3 : 0);
 

@@ -83,15 +83,15 @@ public sealed class SidebarDockTests
                 // stays on screen so a rail icon can reopen the panel.
                 Assert.True(sidebar.IsVisible);
                 Assert.NotNull(sidebar.FindControl<Border>("SidebarRail"));
-                Assert.Equal(24, body.ColumnDefinitions[0].ActualWidth, precision: 1);
+                Assert.Equal(40, body.ColumnDefinitions[0].ActualWidth, precision: 1);
                 Assert.False(
                     window.FindControl<GridSplitter>("SidebarSplitter")!.IsVisible);
                 Assert.False(ReadConfig(env).SessionSidebar.Visible);
 
                 // The dock is still closed: no auto reopening on pointer entry.
-                window.MouseMove(new Point(25, 300));
+                window.MouseMove(new Point(50, 300));
                 RunJobs(window);
-                Assert.Equal(24, body.ColumnDefinitions[0].ActualWidth, precision: 1);
+                Assert.Equal(40, body.ColumnDefinitions[0].ActualWidth, precision: 1);
 
                 Click(window, toggle);
                 Assert.True(sidebar.IsVisible);
@@ -121,7 +121,7 @@ public sealed class SidebarDockTests
                 first = ShowWindow(env, visible: true, width: 260);
                 Click(first, first.FindControl<Button>("SessionsButton")!);
                 Assert.Equal(
-                    24,
+                    40,
                     first.FindControl<Grid>("BodyGrid")!.ColumnDefinitions[0].ActualWidth,
                     precision: 1);
             });
@@ -139,7 +139,7 @@ public sealed class SidebarDockTests
                 var sidebar = second.FindControl<SessionSidebar>("Sidebar")!;
                 Assert.True(sidebar.IsVisible);
                 Assert.NotNull(sidebar.FindControl<Border>("SidebarRail"));
-                Assert.Equal(24, body.ColumnDefinitions[0].ActualWidth, precision: 1);
+                Assert.Equal(40, body.ColumnDefinitions[0].ActualWidth, precision: 1);
             });
         }
         finally

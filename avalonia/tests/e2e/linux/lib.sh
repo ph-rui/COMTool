@@ -46,12 +46,12 @@ SIDEBAR_SESSION_X="${SIDEBAR_SESSION_X:-80}"
 SIDEBAR_SESSION_Y="${SIDEBAR_SESSION_Y:-118}"
 
 # The tab strip is the first 36px row of MainStack. Collapsing the sidebar
-# panel leaves the 24px rail on screen and shrinks the content inset from
-# 32px to 8px, so MainStack still starts at x=32 (24 + 8): the tab
-# coordinates do not change. The tab list has a 10px left margin and each
-# tab is at least 112px wide with a 2px right margin. Keeping the panel
-# collapsed makes these coordinates stable; an open sessions panel shifts
-# every tab 263px right.
+# panel leaves the 40px rail on screen and shrinks the content inset from
+# 32px to 8px, so MainStack starts at x=48 (40 + 8). The tab list has a
+# 10px left margin and each tab is at least 112px wide with a 2px right
+# margin, so the 125/239 click points still land inside the first and
+# second tabs. Keeping the panel collapsed makes these coordinates stable;
+# an open sessions panel shifts every tab 247px right.
 FIRST_TAB_X="${FIRST_TAB_X:-125}"
 SECOND_TAB_X="${SECOND_TAB_X:-239}"
 TAB_STRIP_Y="${TAB_STRIP_Y:-53}"
@@ -62,14 +62,14 @@ SESSIONS_TOGGLE_Y="${SESSIONS_TOGGLE_Y:-18}"
 SIDEBAR_PROBE_X="${SIDEBAR_PROBE_X:-200}"
 SIDEBAR_PROBE_Y="${SIDEBAR_PROBE_Y:-300}"
 
-# The SSH-browser globe of the 24px rail. The rail buttons are 24x44px;
+# The SSH-browser globe of the 40px rail. The rail buttons are 40x44px;
 # the globe is the fourth one and its orange icon spans y=182..195 in the
 # SFTP e2e failure screenshot. The same point opens and retracts the browser.
-SSH_BROWSER_RAIL_X="${SSH_BROWSER_RAIL_X:-12}"
+SSH_BROWSER_RAIL_X="${SSH_BROWSER_RAIL_X:-20}"
 SSH_BROWSER_RAIL_Y="${SSH_BROWSER_RAIL_Y:-190}"
 
-# The SFTP browser of an SSH tab. It lives in the left sidebar: 24px rail
-# plus a 436px pane. There is no SFTP chip in the tab strip; the orange
+# The SFTP browser of an SSH tab. It lives in the left sidebar: 40px rail
+# plus a 420px pane. There is no SFTP chip in the tab strip; the orange
 # globe of the rail opens it, and the MobaXterm-style layout is a single
 # remote list: an icon-only toolbar (hover tooltips in Chinese), the remote
 # path box, a sortable header row, the list, then the status line and the
@@ -77,15 +77,15 @@ SSH_BROWSER_RAIL_Y="${SSH_BROWSER_RAIL_Y:-190}"
 # come from the system pickers, which in the e2e run are answered from the
 # COMTOOL_E2E_PICK_FILES / COMTOOL_E2E_PICK_FOLDER environment (set in
 # start_app). The coordinates below assume that the sidebar panel is
-# collapsed, so the browser opens at x=24 without the sessions list.
+# collapsed, so the browser opens at x=40 without the sessions list.
 # The toolbar, path row and first list row below are window-relative pixels
 # in the 1000x650 window, measured from the SFTP e2e failure screenshot.
 SFTP_TOOLBAR_Y="${SFTP_TOOLBAR_Y:-50}"
-SFTP_NEWFOLDER_X="${SFTP_NEWFOLDER_X:-129}"
-SFTP_RENAME_X="${SFTP_RENAME_X:-156}"
-SFTP_DELETE_X="${SFTP_DELETE_X:-183}"
-SFTP_UPLOAD_X="${SFTP_UPLOAD_X:-102}"
-SFTP_DOWNLOAD_X="${SFTP_DOWNLOAD_X:-74}"
+SFTP_NEWFOLDER_X="${SFTP_NEWFOLDER_X:-145}"
+SFTP_RENAME_X="${SFTP_RENAME_X:-172}"
+SFTP_DELETE_X="${SFTP_DELETE_X:-199}"
+SFTP_UPLOAD_X="${SFTP_UPLOAD_X:-118}"
+SFTP_DOWNLOAD_X="${SFTP_DOWNLOAD_X:-90}"
 SFTP_REMOTE_PATH_X="${SFTP_REMOTE_PATH_X:-200}"
 SFTP_REMOTE_PATH_Y="${SFTP_REMOTE_PATH_Y:-75}"
 # The focused path box draws a 0078d7 ring; its top edge is 6px above the
@@ -943,7 +943,7 @@ click_sidebar_session() {
 
 # Read one window-relative pixel. This is only used to choose the correct tab
 # coordinates: expanding and collapsing the sidebar shifts the tab strip by
-# 263px. Test PASS/FAIL decisions never use screenshots.
+# 247px. Test PASS/FAIL decisions never use screenshots.
 window_pixel_is_dark() {
     local rel_x="$1"
     local rel_y="$2"
@@ -1112,12 +1112,12 @@ wait_for_sidebar_visible() {
 # transport. Wait for its orange icon in the rail before clicking it.
 wait_for_ssh_browser_rail() {
     local timeout_s="${1:-10}"
-    wait_for_window_color "ff9800" 4 178 16 24 "$timeout_s"
+    wait_for_window_color "ff9800" 12 178 16 24 "$timeout_s"
 }
 
-# Wait until the sidebar shows the SSH browser. The browser pane is 460px
-# wide, so (300,300) is its file list; a visible session sidebar is only
-# 260px wide and leaves (300,300) on the dark terminal.
+# Wait until the sidebar shows the SSH browser. The browser sidebar is
+# 460px wide, so (300,300) is its file list; a visible session sidebar is
+# only 260px wide and leaves (300,300) on the dark terminal.
 wait_for_sftp_browser_visible() {
     local timeout_s="${1:-10}"
     local iterations=$((timeout_s * 4))
@@ -1139,7 +1139,7 @@ wait_for_sftp_browser_visible() {
     return 1
 }
 
-# The sidebar is docked and shifts the whole tab strip 263px while expanded.
+# The sidebar is docked and shifts the whole tab strip 247px while expanded.
 # Collapse it explicitly through the title-bar sessions button so tab
 # coordinates are deterministic. The probe tolerates the panel already being
 # collapsed (a prior click or a restored preference) and retries a missed

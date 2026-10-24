@@ -65,11 +65,11 @@ public sealed class MainWindowHeadlessTests
                 var body = window.FindControl<Grid>("BodyGrid")!;
                 var sidebar = window.FindControl<SessionSidebar>("Sidebar")!;
                 // The dock is manual-only now, so a collapsed state survives a
-                // restart instead of being overridden on launch. The 24px
+                // restart instead of being overridden on launch. The 40px
                 // icon rail stays on screen so the panels can be reopened.
                 Assert.True(sidebar.IsVisible);
                 Assert.NotNull(sidebar.FindControl<Border>("SidebarRail"));
-                Assert.Equal(24, body.ColumnDefinitions[0].ActualWidth, precision: 1);
+                Assert.Equal(40, body.ColumnDefinitions[0].ActualWidth, precision: 1);
             });
         }
         finally

@@ -785,7 +785,7 @@ run_sftp02_file_management() {
     log "Running $test_id"
 
     # SFTP01 leaves the browser open in the sidebar. The probe at (300,300)
-    # is bright while the browser is up (its pane covers x=24..460) and
+    # is bright while the browser is up (its pane covers x=40..460) and
     # dark for the terminal when the panel is retracted. Retract it first
     # with the same globe, so the click below opens the browser again.
     if ! window_region_is_dark 300 300; then
