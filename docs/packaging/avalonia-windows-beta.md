@@ -979,8 +979,8 @@ and the visible state and width are restored on launch:
   - WORK and DESKTOP copies both matched that hash via `Get-FileHash`;
   - `BAK_COUNT=0`;
   - smoke test: process started, `Responding=True`, then stopped.
-  - Windows 实机名称列与列宽效果待用户在 192.0.2.x 网段扫描后确认
-    （Linux 实网已验证机制可用）。
+  - Windows 实机用户已确认：名称列显示 `devuser`、IP 范围记忆生效；
+    列宽对齐鲁，但服务列 √/× 相对表头仍偏左（下一轮 `2378e26` 修复）。
 
 ### 2026-10-25 — 网络扫描服务列 √/× 居中对齐表头
 
@@ -1005,7 +1005,43 @@ and the visible state and width are restored on launch:
   - WORK and DESKTOP copies both matched that hash via `Get-FileHash`;
   - `BAK_COUNT=0`;
   - smoke test: process started, `Responding=True`, then stopped.
-  - Windows 实机 √/× 对齐效果待用户扫描后确认。
+  - Windows 实机用户已确认 √/× 居中对齐；随后提出任务栏归组、扫描
+    2 秒内出结果、表头分栏框三点（本轮 `fb29f78` 处理）。
+
+### 2026-10-25 — 工具窗任务栏归组、/24 扫描 2 秒内出结果、表头分栏框
+
+- 用户对照 MobaXterm 提出三点：①MobaXterm 打开工具后点任务栏只弹
+  一个入口，主窗口与工具窗一起激活；②MobaXterm 表头每列有框
+  （Excel 式），内容居中显示；③MobaXterm 扫描 2 秒内出结果，
+  COMTool 要很久；
+- 任务栏归组：工具窗创建改为 `window.Show(this)`（Avalonia 从属窗口
+  API；`WindowBase.Owner` 为 protected），对齐 MobaXterm 的任务栏行为；
+  原“无 Owner、可被主窗口盖住”的设计按用户要求调整；
+- 速度：Windows 实机基准（同一 192.0.2.0/24，C# 内嵌基准与
+  扫描器同语义）：旧参数（并发 32、connect 500ms、ping 1000ms）
+  7693ms；新参数（并发 256、connect/ping 300ms）1013ms，均发现 3 台。
+  代码层面同时把名称解析改为仅对存活主机做——旧版对全部 254 个目标
+  并行做反向 DNS，无 PTR 的机器各等满超时，是慢的主因；
+  `NET05_ScanDefaultsTargetTwoSecondSubnetScan` 守护新默认值
+  （并发≥254、各超时≤500ms）；Linux 实网复扫 /24 全程 <2s
+  （65 台在线、名称齐全）：
+  `docs/fixtures/phase1/network-scan-fast-header-linux-2026-10-25.png`；
+- 表头分栏：表头列 1..8 左缘各加 1px `SidebarBorderBrush` 分隔线
+  （Excel 式列框；左右外框/底边沿用现有边框），
+  `NET05_ScanResultColumnsMatchMobaXtermWidths` 增加 8 条分隔线断言；
+- test evidence: full gate PASS — 426 tests (Core 51, SFTP 42,
+  Connections 82, Terminal 11, ZMODEM 32, TestGate 49, App 159),
+  Linux Xvfb E2E 13/13, TestGate PASS, results `20261024T182522Z`
+  （UTC，本地 2026-10-25）；
+- deployment 2026-10-25 (in-place overwrite, no `.bak-*`):
+  - build commit: `fb29f78`;
+  - exe `COMTool.App-tools.exe` published win-x64 single-file R2R;
+  - size: 209,294,156 bytes;
+  - SHA256: `7308482873779D298D15185363BE8FF1FE02F559AF29C1778029D298E15CB046`;
+  - WORK and DESKTOP copies both matched that hash via `Get-FileHash`;
+  - `BAK_COUNT=0`;
+  - smoke test: process started, `Responding=True`, then stopped.
+  - Windows 实机任务栏归组/2 秒扫描/表头分框效果待用户扫描后确认。
 
 The previously packaged release zip is 74,795,557 bytes with SHA256:
 
