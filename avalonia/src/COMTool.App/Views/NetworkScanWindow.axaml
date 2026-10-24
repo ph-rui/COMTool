@@ -247,6 +247,7 @@
                                      Width="60"
                                      FontSize="12"
                                      HorizontalAlignment="Center"
+                                     TextAlignment="Center"
                                      FontFamily="{DynamicResource IconFontAwesome}"
                                      Foreground="{Binding Foreground}"
                                      ToolTip.Tip="{Binding Label}" />

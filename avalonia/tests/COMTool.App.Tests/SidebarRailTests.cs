@@ -756,6 +756,16 @@ public sealed class SidebarRailTests
                 Assert.Equal(2, headerTexts.Count);
                 Assert.All(headerTexts,
                     text => Assert.Equal(TextAlignment.Center, text.TextAlignment));
+
+                // 数据行 √/× 在 60px 单元格内必须水平居中，才能正对表头
+                //（只在数据行里找，避免把“关闭”按钮的 ✕ 图标算进来）
+                var glyphs = rowGrids
+                    .SelectMany(grid => grid.GetVisualDescendants().OfType<TextBlock>())
+                    .Where(text => text.Text == "\uf00c" || text.Text == "\uf00d")
+                    .ToList();
+                Assert.Equal(7, glyphs.Count); // 1 行 × 7 服务列
+                Assert.All(glyphs,
+                    glyph => Assert.Equal(TextAlignment.Center, glyph.TextAlignment));
             });
         }
         finally
