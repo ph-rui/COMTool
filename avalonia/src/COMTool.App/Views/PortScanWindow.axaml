@@ -10,7 +10,7 @@
         MinHeight="380"
         CanResize="True"
         ShowInTaskbar="False"
-        WindowStartupLocation="CenterOwner"
+        WindowStartupLocation="CenterScreen"
         Background="{DynamicResource WindowBackgroundBrush}"
         FontSize="12">
   <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="12">

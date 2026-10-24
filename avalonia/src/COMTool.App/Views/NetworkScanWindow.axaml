@@ -10,7 +10,7 @@
         MinHeight="420"
         CanResize="True"
         ShowInTaskbar="False"
-        WindowStartupLocation="CenterOwner"
+        WindowStartupLocation="CenterScreen"
         Background="{DynamicResource WindowBackgroundBrush}"
         FontSize="12">
   <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="12">
@@ -28,27 +28,37 @@
         <TextBox Name="ScanOctet1Box"
                  Text="{Binding Octet1}"
                  Width="52"
-                 HorizontalContentAlignment="Center" />
+                 HorizontalContentAlignment="Center"
+                 TextAlignment="Center"
+                 VerticalContentAlignment="Center" />
         <TextBlock Text="." VerticalAlignment="Center" />
         <TextBox Name="ScanOctet2Box"
                  Text="{Binding Octet2}"
                  Width="52"
-                 HorizontalContentAlignment="Center" />
+                 HorizontalContentAlignment="Center"
+                 TextAlignment="Center"
+                 VerticalContentAlignment="Center" />
         <TextBlock Text="." VerticalAlignment="Center" />
         <TextBox Name="ScanOctet3Box"
                  Text="{Binding Octet3}"
                  Width="52"
-                 HorizontalContentAlignment="Center" />
+                 HorizontalContentAlignment="Center"
+                 TextAlignment="Center"
+                 VerticalContentAlignment="Center" />
         <TextBlock Text="." VerticalAlignment="Center" />
         <TextBox Name="ScanOctetFromBox"
                  Text="{Binding OctetFrom}"
                  Width="52"
-                 HorizontalContentAlignment="Center" />
+                 HorizontalContentAlignment="Center"
+                 TextAlignment="Center"
+                 VerticalContentAlignment="Center" />
         <TextBlock Text="--&gt;" VerticalAlignment="Center" Margin="4,0" />
         <TextBox Name="ScanOctetToBox"
                  Text="{Binding OctetTo}"
                  Width="52"
-                 HorizontalContentAlignment="Center" />
+                 HorizontalContentAlignment="Center"
+                 TextAlignment="Center"
+                 VerticalContentAlignment="Center" />
         <Button Name="ScanStartButton"
                 Classes="SidebarActionButton"
                 Margin="12,0,0,0"
