@@ -8,7 +8,7 @@
         Height="444"
         CanResize="False"
         ShowInTaskbar="False"
-        WindowStartupLocation="CenterOwner"
+        WindowStartupLocation="CenterScreen"
         Background="{DynamicResource WindowBackgroundBrush}"
         FontSize="12">
   <Window.Styles>
@@ -36,6 +36,8 @@
     </Style>
     <Style Selector="NumericUpDown">
       <Setter Property="MinHeight" Value="0" />
+      <Setter Property="TextAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
     <Style Selector="Button.ServerOkButton">
       <Setter Property="Width" Value="70" />
@@ -208,7 +210,7 @@
                 <NumericUpDown Name="HttpSecondsBox"
                                Value="{Binding HttpRuntimeSeconds}"
                                Minimum="1" Maximum="86400" FormatString="0"
-                               Width="132" Height="24"
+                               Width="120" Height="24"
                                IsEnabled="{Binding HttpRuntimeEnabled}" />
                 <TextBlock Text="秒" VerticalAlignment="Center" />
               </StackPanel>
@@ -286,7 +288,7 @@
                 <NumericUpDown Name="TftpSecondsBox"
                                Value="{Binding TftpRuntimeSeconds}"
                                Minimum="1" Maximum="86400" FormatString="0"
-                               Width="132" Height="24"
+                               Width="120" Height="24"
                                IsEnabled="{Binding TftpRuntimeEnabled}" />
                 <TextBlock Text="秒" VerticalAlignment="Center" />
               </StackPanel>

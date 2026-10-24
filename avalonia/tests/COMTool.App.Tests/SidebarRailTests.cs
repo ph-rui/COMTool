@@ -5,6 +5,7 @@ using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using COMTool.App.ViewModels;
@@ -319,6 +320,7 @@ public sealed class SidebarRailTests
                 var servers = Assert.IsType<ServersManagementWindow>(
                     window!.FindToolWindowForTests("net-server"));
                 Assert.True(servers.IsVisible);
+                Assert.Null(servers.Owner);
                 ClickToolMenuItem(window, "net-server");
                 Assert.Single(window.ToolWindowsForTests);
                 Assert.Same(servers, window.FindToolWindowForTests("net-server"));
@@ -328,6 +330,7 @@ public sealed class SidebarRailTests
                 var scanner = Assert.IsType<NetworkScanWindow>(
                     window.FindToolWindowForTests("scanner"));
                 Assert.True(scanner.IsVisible);
+                Assert.Null(scanner.Owner);
                 Assert.Equal(2, window.ToolWindowsForTests.Count);
 
                 // 点选“端口扫描仪”：第三个窗口
@@ -335,6 +338,7 @@ public sealed class SidebarRailTests
                 var portScanner = Assert.IsType<PortScanWindow>(
                     window.FindToolWindowForTests("port-scanner"));
                 Assert.True(portScanner.IsVisible);
+                Assert.Null(portScanner.Owner);
                 Assert.Equal(3, window.ToolWindowsForTests.Count);
 
                 // 关闭窗口后从注册表移除，再次点选可重新打开
@@ -349,6 +353,40 @@ public sealed class SidebarRailTests
                 scanner.Close();
                 window.FindToolWindowForTests("port-scanner")!.Close();
                 RunJobs(window);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public void UI16_MainWindowClosesDetachedTools()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                window = CreateWindow(env);
+                var vm = Vm(window);
+                vm.SidebarTab = SidebarTab.Tools;
+                RunJobs(window);
+
+                ClickToolMenuItem(window, "scanner");
+                var scanner = Assert.IsType<NetworkScanWindow>(
+                    window.FindToolWindowForTests("scanner"));
+                Assert.Null(scanner.Owner);
+
+                window.Close();
+                RunJobs(window);
+
+                Assert.False(scanner.IsVisible);
+                Assert.Empty(window.ToolWindowsForTests);
             });
         }
         finally
@@ -671,6 +709,38 @@ public sealed class SidebarRailTests
     }
 
     [AvaloniaFact]
+    public void NET05_ScanNumericInputsAreCenteredAndEqualWidth()
+    {
+        using var env = new TestEnvironment();
+        NetworkScanWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                window = new NetworkScanWindow();
+                window.Show();
+                Dispatcher.UIThread.RunJobs();
+
+                var names = new[]
+                {
+                    "ScanOctet1Box", "ScanOctet2Box", "ScanOctet3Box",
+                    "ScanOctetFromBox", "ScanOctetToBox",
+                };
+                var boxes = names
+                    .Select(name => window.FindControl<TextBox>(name)!)
+                    .ToArray();
+                Assert.All(boxes, box => Assert.Equal(TextAlignment.Center, box.TextAlignment));
+                Assert.All(boxes, box => Assert.Equal(52, box.Width));
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
     public void NET05_NetScanCloseCancelsScan()
     {
         using var env = new TestEnvironment();
@@ -942,6 +1012,37 @@ public sealed class SidebarRailTests
                 // 初始显示欢迎页，底部有“确定”
                 Assert.True(vm.IsWelcome);
                 Assert.NotNull(window.FindControl<Button>("ServersOkButton"));
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public void SRV01_NumericInputsAreCenteredAndShareWidth()
+    {
+        using var env = new TestEnvironment();
+        ServersManagementWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                window = new ServersManagementWindow();
+                window.Show();
+                Dispatcher.UIThread.RunJobs();
+
+                var names = new[]
+                {
+                    "HttpPortBox", "HttpSecondsBox", "TftpPortBox", "TftpSecondsBox",
+                };
+                var boxes = names
+                    .Select(name => window.FindControl<NumericUpDown>(name)!)
+                    .ToArray();
+                Assert.All(boxes, box => Assert.Equal(TextAlignment.Center, box.TextAlignment));
+                Assert.All(boxes, box => Assert.Equal(120, box.Width));
             });
         }
         finally

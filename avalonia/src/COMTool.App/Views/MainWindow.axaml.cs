@@ -3172,6 +3172,10 @@ public partial class MainWindow : Window
             {
                 existing.Show();
             }
+            if (existing.WindowState == WindowState.Minimized)
+            {
+                existing.WindowState = WindowState.Normal;
+            }
             existing.Activate();
             return;
         }
@@ -3179,7 +3183,8 @@ public partial class MainWindow : Window
         var window = descriptor.CreateWindow(this);
         window.Closed += (_, _) => _toolWindows.Remove(id);
         _toolWindows[id] = window;
-        window.Show(this);
+        // 工具窗独立于主窗口，避免始终压在主窗口上方；单实例仍由字典保证。
+        window.Show();
     }
 
     private void OnMinimizeClick(object? sender, RoutedEventArgs e)
@@ -3496,6 +3501,13 @@ public partial class MainWindow : Window
             state.SuppressReattach = true;
             state.Window.Close();
         }
+
+        // 工具窗现在是无 Owner 的独立窗口，主窗口关闭时显式收尾。
+        foreach (var toolWindow in _toolWindows.Values.ToList())
+        {
+            toolWindow.Close();
+        }
+        _toolWindows.Clear();
 
         if (DataContext is MainViewModel viewModel)
         {
