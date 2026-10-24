@@ -876,8 +876,8 @@ and the visible state and width are restored on launch:
   表格由 10 列改为 9 列；端口扫描仪的已知端口表未改动；
 - 扫描中新增“停止”按钮，停止后保留已发现结果并显示
   “已停止（已发现 N 台）”；迟到进度回调不再覆盖停止状态；关窗仍取消扫描；
-- 扫描器五个 IP 数字框与结果表列宽对齐，IP 数字居中；
-  网络服务器的端口/秒数 NumericUpDown 统一 120px 宽，数值居中；
+- 扫描器五个 IP 数字框统一 52px 且数字居中，结果表头与数据行共用
+  九列固定列宽；网络服务器的端口/秒数 NumericUpDown 统一 120px 宽，数值居中；
 - 三个工具窗改用无 Owner 的 `Show()`，可被主窗口盖住；重复点选只激活
   已有窗口（最小化时先还原），主窗口关闭时一并关闭；
 - test evidence: full gate PASS — 414 tests (Core 49, SFTP 42, Connections 77,
