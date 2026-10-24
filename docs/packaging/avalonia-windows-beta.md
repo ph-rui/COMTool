@@ -982,6 +982,31 @@ and the visible state and width are restored on launch:
   - Windows 实机名称列与列宽效果待用户在 192.0.2.x 网段扫描后确认
     （Linux 实网已验证机制可用）。
 
+### 2026-10-25 — 网络扫描服务列 √/× 居中对齐表头
+
+- 用户在 Windows 实机复核 `1f196a1` 部署：名称列（`devuser`）与
+  IP 范围记忆均已生效；但结果表 √/× 相对服务列表头仍偏左（用户红线
+  标出 SSH 列位置）；
+- 根因：数据行服务列 `TextBlock` 固定 60px 宽但缺 `TextAlignment="Center"`，
+  字形落在单元格左缘；表头 StackPanel 是内容尺寸+居中，故表头居中而
+  数据偏左。补 `TextAlignment="Center"` 后 √/× 正对表头；
+- 测试：`NET05_ScanResultColumnsMatchMobaXtermWidths` 增加断言——
+  数据行 7 个 √/× 均 `TextAlignment=Center`（只在数据行内查找，避免误伤
+  “关闭”按钮的 ✕ 图标）；Linux 实网复扫（192.0.2.0/24，64 台）目检
+  √/× 已与表头图标列对齐：
+  `docs/fixtures/phase1/network-scan-glyphs-centered-linux-2026-10-25.png`；
+- test evidence: full gate PASS — 425 tests, Linux Xvfb E2E 13/13,
+  TestGate PASS, results `20261024T164905Z`（UTC，本地 2026-10-25）；
+- deployment 2026-10-25 (in-place overwrite, no `.bak-*`):
+  - build commit: `2378e26`;
+  - exe `COMTool.App-tools.exe` published win-x64 single-file R2R;
+  - size: 209,290,060 bytes;
+  - SHA256: `46AAB360FA40E52E15A044F095D65E6469E5E68B1BD7A56547B6005C2BD0343E`;
+  - WORK and DESKTOP copies both matched that hash via `Get-FileHash`;
+  - `BAK_COUNT=0`;
+  - smoke test: process started, `Responding=True`, then stopped.
+  - Windows 实机 √/× 对齐效果待用户扫描后确认。
+
 The previously packaged release zip is 74,795,557 bytes with SHA256:
 
 ```text
