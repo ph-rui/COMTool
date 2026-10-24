@@ -3183,8 +3183,10 @@ public partial class MainWindow : Window
         var window = descriptor.CreateWindow(this);
         window.Closed += (_, _) => _toolWindows.Remove(id);
         _toolWindows[id] = window;
-        // 工具窗独立于主窗口，避免始终压在主窗口上方；单实例仍由字典保证。
-        window.Show();
+        // 与 MobaXterm 一致：Show(this) 把工具窗设为主窗口的从属窗口，
+        // 任务栏只保留一个按钮，点任务栏时主窗口与工具窗一起激活
+        // （ShowInTaskbar 已在各工具窗 XAML 中为 false）。
+        window.Show(this);
     }
 
     private void OnMinimizeClick(object? sender, RoutedEventArgs e)
@@ -3502,7 +3504,8 @@ public partial class MainWindow : Window
             state.Window.Close();
         }
 
-        // 工具窗现在是无 Owner 的独立窗口，主窗口关闭时显式收尾。
+        // 工具窗是主窗口的从属窗口（Owner）；跨平台实现不保证关主窗自动
+        // 关从属窗，这里仍显式收尾，保证任何平台行为一致。
         foreach (var toolWindow in _toolWindows.Values.ToList())
         {
             toolWindow.Close();

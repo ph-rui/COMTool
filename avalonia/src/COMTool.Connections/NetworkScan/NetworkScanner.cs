@@ -49,13 +49,17 @@ public interface INetworkScanner
 /// </summary>
 public sealed class NetworkScanner : INetworkScanner
 {
-    public int Concurrency { get; init; } = 32;
+    /// <summary>
+    /// All 254 addresses of a /24 probed in one wave (MobaXterm-style speed:
+    /// sub-second for down hosts, whole scan ~1-2 s).
+    /// </summary>
+    public int Concurrency { get; init; } = 256;
 
-    public int PingTimeoutMs { get; init; } = 1000;
+    public int PingTimeoutMs { get; init; } = 300;
 
-    public int ConnectTimeoutMs { get; init; } = 500;
+    public int ConnectTimeoutMs { get; init; } = 300;
 
-    public int DnsTimeoutMs { get; init; } = 1000;
+    public int DnsTimeoutMs { get; init; } = 500;
 
     /// <summary>
     /// NetBIOS name fallback wait (only for hosts that answered ping/TCP).
@@ -184,10 +188,9 @@ public sealed class NetworkScanner : INetworkScanner
         ct.ThrowIfCancellationRequested();
 
         var pingTask = PingAsync(ip, ct);
-        var dnsTask = ResolveAsync(ip, ct);
         var connectTasks = ports.Select(port => ConnectAsync(ip, port, ct)).ToArray();
 
-        await Task.WhenAll([pingTask, dnsTask, ..connectTasks]);
+        await Task.WhenAll([pingTask, ..connectTasks]);
         ct.ThrowIfCancellationRequested();
 
         var openPorts = new List<int>();
@@ -200,13 +203,16 @@ public sealed class NetworkScanner : INetworkScanner
         }
 
         int? rtt = pingTask.Result;
-        string? name = dnsTask.Result;
 
         if (rtt is null && openPorts.Count == 0)
         {
             return null;
         }
 
+        // 只对存活主机做名称解析（MobaXterm 同样做法）：给 254 个目标都
+        // 做反向 DNS 是旧版 /24 扫描要 7 秒多的主因——无 PTR 的机器每次
+        // 都要等满超时。
+        var name = await ResolveAsync(ip, ct);
         if (string.IsNullOrEmpty(name))
         {
             // 小型局域网通常没有 PTR 记录；用 NetBIOS 工作站名兜底

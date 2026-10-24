@@ -221,6 +221,24 @@
               <TextBlock Text="HTTP" FontSize="11"
                          Foreground="{DynamicResource SidebarSectionBrush}" />
             </StackPanel>
+            <!-- Excel 式表头分栏：列 1..8 左缘 1px 分隔线（左/右/底边由表格
+                 边框与表头底边提供），对齐 MobaXterm 的列框观感 -->
+            <Border Grid.Column="1" BorderBrush="{DynamicResource SidebarBorderBrush}"
+                    BorderThickness="1,0,0,0" />
+            <Border Grid.Column="2" BorderBrush="{DynamicResource SidebarBorderBrush}"
+                    BorderThickness="1,0,0,0" />
+            <Border Grid.Column="3" BorderBrush="{DynamicResource SidebarBorderBrush}"
+                    BorderThickness="1,0,0,0" />
+            <Border Grid.Column="4" BorderBrush="{DynamicResource SidebarBorderBrush}"
+                    BorderThickness="1,0,0,0" />
+            <Border Grid.Column="5" BorderBrush="{DynamicResource SidebarBorderBrush}"
+                    BorderThickness="1,0,0,0" />
+            <Border Grid.Column="6" BorderBrush="{DynamicResource SidebarBorderBrush}"
+                    BorderThickness="1,0,0,0" />
+            <Border Grid.Column="7" BorderBrush="{DynamicResource SidebarBorderBrush}"
+                    BorderThickness="1,0,0,0" />
+            <Border Grid.Column="8" BorderBrush="{DynamicResource SidebarBorderBrush}"
+                    BorderThickness="1,0,0,0" />
           </Grid>
         </Border>
 

@@ -316,22 +316,23 @@ public sealed class SidebarRailTests
                     new[] { "#00897b", "#5e35b1", "#2196f3" },
                     vm.ToolMenu.Select(item => item.GlyphColor).ToArray());
 
-                // 点选“网络服务器”：打开独立窗口，重复点选只激活同一实例
+                // 点选“网络服务器”：打开从属窗口（任务栏与主窗口归组，
+                // 点任务栏时一起激活），重复点选只激活同一实例
                 ClickToolMenuItem(window, "net-server");
                 var servers = Assert.IsType<ServersManagementWindow>(
                     window!.FindToolWindowForTests("net-server"));
                 Assert.True(servers.IsVisible);
-                Assert.Null(servers.Owner);
+                Assert.Same(window, servers.Owner);
                 ClickToolMenuItem(window, "net-server");
                 Assert.Single(window.ToolWindowsForTests);
                 Assert.Same(servers, window.FindToolWindowForTests("net-server"));
 
-                // 点选“网络扫描仪”：再开一个独立窗口
+                // 点选“网络扫描仪”：再开一个从属窗口
                 ClickToolMenuItem(window, "scanner");
                 var scanner = Assert.IsType<NetworkScanWindow>(
                     window.FindToolWindowForTests("scanner"));
                 Assert.True(scanner.IsVisible);
-                Assert.Null(scanner.Owner);
+                Assert.Same(window, scanner.Owner);
                 Assert.Equal(2, window.ToolWindowsForTests.Count);
 
                 // 点选“端口扫描仪”：第三个窗口
@@ -339,7 +340,7 @@ public sealed class SidebarRailTests
                 var portScanner = Assert.IsType<PortScanWindow>(
                     window.FindToolWindowForTests("port-scanner"));
                 Assert.True(portScanner.IsVisible);
-                Assert.Null(portScanner.Owner);
+                Assert.Same(window, portScanner.Owner);
                 Assert.Equal(3, window.ToolWindowsForTests.Count);
 
                 // 关闭窗口后从注册表移除，再次点选可重新打开
@@ -381,7 +382,7 @@ public sealed class SidebarRailTests
                 ClickToolMenuItem(window, "scanner");
                 var scanner = Assert.IsType<NetworkScanWindow>(
                     window.FindToolWindowForTests("scanner"));
-                Assert.Null(scanner.Owner);
+                Assert.Same(window, scanner.Owner);
 
                 window.Close();
                 RunJobs(window);
@@ -756,6 +757,12 @@ public sealed class SidebarRailTests
                 Assert.Equal(2, headerTexts.Count);
                 Assert.All(headerTexts,
                     text => Assert.Equal(TextAlignment.Center, text.TextAlignment));
+
+                // Excel 式表头分栏：列 1..8 各有一条左缘分隔线
+                var dividers = header.Children.OfType<Border>().Count(
+                    border => border.BorderThickness.Left == 1
+                              && border.BorderThickness.Right == 0);
+                Assert.Equal(8, dividers);
 
                 // 数据行 √/× 在 60px 单元格内必须水平居中，才能正对表头
                 //（只在数据行里找，避免把“关闭”按钮的 ✕ 图标算进来）

@@ -237,6 +237,20 @@ public sealed class NetworkScannerTests
     }
 
     [Fact]
+    public void NET05_ScanDefaultsTargetTwoSecondSubnetScan()
+    {
+        // MobaXterm 的 /24 扫描 2 秒内出结果：全部 254 个目标一波并行探测，
+        // 各超时都是几百毫秒级（实测 300/300/256 组合约 1 秒）。
+        var scanner = new NetworkScanner();
+        Assert.True(scanner.Concurrency >= 254,
+            "concurrency must probe the whole /24 in one wave");
+        Assert.True(scanner.PingTimeoutMs <= 500);
+        Assert.True(scanner.ConnectTimeoutMs <= 500);
+        Assert.True(scanner.DnsTimeoutMs <= 500);
+        Assert.True(scanner.NetbiosTimeoutMs <= 500);
+    }
+
+    [Fact]
     public async Task NET05_DeepScanWithCancelledToken()
     {
         using var cts = new CancellationTokenSource();

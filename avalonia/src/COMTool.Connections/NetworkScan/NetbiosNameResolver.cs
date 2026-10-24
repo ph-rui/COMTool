@@ -14,7 +14,7 @@ namespace COMTool.Connections.NetworkScan;
 public static class NetbiosNameResolver
 {
     /// <summary>Default UDP 137 wait; short so a /24 scan is not slowed down.</summary>
-    public const int DefaultTimeoutMs = 400;
+    public const int DefaultTimeoutMs = 300;
 
     /// <summary>
     /// Returns the host's NetBIOS workstation name (lower case, as MobaXterm
