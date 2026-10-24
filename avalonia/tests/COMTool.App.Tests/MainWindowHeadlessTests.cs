@@ -25,7 +25,7 @@ public sealed class MainWindowHeadlessTests
             {
                 var config = new ComtoolConfig();
                 config.SessionSidebar.Visible = true;
-                config.SessionSidebar.Width = 240;
+                config.SessionSidebar.Width = 280;
                 env.SeedConfig(config);
 
                 window = new MainWindow { DataContext = new MainViewModel() };
@@ -34,7 +34,7 @@ public sealed class MainWindowHeadlessTests
 
                 var sidebar = window.FindControl<SessionSidebar>("Sidebar")!;
                 Assert.True(sidebar.IsVisible);
-                Assert.Equal(240, sidebar.Bounds.Width, precision: 1);
+                Assert.Equal(280, sidebar.Bounds.Width, precision: 1);
             });
         }
         finally
@@ -55,7 +55,7 @@ public sealed class MainWindowHeadlessTests
             {
                 var config = new ComtoolConfig();
                 config.SessionSidebar.Visible = false;
-                config.SessionSidebar.Width = 240;
+                config.SessionSidebar.Width = 280;
                 env.SeedConfig(config);
 
                 window = new MainWindow { DataContext = new MainViewModel() };

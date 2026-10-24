@@ -796,6 +796,46 @@ and the visible state and width are restored on launch:
   - `BAK_COUNT=0`;
   - smoke test: process started, `Responding=True`, then stopped.
 
+### 2026-10-24 — 左栏 260px、工具菜单字号/图标加大与左边缘核对
+
+- 用户截图批注：工具菜单字体/图标太小、左栏不够宽、左侧有一条细白边；
+- UI 调整：
+  - `Button.ToolMenuItemButton` 字号 11→13、内边距 8,5→10,7、
+    `MinHeight=32`；工具图标字号 11→14、宽度 16→18；
+  - 会话/工具/宏共用的左栏默认与最小宽度 220→260
+    （`ClampSidebarWidth` 260..360，`SessionSidebarConfig.Width` 默认 260；
+    旧 config 里的 220 在启动时抬到 260）；SSH 浏览器宽度仍为 460，
+    内容区 32px 左边距不变，折叠态 E2E 标签坐标不变；
+  - `SidebarRail` 左侧圆角 3,0,0,3→0，图标栏背景贴住窗口左边缘；
+  - Windows 11 DWM 强调色边框：在 `Opened`/`Activated`/`WindowState`
+    变化时调用 `DwmSetWindowAttribute(DWMWA_BORDER_COLOR=34,
+    DWMWA_COLOR_NONE=0xFFFFFFFE)`；Windows 10 会拒绝该属性，调用被忽略；
+- Windows 实机核对（Windows 10 1909，build 18363.535）：
+  - 部署后从交互式 RDP 会话启动应用，`GetWindowRect` 与 `GetClientRect`
+    均为 850x500、原点相同，说明窗口本身没有非客户区边框；
+  - `DwmGetWindowAttribute(DWMWA_BORDER_COLOR)` 返回
+    `E_INVALIDARG`（Windows 10 无此属性）；
+  - `PrintWindow` 截图
+    `docs/fixtures/phase1/tools-menu-260-850x500.png`：工具页左栏 260px、
+    菜单字号/图标已放大，客户端 x=0 为栏背景 `#e6e6e6`，无应用侧白边；
+  - 用户原截图最左 2px 是窗口外的桌面/截图选区（客户端从第 2px 开始），
+    不是 XAML 边距，应用内部无法删除窗口外的像素；如果仍看到该线，
+    可关闭 Windows“在标题栏和窗口边框上显示强调色”或按窗口边界重新截图；
+- test evidence: full gate PASS — 410 tests (Core 49, SFTP 42, Connections 77,
+  Terminal 11, ZMODEM 32, TestGate 49, App 150), Linux Xvfb E2E 13/13,
+  results `20261024T070217Z`；新增
+  `SidebarRailTests.UI16_ToolsMenuUsesReadableSizesAndWiderPanel`
+  （左栏 260、`ToolMenuItemButton` 字号≥13、图标字号≥14、栏圆角为 0），
+  并更新 `SidebarDockTests`/`MainWindowHeadlessTests`/`SidebarRailTests`
+  的宽度断言与 E2E 配置/注释（220→260、223→263）；
+- deployment 2026-10-24 (in-place overwrite, no `.bak-*`):
+  - exe `COMTool.App-tools.exe` published win-x64 single-file R2R;
+  - size: 209,265,484 bytes;
+  - SHA256: `47DE827F236AA6BB882693CC904DEA90470EC357221CDE23D3120F5C61D7215D`;
+  - WORK and DESKTOP copies both matched that hash via `Get-FileHash`;
+  - `BAK_COUNT=0`;
+  - smoke test: process started, `Responding=True`, then stopped.
+
 The previously packaged release zip is 74,795,557 bytes with SHA256:
 
 ```text

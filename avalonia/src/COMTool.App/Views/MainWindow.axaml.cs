@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -29,7 +30,7 @@ public partial class MainWindow : Window
     private const double DefaultBrowserSidebarWidth = 460;
 
     private bool _sidebarVisible = true;
-    private double _sidebarWidth = 220;
+    private double _sidebarWidth = 260;
 
     // The SSH browser needs the room of MobaXterm's panel. The width of
     // the sessions panel is kept apart, so closing the browser brings the
@@ -97,6 +98,7 @@ public partial class MainWindow : Window
         Sidebar.SshBrowserRequested += OnSshBrowserRequested;
         Sidebar.ToolRequested += OnToolRequested;
         Opened += OnOpened;
+        Activated += OnWindowActivated;
     }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
@@ -105,11 +107,52 @@ public partial class MainWindow : Window
         if (change.Property == WindowStateProperty)
         {
             UpdateMaximizeIcon();
+            RemoveWindowsWindowBorder();
         }
     }
 
+    private void OnWindowActivated(object? sender, EventArgs e) =>
+        RemoveWindowsWindowBorder();
+
+    /// <summary>
+    /// Windows 11 draws a thin accent-coloured border around a resizable
+    /// borderless window. The app draws its own chrome, so the DWM border is
+    /// removed with DWMWA_BORDER_COLOR. Older Windows versions reject the
+    /// attribute and simply keep their default frame.
+    /// </summary>
+    private void RemoveWindowsWindowBorder()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var handle = TryGetPlatformHandle();
+        if (handle is null || handle.Handle == IntPtr.Zero)
+        {
+            return;
+        }
+
+        const int DwmwaBorderColor = 34;
+        var color = 0xFFFFFFFEu; // DWMWA_COLOR_NONE
+        _ = DwmSetWindowAttribute(
+            handle.Handle,
+            DwmwaBorderColor,
+            ref color,
+            sizeof(uint));
+    }
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(
+        IntPtr hwnd,
+        int attribute,
+        ref uint value,
+        int size);
+
     private void OnOpened(object? sender, EventArgs e)
     {
+        RemoveWindowsWindowBorder();
+
         if (_loaded || DataContext is not MainViewModel viewModel)
         {
             return;
@@ -2950,7 +2993,7 @@ public partial class MainWindow : Window
     }
 
     private static double ClampSidebarWidth(double width) =>
-        double.IsFinite(width) ? Math.Clamp(width, 160, 320) : 220;
+        double.IsFinite(width) ? Math.Clamp(width, 260, 360) : 260;
 
     private void PersistSidebarConfig()
     {

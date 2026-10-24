@@ -120,7 +120,7 @@ public sealed class SessionSidebarConfig
     public bool Visible { get; set; } = true;
 
     [JsonPropertyName("width")]
-    public int Width { get; set; } = 200;
+    public int Width { get; set; } = 260;
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? Extra { get; set; }

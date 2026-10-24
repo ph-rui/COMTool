@@ -76,6 +76,7 @@ geometry. These are functional evidence images, not final pixel baselines.
 | `telnet-restarted-after-r-1000x650.png` | Pressing `R` on the stopped Telnet session reconnects inside the same tab; the fixture server logged a second connection. |
 | `telnet-stopped-screen-1000x650.png` | A dropped Telnet session shows the MobaXterm-style stopped screen (`Session stopped`, `Press <return> to exit tab`, `Press R to restart session`, `Press S to save terminal output to file`) instead of only a status line. |
 | `telnet-windows-dpapi-2026-10-21.md` | Sanitized Windows Telnet fixture log, binary SHA256, DPAPI token length, and plaintext-absence check for the remembered-password restart. |
+| `tools-menu-260-850x500.png` | Windows 10 `PrintWindow` capture of the deployed Tools page: the shared left panel is 260px wide, the tool labels render at 13px and the icons at 14px, and the rail background starts at client x=0 (`#e6e6e6`) with no app-level left strip. `GetWindowRect` and `GetClientRect` were both 850x500 at the same origin on this build; the 2px cyan line in the user's crop is outside the window client area. |
 | `performance-2026-10-20.md` | Startup, terminal parsing, SSH 10 MB throughput, R2R packaging and Native AOT experiment measurements. |
 
 ## Automated test-gate coverage (2026-10-23)

@@ -153,7 +153,7 @@ public sealed class SidebarRailTests
             {
                 env.SeedConfig(new ComtoolConfig
                 {
-                    SessionSidebar = new SessionSidebarConfig { Visible = true, Width = 220 },
+                    SessionSidebar = new SessionSidebarConfig { Visible = true, Width = 260 },
                 });
                 window = CreateWindow(env);
                 var sidebar = Sidebar(window);
@@ -170,7 +170,7 @@ public sealed class SidebarRailTests
 
                 Click(window, toggle);
                 Assert.True(sidebar.IsVisible);
-                Assert.Equal(220, body.ColumnDefinitions[0].ActualWidth, precision: 1);
+                Assert.Equal(260, body.ColumnDefinitions[0].ActualWidth, precision: 1);
                 Assert.NotNull(sidebar.FindControl<Border>("SidebarRail"));
             });
         }
@@ -192,7 +192,7 @@ public sealed class SidebarRailTests
             {
                 env.SeedConfig(new ComtoolConfig
                 {
-                    SessionSidebar = new SessionSidebarConfig { Visible = true, Width = 220 },
+                    SessionSidebar = new SessionSidebarConfig { Visible = true, Width = 260 },
                 });
                 window = CreateWindow(env);
                 var sidebar = Sidebar(window);
@@ -202,14 +202,14 @@ public sealed class SidebarRailTests
                 var tools = sidebar.FindControl<Button>("RailToolsButton")!;
                 var sessions = sidebar.FindControl<Button>("RailSessionsButton")!;
 
-                Assert.Equal(220, body.ColumnDefinitions[0].ActualWidth, precision: 1);
+                Assert.Equal(260, body.ColumnDefinitions[0].ActualWidth, precision: 1);
                 Assert.True(splitter.IsVisible);
 
                 // Another icon switches to its panel without collapsing.
                 Click(window, tools);
                 Assert.Equal(SidebarTab.Tools, Vm(window).SidebarTab);
                 Assert.True(sidebar.FindControl<Grid>("ToolsPanel")!.IsVisible);
-                Assert.Equal(220, body.ColumnDefinitions[0].ActualWidth, precision: 1);
+                Assert.Equal(260, body.ColumnDefinitions[0].ActualWidth, precision: 1);
 
                 // The same icon again retracts the panel; the rail and the
                 // active tab stay, so a third click reopens the same panel.
@@ -223,7 +223,7 @@ public sealed class SidebarRailTests
 
                 Click(window, tools);
                 Assert.Equal(SidebarTab.Tools, Vm(window).SidebarTab);
-                Assert.Equal(220, body.ColumnDefinitions[0].ActualWidth, precision: 1);
+                Assert.Equal(260, body.ColumnDefinitions[0].ActualWidth, precision: 1);
                 Assert.Equal(32, content.Margin.Left);
                 Assert.True(splitter.IsVisible);
 
@@ -234,7 +234,7 @@ public sealed class SidebarRailTests
                 Click(window, sessions);
                 Assert.Equal(24, body.ColumnDefinitions[0].ActualWidth, precision: 1);
                 Click(window, sessions);
-                Assert.Equal(220, body.ColumnDefinitions[0].ActualWidth, precision: 1);
+                Assert.Equal(260, body.ColumnDefinitions[0].ActualWidth, precision: 1);
             });
         }
         finally
@@ -349,6 +349,49 @@ public sealed class SidebarRailTests
                 scanner.Close();
                 window.FindToolWindowForTests("port-scanner")!.Close();
                 RunJobs(window);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public void UI16_ToolsMenuUsesReadableSizesAndWiderPanel()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                window = CreateWindow(env);
+                var vm = Vm(window);
+                var sidebar = Sidebar(window);
+
+                vm.SidebarTab = SidebarTab.Tools;
+                RunJobs(window);
+
+                // The left panel is wide enough for the MobaXterm tool rows.
+                var body = window.FindControl<Grid>("BodyGrid")!;
+                Assert.Equal(260, body.ColumnDefinitions[0].ActualWidth, precision: 1);
+
+                // The rail is flush with the window edge: no rounded corner
+                // that would expose a light line at the left.
+                var rail = sidebar.FindControl<Border>("SidebarRail")!;
+                Assert.Equal(new CornerRadius(0), rail.CornerRadius);
+
+                var button = sidebar.GetVisualDescendants()
+                    .OfType<Button>()
+                    .First(candidate => candidate.Classes.Contains("ToolMenuItemButton"));
+                Assert.True(button.FontSize >= 13, $"tool font is {button.FontSize}");
+                var glyph = button.GetVisualDescendants()
+                    .OfType<TextBlock>()
+                    .First(text => text.Text == "\uf013");
+                Assert.True(glyph.FontSize >= 14, $"tool icon is {glyph.FontSize}");
             });
         }
         finally
