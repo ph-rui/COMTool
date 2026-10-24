@@ -65,6 +65,21 @@
             <TextBlock Text="Start scan" VerticalAlignment="Center" />
           </StackPanel>
         </Button>
+        <Button Name="NetScanStopButton"
+                Classes="SidebarActionButton"
+                Padding="14,5"
+                IsEnabled="{Binding IsScanning}"
+                Click="OnStopScanClick"
+                ToolTip.Tip="停止扫描">
+          <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
+            <TextBlock Text="&#xf28d;"
+                       FontFamily="{DynamicResource IconFontAwesome}"
+                       FontSize="11"
+                       Foreground="White"
+                       VerticalAlignment="Center" />
+            <TextBlock Text="停止" VerticalAlignment="Center" />
+          </StackPanel>
+        </Button>
       </StackPanel>
     </Border>
 

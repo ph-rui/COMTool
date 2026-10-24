@@ -166,6 +166,7 @@ public sealed class NetworkScanner : INetworkScanner
         }).ToArray();
 
         await Task.WhenAll(tasks);
+        cancellationToken.ThrowIfCancellationRequested();
         return openPorts.OrderBy(p => p).ToList();
     }
 
@@ -181,6 +182,7 @@ public sealed class NetworkScanner : INetworkScanner
         var connectTasks = ports.Select(port => ConnectAsync(ip, port, ct)).ToArray();
 
         await Task.WhenAll([pingTask, dnsTask, ..connectTasks]);
+        ct.ThrowIfCancellationRequested();
 
         var openPorts = new List<int>();
         for (var i = 0; i < connectTasks.Length; i++)
@@ -207,8 +209,12 @@ public sealed class NetworkScanner : INetworkScanner
         try
         {
             using var ping = new Ping();
-            var reply = await ping.SendPingAsync(ip, PingTimeoutMs);
+            var reply = await ping.SendPingAsync(ip, PingTimeoutMs).WaitAsync(ct);
             return reply.Status == IPStatus.Success ? (int)reply.RoundtripTime : null;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
         }
         catch
         {
@@ -228,6 +234,10 @@ public sealed class NetworkScanner : INetworkScanner
             await client.ConnectAsync(ip, port, cts.Token);
             return true;
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
         catch
         {
             return false;
@@ -242,6 +252,10 @@ public sealed class NetworkScanner : INetworkScanner
         {
             var entry = await Dns.GetHostEntryAsync(ip.ToString()).WaitAsync(cts.Token);
             return entry.HostName.Length > 0 ? entry.HostName : null;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
         }
         catch
         {

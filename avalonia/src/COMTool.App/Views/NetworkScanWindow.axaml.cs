@@ -37,7 +37,11 @@ public partial class NetworkScanWindow : Window
 
     private void OnStartScanClick(object? sender, RoutedEventArgs e) => _ = StartScanAsync();
 
+    private void OnStopScanClick(object? sender, RoutedEventArgs e) => StopScan();
+
     private void OnCloseClick(object? sender, RoutedEventArgs e) => Close();
+
+    internal void StopScan() => _cts?.Cancel();
 
     /// <summary>
     /// 网络扫描仪 Start scan: expands the octet range (MobaXterm /24 form)
@@ -70,6 +74,12 @@ public partial class NetworkScanWindow : Window
 
         var progress = new UiProgress<NetworkScanProgress>(p =>
         {
+            // 停止后忽略已排队的进度，避免“已停止”被迟到的“完成”覆盖
+            if (!ReferenceEquals(_cts, cts) || cts.IsCancellationRequested)
+            {
+                return;
+            }
+
             if (p.Host is { } host)
             {
                 vm.Rows.Add(ToScanGridRow(host));

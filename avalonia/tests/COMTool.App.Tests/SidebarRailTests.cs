@@ -705,6 +705,47 @@ public sealed class SidebarRailTests
     }
 
     [AvaloniaFact]
+    public void NET05_StopButtonCancelsScan()
+    {
+        using var env = new TestEnvironment();
+        NetworkScanWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                window = new NetworkScanWindow
+                {
+                    ScannerForTests = new FakeScanner(new List<NetworkScanHost>
+                    {
+                        new(new IPAddress(new byte[] { 127, 0, 0, 1 }), "loopback", new[] { 80 }, 1),
+                    }) { DelayMs = 50 },
+                };
+                window.Show();
+                Dispatcher.UIThread.RunJobs();
+                var vm = window.ViewModel;
+
+                Click(window, window.FindControl<Button>("ScanStartButton")!);
+                WaitUntil(() => vm.Rows.Count == 1, "first scan row");
+                var stop = window.FindControl<Button>("NetScanStopButton")!;
+                Assert.True(stop.IsEnabled);
+
+                Click(window, stop);
+                WaitUntil(() => !vm.IsScanning, "scan to stop");
+
+                // 停止后保留已发现结果，不回到“完成”
+                Assert.Single(vm.Rows);
+                Assert.StartsWith("已停止", vm.Status);
+                Assert.False(stop.IsEnabled);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
     public void PORT01_PortScanKnownModeFormatsListeningLines()
     {
         using var env = new TestEnvironment();
