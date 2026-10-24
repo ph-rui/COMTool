@@ -69,6 +69,14 @@ public sealed class ComtoolConfig
     [JsonPropertyName("macros")]
     public List<MacroConfig> Macros { get; set; } = new();
 
+    /// <summary>
+    /// Remembered 网络扫描仪 "IP 地址范围" (MobaXterm keeps the last range
+    /// between dialog invocations). Missing from older config files, in which
+    /// case the 192.168.1.1→254 default applies.
+    /// </summary>
+    [JsonPropertyName("networkScan")]
+    public NetworkScanConfig NetworkScan { get; set; } = new();
+
     [JsonPropertyName("window")]
     public WindowConfig Window { get; set; } = new();
 
@@ -289,6 +297,32 @@ public sealed class TelnetSession
 
     [JsonPropertyName("updated")]
     public long Updated { get; set; }
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? Extra { get; set; }
+}
+
+/// <summary>
+/// 网络扫描仪 remembered "IP 地址范围" form: three fixed octets plus the
+/// last-octet range (MobaXterm scans a single /24). Kept as strings so the
+/// dialog restores exactly what the user last used.
+/// </summary>
+public sealed class NetworkScanConfig
+{
+    [JsonPropertyName("octet1")]
+    public string Octet1 { get; set; } = "192";
+
+    [JsonPropertyName("octet2")]
+    public string Octet2 { get; set; } = "168";
+
+    [JsonPropertyName("octet3")]
+    public string Octet3 { get; set; } = "1";
+
+    [JsonPropertyName("from")]
+    public string From { get; set; } = "1";
+
+    [JsonPropertyName("to")]
+    public string To { get; set; } = "254";
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? Extra { get; set; }

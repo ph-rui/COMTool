@@ -117,6 +117,12 @@ public sealed class AppConfigService
         Config.Save(ConfigPath);
     }
 
+    /// <summary>
+    /// Persists only the app config (session stores untouched). Used by
+    /// lightweight preferences such as the remembered network scan range.
+    /// </summary>
+    public void SaveConfig() => Config.Save(ConfigPath);
+
     public void RememberSshPassword(
         SshSession session,
         string password,

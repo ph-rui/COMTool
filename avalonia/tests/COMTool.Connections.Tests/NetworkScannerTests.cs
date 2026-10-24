@@ -248,4 +248,127 @@ public sealed class NetworkScannerTests
 
         Assert.IsAssignableFrom<OperationCanceledException>(ex);
     }
+
+    /// <summary>
+    /// Real NBSTAT node-status reply captured from a Windows host on the LAN
+    /// (192.0.2.163): WINHOST1 station + file server, WORKGROUP workgroup.
+    /// </summary>
+    private const string NbstatCaptureHex =
+        "f92f8400000000010000000020434b4141414141414141414141414141414141414141" +
+        "4141414141414141414100002100010000000000650357494e484f5354312020202020" +
+        "202000040057494e484f53543120202020202020200400574f524b47524f5550202020" +
+        "202020008400fefcfe1ce0280000000000000000000000000000000000000000000000" +
+        "0000000000000000000000000000000000";
+
+    [Fact]
+    public void NET05_NetbiosNameParsesCapturedReply()
+    {
+        var response = Convert.FromHexString(NbstatCaptureHex);
+
+        // 取工作站名（后缀 0x00），不取工作组名，并转小写（MobaXterm 显示形式）
+        Assert.Equal("winhost1", NetbiosNameResolver.ParseNodeStatusResponse(response, 0xf92f));
+
+        // 事务 ID 不匹配的应答必须忽略，避免串包
+        Assert.Null(NetbiosNameResolver.ParseNodeStatusResponse(response, 0x1234));
+    }
+
+    [Fact]
+    public async Task NET05_NetbiosQueryResolvesStationNameOverUdp()
+    {
+        // 名称列兜底：反向 DNS 无 PTR 时，UDP 137 NBSTAT 返回工作站名。
+        // 组名（工作组/域，flags 0x8000）必须被忽略。
+        var name = await QueryFakeNbstatAsync(
+            ("WINHOST1", 0x00, 0x0400),
+            ("WORKGROUP", 0x00, 0x8400));
+
+        Assert.Equal("winhost1", name);
+    }
+
+    [Fact]
+    public async Task NET05_NetbiosQueryIgnoresGroupNamesOnly()
+    {
+        var name = await QueryFakeNbstatAsync(("WORKGROUP", 0x00, 0x8400));
+
+        Assert.Null(name);
+    }
+
+    [Fact]
+    public async Task NET05_NetbiosQueryReturnsNullWithoutAnswer()
+    {
+        var port = FreeUdpPort();
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        var name = await NetbiosNameResolver.QueryAsync(
+            IPAddress.Loopback, 150, default, port);
+
+        Assert.Null(name);
+        // 兜底查询必须有上限，不能拖慢 /24 扫描
+        Assert.True(stopwatch.ElapsedMilliseconds < 2000,
+            $"NetBIOS fallback took {stopwatch.ElapsedMilliseconds} ms");
+    }
+
+    private static int FreeUdpPort()
+    {
+        using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+        socket.Bind(new IPEndPoint(IPAddress.Loopback, 0));
+        return ((IPEndPoint)socket.LocalEndPoint!).Port;
+    }
+
+    /// <summary>
+    /// Runs <see cref="NetbiosNameResolver.QueryAsync"/> against a local UDP
+    /// responder that answers the NBSTAT request with <paramref name="names"/>.
+    /// </summary>
+    private static async Task<string?> QueryFakeNbstatAsync(
+        params (string Name, byte Suffix, ushort Flags)[] names)
+    {
+        using var responder = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+        responder.Bind(new IPEndPoint(IPAddress.Loopback, 0));
+        var port = ((IPEndPoint)responder.LocalEndPoint!).Port;
+
+        var reply = Task.Run(async () =>
+        {
+            var buffer = new byte[512];
+            EndPoint from = new IPEndPoint(IPAddress.Any, 0);
+            var received = await responder.ReceiveFromAsync(buffer, SocketFlags.None, from);
+            var transactionId = (ushort)((buffer[0] << 8) | buffer[1]);
+            var response = BuildNbstatResponse(transactionId, names);
+            await responder.SendToAsync(response, SocketFlags.None, received.RemoteEndPoint);
+        });
+
+        var name = await NetbiosNameResolver.QueryAsync(
+            IPAddress.Loopback, 2000, default, port);
+        await reply;
+        return name;
+    }
+
+    private static byte[] BuildNbstatResponse(
+        ushort transactionId,
+        IReadOnlyList<(string Name, byte Suffix, ushort Flags)> names)
+    {
+        var rdata = new List<byte> { (byte)names.Count };
+        foreach (var (name, suffix, flags) in names)
+        {
+            var raw = new byte[15];
+            Array.Fill(raw, (byte)' ');
+            var text = System.Text.Encoding.ASCII.GetBytes(name);
+            Array.Copy(text, raw, Math.Min(raw.Length, text.Length));
+            rdata.AddRange(raw);
+            rdata.Add(suffix);
+            rdata.Add((byte)(flags >> 8));
+            rdata.Add((byte)flags);
+        }
+
+        var packet = new List<byte>
+        {
+            (byte)(transactionId >> 8), (byte)transactionId,
+            0x84, 0x00,             // response, rcode 0
+            0, 0, 0, 1, 0, 0, 0, 0, // qd=0, an=1
+            0x00,                   // answer name: root
+            0x00, 0x21, 0x00, 0x01, // NBSTAT / IN
+            0, 0, 0, 0x65,          // ttl
+            (byte)(rdata.Count >> 8), (byte)rdata.Count,
+        };
+        packet.AddRange(rdata);
+        return packet.ToArray();
+    }
 }

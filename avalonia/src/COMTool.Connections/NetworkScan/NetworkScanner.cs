@@ -57,6 +57,12 @@ public sealed class NetworkScanner : INetworkScanner
 
     public int DnsTimeoutMs { get; init; } = 1000;
 
+    /// <summary>
+    /// NetBIOS name fallback wait (only for hosts that answered ping/TCP).
+    /// 0 disables the fallback.
+    /// </summary>
+    public int NetbiosTimeoutMs { get; init; } = NetbiosNameResolver.DefaultTimeoutMs;
+
     public async Task ScanAsync(
         IReadOnlyList<IPAddress> targets,
         IReadOnlyList<int> ports,
@@ -201,6 +207,13 @@ public sealed class NetworkScanner : INetworkScanner
             return null;
         }
 
+        if (string.IsNullOrEmpty(name))
+        {
+            // 小型局域网通常没有 PTR 记录；用 NetBIOS 工作站名兜底
+            // (MobaXterm 也会显示这类短主机名)。
+            name = await NetbiosNameResolver.QueryAsync(ip, NetbiosTimeoutMs, ct);
+        }
+
         return new NetworkScanHost(ip, name, openPorts, rtt);
     }
 
@@ -251,7 +264,11 @@ public sealed class NetworkScanner : INetworkScanner
         try
         {
             var entry = await Dns.GetHostEntryAsync(ip.ToString()).WaitAsync(cts.Token);
-            return entry.HostName.Length > 0 ? entry.HostName : null;
+            // 有些平台在无 PTR 时把 IP 本身当作主机名返回；那不算名字。
+            return entry.HostName.Length > 0
+                   && !string.Equals(entry.HostName, ip.ToString(), StringComparison.OrdinalIgnoreCase)
+                ? entry.HostName
+                : null;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {

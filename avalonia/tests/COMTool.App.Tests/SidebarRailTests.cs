@@ -10,6 +10,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using COMTool.App.ViewModels;
 using COMTool.App.ViewModels.Tools;
+using COMTool.App.Services;
 using COMTool.App.Views;
 using COMTool.Connections.NetworkScan;
 using COMTool.Connections.Servers;
@@ -699,6 +700,162 @@ public sealed class SidebarRailTests
                 Assert.DoesNotContain(
                     window.GetVisualDescendants().OfType<TextBlock>(),
                     text => text.Text == "其他端口");
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public void NET05_ScanResultColumnsMatchMobaXtermWidths()
+    {
+        using var env = new TestEnvironment();
+        NetworkScanWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                window = new NetworkScanWindow
+                {
+                    ScannerForTests = new FakeScanner(new List<NetworkScanHost>
+                    {
+                        new(new IPAddress(new byte[] { 127, 0, 0, 1 }), "loopback", new[] { 22 }, 1),
+                    }) { DelayMs = 1 },
+                };
+                window.Show();
+                Dispatcher.UIThread.RunJobs();
+
+                Click(window, window.FindControl<Button>("ScanStartButton")!);
+                Assert.True(WaitUntilTry(() => window.ViewModel.Rows.Count == 1, 10));
+                RunJobs(window);
+
+                // 名称列 90 → 160：SSH 列中心随之到 ≈318，与 MobaXterm 实测
+                // (≈317.5) 对齐，整块服务列不再偏左。
+                var expected = new[] { 120d, 160d, 60d, 60d, 60d, 60d, 60d, 60d, 60d };
+                var header = window.FindControl<Grid>("ScanHeaderGrid")!;
+                Assert.Equal(9, header.ColumnDefinitions.Count);
+                Assert.Equal(
+                    expected,
+                    header.ColumnDefinitions.Select(c => c.Width.Value).ToArray());
+
+                // 表头与数据行必须共用同一组列宽
+                var rowGrids = window.GetVisualDescendants()
+                    .OfType<Grid>()
+                    .Where(g => g.ColumnDefinitions.Count == 9 && !ReferenceEquals(g, header))
+                    .ToList();
+                Assert.NotEmpty(rowGrids);
+                Assert.All(rowGrids, grid => Assert.Equal(
+                    expected,
+                    grid.ColumnDefinitions.Select(c => c.Width.Value).ToArray()));
+
+                // “IP 地址/名称”表头居中（MobaXterm 实测）
+                var headerTexts = header.Children.OfType<TextBlock>().ToList();
+                Assert.Equal(2, headerTexts.Count);
+                Assert.All(headerTexts,
+                    text => Assert.Equal(TextAlignment.Center, text.TextAlignment));
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public void NET05_ScanRangeIsRememberedOnCloseAndRestored()
+    {
+        using var env = new TestEnvironment();
+        NetworkScanWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                var config = AppConfigService.Load();
+                window = new NetworkScanWindow(config);
+                window.Show();
+                Dispatcher.UIThread.RunJobs();
+
+                var vm = window.ViewModel;
+                vm.Octet1 = "10";
+                vm.Octet2 = "13";
+                vm.Octet3 = "1";
+                vm.OctetFrom = "20";
+                vm.OctetTo = "40";
+
+                // 关窗时把合法范围写入配置（即使没有扫描）
+                window.Close();
+                Dispatcher.UIThread.RunJobs();
+                window = null;
+
+                var saved = AppConfigService.Load().Config.NetworkScan;
+                Assert.Equal("10", saved.Octet1);
+                Assert.Equal("13", saved.Octet2);
+                Assert.Equal("1", saved.Octet3);
+                Assert.Equal("20", saved.From);
+                Assert.Equal("40", saved.To);
+
+                // 重新打开窗口恢复上次范围，而不是默认 192.168.1.1→254
+                window = new NetworkScanWindow(AppConfigService.Load());
+                window.Show();
+                Dispatcher.UIThread.RunJobs();
+                Assert.Equal("10", window.ViewModel.Octet1);
+                Assert.Equal("13", window.ViewModel.Octet2);
+                Assert.Equal("1", window.ViewModel.Octet3);
+                Assert.Equal("20", window.ViewModel.OctetFrom);
+                Assert.Equal("40", window.ViewModel.OctetTo);
+
+                // 非法范围不覆盖已记住的值
+                window.ViewModel.Octet1 = "300";
+                window.Close();
+                Dispatcher.UIThread.RunJobs();
+                window = null;
+                Assert.Equal("10", AppConfigService.Load().Config.NetworkScan.Octet1);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public void NET05_ScanRangeIsRememberedOnStartScan()
+    {
+        using var env = new TestEnvironment();
+        NetworkScanWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                window = new NetworkScanWindow(AppConfigService.Load())
+                {
+                    ScannerForTests = new FakeScanner(new List<NetworkScanHost>()) { DelayMs = 1 },
+                };
+                window.Show();
+                Dispatcher.UIThread.RunJobs();
+
+                var vm = window.ViewModel;
+                vm.Octet1 = "172";
+                vm.Octet2 = "16";
+                vm.Octet3 = "66";
+                vm.OctetFrom = "1";
+                vm.OctetTo = "10";
+
+                Click(window, window.FindControl<Button>("ScanStartButton")!);
+                Assert.True(WaitUntilTry(() => vm.Status.Contains("完成"), 10));
+
+                // 点 Start scan 就开始记忆，无需等到关窗
+                var saved = AppConfigService.Load().Config.NetworkScan;
+                Assert.Equal("172", saved.Octet1);
+                Assert.Equal("16", saved.Octet2);
+                Assert.Equal("66", saved.Octet3);
+                Assert.Equal("1", saved.From);
+                Assert.Equal("10", saved.To);
             });
         }
         finally

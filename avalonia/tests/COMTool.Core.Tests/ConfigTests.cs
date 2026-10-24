@@ -157,6 +157,47 @@ public sealed class ConfigTests : IDisposable
     }
 
     [Fact]
+    public void SaveAndLoad_RoundTripsNetworkScanRange()
+    {
+        var path = Path.Combine(_directory, "config.json");
+        var config = new ComtoolConfig
+        {
+            NetworkScan = new NetworkScanConfig
+            {
+                Octet1 = "10",
+                Octet2 = "13",
+                Octet3 = "1",
+                From = "20",
+                To = "40",
+            },
+        };
+
+        config.Save(path);
+        var loaded = ComtoolConfig.Load(path);
+
+        Assert.Equal("10", loaded.NetworkScan.Octet1);
+        Assert.Equal("13", loaded.NetworkScan.Octet2);
+        Assert.Equal("1", loaded.NetworkScan.Octet3);
+        Assert.Equal("20", loaded.NetworkScan.From);
+        Assert.Equal("40", loaded.NetworkScan.To);
+    }
+
+    [Fact]
+    public void Load_ConfigWithoutNetworkScan_UsesDefaults()
+    {
+        var path = Path.Combine(_directory, "config.json");
+        File.WriteAllText(path, """{"version":3,"skin":"dark"}""");
+
+        var loaded = ComtoolConfig.Load(path);
+
+        Assert.Equal("192", loaded.NetworkScan.Octet1);
+        Assert.Equal("168", loaded.NetworkScan.Octet2);
+        Assert.Equal("1", loaded.NetworkScan.Octet3);
+        Assert.Equal("1", loaded.NetworkScan.From);
+        Assert.Equal("254", loaded.NetworkScan.To);
+    }
+
+    [Fact]
     public void SaveAndLoad_RoundTripsMacros()
     {
         var path = Path.Combine(_directory, "config.json");

@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using COMTool.App.Services;
 using COMTool.App.Tools;
 using COMTool.App.ViewModels.Tools;
 using COMTool.Connections.NetworkScan;
@@ -9,17 +10,26 @@ namespace COMTool.App.Views;
 
 /// <summary>
 /// Standalone 网络扫描窗口 (MobaXterm "Network scanner" dialog). Owns its scan
-/// lifecycle: closing the window cancels a running scan.
+/// lifecycle: closing the window cancels a running scan and remembers the
+/// entered IP range.
 /// </summary>
 public partial class NetworkScanWindow : Window
 {
+    private readonly AppConfigService? _config;
     private CancellationTokenSource? _cts;
     private INetworkScanner? _scanner;
 
     public NetworkScanWindow()
+        : this(null)
+    {
+    }
+
+    public NetworkScanWindow(AppConfigService? config)
     {
         InitializeComponent();
+        _config = config;
         DataContext = new NetworkScanWindowViewModel();
+        RestoreScanRange();
     }
 
     internal NetworkScanWindowViewModel ViewModel =>
@@ -33,7 +43,70 @@ public partial class NetworkScanWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         _cts?.Cancel();
+        RememberScanRange();
         base.OnClosed(e);
+    }
+
+    /// <summary>
+    /// Restores the last used "IP 地址范围" (MobaXterm remembers it between
+    /// invocations). Invalid/absent values keep the built-in defaults.
+    /// </summary>
+    private void RestoreScanRange()
+    {
+        var saved = _config?.Config.NetworkScan;
+        if (saved is null
+            || !NetworkScanTargets.TryParseSubnet(
+                saved.Octet1, saved.Octet2, saved.Octet3, saved.From, saved.To,
+                out _, out _))
+        {
+            return;
+        }
+
+        var vm = ViewModel;
+        vm.Octet1 = saved.Octet1;
+        vm.Octet2 = saved.Octet2;
+        vm.Octet3 = saved.Octet3;
+        vm.OctetFrom = saved.From;
+        vm.OctetTo = saved.To;
+    }
+
+    /// <summary>
+    /// Persists the entered "IP 地址范围" when it is valid. Called on Start
+    /// scan and on close, so a range the user typed but never scanned is also
+    /// remembered.
+    /// </summary>
+    private void RememberScanRange()
+    {
+        var config = _config;
+        if (config is null)
+        {
+            return;
+        }
+
+        var vm = ViewModel;
+        if (!NetworkScanTargets.TryParseSubnet(
+                vm.Octet1, vm.Octet2, vm.Octet3, vm.OctetFrom, vm.OctetTo,
+                out _, out _))
+        {
+            return;
+        }
+
+        var saved = config.Config.NetworkScan;
+        if (saved.Octet1 == vm.Octet1
+            && saved.Octet2 == vm.Octet2
+            && saved.Octet3 == vm.Octet3
+            && saved.From == vm.OctetFrom
+            && saved.To == vm.OctetTo)
+        {
+            return;
+        }
+
+        saved.Octet1 = vm.Octet1;
+        saved.Octet2 = vm.Octet2;
+        saved.Octet3 = vm.Octet3;
+        saved.From = vm.OctetFrom;
+        saved.To = vm.OctetTo;
+        config.SaveConfig();
     }
 
     /// <summary>
@@ -111,6 +184,7 @@ public partial class NetworkScanWindow : Window
         }
 
         var ports = NetworkServices.ServicePorts;
+        RememberScanRange();
 
         vm.Error = null;
         vm.Rows.Clear();

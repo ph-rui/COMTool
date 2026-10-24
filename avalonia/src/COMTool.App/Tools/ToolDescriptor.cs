@@ -43,7 +43,7 @@ public static class ToolCatalog
             "\uf7c0",
             "#5e35b1",
             true,
-            _ => new NetworkScanWindow()),
+            owner => new NetworkScanWindow(owner.ConfigService)),
         new ToolDescriptor(
             "port-scanner",
             "端口扫描仪",

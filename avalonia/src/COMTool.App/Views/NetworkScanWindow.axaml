@@ -165,10 +165,12 @@
                 BorderThickness="0,0,0,1"
                 Padding="8,5">
           <Grid x:Name="ScanHeaderGrid"
-                ColumnDefinitions="120,90,60,60,60,60,60,60,60">
+                ColumnDefinitions="120,160,60,60,60,60,60,60,60">
             <TextBlock Grid.Column="0" Text="IP 地址" FontSize="11"
+                       TextAlignment="Center"
                        Foreground="{DynamicResource SidebarSectionBrush}" />
             <TextBlock Grid.Column="1" Text="名称" FontSize="11"
+                       TextAlignment="Center"
                        Foreground="{DynamicResource SidebarSectionBrush}" />
             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="3"
                         HorizontalAlignment="Center">
@@ -228,7 +230,7 @@
             <ItemsControl ItemsSource="{Binding Rows}" Margin="8,4">
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="tools:ScanGridRow">
-                  <Grid ColumnDefinitions="120,90,60,60,60,60,60,60,60" Margin="0,2">
+                  <Grid ColumnDefinitions="120,160,60,60,60,60,60,60,60" Margin="0,2">
                     <TextBlock Grid.Column="0" Text="{Binding Address}" FontSize="11" />
                     <TextBlock Grid.Column="1" Text="{Binding HostName}" FontSize="11"
                                TextTrimming="CharacterEllipsis"
