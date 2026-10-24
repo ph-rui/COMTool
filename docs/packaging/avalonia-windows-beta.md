@@ -869,6 +869,45 @@ and the visible state and width are restored on launch:
   - `BAK_COUNT=0`;
   - smoke test: process started, `Responding=True`, then stopped.
 
+### 2026-10-24 — 网络扫描固定七端口、停止扫描、数值对齐与工具窗独立
+
+- 网络扫描只探测 SSH/RDP/VNC/FTP/Telnet/Rlogin/HTTP 七个固定服务端口
+  （22/3389/5900/21/23/513/80），删除“其他端口”探测、数据路径和结果列，
+  表格由 10 列改为 9 列；端口扫描仪的已知端口表未改动；
+- 扫描中新增“停止”按钮，停止后保留已发现结果并显示
+  “已停止（已发现 N 台）”；迟到进度回调不再覆盖停止状态；关窗仍取消扫描；
+- 扫描器五个 IP 数字框与结果表列宽对齐，IP 数字居中；
+  网络服务器的端口/秒数 NumericUpDown 统一 120px 宽，数值居中；
+- 三个工具窗改用无 Owner 的 `Show()`，可被主窗口盖住；重复点选只激活
+  已有窗口（最小化时先还原），主窗口关闭时一并关闭；
+- test evidence: full gate PASS — 414 tests (Core 49, SFTP 42, Connections 77,
+  Terminal 11, ZMODEM 32, TestGate 49, App 154), Linux Xvfb E2E 13/13,
+  results `20261024T091114Z`；新增/更新测试：
+  `SidebarRailTests.NET05_ScanShowsServiceGridResults`、
+  `SidebarRailTests.NET05_StopButtonCancelsScan`、
+  `SidebarRailTests.NET05_ScanNumericInputsAreCenteredAndEqualWidth`、
+  `SidebarRailTests.SRV01_NumericInputsAreCenteredAndShareWidth`、
+  `SidebarRailTests.UI16_MainWindowClosesDetachedTools`、
+  `NetworkScannerTests.NET05_ServiceColumnsMatchMobaXterm`；
+- Windows 实机核对（Windows 10 1909，build 18363.535，交互式 RDP）：
+  - 扫描中截图显示 9 列表头、“停止”按钮可用、进度 32/254：
+    `docs/fixtures/phase1/network-scan-stop-2026-10-24.png`；
+  - 停止后截图显示同一 9 列表格、“已停止（已发现 0 台）”、Start scan 恢复：
+    `docs/fixtures/phase1/network-scan-9-columns-2026-10-24.png`；
+  - 网络服务器 HTTP 配置截图显示监听端口 80 与运行秒数 3600 的输入框
+    等宽且居中：`docs/fixtures/phase1/network-servers-aligned-2026-10-24.png`；
+  - 主窗口缩小到 760x600 后置于最前，独立扫描器窗口位于其后且只露出
+    右侧区域，证明工具窗不再始终压在主窗口上方：
+    `docs/fixtures/phase1/tools-detached-2026-10-24.png`；
+- deployment 2026-10-24 (in-place overwrite, no `.bak-*`):
+  - build commit: `7188403`;
+  - exe `COMTool.App-tools.exe` published win-x64 single-file R2R;
+  - size: 209,269,580 bytes;
+  - SHA256: `5F65E80A2DF3A4642CD98FE5EDE12E2CDDE030649A99B59E8D9035A6009528B4`;
+  - WORK and DESKTOP copies both matched that hash via `Get-FileHash`;
+  - `BAK_COUNT=0`;
+  - smoke test: process started, `Responding=True`, then stopped.
+
 The previously packaged release zip is 74,795,557 bytes with SHA256:
 
 ```text

@@ -43,7 +43,7 @@
 - Consumes: `NetworkServices.ServiceColumns`, `NetworkServices.ServicePorts`, `NetworkScanHost.OpenPorts`.
 - Produces: `ScanGridRow` with `Address`, `HostName`, `Cells` only; scanner probes exactly `NetworkServices.ServicePorts`.
 
-- [ ] **Step 1: Write the failing assertions**
+- [x] **Step 1: Write the failing assertions**
 
 In `NetworkScannerTests.NET05_ServiceColumnsMatchMobaXterm`, replace the `AllProbePorts` assertion with:
 
@@ -66,7 +66,7 @@ Assert.DoesNotContain(
 
 The test host still has port 443 open, proving it is no longer surfaced.
 
-- [ ] **Step 2: Run the focused tests to verify they fail**
+- [x] **Step 2: Run the focused tests to verify they fail**
 
 Run:
 
@@ -81,7 +81,7 @@ DOTNET_ROOT=/tmp/opencode/dotnet PATH=/tmp/opencode/dotnet:$PATH \
 
 Expected: the app test fails because `ScanHeaderGrid`/nine columns/absent “其他端口” are not implemented; the scanner test still compiles but no longer asserts the old extra set.
 
-- [ ] **Step 3: Remove the extra-port data path**
+- [x] **Step 3: Remove the extra-port data path**
 
 In `NetworkServices.cs`, delete `OtherPorts` and `AllProbePorts`; update the class comment to say the scanner uses the fixed service table only. Keep `KnownPorts` and `KnownPortNumbers` untouched.
 
@@ -91,11 +91,11 @@ In `NetworkScanWindow.axaml.cs`, use `NetworkServices.ServicePorts` instead of `
 
 In `NetworkScanWindow.axaml`, name the header grid `x:Name="ScanHeaderGrid"`, use nine fixed columns (`120,90,60,60,60,60,60,60,60`) for both header and rows, and delete the “其他端口” header/cell. Update the layout comment.
 
-- [ ] **Step 4: Run the focused tests to verify they pass**
+- [x] **Step 4: Run the focused tests to verify they pass**
 
 Run the two Step 2 commands. Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add avalonia/src/COMTool.Connections/NetworkScan/NetworkServices.cs \
@@ -122,7 +122,7 @@ git commit -m "feat: limit network scan to fixed service ports"
 - Consumes: `INetworkScanner.ScanAsync`, `CancellationTokenSource`.
 - Produces: `NetworkScanWindow.StopScan()`; `NetScanStopButton`; progress callbacks ignore stale scans.
 
-- [ ] **Step 1: Write the failing stop test**
+- [x] **Step 1: Write the failing stop test**
 
 Add `SidebarRailTests.NET05_StopButtonCancelsScan`:
 
@@ -150,7 +150,7 @@ Assert.StartsWith("已停止", vm.Status);
 Assert.False(stop.IsEnabled);
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 ```bash
 DOTNET_ROOT=/tmp/opencode/dotnet PATH=/tmp/opencode/dotnet:$PATH \
@@ -160,7 +160,7 @@ DOTNET_ROOT=/tmp/opencode/dotnet PATH=/tmp/opencode/dotnet:$PATH \
 
 Expected: FAIL because `NetScanStopButton` is not found.
 
-- [ ] **Step 3: Implement stop and cancellation propagation**
+- [x] **Step 3: Implement stop and cancellation propagation**
 
 Add a `NetScanStopButton` next to `ScanStartButton`, enabled with `{Binding IsScanning}`, using the same `SidebarActionButton` style and a “停止” label. Add `OnStopScanClick` and `internal void StopScan() => _cts?.Cancel();`.
 
@@ -172,7 +172,7 @@ In `NetworkScanner.cs`:
 - `ResolveAsync`: same cancellation filter around `WaitAsync(cts.Token)`.
 - `ProbeAsync`: call `ct.ThrowIfCancellationRequested()` after `Task.WhenAll`.
 
-- [ ] **Step 4: Run stop, close, and scanner cancellation tests**
+- [x] **Step 4: Run stop, close, and scanner cancellation tests**
 
 ```bash
 DOTNET_ROOT=/tmp/opencode/dotnet PATH=/tmp/opencode/dotnet:$PATH \
@@ -185,7 +185,7 @@ DOTNET_ROOT=/tmp/opencode/dotnet PATH=/tmp/opencode/dotnet:$PATH \
 
 Expected: PASS, including the existing close-cancels test.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add avalonia/src/COMTool.Connections/NetworkScan/NetworkScanner.cs \
@@ -211,7 +211,7 @@ git commit -m "feat: stop network scans and propagate cancellation"
 - Consumes: `Window.Show()`, `Window.Activate()`, `WindowState`, `TextAlignment`.
 - Produces: unowned tool windows with `CenterScreen`; centered numeric inputs; main-window close cleanup.
 
-- [ ] **Step 1: Write the failing alignment and ownership tests**
+- [x] **Step 1: Write the failing alignment and ownership tests**
 
 Add `using Avalonia.Media;` to `SidebarRailTests.cs`. Add `NET05_ScanNumericInputsAreCenteredAndEqualWidth`:
 
@@ -239,7 +239,7 @@ In `UI16_ToolsMenuMatchesMobaXtermDropdown`, after creating each window, assert 
 
 Add `UI16_MainWindowClosesDetachedTools` that opens the scanner from the tools menu, closes the main window, runs jobs, and asserts the scanner is no longer visible and the tool registry is empty.
 
-- [ ] **Step 2: Run the focused tests to verify they fail**
+- [x] **Step 2: Run the focused tests to verify they fail**
 
 ```bash
 DOTNET_ROOT=/tmp/opencode/dotnet PATH=/tmp/opencode/dotnet:$PATH \
@@ -249,7 +249,7 @@ DOTNET_ROOT=/tmp/opencode/dotnet PATH=/tmp/opencode/dotnet:$PATH \
 
 Expected: alignment tests fail on default left alignment / 132px second fields; ownership assertions fail because the windows are owned.
 
-- [ ] **Step 3: Apply alignment and window changes**
+- [x] **Step 3: Apply alignment and window changes**
 
 `NetworkScanWindow.axaml`: add a style for the five octet boxes with `Width=52`, `TextAlignment=Center`, `VerticalContentAlignment=Center`; set `WindowStartupLocation="CenterScreen"`. Keep the nine fixed grid columns from Task 1.
 
@@ -259,11 +259,11 @@ Expected: alignment tests fail on default left alignment / 132px second fields; 
 
 `MainWindow.axaml.cs`: replace `window.Show(this)` with `window.Show()`; before activating an existing window, restore `WindowState.Normal` if it is minimized; in `OnClosed`, close every window in `_toolWindows.Values.ToList()` and clear the dictionary.
 
-- [ ] **Step 4: Run the focused tests to verify they pass**
+- [x] **Step 4: Run the focused tests to verify they pass**
 
 Run the Step 2 command. Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add avalonia/src/COMTool.App/Views/NetworkScanWindow.axaml \
@@ -289,11 +289,11 @@ git commit -m "feat: align tool numbers and detach tool windows"
 - Consumes: all test IDs from Tasks 1–3, `avalonia/pack/verify.sh`, Windows `pack.ps1`.
 - Produces: updated matrix/manual wording and verified Windows artifact.
 
-- [ ] **Step 1: Update the test documentation**
+- [x] **Step 1: Update the test documentation**
 
 Update NET-05 to say seven fixed service ports, no “其他端口” probe/column, Stop button, preserved rows, and cancellation propagation. Update SRV-01 to mention centered/equal-width port and seconds inputs. Update UI-16 to mention unowned `Show()` tool windows, CenterScreen, and main-window close cleanup. Update WIN-26’s manual 10-column description to 9 columns and add the Stop/independent-window checks.
 
-- [ ] **Step 2: Run the full verification gate**
+- [x] **Step 2: Run the full verification gate**
 
 ```bash
 PATH=/tmp/opencode/e2e-deps/usr/bin:$PATH \
@@ -304,11 +304,11 @@ avalonia/pack/verify.sh
 
 Expected: restore/build PASS, every test project PASS, App tests PASS, Linux E2E PASS, TestGate PASS. Record the timestamp/results directory.
 
-- [ ] **Step 3: Build/publish the Windows single-file R2R artifact**
+- [x] **Step 3: Build/publish the Windows single-file R2R artifact**
 
 Use the existing `avalonia/pack/windows/pack.ps1` flow and copy the resulting `COMTool.App-tools.exe` to the deployment source path. Confirm the file is single-file, win-x64, self-contained R2R, version `0.01`.
 
-- [ ] **Step 4: Deploy in place and verify**
+- [x] **Step 4: Deploy in place and verify**
 
 Set `$expected` in `/tmp/opencode/deploy-singlepane.ps1` to the new SHA256, run it, and require:
 
@@ -324,7 +324,7 @@ DEPLOY_DONE
 
 Open the tools once on Windows and capture the refreshed scanner/server screenshots (9-column grid, Stop button, aligned numeric fields, independent windows).
 
-- [ ] **Step 5: Commit docs and evidence**
+- [x] **Step 5: Commit docs and evidence**
 
 ```bash
 git add docs/testing/feature-test-matrix.md docs/testing/manual-acceptance.md \
