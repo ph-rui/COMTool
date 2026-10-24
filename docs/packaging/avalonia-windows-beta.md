@@ -1041,7 +1041,14 @@ and the visible state and width are restored on launch:
   - WORK and DESKTOP copies both matched that hash via `Get-FileHash`;
   - `BAK_COUNT=0`;
   - smoke test: process started, `Responding=True`, then stopped.
-  - Windows 实机任务栏归组/2 秒扫描/表头分框效果待用户扫描后确认。
+  - Windows 实机 RDP 验证（2026-10-25）：扫描窗口在 UIA 树中是主窗口的
+    子元素（owned window 关系成立，即 Win32 任务栏归组机制）；表头
+    分栏框实机可见；IP 范围记忆恢复（192.0.2.1→254）生效；
+    /24 扫描速度——同语义 C# 基准（Windows 实测 192.0.2.0/24）：
+    旧参数 7693ms → 新参数 1013ms；应用实机截图约 2.8s（含截图时延）
+    时进度 251/254，首行结果约 1s，全部结果约 2-3s（余量为 2 台存活
+    主机的名称解析：DNS 500ms + NetBIOS 300ms）；
+  - 视觉效果最终由用户确认。
 
 The previously packaged release zip is 74,795,557 bytes with SHA256:
 
