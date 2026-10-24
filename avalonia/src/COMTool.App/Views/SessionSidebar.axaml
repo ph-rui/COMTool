@@ -11,7 +11,7 @@
     <Border Grid.Column="0"
             Name="SidebarRail"
             Background="{DynamicResource SidebarRailBackgroundBrush}"
-            CornerRadius="3,0,0,3">
+            CornerRadius="0">
       <StackPanel>
         <Button Name="RailSessionsButton"
                 Classes="RailButton"
@@ -248,8 +248,8 @@
                                 VerticalAlignment="Center">
                       <TextBlock Text="{Binding Glyph}"
                                  FontFamily="{DynamicResource IconFontAwesome}"
-                                 FontSize="11"
-                                 Width="16"
+                                 FontSize="14"
+                                 Width="18"
                                  TextAlignment="Center"
                                  Foreground="{Binding GlyphColor}" />
                       <TextBlock Text="{Binding Name}"

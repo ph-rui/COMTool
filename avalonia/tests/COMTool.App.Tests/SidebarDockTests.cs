@@ -26,12 +26,12 @@ public sealed class SidebarDockTests
         {
             env.Run(() =>
             {
-                window = ShowWindow(env, visible: true, width: 220);
+                window = ShowWindow(env, visible: true, width: 260);
 
                 var body = window.FindControl<Grid>("BodyGrid")!;
                 var sidebar = window.FindControl<SessionSidebar>("Sidebar")!;
                 Assert.True(sidebar.IsVisible);
-                Assert.Equal(220, body.ColumnDefinitions[0].ActualWidth, precision: 1);
+                Assert.Equal(260, body.ColumnDefinitions[0].ActualWidth, precision: 1);
 
                 // Hover-reveal affordances are gone: no edge strip, no handle.
                 Assert.Null(window.FindControl<Border>("SessionHoverStrip"));
@@ -51,7 +51,7 @@ public sealed class SidebarDockTests
                     window.MouseMove(point);
                     RunJobs(window);
                     Assert.True(sidebar.IsVisible, $"sidebar collapsed at {point}");
-                    Assert.Equal(220, body.ColumnDefinitions[0].ActualWidth, precision: 1);
+                    Assert.Equal(260, body.ColumnDefinitions[0].ActualWidth, precision: 1);
                 }
             });
         }
@@ -71,7 +71,7 @@ public sealed class SidebarDockTests
         {
             env.Run(() =>
             {
-                window = ShowWindow(env, visible: true, width: 220);
+                window = ShowWindow(env, visible: true, width: 260);
 
                 var body = window.FindControl<Grid>("BodyGrid")!;
                 var sidebar = window.FindControl<SessionSidebar>("Sidebar")!;
@@ -95,7 +95,7 @@ public sealed class SidebarDockTests
 
                 Click(window, toggle);
                 Assert.True(sidebar.IsVisible);
-                Assert.Equal(220, body.ColumnDefinitions[0].ActualWidth, precision: 1);
+                Assert.Equal(260, body.ColumnDefinitions[0].ActualWidth, precision: 1);
                 Assert.True(
                     window.FindControl<GridSplitter>("SidebarSplitter")!.IsVisible);
                 Assert.True(ReadConfig(env).SessionSidebar.Visible);
@@ -118,7 +118,7 @@ public sealed class SidebarDockTests
         {
             env.Run(() =>
             {
-                first = ShowWindow(env, visible: true, width: 220);
+                first = ShowWindow(env, visible: true, width: 260);
                 Click(first, first.FindControl<Button>("SessionsButton")!);
                 Assert.Equal(
                     24,
@@ -134,7 +134,7 @@ public sealed class SidebarDockTests
             {
                 // A fresh window restores the user's explicit choice instead of
                 // silently forcing the dock open like the auto-hide build did.
-                second = ShowWindow(env, visible: false, width: 220, seed: false);
+                second = ShowWindow(env, visible: false, width: 260, seed: false);
                 var body = second.FindControl<Grid>("BodyGrid")!;
                 var sidebar = second.FindControl<SessionSidebar>("Sidebar")!;
                 Assert.True(sidebar.IsVisible);
@@ -159,7 +159,7 @@ public sealed class SidebarDockTests
         {
             env.Run(() =>
             {
-                window = ShowWindow(env, visible: true, width: 220);
+                window = ShowWindow(env, visible: true, width: 260);
 
                 var sidebar = window.FindControl<SessionSidebar>("Sidebar")!;
                 var add = sidebar.FindControl<Button>("SidebarAddSessionButton")!;

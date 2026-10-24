@@ -39,7 +39,7 @@ DEFAULT_WINDOW_TIMEOUT="${DEFAULT_WINDOW_TIMEOUT:-20}"
 E2E_CAPTURED="${E2E_CAPTURED:-0}"
 
 # Window-relative coordinates for the 1000x650 E2E window (no decorations).
-# The sidebar is 220px wide when its panel is open. Its first SSH row sits
+# The sidebar is 260px wide when its panel is open. Its first SSH row sits
 # below the 24px sidebar header, 5px gap, 26px "SSH" section header and 2px
 # list padding, so the 40px row spans y=98..138.
 SIDEBAR_SESSION_X="${SIDEBAR_SESSION_X:-80}"
@@ -51,7 +51,7 @@ SIDEBAR_SESSION_Y="${SIDEBAR_SESSION_Y:-118}"
 # coordinates do not change. The tab list has a 10px left margin and each
 # tab is at least 112px wide with a 2px right margin. Keeping the panel
 # collapsed makes these coordinates stable; an open sessions panel shifts
-# every tab 223px right.
+# every tab 263px right.
 FIRST_TAB_X="${FIRST_TAB_X:-125}"
 SECOND_TAB_X="${SECOND_TAB_X:-239}"
 TAB_STRIP_Y="${TAB_STRIP_Y:-53}"
@@ -398,7 +398,7 @@ seed_empty_config() {
   "encoding": "UTF-8",
   "serialSessions": [],
   "sshSessions": [],
-  "sessionSidebar": { "visible": true, "width": 220 },
+  "sessionSidebar": { "visible": true, "width": 260 },
   "window": { "width": 1000, "height": 650 }
 }
 JSON
@@ -682,7 +682,7 @@ seed_telnet_config() {
       "passwd_enc": ""
     }
   ],
-  "sessionSidebar": { "visible": true, "width": 220 },
+  "sessionSidebar": { "visible": true, "width": 260 },
   "window": { "width": 1000, "height": 650 }
 }
 EOF
@@ -719,7 +719,7 @@ seed_ssh_config() {
     }
   ],
   "sshSessionsMigrated": true,
-  "sessionSidebar": { "visible": true, "width": 220 },
+  "sessionSidebar": { "visible": true, "width": 260 },
   "window": { "width": 1000, "height": 650 }
 }
 EOF
@@ -943,7 +943,7 @@ click_sidebar_session() {
 
 # Read one window-relative pixel. This is only used to choose the correct tab
 # coordinates: expanding and collapsing the sidebar shifts the tab strip by
-# 223px. Test PASS/FAIL decisions never use screenshots.
+# 263px. Test PASS/FAIL decisions never use screenshots.
 window_pixel_is_dark() {
     local rel_x="$1"
     local rel_y="$2"
@@ -1117,7 +1117,7 @@ wait_for_ssh_browser_rail() {
 
 # Wait until the sidebar shows the SSH browser. The browser pane is 460px
 # wide, so (300,300) is its file list; a visible session sidebar is only
-# 220px wide and leaves (300,300) on the dark terminal.
+# 260px wide and leaves (300,300) on the dark terminal.
 wait_for_sftp_browser_visible() {
     local timeout_s="${1:-10}"
     local iterations=$((timeout_s * 4))
@@ -1139,7 +1139,7 @@ wait_for_sftp_browser_visible() {
     return 1
 }
 
-# The sidebar is docked and shifts the whole tab strip 223px while expanded.
+# The sidebar is docked and shifts the whole tab strip 263px while expanded.
 # Collapse it explicitly through the title-bar sessions button so tab
 # coordinates are deterministic. The probe tolerates the panel already being
 # collapsed (a prior click or a restored preference) and retries a missed
