@@ -104,9 +104,11 @@ public sealed class NetworkScannerTests
             new[] { "SSH", "RDP", "VNC", "FTP", "Telnet", "Rlogin", "HTTP" },
             NetworkServices.ServiceColumns.Select(c => c.Name).ToArray());
 
-        // AllProbePorts = 7 个服务端口 + "其他端口" 探测集
-        Assert.Equal(7 + NetworkServices.OtherPorts.Length, NetworkServices.AllProbePorts.Length);
-        Assert.All(NetworkServices.AllProbePorts, p => Assert.InRange(p, 1, 65535));
+        // 网络扫描只探测七个固定服务端口，不再探测“其他端口”集合
+        Assert.Equal(
+            new[] { 22, 3389, 5900, 21, 23, 513, 80 },
+            NetworkServices.ServicePorts);
+        Assert.DoesNotContain(443, NetworkServices.ServicePorts);
     }
 
     [Fact]

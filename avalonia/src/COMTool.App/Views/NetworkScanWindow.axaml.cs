@@ -41,7 +41,7 @@ public partial class NetworkScanWindow : Window
 
     /// <summary>
     /// 网络扫描仪 Start scan: expands the octet range (MobaXterm /24 form)
-    /// and probes the fixed MobaXterm service set + "other ports" per host.
+    /// and probes the fixed MobaXterm service set per host.
     /// </summary>
     internal async Task StartScanAsync()
     {
@@ -59,7 +59,7 @@ public partial class NetworkScanWindow : Window
             return;
         }
 
-        var ports = NetworkServices.AllProbePorts;
+        var ports = NetworkServices.ServicePorts;
 
         vm.Error = null;
         vm.Rows.Clear();
@@ -121,7 +121,6 @@ public partial class NetworkScanWindow : Window
     internal static ScanGridRow ToScanGridRow(NetworkScanHost host)
     {
         var openPorts = new HashSet<int>(host.OpenPorts);
-        var otherPorts = NetworkServices.OtherPorts.Where(p => openPorts.Contains(p)).ToList();
         return new ScanGridRow
         {
             Address = host.Address.ToString(),
@@ -129,7 +128,6 @@ public partial class NetworkScanWindow : Window
             Cells = NetworkServices.ServiceColumns
                 .Select(c => new PortCell { Label = c.Name, IsOpen = openPorts.Contains(c.Port) })
                 .ToList(),
-            OtherPorts = otherPorts.Count == 0 ? "" : string.Join(", ", otherPorts),
         };
     }
 }

@@ -3,8 +3,8 @@ namespace COMTool.Connections.NetworkScan;
 /// <summary>
 /// MobaXterm-compatible service tables for the tool pages:
 ///  - 网络扫描仪 (network scanner): fixed service grid columns in display order
-///    (SSH / RDP / VNC / FTP / Telnet / Rlogin / HTTP) plus the extra ports
-///    aggregated into the "其他端口" (other ports) column.
+///    (SSH / RDP / VNC / FTP / Telnet / Rlogin / HTTP); only these ports are
+///    probed.
 ///  - 端口扫描仪 (port scanner): the "仅扫描已知端口" (known ports only) list;
 ///    names follow MobaXterm's result style ("- Port #22 (ssh): listening").
 /// </summary>
@@ -29,22 +29,6 @@ public static class NetworkServices
     public static readonly int[] ServicePorts =
     {
         22, 3389, 5900, 21, 23, 513, 80,
-    };
-
-    /// <summary>
-    /// Extra well-known ports probed by the network scanner and reported in
-    /// the "其他端口" column when open.
-    /// </summary>
-    public static readonly int[] OtherPorts =
-    {
-        443, 445, 135, 139, 1433, 3306, 5432, 8080, 8443, 6000,
-    };
-
-    /// <summary>All ports the network scanner probes per host.</summary>
-    public static readonly int[] AllProbePorts =
-    {
-        22, 3389, 5900, 21, 23, 513, 80,
-        443, 445, 135, 139, 1433, 3306, 5432, 8080, 8443, 6000,
     };
 
     /// <summary>
