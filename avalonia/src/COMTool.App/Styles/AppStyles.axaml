@@ -89,7 +89,7 @@
 
   <!-- MobaXterm-style sidebar icon rail cells. -->
   <Style Selector="Button.RailButton">
-    <Setter Property="Width" Value="24" />
+    <Setter Property="Width" Value="40" />
     <Setter Property="Height" Value="44" />
     <Setter Property="MinWidth" Value="0" />
     <Setter Property="MinHeight" Value="0" />

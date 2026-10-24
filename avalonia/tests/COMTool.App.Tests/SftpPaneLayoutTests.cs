@@ -380,15 +380,15 @@ public sealed class SftpPaneLayoutTests
                 var tabView = (SshSessionView)Vm(window).SelectedTab!.Content!;
                 Assert.Null(tabView.FindControl<Control>("SftpHost"));
 
-                // Clicking the globe again retracts the panel. The 24px
+                // Clicking the globe again retracts the panel. The 40px
                 // rail stays on screen and the terminal keeps its former
-                // absolute left edge (24 + 8 = 32).
+                // absolute left edge (40 + 8 = 48).
                 ClickRailGlobe(window);
 
                 Assert.Equal(SidebarTab.SshBrowser, Vm(window).SidebarTab);
                 Assert.True(Sidebar(window).IsVisible);
                 Assert.True(RailGlobe(window).IsVisible);
-                Assert.Equal(24, body.ColumnDefinitions[0].ActualWidth, precision: 1);
+                Assert.Equal(40, body.ColumnDefinitions[0].ActualWidth, precision: 1);
                 Assert.Equal(8, content.Margin.Left);
                 Assert.False(splitter.IsVisible);
 
