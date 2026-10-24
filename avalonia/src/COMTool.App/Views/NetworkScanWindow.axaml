@@ -22,43 +22,89 @@
             CornerRadius="3"
             Padding="12,8">
       <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-        <TextBlock Text="IP 地址范围:"
-                   VerticalAlignment="Center"
-                   Foreground="{DynamicResource WindowTextBrush}" />
-        <TextBox Name="ScanOctet1Box"
-                 Text="{Binding Octet1}"
-                 Width="52"
-                 HorizontalContentAlignment="Center"
-                 TextAlignment="Center"
-                 VerticalContentAlignment="Center" />
-        <TextBlock Text="." VerticalAlignment="Center" />
-        <TextBox Name="ScanOctet2Box"
-                 Text="{Binding Octet2}"
-                 Width="52"
-                 HorizontalContentAlignment="Center"
-                 TextAlignment="Center"
-                 VerticalContentAlignment="Center" />
-        <TextBlock Text="." VerticalAlignment="Center" />
-        <TextBox Name="ScanOctet3Box"
-                 Text="{Binding Octet3}"
-                 Width="52"
-                 HorizontalContentAlignment="Center"
-                 TextAlignment="Center"
-                 VerticalContentAlignment="Center" />
-        <TextBlock Text="." VerticalAlignment="Center" />
-        <TextBox Name="ScanOctetFromBox"
-                 Text="{Binding OctetFrom}"
-                 Width="52"
-                 HorizontalContentAlignment="Center"
-                 TextAlignment="Center"
-                 VerticalContentAlignment="Center" />
-        <TextBlock Text="--&gt;" VerticalAlignment="Center" Margin="4,0" />
-        <TextBox Name="ScanOctetToBox"
-                 Text="{Binding OctetTo}"
-                 Width="52"
-                 HorizontalContentAlignment="Center"
-                 TextAlignment="Center"
-                 VerticalContentAlignment="Center" />
+        <!-- MobaXterm 的 IP 行整体右移，标签靠近结果表的“名称”列；
+             输入框缩小到 32px，Start scan 保持原来的水平位置。 -->
+        <StackPanel Name="ScanIpFieldsPanel"
+                    Orientation="Horizontal"
+                    Spacing="4"
+                    Margin="110,0,0,0"
+                    VerticalAlignment="Center">
+          <TextBlock Name="ScanIpLabel"
+                     Text="IP 地址范围:"
+                     Width="90"
+                     TextAlignment="Right"
+                     VerticalAlignment="Center"
+                     Foreground="{DynamicResource WindowTextBrush}" />
+          <TextBox Name="ScanOctet1Box"
+                   Text="{Binding Octet1}"
+                   Width="32"
+                   Height="24"
+                   MinWidth="0"
+                   MinHeight="0"
+                   Padding="0"
+                   MaxLength="3"
+                   HorizontalContentAlignment="Center"
+                   TextAlignment="Center"
+                   VerticalContentAlignment="Center"
+                   TextChanged="OnOctetTextChanged"
+                   GotFocus="OnOctetGotFocus" />
+          <TextBlock Text="." VerticalAlignment="Center" />
+          <TextBox Name="ScanOctet2Box"
+                   Text="{Binding Octet2}"
+                   Width="32"
+                   Height="24"
+                   MinWidth="0"
+                   MinHeight="0"
+                   Padding="0"
+                   MaxLength="3"
+                   HorizontalContentAlignment="Center"
+                   TextAlignment="Center"
+                   VerticalContentAlignment="Center"
+                   TextChanged="OnOctetTextChanged"
+                   GotFocus="OnOctetGotFocus" />
+          <TextBlock Text="." VerticalAlignment="Center" />
+          <TextBox Name="ScanOctet3Box"
+                   Text="{Binding Octet3}"
+                   Width="32"
+                   Height="24"
+                   MinWidth="0"
+                   MinHeight="0"
+                   Padding="0"
+                   MaxLength="3"
+                   HorizontalContentAlignment="Center"
+                   TextAlignment="Center"
+                   VerticalContentAlignment="Center"
+                   TextChanged="OnOctetTextChanged"
+                   GotFocus="OnOctetGotFocus" />
+          <TextBlock Text="." VerticalAlignment="Center" />
+          <TextBox Name="ScanOctetFromBox"
+                   Text="{Binding OctetFrom}"
+                   Width="32"
+                   Height="24"
+                   MinWidth="0"
+                   MinHeight="0"
+                   Padding="0"
+                   MaxLength="3"
+                   HorizontalContentAlignment="Center"
+                   TextAlignment="Center"
+                   VerticalContentAlignment="Center"
+                   TextChanged="OnOctetTextChanged"
+                   GotFocus="OnOctetGotFocus" />
+          <TextBlock Text="--&gt;" VerticalAlignment="Center" Margin="4,0" />
+          <TextBox Name="ScanOctetToBox"
+                   Text="{Binding OctetTo}"
+                   Width="32"
+                   Height="24"
+                   MinWidth="0"
+                   MinHeight="0"
+                   Padding="0"
+                   MaxLength="3"
+                   HorizontalContentAlignment="Center"
+                   TextAlignment="Center"
+                   VerticalContentAlignment="Center"
+                   TextChanged="OnOctetTextChanged"
+                   GotFocus="OnOctetGotFocus" />
+        </StackPanel>
         <Button Name="ScanStartButton"
                 Classes="SidebarActionButton"
                 Margin="12,0,0,0"

@@ -730,7 +730,124 @@ public sealed class SidebarRailTests
                     .Select(name => window.FindControl<TextBox>(name)!)
                     .ToArray();
                 Assert.All(boxes, box => Assert.Equal(TextAlignment.Center, box.TextAlignment));
-                Assert.All(boxes, box => Assert.Equal(52, box.Width));
+                Assert.All(boxes, box => Assert.Equal(32, box.Width));
+                Assert.All(boxes, box => Assert.Equal(24, box.Height));
+                Assert.All(boxes, box => Assert.Equal(3, box.MaxLength));
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public void NET05_ScanIpRowIsCompactAndShiftedRight()
+    {
+        using var env = new TestEnvironment();
+        NetworkScanWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                window = new NetworkScanWindow();
+                window.Show();
+                Dispatcher.UIThread.RunJobs();
+
+                var fieldsPanel = window.FindControl<StackPanel>("ScanIpFieldsPanel")!;
+                var label = window.FindControl<TextBlock>("ScanIpLabel")!;
+                var firstBox = window.FindControl<TextBox>("ScanOctet1Box")!;
+                var start = window.FindControl<Button>("ScanStartButton")!;
+
+                // MobaXterm 的 IP 行不是贴着窗口左边缘：标签右移到“名称”
+                // 列附近，五个输入框缩小到 32px，Start scan 仍留在原位置。
+                Assert.Equal(110, fieldsPanel.Margin.Left);
+                var labelX = label.TranslatePoint(new Point(0, 0), window)!.Value.X;
+                var firstBoxX = firstBox.TranslatePoint(new Point(0, 0), window)!.Value.X;
+                var startX = start.TranslatePoint(new Point(0, 0), window)!.Value.X;
+                Assert.Equal(32, firstBox.Bounds.Width);
+                Assert.InRange(labelX, 125, 145);
+                Assert.InRange(firstBoxX, 220, 245);
+                Assert.InRange(startX, 505, 530);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public void NET05_ScanOctetAutoAdvancesAtThreeDigits()
+    {
+        using var env = new TestEnvironment();
+        NetworkScanWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                window = new NetworkScanWindow();
+                window.Show();
+                Dispatcher.UIThread.RunJobs();
+
+                var first = window.FindControl<TextBox>("ScanOctet1Box")!;
+                var second = window.FindControl<TextBox>("ScanOctet2Box")!;
+                var third = window.FindControl<TextBox>("ScanOctet3Box")!;
+                var from = window.FindControl<TextBox>("ScanOctetFromBox")!;
+                var to = window.FindControl<TextBox>("ScanOctetToBox")!;
+
+                // 初始化绑定 192/168/... 时没有焦点，不应误跳到下一格。
+                first.Text = "192";
+                RunJobs(window);
+                Assert.False(first.IsFocused);
+                Assert.False(second.IsFocused);
+
+                // 聚焦时全选原值，直接输入可覆盖。
+                first.Focus();
+                RunJobs(window);
+                Assert.True(first.IsFocused);
+                Assert.Equal(0, first.SelectionStart);
+                Assert.Equal(first.Text!.Length, first.SelectionEnd);
+
+                // 输入满 3 位且有效才跳转。
+                first.Text = "19";
+                RunJobs(window);
+                Assert.True(first.IsFocused);
+                Assert.False(second.IsFocused);
+
+                first.Text = "192";
+                RunJobs(window);
+                Assert.True(second.IsFocused);
+                Assert.Equal("192", first.Text);
+                Assert.Equal(0, second.SelectionStart);
+                Assert.Equal(second.Text!.Length, second.SelectionEnd);
+
+                // 999 超过 0–255，不跳转。
+                second.Text = "999";
+                RunJobs(window);
+                Assert.True(second.IsFocused);
+                Assert.False(third.IsFocused);
+
+                // 下一格输入有效值后继续跳转，最后一段不再越界。
+                second.Text = "168";
+                RunJobs(window);
+                Assert.True(third.IsFocused);
+                third.Text = "1";
+                RunJobs(window);
+                Assert.True(third.IsFocused);
+                third.Text = "001";
+                RunJobs(window);
+                Assert.True(from.IsFocused);
+
+                to.Focus();
+                RunJobs(window);
+                to.Text = "25";
+                RunJobs(window);
+                to.Text = "254";
+                RunJobs(window);
+                Assert.True(to.IsFocused);
             });
         }
         finally

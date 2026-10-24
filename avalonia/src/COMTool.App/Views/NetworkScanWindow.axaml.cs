@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using COMTool.App.Tools;
 using COMTool.App.ViewModels.Tools;
@@ -34,6 +35,52 @@ public partial class NetworkScanWindow : Window
         _cts?.Cancel();
         base.OnClosed(e);
     }
+
+    /// <summary>
+    /// MobaXterm-style octet entry: once a focused box contains a complete,
+    /// valid octet (three digits, 0–255), move to the next box. Invalid values
+    /// such as 999 stay in place so the existing validation reports them.
+    /// </summary>
+    private void OnOctetTextChanged(object? sender, TextChangedEventArgs e)
+    {
+        if (sender is not TextBox box || !box.IsFocused)
+        {
+            return;
+        }
+
+        if (box.Text is not { Length: 3 } text
+            || !int.TryParse(text, out var value)
+            || value is < 0 or > 255)
+        {
+            return;
+        }
+
+        var next = NextOctetBox(box);
+        if (next is null)
+        {
+            return;
+        }
+
+        next.Focus();
+        next.SelectAll();
+    }
+
+    private void OnOctetGotFocus(object? sender, FocusChangedEventArgs e)
+    {
+        if (sender is TextBox box)
+        {
+            box.SelectAll();
+        }
+    }
+
+    private TextBox? NextOctetBox(TextBox box) => box.Name switch
+    {
+        "ScanOctet1Box" => this.FindControl<TextBox>("ScanOctet2Box"),
+        "ScanOctet2Box" => this.FindControl<TextBox>("ScanOctet3Box"),
+        "ScanOctet3Box" => this.FindControl<TextBox>("ScanOctetFromBox"),
+        "ScanOctetFromBox" => this.FindControl<TextBox>("ScanOctetToBox"),
+        _ => null,
+    };
 
     private void OnStartScanClick(object? sender, RoutedEventArgs e) => _ = StartScanAsync();
 
