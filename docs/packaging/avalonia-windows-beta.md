@@ -1075,6 +1075,30 @@ and the visible state and width are restored on launch:
   - `BAK_COUNT=0`;
   - smoke test: process started, `Responding=True`, then stopped.
 
+### 2026-10-25 — Start scan 卡顿 3 秒修复（UI 线程不再创建 socket）
+
+- 现象：网络扫描仪点击 Start scan 后窗口无响应约 3 秒；
+- 根因：`ScanAsync` 用 `targets.Select(async ip => ...)` 内联创建探测任务，
+  每个任务体在创建它的线程（UI 线程）上同步执行到第一个真正 yield 之前，
+  其中包含 `new Ping()`（Windows 上 raw ICMP socket）与 7 个 TCP socket
+  的创建；254 台主机 ≈ 2000 个 socket 同步落在 UI 线程；
+- 修复：`ScanAsync` 与 `ScanPortsCoreAsync`（端口深扫 1→65535）改为
+  `Task.Run` 调度每个探测任务，socket 创建移到线程池；`await` 期间线程
+  归还线程池，并发度与扫描速度不变；
+- test evidence: full gate PASS — 431 tests (Core 53, SFTP 42,
+  Connections 83, Terminal 11, ZMODEM 32, TestGate 49, App 161),
+  Linux Xvfb E2E 13/13, TestGate PASS, results `20261025T135806Z`；
+  新增守护测试 `NET05_ScanManyTargetsReturnsPromptlyOnCallerThread`
+  （254 个不可达目标时 `ScanAsync` 的同步部分 <500ms）；
+- deployment 2026-10-25 (in-place overwrite, no `.bak-*`):
+  - build commit: `0a82c7b`;
+  - exe `COMTool.App-tools.exe` published win-x64 single-file R2R;
+  - size: 209,306,444 bytes;
+  - SHA256: `D7C1C9057556A7D7E91F38DCC3A3BEFE853EE76C7AA319E451C434B78973B238`;
+  - WORK and DESKTOP copies both matched that hash via `Get-FileHash`;
+  - `BAK_COUNT=0`;
+  - smoke test: process started, `Responding=True`, then stopped.
+
 The previously packaged release zip is 74,795,557 bytes with SHA256:
 
 ```text
