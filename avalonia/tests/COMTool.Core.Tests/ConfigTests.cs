@@ -198,6 +198,41 @@ public sealed class ConfigTests : IDisposable
     }
 
     [Fact]
+    public void SaveAndLoad_RoundTripsPortScanSettings()
+    {
+        var path = Path.Combine(_directory, "config.json");
+        var config = new ComtoolConfig
+        {
+            PortScan = new PortScanConfig
+            {
+                Ip = "192.0.2.251",
+                From = "1000",
+                To = "2000",
+            },
+        };
+
+        config.Save(path);
+        var loaded = ComtoolConfig.Load(path);
+
+        Assert.Equal("192.0.2.251", loaded.PortScan.Ip);
+        Assert.Equal("1000", loaded.PortScan.From);
+        Assert.Equal("2000", loaded.PortScan.To);
+    }
+
+    [Fact]
+    public void Load_ConfigWithoutPortScan_UsesDefaults()
+    {
+        var path = Path.Combine(_directory, "config.json");
+        File.WriteAllText(path, """{"version":3,"skin":"dark"}""");
+
+        var loaded = ComtoolConfig.Load(path);
+
+        Assert.Equal("127.0.0.1", loaded.PortScan.Ip);
+        Assert.Equal("1", loaded.PortScan.From);
+        Assert.Equal("65535", loaded.PortScan.To);
+    }
+
+    [Fact]
     public void SaveAndLoad_RoundTripsMacros()
     {
         var path = Path.Combine(_directory, "config.json");

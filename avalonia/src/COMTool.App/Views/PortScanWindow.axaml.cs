@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using COMTool.App.Services;
 using COMTool.App.Tools;
 using COMTool.App.ViewModels.Tools;
 using COMTool.Connections.NetworkScan;
@@ -8,17 +9,26 @@ namespace COMTool.App.Views;
 
 /// <summary>
 /// Standalone 端口扫描窗口. MobaXterm opens it with the "网络扫描" title; it
-/// owns its scan lifecycle and cancels on close.
+/// owns its scan lifecycle, cancels on close and remembers the entered IP
+/// and port range.
 /// </summary>
 public partial class PortScanWindow : Window
 {
+    private readonly AppConfigService? _config;
     private CancellationTokenSource? _cts;
     private INetworkScanner? _scanner;
 
     public PortScanWindow()
+        : this(null)
+    {
+    }
+
+    public PortScanWindow(AppConfigService? config)
     {
         InitializeComponent();
+        _config = config;
         DataContext = new PortScanWindowViewModel();
+        RestoreScanSettings();
     }
 
     internal PortScanWindowViewModel ViewModel =>
@@ -32,7 +42,72 @@ public partial class PortScanWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         _cts?.Cancel();
+        RememberScanSettings();
         base.OnClosed(e);
+    }
+
+    /// <summary>
+    /// Restores the last used target IP and port range (MobaXterm remembers
+    /// them between invocations). Invalid/absent values keep the defaults.
+    /// </summary>
+    private void RestoreScanSettings()
+    {
+        var saved = _config?.Config.PortScan;
+        if (saved is null || !NetworkScanTargets.TryParseIp(saved.Ip, out _, out _))
+        {
+            return;
+        }
+
+        var vm = ViewModel;
+        vm.Ip = saved.Ip;
+        if (int.TryParse(saved.From, out var from)
+            && int.TryParse(saved.To, out var to)
+            && from is >= 1 and <= 65535
+            && to is >= 1 and <= 65535
+            && from <= to)
+        {
+            vm.From = saved.From;
+            vm.To = saved.To;
+        }
+    }
+
+    /// <summary>
+    /// Persists the entered IP (and port range, when valid) so the dialog
+    /// restores it on the next open. Called on Start scan and on close, so a
+    /// value the user typed but never scanned is still remembered. Invalid
+    /// inputs never overwrite the last good value.
+    /// </summary>
+    private void RememberScanSettings()
+    {
+        var config = _config;
+        if (config is null)
+        {
+            return;
+        }
+
+        var vm = ViewModel;
+        if (!NetworkScanTargets.TryParseIp(vm.Ip, out _, out _))
+        {
+            return;
+        }
+
+        var saved = config.Config.PortScan;
+        var fromValid = int.TryParse(vm.From, out var from) && from is >= 1 and <= 65535;
+        var toValid = int.TryParse(vm.To, out var to)
+                      && to is >= 1 and <= 65535
+                      && (fromValid ? to >= from : true);
+
+        var newFrom = fromValid && toValid ? vm.From : saved.From;
+        var newTo = fromValid && toValid ? vm.To : saved.To;
+        if (saved.Ip == vm.Ip && saved.From == newFrom && saved.To == newTo)
+        {
+            return;
+        }
+
+        saved.Ip = vm.Ip;
+        saved.From = newFrom;
+        saved.To = newTo;
+        config.SaveConfig();
     }
 
     private void OnStartScanClick(object? sender, RoutedEventArgs e) => _ = StartScanAsync();
@@ -82,6 +157,8 @@ public partial class PortScanWindow : Window
                 return;
             }
         }
+
+        RememberScanSettings();
 
         var total = vm.RangeMode ? to - from + 1 : NetworkServices.KnownPortNumbers.Length;
         vm.Error = null;

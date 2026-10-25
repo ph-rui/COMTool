@@ -50,7 +50,7 @@ public static class ToolCatalog
             "\uf1eb",
             "#2196f3",
             true,
-            _ => new PortScanWindow()),
+            owner => new PortScanWindow(owner.ConfigService)),
     };
 
     public static ToolDescriptor? Find(string id) =>

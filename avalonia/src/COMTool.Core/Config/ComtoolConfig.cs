@@ -77,6 +77,14 @@ public sealed class ComtoolConfig
     [JsonPropertyName("networkScan")]
     public NetworkScanConfig NetworkScan { get; set; } = new();
 
+    /// <summary>
+    /// Remembered 端口扫描仪 inputs: the last target IP and the port range
+    /// used in "扫描端口范围" mode. Missing from older config files, in which
+    /// case the 127.0.0.1 / 1→65535 defaults apply.
+    /// </summary>
+    [JsonPropertyName("portScan")]
+    public PortScanConfig PortScan { get; set; } = new();
+
     [JsonPropertyName("window")]
     public WindowConfig Window { get; set; } = new();
 
@@ -323,6 +331,26 @@ public sealed class NetworkScanConfig
 
     [JsonPropertyName("to")]
     public string To { get; set; } = "254";
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? Extra { get; set; }
+}
+
+/// <summary>
+/// 端口扫描仪 remembered inputs: the target IP and the explicit port range
+/// (used when "扫描端口范围" is selected). Kept as strings so the dialog
+/// restores exactly what the user last used.
+/// </summary>
+public sealed class PortScanConfig
+{
+    [JsonPropertyName("ip")]
+    public string Ip { get; set; } = "127.0.0.1";
+
+    [JsonPropertyName("from")]
+    public string From { get; set; } = "1";
+
+    [JsonPropertyName("to")]
+    public string To { get; set; } = "65535";
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? Extra { get; set; }

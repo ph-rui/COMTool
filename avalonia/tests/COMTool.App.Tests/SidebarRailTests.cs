@@ -1267,6 +1267,103 @@ public sealed class SidebarRailTests
         }
     }
 
+    [AvaloniaFact]
+    public void PORT01_PortScanIpAndRangeAreRemembered()
+    {
+        using var env = new TestEnvironment();
+        PortScanWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                var config = AppConfigService.Load();
+                window = new PortScanWindow(config);
+                window.Show();
+                Dispatcher.UIThread.RunJobs();
+
+                var vm = window.ViewModel;
+                vm.Ip = "192.0.2.251";
+                vm.From = "1000";
+                vm.To = "2000";
+
+                // 关窗时把合法输入写入配置（即使没有扫描）
+                window.Close();
+                Dispatcher.UIThread.RunJobs();
+                window = null;
+
+                var saved = AppConfigService.Load().Config.PortScan;
+                Assert.Equal("192.0.2.251", saved.Ip);
+                Assert.Equal("1000", saved.From);
+                Assert.Equal("2000", saved.To);
+
+                // 重新打开窗口恢复上次输入，而不是默认 127.0.0.1 / 1→65535
+                window = new PortScanWindow(AppConfigService.Load());
+                window.Show();
+                Dispatcher.UIThread.RunJobs();
+                Assert.Equal("192.0.2.251", window.ViewModel.Ip);
+                Assert.Equal("1000", window.ViewModel.From);
+                Assert.Equal("2000", window.ViewModel.To);
+
+                // 非法 IP 不覆盖已记住的值；非法端口范围同样不落盘
+                window.ViewModel.Ip = "not-an-ip";
+                window.ViewModel.From = "99999";
+                window.ViewModel.To = "1";
+                window.Close();
+                Dispatcher.UIThread.RunJobs();
+                window = null;
+
+                var kept = AppConfigService.Load().Config.PortScan;
+                Assert.Equal("192.0.2.251", kept.Ip);
+                Assert.Equal("1000", kept.From);
+                Assert.Equal("2000", kept.To);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public void PORT01_PortScanIpIsRememberedOnStartScan()
+    {
+        using var env = new TestEnvironment();
+        PortScanWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                window = new PortScanWindow(AppConfigService.Load())
+                {
+                    ScannerForTests = new FakeScanner(Array.Empty<NetworkScanHost>())
+                    {
+                        DeepPorts = new[] { 22 },
+                    },
+                };
+                window.Show();
+                Dispatcher.UIThread.RunJobs();
+
+                var vm = window.ViewModel;
+                vm.Ip = "192.0.2.163";
+
+                Click(window, window.FindControl<Button>("PortScanStartButton")!);
+                Assert.True(WaitUntilTry(
+                    () => !vm.IsScanning && vm.Result.Length > 0, 10),
+                    $"port scan did not finish: status='{vm.Status}'");
+
+                // 点 Start scan 就开始记忆，无需等到关窗
+                var saved = AppConfigService.Load().Config.PortScan;
+                Assert.Equal("192.0.2.163", saved.Ip);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
     // --- Servers management (SRV-01) ---------------------------------------
 
     [AvaloniaFact]
