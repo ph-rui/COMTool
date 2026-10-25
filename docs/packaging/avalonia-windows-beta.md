@@ -1050,6 +1050,31 @@ and the visible state and width are restored on launch:
     主机的名称解析：DNS 500ms + NetBIOS 300ms）；
   - 视觉效果最终由用户确认。
 
+### 2026-10-25 — 端口扫描仪 IP/端口范围记忆
+
+- 用户要求“端口扫描器也是这样改”：任务栏归组与快速扫描它已通过共享
+  代码（`Show(this)`、`NetworkScanner` 默认值 256 并发/300ms）生效；
+  结果区是 MobaXterm 同款纯文本列表（`- Port #22 (ssh): listening`），
+  无列头表格，Excel 式分框不适用；
+- 新补：`ComtoolConfig.portScan` 持久化目标 IP 与范围模式起止端口
+  （Start scan 或关窗保存，仅合法值落盘，非法 IP/端口不覆盖），
+  窗口打开时恢复（默认 127.0.0.1 / 1→65535 仅无记忆时生效）；
+- test evidence: full gate PASS — 430 tests (Core 53, SFTP 42,
+  Connections 82, Terminal 11, ZMODEM 32, TestGate 49, App 161),
+  Linux Xvfb E2E 13/13, TestGate PASS, results `20261025T013953Z`；
+  新增：`PORT01_PortScanIpAndRangeAreRemembered`、
+  `PORT01_PortScanIpIsRememberedOnStartScan`、
+  `ConfigTests.SaveAndLoad_RoundTripsPortScanSettings`、
+  `ConfigTests.Load_ConfigWithoutPortScan_UsesDefaults`；
+- deployment 2026-10-25 (in-place overwrite, no `.bak-*`):
+  - build commit: `b71f2da`;
+  - exe `COMTool.App-tools.exe` published win-x64 single-file R2R;
+  - size: 209,302,348 bytes;
+  - SHA256: `2F1E2D463B4D404AF8D9323904B5FC682AA7F378E6A24C9F9B96446C73EB47E6`;
+  - WORK and DESKTOP copies both matched that hash via `Get-FileHash`;
+  - `BAK_COUNT=0`;
+  - smoke test: process started, `Responding=True`, then stopped.
+
 The previously packaged release zip is 74,795,557 bytes with SHA256:
 
 ```text
