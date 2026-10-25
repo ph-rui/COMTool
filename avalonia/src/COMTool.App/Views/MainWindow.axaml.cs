@@ -74,6 +74,15 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        WarmUpTerminalFonts();
+
+        // Windows: keep the native resize frame (WS_THICKFRAME) under our
+        // self-drawn title bar so dragging to a screen edge snaps the window
+        // (Aero Snap) and Win+Arrow works. BorderOnly still hides the native
+        // caption. Other platforms keep the frameless window the X11 E2E
+        // harness drives.
+        WindowDecorations = PreferredWindowDecorations(OperatingSystem.IsWindows());
+
         UpdateMaximizeIcon();
         SizeChanged += OnWindowSizeChanged;
         ApplySavedWindowSizeBeforeShow();
@@ -788,6 +797,7 @@ public partial class MainWindow : Window
             throw new InvalidOperationException($"SSH session {key} was not found.");
         }
 
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var connection = await ConnectSshSessionAsync(session, this);
         if (connection is null)
         {
@@ -837,11 +847,15 @@ public partial class MainWindow : Window
 
                     AttachTerminal(tab, terminal, connection.Pty);
                     FocusTerminalWhenSelected(tab, terminal);
+                    AppLog.Info(
+                        $"SSH session {key} terminal attached after {stopwatch.ElapsedMilliseconds} ms");
                 },
                 DispatcherPriority.Loaded);
 
         viewModel.AddTab(tab);
         UpdateConnectionStates();
+        AppLog.Info(
+            $"SSH session {key} tab created after {stopwatch.ElapsedMilliseconds} ms");
     }
 
     private async Task<SshConnection?> ConnectSshSessionAsync(
@@ -881,6 +895,7 @@ public partial class MainWindow : Window
 
             try
             {
+                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
                 var connection = await Task.Run(() => SshConnection.Connect(
                     new SshConnectionOptions(
                         session.Host,
@@ -890,6 +905,11 @@ public partial class MainWindow : Window
                         KeyFile: session.SshKey,
                         Columns: 100,
                         Rows: 30)));
+                stopwatch.Stop();
+                AppLog.Info(
+                    $"SSH connect {session.Host}:{session.Port} ({session.User}) took " +
+                    $"{stopwatch.ElapsedMilliseconds} ms " +
+                    $"(handshake {connection.ConnectTime.TotalMilliseconds:F0} ms)");
                 _config.PasswordCache.Set(session.Key, password);
                 if (remember && !string.IsNullOrEmpty(password))
                 {
@@ -1568,18 +1588,56 @@ public partial class MainWindow : Window
         }
     }
 
-    // One face grid must cover BOTH latin and CJK. The terminal control
-    // shapes every run independently, and a CJK run shaped from a latin
-    // primary falls back to a CJK font whose line metrics differ: the CJK
-    // glyphs then land on a lower baseline than the latin glyphs of the same
-    // row, so mixed output looked staggered. Noto Sans Mono CJK SC puts
-    // latin on a half-width grid and CJK on a full-width grid with identical
-    // metrics, so every run shapes from one font and every baseline agrees by
-    // construction. Both weights are registered so bold cells stay inside the
-    // family instead of escaping to a system font.
+    // MobaXterm's terminal font is Consolas 10pt. Chinese has no Consolas
+    // glyphs, so the family list falls back to Microsoft YaHei UI (present on
+    // every Windows install) and finally to the bundled Noto Sans Mono CJK SC,
+    // which guarantees CJK coverage on Linux and in headless tests.
     internal static FontFamily TerminalFontFamily() => new FontFamily(
+        "Consolas," +
+        "Microsoft YaHei UI," +
         "avares://COMTool.App/Assets/Fonts/NotoSansMonoCJKsc-Regular.otf#Noto Sans Mono CJK SC," +
         "avares://COMTool.App/Assets/Fonts/NotoSansMonoCJKsc-Bold.otf#Noto Sans Mono CJK SC");
+
+    // MobaXterm's 10pt Consolas is ~13.3px at 96 DPI.
+    internal const double TerminalFontSize = 13.5;
+
+    /// <summary>
+    /// MobaXterm snaps to screen edges (Aero Snap). Windows only grants that
+    /// when the window keeps its native resize frame, so Windows keeps a
+    /// border without a caption while every other platform stays frameless.
+    /// </summary>
+    internal static WindowDecorations PreferredWindowDecorations(bool isWindows) =>
+        isWindows ? WindowDecorations.BorderOnly : WindowDecorations.None;
+
+    /// <summary>
+    /// Warms Avalonia's typeface cache off the UI thread. The bundled CJK
+    /// fallback is a 16 MB CFF font; parsing it when the first terminal is
+    /// created delayed the first SSH tab by a noticeable amount. Resolving the
+    /// same typefaces at startup moves that cost out of the connect path.
+    /// </summary>
+    private static void WarmUpTerminalFonts()
+    {
+        var family = TerminalFontFamily();
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                foreach (var weight in new[] { FontWeight.Normal, FontWeight.Bold })
+                {
+                    var typeface = new Typeface(family, FontStyle.Normal, weight);
+                    if (typeface.GlyphTypeface is { } glyphs)
+                    {
+                        _ = glyphs.CharacterToGlyphMap.TryGetGlyph('L', out _);
+                        _ = glyphs.CharacterToGlyphMap.TryGetGlyph('個', out _);
+                    }
+                }
+            }
+            catch
+            {
+                // Best effort: the terminal still loads the font on demand.
+            }
+        });
+    }
 
     private TerminalControl CreateTerminal()
     {
@@ -1591,7 +1649,7 @@ public partial class MainWindow : Window
             // writing its own prompt into the terminal buffer.
             Process = string.Empty,
             FontFamily = TerminalFontFamily(),
-            FontSize = 15,
+            FontSize = TerminalFontSize,
             Background = new SolidColorBrush(Color.Parse(TerminalTheme.Background)),
             Foreground = new SolidColorBrush(Color.Parse(TerminalTheme.Foreground)),
             CursorColor = Color.Parse(TerminalTheme.Cursor),

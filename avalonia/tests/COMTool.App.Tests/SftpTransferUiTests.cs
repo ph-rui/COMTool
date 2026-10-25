@@ -104,13 +104,21 @@ public sealed class SftpTransferUiTests
             // into the picked folder.
             pane.Pickers = new FakePickers(new[] { "/local/a.txt" }, "/local");
             pane.UploadButtonControl.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            await WaitUntil(() => remote.HasEntry("/remote/a.txt"), "upload through the picker");
+            // The entry can appear before its bytes are flushed, so wait for
+            // the content itself; under a loaded test run the write lags.
+            await WaitUntil(
+                () => remote.HasEntry("/remote/a.txt")
+                      && remote.ReadFile("/remote/a.txt") == "hello",
+                "upload through the picker");
             Assert.Equal("hello", remote.ReadFile("/remote/a.txt"));
 
             viewModel.SelectedRemoteEntry = viewModel.RemoteEntries.Single(entry => entry.Name == "b.txt");
             Dispatcher.UIThread.RunJobs();
             pane.DownloadButtonControl.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            await WaitUntil(() => local.HasEntry("/local/b.txt"), "download through the picker");
+            await WaitUntil(
+                () => local.HasEntry("/local/b.txt")
+                      && local.ReadFile("/local/b.txt") == "world",
+                "download through the picker");
             Assert.Equal("world", local.ReadFile("/local/b.txt"));
         }
         finally
