@@ -10,7 +10,7 @@
 
 | ID | 功能 | 优先级 | 状态 | 验收要点 |
 |---|---|---|---|---|
-| UI-01 | 自定义标题栏、Logo、窗口按钮 | P0 | 部分 | 无原生边框/白条，Material Design 最小化/最大化/还原/关闭图标，自定义 5px 边缘缩放与光标，拖拽/最小化/最大化/关闭，标题栏双击最大化/还原已自动化并由 Xvfb E2E 验证，Xvfb 基准截图通过；Windows 白条、拖拽和边缘缩放实机确认待用户启动新 exe |
+| UI-01 | 自定义标题栏、Logo、窗口按钮 | P0 | 部分 | 无原生边框/白条，Material Design 最小化/最大化/还原/关闭图标，自定义 5px 边缘缩放与光标，拖拽/最小化/最大化/关闭，标题栏双击最大化/还原已自动化并由 Xvfb E2E 验证，Xvfb 基准截图通过；2026-10-25 起 Windows 保留原生可缩放边框（`WindowDecorations.BorderOnly`，仍自绘标题栏、无原生标题栏），拖标题栏到屏幕左/右边缘可 Aero Snap 贴墙占半屏、拖到上边缘最大化，其他平台保持无边框（X11 重父化会平移窗口内坐标，破坏 E2E） |
 | UI-02 | 左侧 `User sessions` 侧栏 | P0 | 完成 | 2026-10-23 按用户要求改为 MobaXterm 式固定停靠：侧栏常驻，不再随指针悬停自动展开/收起，左边缘浮动把手已删除；仅标题栏“会话”按钮手动收起/展开，收起后不占宽度，宽度可拖动调整，可见性与宽度跨重启恢复；`+` 新建会话菜单展开期间不收起；点击会话后该行立即显示蓝色 `Connecting...`，连接期间重复点击被忽略，成功/失败/取消后清除；见 `session-sidebar-expanded-on-launch-1000x650.png` |
 | UI-03 | 串口/SSH/Telnet 分组与状态图标 | P0 | 部分 | 连接状态原地更新；Windows `--ports` 已输出 COM97/99 等 SetupAPI 描述 |
 | UI-04 | 侧栏右键菜单 | P0 | 部分 | Open、Edit session、Remove session；Edit session 可在未打开连接时回填已保存主机/端口/用户；确认框、真实桌面右键和配置持久化仍需核对 |
@@ -39,7 +39,7 @@
 | TERM-06 | 粘贴 | P0 | 完成 | 右键、Ctrl+V/Ctrl+Shift+V、中文已验证 |
 | TERM-07 | MobaXterm 关键字高亮 | P0 | 完成 | 错误红、成功绿、警告黄、URL 下划线、ANSI 优先；流式高亮测试通过 |
 | TERM-08 | 光标显示 | P0 | 完成 | 光标颜色/位置正常，隐藏/显示和宽字符推进已通过单元测试 |
-| TERM-09 | 字体/字号配置 | P1 | 部分 | Python 固定 15px；Avalonia 同样固定 15px；2026-10-23 起终端字体为内置 Noto Sans Mono CJK SC（拉丁半宽 + CJK 全宽同一字网格，修复中英文混排基线高低不一），resize/分离渲染正常 |
+| TERM-09 | 字体/字号配置 | P1 | 完成（Avalonia 增强） | 2026-10-25 按用户要求对齐 MobaXterm 默认字体：Consolas 13.5px（≈10pt），中文优先回退 Microsoft YaHei UI，再回退内置 Noto Sans Mono CJK SC（Regular+Bold，OFL）保证没有 YaHei 的环境不出 .notdef；启动时后台预热字型缓存，首个 SSH 标签不再因解析 16MB CJK 字体而变慢（Windows 实机点击→终端可输入 573ms，见 run.log 三段耗时），resize/分离渲染正常；中英文混排观感由 WIN-20 实机核对 |
 | TERM-10 | 终端输入映射 | P0 | 部分 | 文本、Enter、Ctrl+C/V、方向键、Home/End、Insert/Delete、F1-F12 已通过 `cat -v` 实测 |
 | TERM-11 | 断线/重连显示 | P0 | 完成 | SSH 通道 `Closed`/错误事件立即置为断开；主窗口和分离窗口均显示断线，侧栏圆点变灰；无存活连接时点击会话关闭死标签并用缓存凭据重连且不重复提示；已有存活连接时点击会话另开连接；shell 退出或标签关闭后终端布局再次 resize 不再访问已释放的 `ShellStream`，避免 UI 线程未处理异常导致软件退出 |
 | TERM-12 | ZMODEM 字节流接入 | P0 | 完成 | 自动检测、流路由、发送/接收引擎、保存对话框已接入 |

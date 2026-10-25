@@ -1116,6 +1116,42 @@ and the visible state and width are restored on launch:
   - `BAK_COUNT=0`;
   - smoke test: process started, `Responding=True`, then stopped.
 
+### 2026-10-25 — 贴墙分屏、MobaXterm 字体、SSH 首连提速
+
+- 用户三项要求：SSH 连接偏慢、终端字体对齐 MobaXterm、主窗口可拖到屏幕边缘贴墙分屏；
+- 贴墙分屏：Windows 主窗口改用 `WindowDecorations.BorderOnly`（保留原生可缩放边框
+  WS_THICKFRAME，仍自绘标题栏且不显示原生标题栏），其他平台保持 `None`（X11 重父化会
+  平移窗口内坐标，导致 SFTP E2E 点击落点偏移）；RDP 实机拖标题栏到屏幕左边缘已贴墙占
+  半屏，最大化/还原后自绘标题栏与内容完整；
+- 字体：`Consolas, Microsoft YaHei UI, 内置 Noto Sans Mono CJK SC(Regular+Bold)`，
+  字号 13.5（≈MobaXterm 默认 10pt）；启动时后台预热字型缓存，首个终端不再在连接路径上
+  解析 16MB CJK 字体；RDP 实机中英文混排基线齐平、CJK 无 .notdef；
+- SSH 提速：新增三段耗时日志（`SSH connect … took … ms (handshake … ms)`、
+  `SSH session … tab created after … ms`、`… terminal attached after … ms`）；
+  Windows 实机 192.0.2.48 实测 433 ms / 476 ms / 573 ms（其中握手 159 ms）；
+  本机 SSH.NET 连接+shell 基线 106 ms，服务端 auth.log 的 Accepted 与 session opened
+  同秒，结论是点击会话到终端可输入 < 0.6 s，无需再优化；
+- 顺带修复 `SftpTransferUiTests` 上传/下载只等条目出现、不等内容落盘的竞态（全量跑时
+  偶发读到空文件）；
+- test evidence: full gate PASS — 432 tests（Core 53, SFTP 42, Connections 83,
+  Terminal 11, ZMODEM 32, TestGate 49, App 162），Linux Xvfb E2E 13/13，
+  TestGate PASS，results `20261025T152610Z`；新增
+  `WindowSnapTests.UI16_WindowsKeepsTheNativeResizeFrameForAeroSnap` 与
+  `WindowSnapTests.UI16_LinuxWindowStaysFrameless`，重写
+  `CjkTerminalFontTests.TERM17_TerminalFontMatchesMobaxterm` 与
+  `CjkTerminalFontTests.TERM17_BundledFallbackCoversBothScripts`；
+- 实机核对（RDP 1280x800，Windows 10/11 桌面）：900x600 窗口自绘标题栏完整、无原生
+  标题栏；SSH 会话中英文混排正常；拖标题栏到左边缘贴墙占左半屏；点最大化后内容铺满且
+  标题栏不被裁切；日志三段耗时如上；
+- deployment 2026-10-25 (in-place overwrite, no `.bak-*`):
+  - build commit: `7e4b141`;
+  - exe `COMTool.App.exe` published win-x64 single-file R2R;
+  - size: 209,310,540 bytes;
+  - SHA256: `4CF9BED33A8A2C4D0E11D745897473C29EB118CDFB686FE110E21F04851EE622`;
+  - WORK and DESKTOP copies both matched that hash via `Get-FileHash`;
+  - `BAK_COUNT=0`;
+  - smoke test: process started, `Responding=True`, then stopped.
+
 The previously packaged release zip is 74,795,557 bytes with SHA256:
 
 ```text
