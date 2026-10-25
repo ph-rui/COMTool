@@ -249,8 +249,10 @@
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="tools:ScanGridRow">
                   <Grid ColumnDefinitions="120,160,60,60,60,60,60,60,60" Margin="0,2">
-                    <TextBlock Grid.Column="0" Text="{Binding Address}" FontSize="11" />
+                    <TextBlock Grid.Column="0" Text="{Binding Address}" FontSize="11"
+                               TextAlignment="Center" />
                     <TextBlock Grid.Column="1" Text="{Binding HostName}" FontSize="11"
+                               TextAlignment="Center"
                                TextTrimming="CharacterEllipsis"
                                ToolTip.Tip="{Binding HostName}" />
                     <ItemsControl Grid.Column="2" Grid.ColumnSpan="7" ItemsSource="{Binding Cells}">

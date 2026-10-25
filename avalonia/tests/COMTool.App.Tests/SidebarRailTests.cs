@@ -773,6 +773,15 @@ public sealed class SidebarRailTests
                 Assert.Equal(7, glyphs.Count); // 1 行 × 7 服务列
                 Assert.All(glyphs,
                     glyph => Assert.Equal(TextAlignment.Center, glyph.TextAlignment));
+
+                // IP 地址 / 名称 数据单元格也必须居中，与居中的表头对齐
+                var cellTexts = rowGrids
+                    .SelectMany(grid => grid.Children.OfType<TextBlock>())
+                    .Where(text => Grid.GetColumn(text) is 0 or 1)
+                    .ToList();
+                Assert.Equal(2, cellTexts.Count); // 1 行 × 列 0/1
+                Assert.All(cellTexts,
+                    text => Assert.Equal(TextAlignment.Center, text.TextAlignment));
             });
         }
         finally
