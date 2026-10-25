@@ -1099,6 +1099,23 @@ and the visible state and width are restored on launch:
   - `BAK_COUNT=0`;
   - smoke test: process started, `Responding=True`, then stopped.
 
+### 2026-10-25 — 结果表 IP/名称数据居中
+
+- 现象：表头“IP 地址 / 名称”已居中，但数据单元格仍左对齐；
+- 修复：两列数据 `TextBlock` 补 `TextAlignment="Center"`，与表头对齐；
+- test evidence: full gate PASS — 431 tests (Core 53, SFTP 42,
+  Connections 83, Terminal 11, ZMODEM 32, TestGate 49, App 161),
+  Linux Xvfb E2E 13/13, TestGate PASS, results `20261025T141244Z`；
+  断言并入 `NET05_ScanResultColumnsMatchMobaXtermWidths`；
+- deployment 2026-10-25 (in-place overwrite, no `.bak-*`):
+  - build commit: `1cbe5bb`;
+  - exe `COMTool.App-tools.exe` published win-x64 single-file R2R;
+  - size: 209,306,444 bytes;
+  - SHA256: `B177E005ACC8A2E975F7776A3C325CFD1481F298C084AA28AA5AB738C796D25D`;
+  - WORK and DESKTOP copies both matched that hash via `Get-FileHash`;
+  - `BAK_COUNT=0`;
+  - smoke test: process started, `Responding=True`, then stopped.
+
 The previously packaged release zip is 74,795,557 bytes with SHA256:
 
 ```text
