@@ -82,7 +82,10 @@ public sealed class NetworkScanner : INetworkScanner
         int completed = 0;
         var total = targets.Count;
 
-        var tasks = targets.Select(async ip =>
+        // Task.Run：探测任务体（raw ICMP socket + 7 个 TCP socket 的创建）
+        // 必须在线程池上跑。若用 Select(async ...) 内联创建，254 台主机的
+        // socket 会全部在调用方（UI）线程上同步铺开，点击 Start scan 卡 ~3s。
+        var tasks = targets.Select(ip => Task.Run(async () =>
         {
             await gate.WaitAsync(cancellationToken);
             try
@@ -108,7 +111,7 @@ public sealed class NetworkScanner : INetworkScanner
             {
                 gate.Release();
             }
-        }).ToArray();
+        }, cancellationToken)).ToArray();
 
         await Task.WhenAll(tasks);
     }
@@ -152,7 +155,8 @@ public sealed class NetworkScanner : INetworkScanner
         int scanned = 0;
         var total = ports.Count;
 
-        var tasks = ports.Select(async port =>
+        // 同 ScanAsync：任务体放到线程池，避免大批 socket 在 UI 线程内联创建
+        var tasks = ports.Select(port => Task.Run(async () =>
         {
             await gate.WaitAsync(cancellationToken);
             try
@@ -173,7 +177,7 @@ public sealed class NetworkScanner : INetworkScanner
             {
                 gate.Release();
             }
-        }).ToArray();
+        }, cancellationToken)).ToArray();
 
         await Task.WhenAll(tasks);
         cancellationToken.ThrowIfCancellationRequested();

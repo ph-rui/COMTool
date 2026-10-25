@@ -237,6 +237,28 @@ public sealed class NetworkScannerTests
     }
 
     [Fact]
+    public async Task NET05_ScanManyTargetsReturnsPromptlyOnCallerThread()
+    {
+        // TEST-NET-1（192.0.2.0/24）保证不可达：254 个目标全部走超时路径。
+        // 探测任务体（socket 创建等）必须在线程池执行，调用方（UI 线程）的
+        // 同步部分要立即返回——否则点击 Start scan 会卡住界面数秒。
+        Assert.True(
+            NetworkScanTargets.TryParseSubnet("192", "0", "2", "1", "254", out var targets, out var error),
+            $"unexpected parse failure: {error}");
+        var scanner = new NetworkScanner { PingTimeoutMs = 200, ConnectTimeoutMs = 200 };
+
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var scan = scanner.ScanAsync(targets, new[] { 22 }, null, default);
+        stopwatch.Stop();
+        var blockedMs = stopwatch.ElapsedMilliseconds;
+
+        Assert.True(blockedMs < 500,
+            $"ScanAsync blocked the caller for {blockedMs} ms (work must be deferred to the pool)");
+        Assert.False(scan.IsCompleted);
+        await scan;
+    }
+
+    [Fact]
     public void NET05_ScanDefaultsTargetTwoSecondSubnetScan()
     {
         // MobaXterm 的 /24 扫描 2 秒内出结果：全部 254 个目标一波并行探测，
