@@ -9,7 +9,7 @@
         MinWidth="700"
         MinHeight="420"
         CanResize="True"
-        ShowInTaskbar="False"
+        ShowInTaskbar="True"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource WindowBackgroundBrush}"
         FontSize="12">

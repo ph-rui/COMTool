@@ -316,23 +316,23 @@ public sealed class SidebarRailTests
                     new[] { "#00897b", "#5e35b1", "#2196f3" },
                     vm.ToolMenu.Select(item => item.GlyphColor).ToArray());
 
-                // 点选“网络服务器”：打开从属窗口（任务栏与主窗口归组，
-                // 点任务栏时一起激活），重复点选只激活同一实例
+                // 点选“网络服务器”：打开独立顶层窗（无 Owner，任务栏靠同进程 AUMID
+                // 归组、悬停出缩略图预览、主窗最小化不带走），重复点选只激活同一实例
                 ClickToolMenuItem(window, "net-server");
                 var servers = Assert.IsType<ServersManagementWindow>(
                     window!.FindToolWindowForTests("net-server"));
                 Assert.True(servers.IsVisible);
-                Assert.Same(window, servers.Owner);
+                Assert.Null(servers.Owner);
                 ClickToolMenuItem(window, "net-server");
                 Assert.Single(window.ToolWindowsForTests);
                 Assert.Same(servers, window.FindToolWindowForTests("net-server"));
 
-                // 点选“网络扫描仪”：再开一个从属窗口
+                // 点选“网络扫描仪”：再开一个独立窗口
                 ClickToolMenuItem(window, "scanner");
                 var scanner = Assert.IsType<NetworkScanWindow>(
                     window.FindToolWindowForTests("scanner"));
                 Assert.True(scanner.IsVisible);
-                Assert.Same(window, scanner.Owner);
+                Assert.Null(scanner.Owner);
                 Assert.Equal(2, window.ToolWindowsForTests.Count);
 
                 // 点选“端口扫描仪”：第三个窗口
@@ -340,7 +340,7 @@ public sealed class SidebarRailTests
                 var portScanner = Assert.IsType<PortScanWindow>(
                     window.FindToolWindowForTests("port-scanner"));
                 Assert.True(portScanner.IsVisible);
-                Assert.Same(window, portScanner.Owner);
+                Assert.Null(portScanner.Owner);
                 Assert.Equal(3, window.ToolWindowsForTests.Count);
 
                 // 关闭窗口后从注册表移除，再次点选可重新打开
@@ -382,7 +382,7 @@ public sealed class SidebarRailTests
                 ClickToolMenuItem(window, "scanner");
                 var scanner = Assert.IsType<NetworkScanWindow>(
                     window.FindToolWindowForTests("scanner"));
-                Assert.Same(window, scanner.Owner);
+                Assert.Null(scanner.Owner);
 
                 window.Close();
                 RunJobs(window);
@@ -1401,10 +1401,9 @@ public sealed class SidebarRailTests
                         "Iperf 服务器",
                     },
                     vm.Rows.Select(r => r.Name));
-                Assert.True(vm.Find("http")!.IsImplemented);
-                Assert.True(vm.Find("tftp")!.IsImplemented);
-                Assert.Equal(7, vm.Rows.Count(r => !r.IsImplemented));
-                Assert.Equal("暂不支持（框架已预留）", vm.Find("ftp")!.ToolTipText);
+                Assert.Equal(ServerConfigKind.Nfs, vm.Find("nfs")!.Kind);
+                Assert.Equal(ServerConfigKind.Vnc, vm.Find("vnc")!.Kind);
+                Assert.False(vm.Rows.Any(r => r.IsSelected));
 
                 // 初始显示欢迎页，底部有“确定”
                 Assert.True(vm.IsWelcome);
@@ -1419,8 +1418,10 @@ public sealed class SidebarRailTests
     }
 
     [AvaloniaFact]
-    public void SRV01_NumericInputsAreCenteredAndShareWidth()
+    public void SRV01_NumericInputsShareWidth()
     {
+        // MobaXterm 22.1 经典微调框：数值左对齐（自定义 ClassicNum 模板 1:1），
+        // 各数值框统一 60px 宽。
         using var env = new TestEnvironment();
         ServersManagementWindow? window = null;
         try
@@ -1438,8 +1439,99 @@ public sealed class SidebarRailTests
                 var boxes = names
                     .Select(name => window.FindControl<NumericUpDown>(name)!)
                     .ToArray();
-                Assert.All(boxes, box => Assert.Equal(TextAlignment.Center, box.TextAlignment));
-                Assert.All(boxes, box => Assert.Equal(120, box.Width));
+                Assert.All(boxes, box => Assert.Equal(TextAlignment.Start, box.TextAlignment));
+                Assert.All(boxes, box => Assert.Equal(60, box.Width));
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public void SRV01_SpinnerArrowsChangeValue()
+    {
+        // 回归（2026-10-26 实机：上下箭头点击无响应）：ClassicNum 模板必须包含
+        // ButtonSpinner#PART_Spinner，NumericUpDown.OnApplyTemplate 才能订阅 Spin 事件；
+        // PART_IncreaseButton / PART_DecreaseButton 必须位于 ButtonSpinner 模板作用域内。
+        // 同时数值区（PART_TextBox）宽度必须足够显示 4 位数。
+        using var env = new TestEnvironment();
+        ServersManagementWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                window = new ServersManagementWindow();
+                window.Show();
+                window.UpdateLayout();
+                Dispatcher.UIThread.RunJobs();
+
+                var vm = window.ViewModel;
+                var pairs = new (string Server, string BoxName)[]
+                {
+                    ("http", "HttpPortBox"),
+                    ("http", "HttpSecondsBox"),
+                    ("tftp", "TftpPortBox"),
+                    ("tftp", "TftpSecondsBox"),
+                };
+                foreach (var (server, boxName) in pairs)
+                {
+                    // 面板默认隐藏（欢迎页），先选中服务器让控件可见可命中
+                    vm.Select(vm.Find(server));
+                    window.UpdateLayout();
+                    Dispatcher.UIThread.RunJobs();
+
+                    var box = window.FindControl<NumericUpDown>(boxName)!;
+
+                    var spinner = box.GetVisualDescendants()
+                        .OfType<ButtonSpinner>().FirstOrDefault();
+                    Assert.NotNull(spinner);
+                    Assert.Equal("PART_Spinner", spinner!.Name);
+
+                    var inc = box.GetVisualDescendants().OfType<RepeatButton>()
+                        .FirstOrDefault(b => b.Name == "PART_IncreaseButton");
+                    var dec = box.GetVisualDescendants().OfType<RepeatButton>()
+                        .FirstOrDefault(b => b.Name == "PART_DecreaseButton");
+                    Assert.NotNull(inc);
+                    Assert.NotNull(dec);
+
+                    var v0 = box.Value;
+                    Click(window, inc!);
+                    Assert.True((int)box.Value == (int)(v0 + 1), $"{boxName} 上箭头未生效");
+                    Click(window, dec!);
+                    Click(window, dec!);
+                    Assert.True((int)box.Value == (int)(v0 - 1), $"{boxName} 下箭头未生效");
+                    box.Value = v0;
+                    Dispatcher.UIThread.RunJobs();
+
+                    var tb = box.GetVisualDescendants().OfType<TextBox>().FirstOrDefault();
+                    Assert.NotNull(tb);
+                    Assert.True(tb!.Bounds.Width >= 30,
+                        $"{boxName} 数值区宽度 {tb.Bounds.Width:F0}px 不足以显示 4 位数");
+
+                    // 回归（2026-10-27 实机"小键盘吞键"）：键盘焦点只属于编辑框。
+                    // 点 ▲/▼ 不得抢走焦点（RepeatButton/ButtonSpinner/NumericUpDown
+                    // 均 Focusable=False），否则后续输入落到按钮上被吞
+                    // （对齐 MobaXterm 的 Win32 buddy up-down 行为）
+                    Assert.False(inc!.Focusable, $"{boxName} PART_IncreaseButton 必须 Focusable=False");
+                    Assert.False(dec!.Focusable, $"{boxName} PART_DecreaseButton 必须 Focusable=False");
+                    Assert.False(spinner.Focusable, $"{boxName} ButtonSpinner 必须 Focusable=False");
+                    Assert.False(box.Focusable, $"{boxName} NumericUpDown 必须 Focusable=False");
+                    Assert.True(tb.Focusable, $"{boxName} PART_TextBox 必须可聚焦");
+
+                    var fm = window.FocusManager;
+                    Assert.NotNull(fm);
+                    fm!.Focus(tb);
+                    Dispatcher.UIThread.RunJobs();
+                    Assert.True(ReferenceEquals(tb, fm.GetFocusedElement()),
+                        $"{boxName}: 无法将焦点设到编辑框（当前焦点 {fm.GetFocusedElement()?.GetType().Name}）");
+                    Click(window, inc!);
+                    Dispatcher.UIThread.RunJobs();
+                    Assert.True(ReferenceEquals(tb, fm.GetFocusedElement()),
+                        $"{boxName}: 点上箭头后焦点被抢走（当前焦点 {fm.GetFocusedElement()?.GetType().Name}）");
+                }
             });
         }
         finally

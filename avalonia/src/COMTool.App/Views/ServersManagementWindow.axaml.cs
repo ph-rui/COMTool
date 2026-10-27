@@ -9,9 +9,10 @@ using COMTool.Connections.Servers;
 namespace COMTool.App.Views;
 
 /// <summary>
-/// MobaXterm "Servers management" dialog (工具 → 网络服务器). Nine server rows,
-/// HTTP and TFTP functional, the rest disabled placeholders. Closing the
-/// dialog stops every running server.
+/// MobaXterm "Servers management" dialog (工具 → 网络服务器). Nine server
+/// rows in MobaXterm order: FTP/Telnet/SSH-SFTP/Cron/Iperf run real
+/// engines, NFS/VNC are placeholders that report in the server output.
+/// Closing the dialog stops every running server.
 /// </summary>
 public partial class ServersManagementWindow : Window
 {
@@ -27,14 +28,21 @@ public partial class ServersManagementWindow : Window
         InitializeComponent();
         _config = config;
         DataContext = new ServersManagementViewModel(config);
-        ViewModel.HttpLog.CollectionChanged += (_, _) => ScrollLogToEnd(HttpLogBox);
-        ViewModel.TftpLog.CollectionChanged += (_, _) => ScrollLogToEnd(TftpLogBox);
+        WireLog("tftp", TftpLogBox);
+        WireLog("ftp", FtpLogBox);
+        WireLog("http", HttpLogBox);
+        WireLog("ssh", SshLogBox);
+        WireLog("telnet", TelnetLogBox);
+        WireLog("nfs", NfsLogBox);
+        WireLog("vnc", VncLogBox);
+        WireLog("cron", CronLogBox);
+        WireLog("iperf", IperfLogBox);
     }
 
     internal ServersManagementViewModel ViewModel =>
         (ServersManagementViewModel)DataContext!;
 
-    /// <summary>Test seam: id → host, replacing the real HTTP/TFTP engines.</summary>
+    /// <summary>Test seam: id → host, replacing the real engines.</summary>
     internal Func<string, IServerHost>? ServerFactoryForTests
     {
         get => ViewModel.ServerFactory;
@@ -76,6 +84,24 @@ public partial class ServersManagementWindow : Window
 
     private void OnOkClick(object? sender, RoutedEventArgs e) => Close();
 
+    private async void OnBrowseTftpRoot(object? sender, RoutedEventArgs e)
+    {
+        var path = await PickFolderAsync("选择 TFTP 服务器根目录");
+        if (path is not null)
+        {
+            ViewModel.TftpRoot = path;
+        }
+    }
+
+    private async void OnBrowseFtpRoot(object? sender, RoutedEventArgs e)
+    {
+        var path = await PickFolderAsync("选择 FTP 服务器根目录");
+        if (path is not null)
+        {
+            ViewModel.FtpRoot = path;
+        }
+    }
+
     private async void OnBrowseHttpRoot(object? sender, RoutedEventArgs e)
     {
         var path = await PickFolderAsync("选择 HTTP 服务器根目录");
@@ -85,12 +111,11 @@ public partial class ServersManagementWindow : Window
         }
     }
 
-    private async void OnBrowseTftpRoot(object? sender, RoutedEventArgs e)
+    private void WireLog(string rowId, ListBox box)
     {
-        var path = await PickFolderAsync("选择 TFTP 服务器根目录");
-        if (path is not null)
+        if (ViewModel.Find(rowId) is { } row && box is not null)
         {
-            ViewModel.TftpRoot = path;
+            row.Log.CollectionChanged += (_, _) => ScrollLogToEnd(box);
         }
     }
 

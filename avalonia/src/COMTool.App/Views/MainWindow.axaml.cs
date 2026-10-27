@@ -76,17 +76,21 @@ public partial class MainWindow : Window
         InitializeComponent();
         WarmUpTerminalFonts();
 
-        // Windows: keep the native resize frame (WS_THICKFRAME) under our
-        // self-drawn title bar so dragging to a screen edge snaps the window
-        // (Aero Snap) and Win+Arrow works. BorderOnly still hides the native
-        // caption. Other platforms keep the frameless window the X11 E2E
-        // harness drives.
-        WindowDecorations = PreferredWindowDecorations(OperatingSystem.IsWindows());
+        // Every platform stays frameless (WindowDecorations=None in XAML) so
+        // DWM never draws a window border and the X11 E2E harness keeps its
+        // window-relative coordinates. On top of that, Windows marks the
+        // window resizable by adding WS_THICKFRAME itself: Aero Snap and
+        // Win+Arrow only work for windows with that style, and because the
+        // client area covers the whole window (Avalonia's None mode answers
+        // WM_NCCALCSIZE with the full rect) the style bit adds no visible
+        // frame.
+        EnsureWindowsSnapFrame();
 
         UpdateMaximizeIcon();
         SizeChanged += OnWindowSizeChanged;
         ApplySavedWindowSizeBeforeShow();
         AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Tunnel);
+        AddHandler(PointerWheelChangedEvent, OnWindowPointerWheelChanged, RoutingStrategies.Tunnel, handledEventsToo: true);
         AddHandler(PointerMovedEvent, OnWindowPointerMoved, RoutingStrategies.Tunnel, handledEventsToo: true);
         AddHandler(PointerPressedEvent, OnWindowPointerPressed, RoutingStrategies.Tunnel);
         AddHandler(PointerReleasedEvent, OnWindowPointerReleased, RoutingStrategies.Tunnel, handledEventsToo: true);
@@ -116,20 +120,24 @@ public partial class MainWindow : Window
         if (change.Property == WindowStateProperty)
         {
             UpdateMaximizeIcon();
-            RemoveWindowsWindowBorder();
+            EnsureWindowsSnapFrame();
         }
     }
 
     private void OnWindowActivated(object? sender, EventArgs e) =>
-        RemoveWindowsWindowBorder();
+        EnsureWindowsSnapFrame();
 
     /// <summary>
-    /// Windows 11 draws a thin accent-coloured border around a resizable
-    /// borderless window. The app draws its own chrome, so the DWM border is
-    /// removed with DWMWA_BORDER_COLOR. Older Windows versions reject the
-    /// attribute and simply keep their default frame.
+    /// Aero Snap (drag to a screen edge, Win+Arrow) only works for windows
+    /// that carry the WS_THICKFRAME style. The window itself stays frameless
+    /// (WindowDecorations.None answers WM_NCCALCSIZE with the full rect, so
+    /// DWM has no non-client area to draw a frame into and no visible border
+    /// appears - verified against the Win10 DWM frame the old BorderOnly
+    /// decoration left behind). The bit is added after the handle exists and
+    /// re-applied on activation/state changes because Avalonia rewrites the
+    /// style from its own decoration model.
     /// </summary>
-    private void RemoveWindowsWindowBorder()
+    private void EnsureWindowsSnapFrame()
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -142,25 +150,49 @@ public partial class MainWindow : Window
             return;
         }
 
-        const int DwmwaBorderColor = 34;
-        var color = 0xFFFFFFFEu; // DWMWA_COLOR_NONE
-        _ = DwmSetWindowAttribute(
+        var style = GetWindowLongPtr(handle.Handle, GwlStyle);
+        if ((style.ToInt64() & WsThickFrame) != 0)
+        {
+            return;
+        }
+
+        SetWindowLongPtr(handle.Handle, GwlStyle, new IntPtr(style.ToInt64() | WsThickFrame));
+        SetWindowPos(
             handle.Handle,
-            DwmwaBorderColor,
-            ref color,
-            sizeof(uint));
+            IntPtr.Zero,
+            0,
+            0,
+            0,
+            0,
+            SwpNoMove | SwpNoSize | SwpNoZOrder | SwpFrameChanged);
     }
 
-    [DllImport("dwmapi.dll")]
-    private static extern int DwmSetWindowAttribute(
-        IntPtr hwnd,
-        int attribute,
-        ref uint value,
-        int size);
+    private const int GwlStyle = -16;
+    private const long WsThickFrame = 0x00040000L;
+    private const uint SwpNoMove = 0x0002;
+    private const uint SwpNoSize = 0x0001;
+    private const uint SwpNoZOrder = 0x0004;
+    private const uint SwpFrameChanged = 0x0020;
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
+    private static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
+    private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetWindowPos(
+        IntPtr hWnd,
+        IntPtr hWndInsertAfter,
+        int x,
+        int y,
+        int cx,
+        int cy,
+        uint uFlags);
 
     private void OnOpened(object? sender, EventArgs e)
     {
-        RemoveWindowsWindowBorder();
+        EnsureWindowsSnapFrame();
 
         if (_loaded || DataContext is not MainViewModel viewModel)
         {
@@ -180,6 +212,8 @@ public partial class MainWindow : Window
             {
                 _config = AppConfigService.Load();
                 AppLog.Info($"Config loaded: {_config.ConfigPath}");
+                // "COMTool 启动时启动 Cron 服务器" 勾选时随主窗口自启
+                _ = CronAutoStart.EnsureAsync(_config.Config.Servers.Cron);
                 ThemeManager.Apply(_config.Config.Skin);
                 ApplyEncodingConfig();
                 ApplySidebarConfig();
@@ -1601,13 +1635,17 @@ public partial class MainWindow : Window
     // MobaXterm's 10pt Consolas is ~13.3px at 96 DPI.
     internal const double TerminalFontSize = 13.5;
 
-    /// <summary>
-    /// MobaXterm snaps to screen edges (Aero Snap). Windows only grants that
-    /// when the window keeps its native resize frame, so Windows keeps a
-    /// border without a caption while every other platform stays frameless.
-    /// </summary>
-    internal static WindowDecorations PreferredWindowDecorations(bool isWindows) =>
-        isWindows ? WindowDecorations.BorderOnly : WindowDecorations.None;
+    // Aero Snap (drag to a screen edge) only works when the window carries
+    // the native resize style. The window itself stays frameless on every
+    // platform: Avalonia's WindowDecorations.None answers WM_NCCALCSIZE with
+    // the full rect, so on Windows the bit enables snapping without any
+    // visible DWM border (the BorderOnly decoration that used to provide the
+    // frame left a blue/white strip above the title bar on Windows 10).
+    internal const long SnapFrameStyle = 0x00040000; // WS_THICKFRAME
+
+    internal static bool WantsSnapFrame(bool isWindows) => isWindows;
+
+    internal static long WithSnapFrame(long style) => style | SnapFrameStyle;
 
     /// <summary>
     /// Warms Avalonia's typeface cache off the UI thread. The bundled CJK
@@ -2843,6 +2881,49 @@ public partial class MainWindow : Window
 
     internal ConnectionSettingsWindow? SettingsWindowForTests => _settingsWindow;
 
+    // Ctrl + mouse wheel resizes the font of the terminal under the pointer,
+    // like MobaXterm. The change is per-terminal and not persisted, so a
+    // restart returns to TerminalFontSize.
+    internal const double TerminalFontSizeMin = 8.0;
+    internal const double TerminalFontSizeMax = 48.0;
+
+    internal static double AdjustTerminalFontSize(double current, double deltaY)
+    {
+        if (double.Equals(deltaY, 0.0))
+        {
+            return current;
+        }
+
+        var next = current + (deltaY > 0 ? 1 : -1);
+        if (next < TerminalFontSizeMin)
+        {
+            next = TerminalFontSizeMin;
+        }
+        else if (next > TerminalFontSizeMax)
+        {
+            next = TerminalFontSizeMax;
+        }
+
+        return next;
+    }
+
+    private void OnWindowPointerWheelChanged(object? sender, PointerWheelEventArgs e)
+    {
+        if (!e.KeyModifiers.HasFlag(KeyModifiers.Control))
+        {
+            return;
+        }
+
+        if (e.Source is not Visual source
+            || source.FindAncestorOfType<TerminalControl>(includeSelf: true) is not TerminalControl terminal)
+        {
+            return;
+        }
+
+        terminal.FontSize = AdjustTerminalFontSize(terminal.FontSize, e.Delta.Y);
+        e.Handled = true;
+    }
+
     private void OnWindowPointerMoved(object? sender, PointerEventArgs e)
     {
         var position = e.GetPosition(this);
@@ -3241,10 +3322,12 @@ public partial class MainWindow : Window
         var window = descriptor.CreateWindow(this);
         window.Closed += (_, _) => _toolWindows.Remove(id);
         _toolWindows[id] = window;
-        // 与 MobaXterm 一致：Show(this) 把工具窗设为主窗口的从属窗口，
-        // 任务栏只保留一个按钮，点任务栏时主窗口与工具窗一起激活
-        // （ShowInTaskbar 已在各工具窗 XAML 中为 false）。
-        window.Show(this);
+        // 与 MobaXterm 一致的任务栏归组行为：不设 Owner。Show(this) 会建立 Win32
+        // 从属关系——工具窗跟随主窗最小化（用户明确不要）、也不出独立任务栏缩略图。
+        // 用普通 Show + 工具窗 ShowInTaskbar=true：各窗为独立顶层窗，同进程 AUMID
+        // 自动归到同一任务栏按钮（悬停出主窗+各工具窗缩略图预览、点预览单独激活
+        // 对应窗）；关主窗时由 OnClosed 显式关闭全部工具窗。
+        window.Show();
     }
 
     private void OnMinimizeClick(object? sender, RoutedEventArgs e)
@@ -3548,6 +3631,8 @@ public partial class MainWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         PersistWindowSize();
+        // 退出时停止随主窗口自启的 Cron 服务器（对话框自启的由对话框收尾）
+        _ = CronAutoStart.StopAsync();
         _portTimer?.Stop();
         _portTimer = null;
         SizeChanged -= OnWindowSizeChanged;
@@ -3562,8 +3647,8 @@ public partial class MainWindow : Window
             state.Window.Close();
         }
 
-        // 工具窗是主窗口的从属窗口（Owner）；跨平台实现不保证关主窗自动
-        // 关从属窗，这里仍显式收尾，保证任何平台行为一致。
+        // 工具窗是独立顶层窗（无 Owner，任务栏靠同进程 AUMID 归组），
+        // 关主窗不会自动带关，这里显式收尾，保证任何平台行为一致。
         foreach (var toolWindow in _toolWindows.Values.ToList())
         {
             toolWindow.Close();

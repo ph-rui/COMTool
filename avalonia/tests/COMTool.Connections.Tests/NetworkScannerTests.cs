@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using System.Threading;
 using COMTool.Connections.NetworkScan;
 
 namespace COMTool.Connections.Tests;
@@ -222,8 +223,16 @@ public sealed class NetworkScannerTests
         listener.Start();
         var port = ((IPEndPoint)listener.LocalEndpoint).Port;
 
-        var seen = 0;
-        var progress = new IntSyncProgress(n => seen = n);
+        // 进度由 7 个线程池任务同步回调写入 seen（跨线程非原子写）。await 返回后
+        // 直接读 seen 可能读到中间值（store 顺序/可见性竞态，整库高负载下偶发失败）。
+        // 改为原子取最大值：扫描保证上报 done==total(=7)，故终值恒为 7，测试确定性通过。
+        int seen = 0;
+        var progress = new IntSyncProgress(n =>
+        {
+            int cur;
+            do { cur = Volatile.Read(ref seen); }
+            while (n > cur && Interlocked.CompareExchange(ref seen, n, cur) != cur);
+        });
 
         // 只扫监听端口附近的小窗口（随机端口可能是高位端口，扫 1..port 会过慢）
         var open = await new NetworkScanner().ScanHostPortsAsync(
@@ -231,7 +240,7 @@ public sealed class NetworkScannerTests
 
         Assert.Single(open);
         Assert.Equal(port, open[0]);
-        Assert.Equal(7, seen);
+        Assert.Equal(7, Volatile.Read(ref seen));
 
         listener.Stop();
     }
