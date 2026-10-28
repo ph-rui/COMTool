@@ -21,6 +21,9 @@
   phase0-report L129 已有同类记录；交互桌面不受影响）
 - [ ] 用户实机目验（WIN-27 清单；对照 MobaXterm 22.1 并排）
 - [ ] 用户确认后 push（本轮不 push）
+- [x] 追加：应用户反馈移除顶栏"宏"按钮（标题栏恢复原 8 列，min/max/close 回 5/6/7；
+  宏入口保留左侧栏宏页 + Ctrl+Space + 热键；commit cc9cff4）；gate 第三轮
+  （2026-10-28 06:18Z）全 PASS；重新发布（SHA256 FF36D195…）双份部署 + SSH 冒烟通过
 
 ## 已知偏差（已写入 spec 附录）
 
