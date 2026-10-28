@@ -96,7 +96,7 @@
                      Foreground="{DynamicResource TitleBarForegroundBrush}" />
         </Button>
 
-        <Button Grid.Column="5"
+        <Button Grid.Column="6"
                 Classes="TitleBarButton WindowMinButton"
                 ToolTip.Tip="Minimize"
                 Click="OnMinimizeClick">
@@ -105,7 +105,7 @@
                      FontSize="13"
                      Foreground="{DynamicResource TitleBarForegroundBrush}" />
         </Button>
-        <Button Grid.Column="6"
+        <Button Grid.Column="7"
                 Name="MaximizeButton"
                 Classes="TitleBarButton WindowMaxButton"
                 ToolTip.Tip="Maximize"
@@ -116,7 +116,7 @@
                      FontSize="13"
                      Foreground="{DynamicResource TitleBarForegroundBrush}" />
         </Button>
-        <Button Grid.Column="7"
+        <Button Grid.Column="8"
                 Classes="TitleBarButton WindowCloseButton"
                 ToolTip.Tip="Close"
                 Click="OnCloseClick">
