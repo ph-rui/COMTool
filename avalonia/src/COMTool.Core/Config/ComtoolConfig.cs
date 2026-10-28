@@ -1,6 +1,7 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using COMTool.Core.Macros;
 
 namespace COMTool.Core.Config;
 
@@ -150,6 +151,18 @@ public sealed class MacroConfig
     [JsonPropertyName("name")]
     public string Name { get; set; } = "";
 
+    /// <summary>
+    /// Step-based definition (MobaXterm-style). When empty and <see cref="Text"/>
+    /// is set, the legacy single-text format is migrated on load.
+    /// </summary>
+    [JsonPropertyName("steps")]
+    public List<MacroStepDto> Steps { get; set; } = new();
+
+    /// <summary>Global hotkey, e.g. "Ctrl+Shift+M". Null/empty = none.</summary>
+    [JsonPropertyName("hotkey")]
+    public string? Hotkey { get; set; }
+
+    // Legacy fields, kept so pre-migration configs keep deserializing.
     [JsonPropertyName("text")]
     public string Text { get; set; } = "";
 
