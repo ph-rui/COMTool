@@ -42,6 +42,9 @@ public partial class MainWindow : Window
     private AppConfigService? _config;
     private DispatcherTimer? _portTimer;
     private bool _windowPointerPressed;
+    // 录制去重：KeyDown 路径刚喂过的字符+时刻（防 Win32 WM_CHAR 回声把同一字符双录）
+    private char _lastKeyFeedChar = '\0';
+    private int _lastKeyFeedTick;
     private ConnectionSettingsWindow? _settingsWindow;
     private readonly Dictionary<TerminalTab, ZmodemTiming> _zmodemTimings = new();
     private readonly Dictionary<TerminalTab, ZmodemStream> _zmodemStreams = new();
@@ -2555,17 +2558,30 @@ public partial class MainWindow : Window
 
             if (viewModel.IsRecording)
             {
-                // 2) Recording: special keys inside the recording target's
-                //    subtree are fed to the recorder but NOT consumed, so the
-                //    terminal still receives them. Modifier combos and
-                //    printable text are not part of the macro here (text goes
-                //    through OnRecordingTextInput; known MobaXterm deviation).
+                // 2) Recording: keys inside the recording target's subtree are
+                //    fed to the recorder but NOT consumed, so the terminal
+                //    still receives them. Special keys -> FeedKey; printable
+                //    characters -> FeedText (derived from Key+Shift, US layout):
+                //    real keyboards never raise TextInputEvent for terminal
+                //    input (the terminal control consumes KeyDown itself), so
+                //    text MUST be captured here; IME-composed text still
+                //    arrives via OnRecordingTextInput, deduped against this
+                //    path. Ctrl/Alt combos produce control sequences, not
+                //    text, so they are not recorded (known MobaXterm deviation).
                 if (viewModel.ActiveRecording is { } recording
                     && e.Source is Visual recordingSource
-                    && IsInSubtree(recordingSource, recording.Target)
-                    && MapKeyToMacroName(e.Key) is { } macroKeyName)
+                    && IsInSubtree(recordingSource, recording.Target))
                 {
-                    recording.FeedKey(macroKeyName);
+                    if (MapKeyToMacroName(e.Key) is { } macroKeyName)
+                    {
+                        recording.FeedKey(macroKeyName);
+                    }
+                    else if (MapKeyToChar(e.Key, e.KeyModifiers) is { } ch)
+                    {
+                        _lastKeyFeedChar = ch[0];
+                        _lastKeyFeedTick = Environment.TickCount;
+                        recording.FeedText(ch);
+                    }
                 }
             }
             else if (!viewModel.IsExecutingMacro)
@@ -2625,10 +2641,75 @@ public partial class MainWindow : Window
             return;
         }
 
+        // 去重：同一物理按键在部分平台（如 Win32 的 WM_CHAR）会先后触发
+        // KeyDown 和 TextInput 两次；KeyDown 路径 100ms 内已喂过同一字符时
+        // 丢弃，防止双录。IME 组合文本（多字符或与上次不同）不受影响。
+        if (e.Text.Length == 1
+            && e.Text[0] == _lastKeyFeedChar
+            && (Environment.TickCount - _lastKeyFeedTick) < 100)
+        {
+            return;
+        }
+
         if (IsInSubtree(source, recording.Target))
         {
             recording.FeedText(e.Text);
         }
+    }
+
+    /// <summary>
+    /// 录制用：按键 → 可打印字符（US 布局，Shift 映射大写/符号）。
+    /// 真实键盘在终端控件上敲字符不会触发 TextInputEvent（控件自己消费
+    /// KeyDown 送 pty），所以文本必须在 KeyDown 路径派生捕获，保证
+    /// "终端收到什么，宏就录什么"。Ctrl/Alt 组合产生控制序列而非文本，
+    /// 不记录（已知偏差）。非 US 布局的标点位置会录出 US 字符（已知偏差）。
+    /// </summary>
+    private static string? MapKeyToChar(Key key, KeyModifiers mods)
+    {
+        if ((mods & ~KeyModifiers.Shift) != KeyModifiers.None)
+        {
+            return null;
+        }
+
+        var shift = (mods & KeyModifiers.Shift) != 0;
+        char c;
+
+        if (key >= Key.A && key <= Key.Z)
+        {
+            c = (char)((shift ? 'A' : 'a') + (int)(key - Key.A));
+            return c.ToString();
+        }
+        if (key >= Key.D0 && key <= Key.D9)
+        {
+            var i = (int)(key - Key.D0);
+            return shift ? "!\"#$%&'()".Substring(i, 1) : ((char)('0' + i)).ToString();
+        }
+        if (key >= Key.NumPad0 && key <= Key.NumPad9)
+        {
+            return ((char)('0' + (int)(key - Key.NumPad0))).ToString();
+        }
+        if (key == Key.Space)
+        {
+            return " ";
+        }
+
+        // US 布局标点（Avalonia 12.1.4 Key 值：OemSemicolon=140..OemBackslash=154）
+        switch (key)
+        {
+            case Key.OemSemicolon: c = shift ? ':' : ';'; break;
+            case Key.OemPlus: c = shift ? '*' : '+'; break;
+            case Key.OemComma: c = shift ? '<' : ','; break;
+            case Key.OemMinus: c = shift ? '_' : '-'; break;
+            case Key.OemPeriod: c = shift ? '>' : '.'; break;
+            case Key.OemQuestion: c = shift ? '?' : '/'; break;
+            case Key.OemTilde: c = shift ? '~' : '`'; break;
+            case Key.OemOpenBrackets: c = shift ? '{' : '['; break;
+            case Key.OemPipe: c = shift ? '|' : '\\'; break;
+            case Key.OemCloseBrackets: c = shift ? '}' : ']'; break;
+            case Key.OemQuotes: c = shift ? '"' : '\''; break;
+            default: return null;
+        }
+        return c.ToString();
     }
 
     /// <summary>Maps an Avalonia key to a <see cref="COMTool.Core.Macros.MacroKeys"/> name, or null.</summary>

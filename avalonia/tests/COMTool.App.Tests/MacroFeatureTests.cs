@@ -1363,6 +1363,142 @@ public sealed class MacroFeatureTests
         root.GetVisualDescendants().OfType<Button>()
             .First(b => b.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == label));
 
+    [AvaloniaFact]
+    public async Task MAC22_RecordingCapturesTypedTextViaKeyDownTunnel()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            await env.RunAsync(async () =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                window = CreateWindow(env);
+                var vm = Vm(window);
+                var sidebar = Sidebar(window);
+
+                var pty = new InMemoryPty();
+                var terminal = new TerminalControl { Process = string.Empty };
+                vm.AddTab(TestTab.Create(terminal, title: "t", sessionId: "t",
+                    kind: SessionKind.Local, terminal: terminal));
+                RunJobs(window);
+                terminal.ApplyTemplate();
+                terminal.AttachConnection(pty);
+                RunJobs(window);
+
+                // 开始录制（sidebar 事件，真实路径）
+                sidebar.RaiseMacroRecordToggleForTests();
+                RunJobs(window);
+                Assert.True(vm.IsRecording);
+
+                // 真实按键路径：在终端上触发 KeyDown（窗口 tunnel 捕获），
+                // 复现用户实机场景 "ls 回车 pwd 回车"。修复前字符走 TextInputEvent
+                // 而真实键盘在终端上不触发该事件 → 宏里只剩 RETURN/SLEEP。
+                PressKey(terminal, Key.L, KeyModifiers.None);
+                PressKey(terminal, Key.S, KeyModifiers.None);
+                PressKey(terminal, Key.Enter, KeyModifiers.None);
+                PressKey(terminal, Key.P, KeyModifiers.None);
+                PressKey(terminal, Key.W, KeyModifiers.None);
+                PressKey(terminal, Key.D, KeyModifiers.None);
+                PressKey(terminal, Key.Enter, KeyModifiers.None);
+
+                // 停止录制
+                sidebar.RaiseMacroRecordToggleForTests();
+                RunJobs(window);
+                Assert.False(vm.IsRecording);
+
+                // 命名对话框：确认保存
+                var dialog = window.LastMacroNameDialogForTests;
+                Assert.NotNull(dialog);
+                ButtonByLabel(dialog, "确定")
+                    .RaiseEvent(new RoutedEventArgs(Button.ClickEvent, dialog));
+                RunJobs(window);
+
+                Assert.Single(vm.Macros);
+                var steps = vm.Macros[0].Steps;
+                Assert.Equal(4, steps.Count);
+                Assert.Equal(MacroStepKind.Text, steps[0].Kind);
+                Assert.Equal("ls", steps[0].Text);
+                Assert.Equal(MacroStepKind.Key, steps[1].Kind);
+                Assert.Equal(MacroKeys.Return, steps[1].KeyName);
+                Assert.Equal(MacroStepKind.Text, steps[2].Kind);
+                Assert.Equal("pwd", steps[2].Text);
+                Assert.Equal(MacroStepKind.Key, steps[3].Kind);
+                Assert.Equal(MacroKeys.Return, steps[3].KeyName);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task MAC23_RecordingTextInputDedupAndIme()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            await env.RunAsync(async () =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                window = CreateWindow(env);
+                var vm = Vm(window);
+                var sidebar = Sidebar(window);
+
+                var pty = new InMemoryPty();
+                var terminal = new TerminalControl { Process = string.Empty };
+                vm.AddTab(TestTab.Create(terminal, title: "t", sessionId: "t",
+                    kind: SessionKind.Local, terminal: terminal));
+                RunJobs(window);
+                terminal.ApplyTemplate();
+                terminal.AttachConnection(pty);
+                RunJobs(window);
+
+                sidebar.RaiseMacroRecordToggleForTests();
+                RunJobs(window);
+                Assert.True(vm.IsRecording);
+
+                // 1) KeyDown 已录 'l' 后，同字符 TextInput 回声（<100ms）不得双录
+                PressKey(terminal, Key.L, KeyModifiers.None);
+                terminal.RaiseEvent(new TextInputEventArgs
+                {
+                    RoutedEvent = InputElement.TextInputEvent,
+                    Text = "l",
+                });
+
+                // 2) IME 组合文本（与上次不同）正常录入并与前段合并
+                terminal.RaiseEvent(new TextInputEventArgs
+                {
+                    RoutedEvent = InputElement.TextInputEvent,
+                    Text = "测试",
+                });
+
+                sidebar.RaiseMacroRecordToggleForTests();
+                RunJobs(window);
+
+                var dialog = window.LastMacroNameDialogForTests;
+                Assert.NotNull(dialog);
+                ButtonByLabel(dialog, "确定")
+                    .RaiseEvent(new RoutedEventArgs(Button.ClickEvent, dialog));
+                RunJobs(window);
+
+                Assert.Single(vm.Macros);
+                var steps = vm.Macros[0].Steps;
+                Assert.Single(steps);
+                Assert.Equal(MacroStepKind.Text, steps[0].Kind);
+                Assert.Equal("l测试", steps[0].Text);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
     // --- Helpers (mirrored from SidebarRailTests) ---
 
     /// <summary>Opens the macro step editor via the sidebar event and waits for it.</summary>
