@@ -1,7 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="COMTool.App.Views.MacroStepEditorDialog"
-        Title="Macro 编辑"
+        Title="宏编辑"
         Width="440"
         Height="300"
         MinWidth="380"

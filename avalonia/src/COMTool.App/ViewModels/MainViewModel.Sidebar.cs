@@ -43,12 +43,12 @@ public sealed partial class MacroItem : ObservableObject
         Steps = steps.ToList();
     }
 
-    public string MenuRenameHeader => $"Rename \"{Name}\"";
-    public string MenuEditHeader => $"Edit \"{Name}\"";
-    public string MenuDuplicateHeader => $"Duplicate \"{Name}\"";
-    public string MenuDeleteHeader => $"Delete \"{Name}\"";
-    public string MenuHotkeyHeader => $"Assign hotkey to \"{Name}\"";
-    public string MenuExecuteHeader => $"Execute \"{Name}\"";
+    public string MenuRenameHeader => $"重命名 \"{Name}\"";
+    public string MenuEditHeader => $"编辑 \"{Name}\"";
+    public string MenuDuplicateHeader => $"复制 \"{Name}\"";
+    public string MenuDeleteHeader => $"删除 \"{Name}\"";
+    public string MenuHotkeyHeader => $"分配快捷键 \"{Name}\"";
+    public string MenuExecuteHeader => $"执行 \"{Name}\"";
 
     partial void OnNameChanged(string value)
     {
@@ -165,7 +165,7 @@ public partial class MainViewModel
     public string SidebarTitle => SidebarTab switch
     {
         SidebarTab.Tools => "Tools",
-        SidebarTab.Macros => "Macros",
+        SidebarTab.Macros => "宏",
         SidebarTab.SshBrowser => "SSH browser",
         _ => "User sessions",
     };

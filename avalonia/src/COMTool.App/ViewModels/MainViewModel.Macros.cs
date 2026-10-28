@@ -35,9 +35,9 @@ public partial class MainViewModel
     public bool CanToggleRecording =>
         SelectedTab?.Terminal is not null && (IsRecording || !IsExecutingMacro);
 
-    /// <summary>MobaXterm wording: "Record new macro" / "Stop recording macro".</summary>
+    /// <summary>录制开关按钮文案（汉化）。</summary>
     public string RecordButtonText =>
-        IsRecording ? "Stop recording macro" : "Record new macro";
+        IsRecording ? "停止录制宏" : "录制新宏";
 
     partial void OnActiveRecordingChanged(MacroRecordingSession? value)
     {

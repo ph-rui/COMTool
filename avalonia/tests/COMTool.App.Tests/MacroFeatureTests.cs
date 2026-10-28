@@ -77,12 +77,12 @@ public sealed class MacroFeatureTests
                 // (the ContextMenu DataContext is injected when the menu opens,
                 // which headless does not do here).
                 var item = vm.Macros[0];
-                Assert.Equal("Rename \"TestMacro\"", item.MenuRenameHeader);
-                Assert.Equal("Edit \"TestMacro\"", item.MenuEditHeader);
-                Assert.Equal("Duplicate \"TestMacro\"", item.MenuDuplicateHeader);
-                Assert.Equal("Delete \"TestMacro\"", item.MenuDeleteHeader);
-                Assert.Equal("Assign hotkey to \"TestMacro\"", item.MenuHotkeyHeader);
-                Assert.Equal("Execute \"TestMacro\"", item.MenuExecuteHeader);
+                Assert.Equal("重命名 \"TestMacro\"", item.MenuRenameHeader);
+                Assert.Equal("编辑 \"TestMacro\"", item.MenuEditHeader);
+                Assert.Equal("复制 \"TestMacro\"", item.MenuDuplicateHeader);
+                Assert.Equal("删除 \"TestMacro\"", item.MenuDeleteHeader);
+                Assert.Equal("分配快捷键 \"TestMacro\"", item.MenuHotkeyHeader);
+                Assert.Equal("执行 \"TestMacro\"", item.MenuExecuteHeader);
 
                 var desktopShortcut = menuItems.FirstOrDefault(mi =>
                     (string)mi.Header! == "创建桌面快捷方式(W)");
@@ -1152,7 +1152,7 @@ public sealed class MacroFeatureTests
                 WaitUntil(() => window.LastMacroInfoDialogForTests is not null, "export info dialog");
                 var info = window.LastMacroInfoDialogForTests!;
                 Assert.True(info.GetVisualDescendants().OfType<TextBlock>()
-                    .Any(t => t.Text != null && t.Text.Contains("exported to")));
+                    .Any(t => t.Text != null && t.Text.Contains("宏已导出到")));
                 info.GetVisualDescendants().OfType<Button>()
                     .First(b => b.Content is string s && s == "OK")
                     .RaiseEvent(new RoutedEventArgs(Button.ClickEvent, info));
@@ -1236,7 +1236,7 @@ public sealed class MacroFeatureTests
                 WaitUntil(() => window.LastMacroExportWarnDialogForTests is not null, "warn dialog");
                 var warn = window.LastMacroExportWarnDialogForTests!;
                 Assert.True(warn.GetVisualDescendants().OfType<TextBlock>()
-                    .Any(t => t.Text != null && t.Text.Contains("exported without encryption")));
+                    .Any(t => t.Text != null && t.Text.Contains("不加密")));
 
                 // 点"否" → 中止, 不产生文件
                 warn.GetVisualDescendants().OfType<Button>()
@@ -1315,6 +1315,49 @@ public sealed class MacroFeatureTests
         finally
         {
             Environment.SetEnvironmentVariable("COMTOOL_E2E_MACRO_IMPORT_PATH", oldImport);
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public void MAC21_RecordButtonEnablesWithActiveTerminal()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                window = CreateWindow(env);
+                var vm = Vm(window);
+                var sidebar = Sidebar(window);
+                vm.SidebarTab = SidebarTab.Macros;
+                RunJobs(window);
+
+                var recordBtn = sidebar.FindControl<Button>("MacroRecordButton")!;
+                var recordText = sidebar.FindControl<TextBlock>("MacroRecordText")!;
+
+                // No terminal tab: disabled, Chinese label
+                Assert.False(recordBtn.IsEnabled);
+                Assert.Equal("录制新宏", recordText.Text);
+
+                // Open a terminal tab -> the binding must re-raise and enable
+                var terminal = new TerminalControl { Process = string.Empty };
+                vm.AddTab(TestTab.Create(terminal, title: "t", sessionId: "t",
+                    kind: SessionKind.Local, terminal: terminal));
+                RunJobs(window);
+                Assert.True(recordBtn.IsEnabled);
+
+                // Close the tab -> disabled again
+                window.CloseTabForTests((TerminalTab)vm.Tabs[0]);
+                RunJobs(window);
+                Assert.False(recordBtn.IsEnabled);
+            });
+        }
+        finally
+        {
             window?.Close();
             Dispatcher.UIThread.RunJobs();
         }

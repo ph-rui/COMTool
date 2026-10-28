@@ -4,7 +4,7 @@
         xmlns:core="using:COMTool.Core.Macros"
         x:Class="COMTool.App.Views.MacroEditorWindow"
         x:DataType="vm:MacroItem"
-        Title="Macro 编辑"
+        Title="宏编辑"
         Width="560"
         Height="400"
         MinWidth="480"
@@ -44,7 +44,7 @@
                 MinWidth="132"
                 Click="OnEditStep" />
         <Button Name="InsertAboveButton"
-                Content="Insert new line above"
+                Content="在上方插入新行"
                 MinWidth="132"
                 Click="OnInsertAbove" />
         <Button Name="InsertBelowButton"
@@ -70,7 +70,7 @@
         <ComboBox Name="HotkeyCombo" Width="140" />
       </StackPanel>
       <TextBlock Grid.Column="1"
-                 Text="or use Ctrl+SPACE in order to display the popup macros menu"
+                 Text="或使用 Ctrl+SPACE 显示宏弹出菜单"
                  FontSize="10"
                  Foreground="#9e9e9e"
                  VerticalAlignment="Center"

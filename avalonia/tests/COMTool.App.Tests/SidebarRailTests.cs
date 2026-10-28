@@ -63,7 +63,7 @@ public sealed class SidebarRailTests
                     SidebarTab.Sessions,
                 };
                 var panels = new[] { "ToolsPanel", "MacrosPanel", "SessionsPanel" };
-                var titles = new[] { "Tools", "Macros", "User sessions" };
+                var titles = new[] { "Tools", "宏", "User sessions" };
 
                 for (var i = 0; i < rail.Length; i++)
                 {

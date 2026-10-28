@@ -155,14 +155,14 @@
 | CFG-06 | Windows DPAPI | P0 | 完成 | 设置页记住密码、DPAPI 加密保存、Windows headless 解密连接通过 |
 | CFG-07 | 单实例/多开 | P1 | 未开始 | 与 Python 行为一致 |
 | CFG-08 | 自动更新 | P1 | 未开始 | 独立通道，不覆盖稳定版 |
-| MAC-01 | 宏（侧栏宏页，MobaXterm 22.1 1:1） | P1 | 完成 | 2026-10-28 全量重构为 MobaXterm 22.1 宏系统：侧栏宏页 = "Record new macro" 按钮（录制中红点+变 "Stop recording macro"）+ "已保存的宏" 标题（空时灰）+ ◎ 宏列表；配置升级为 `macros: [{id,name,steps[],hotkey}]`，旧 `text/appendEnter` 配置加载时自动迁移为步骤（单 TextStep 原样 + appendEnter→Key(RETURN)，字节等价），Version 保持 3，旧配置原样可读；旧内联编辑面板已删除 |
+| MAC-01 | 宏（侧栏宏页，MobaXterm 22.1 1:1） | P1 | 完成 | 2026-10-28 全量重构为 MobaXterm 22.1 宏系统：侧栏宏页 = "录制新宏" 按钮（录制中红点+变"停止录制宏"；UI 文案按用户 2026-10-28 要求汉化，原 MobaXterm 英文原文替换为中文）+ "已保存的宏" 标题（空时灰）+ ◎ 宏列表；配置升级为 `macros: [{id,name,steps[],hotkey}]`，旧 `text/appendEnter` 配置加载时自动迁移为步骤（单 TextStep 原样 + appendEnter→Key(RETURN)，字节等价），Version 保持 3，旧配置原样可读；旧内联编辑面板已删除 |
 | MAC-02 | 宏录制 | P1 | 完成 | 录制捕获当前终端：连续字符合并为 1 个 Text 步骤、特殊键（RETURN/TAB/方向/F 键等 26 种）记 Key 步骤、按键间隙 >1000ms 记 SLEEP（四舍五入 10ms、封顶 1200ms，对齐 MobaXterm 实测）；空录制静默丢弃；命名框默认名=录制首行（预填选中）；录制/执行中关闭该终端自动停止并复位；被录制的按键不吞（pty 同步收到）；修饰键组合不记录（已知偏差 6） |
 | MAC-03 | 宏 4 种步骤 | P1 | 完成 | 文本（按键间延迟 0-5000ms）/按键（26 种，xterm 转义序列回放）/睡眠（ms）/等待字符串（50ms 轮询输出、`*`/`?` 通配、超时默认 30s 跳过继续不卡死）；Core 层可单测（MacroRecorder/MacroRunner 17 项） |
-| MAC-04 | 步骤编辑器 "Macro 编辑" | P1 | 完成 | 560×400 弹窗：左步骤列表（DisplaySummary）+ 右 4 按钮（编辑选定的行/Insert new line above/在下方插入新行/删除行，MobaXterm 原文）+ 底部快捷键下拉 + "or use Ctrl+SPACE…" 提示；工作副本语义（取消=全部丢弃）；步骤类型对话框 4 radio（文本/按键/睡眠/等待字符串）字段随选显隐、编辑回填 |
-| MAC-05 | 宏右键菜单 | P1 | 完成 | 9 项与 MobaXterm 原文一致：Rename "X"/Edit "X"/Duplicate "X"/Delete "X"/Assign hotkey to "X"/Execute "X"/创建桌面快捷方式(W)（P2 灰显占位）/导入宏(Y)/导出宏(Z)；双击行=执行；删除需 是/否 确认；重名/改名经命名框 |
+| MAC-04 | 步骤编辑器 "宏编辑" | P1 | 完成 | 560×400 弹窗：左步骤列表（DisplaySummary）+ 右 4 按钮（编辑选定的行/在上方插入新行/在下方插入新行/删除行）+ 底部快捷键下拉 + "或使用 Ctrl+SPACE 显示宏弹出菜单" 提示（文案已汉化）；工作副本语义（取消=全部丢弃）；步骤类型对话框 4 radio（文本/按键/睡眠/等待字符串）字段随选显隐、编辑回填 |
+| MAC-05 | 宏右键菜单 | P1 | 完成 | 9 项（文案已汉化）：重命名 "X"/编辑 "X"/复制 "X"/删除 "X"/分配快捷键 "X"/执行 "X"/创建桌面快捷方式(W)（P2 灰显占位）/导入宏(Y)/导出宏(Z)；双击行=执行；删除需 是/否 确认；重名/改名经命名框（"请为此宏输入一个名称"） |
 | MAC-06 | 宏快捷键 | P1 | 完成（窗口级） | 选项 `<none>`/F5-F12/Ctrl+Shift+A-Z/Ctrl+Alt+A-Z；保留组合（Ctrl+Space/F11/Ctrl+W/T/N/S）与已被其他宏占用的组合拒绝对并提示；窗口内按下触发对应宏；MobaXterm 为系统级、本实现为应用窗口级（已知偏差 5） |
 | MAC-07 | Ctrl+Space 弹出宏菜单 | P1 | 完成 | 窗口内 Ctrl+Space 居中弹出（宏名+热键右对齐灰字），Up/Down 移动选中、Enter 执行、Esc 收起、点行直接执行并收起；录制/执行中不响应 |
-| MAC-08 | .mxtmacros 导入/导出 | P1 | 完成 | 导出：MobaXterm 明文警告（英文原文+是(Y)/否(N)，否=中止不产文件）→ 保存对话框（默认名 "MobaXterm Macros.mxtmacros"）→ 成功提示；编码与实机样本一致（12=文本/258=按键/0=SLEEPEQUAL，hotkey 恒 0）；导入：BOM/CRLF 宽容解析、未知 typeId 跳过+警告、文件内重名留首个+警告、与现有宏重名加 " (imported)"；wait 步骤 typeId=4 为 COMTool 自定扩展（MobaXterm 真实编码未实测，已知偏差 1） |
+| MAC-08 | .mxtmacros 导入/导出 | P1 | 完成 | 导出：明文警告（已汉化："警告：宏将在不加密的情况下导出…" + 是(Y)/否(N)，否=中止不产文件）→ 保存对话框（默认名 "MobaXterm Macros.mxtmacros"）→ 成功提示"宏已导出到 <path>"；编码与实机样本一致（12=文本/258=按键/0=SLEEPEQUAL，hotkey 恒 0）；导入：BOM/CRLF 宽容解析、未知 typeId 跳过+警告、文件内重名留首个+警告、与现有宏重名加 " (imported)"；wait 步骤 typeId=4 为 COMTool 自定扩展（MobaXterm 真实编码未实测，已知偏差 1） |
 
 ## 12. 打包与发布
 

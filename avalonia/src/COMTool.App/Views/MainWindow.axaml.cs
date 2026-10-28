@@ -3665,17 +3665,17 @@ public partial class MainWindow : Window
             return;
         }
 
-        _ = ShowMacroInfoAsync("导出宏", $"Your macros have been exported to \"{path}\"");
+        _ = ShowMacroInfoAsync("导出宏", $"宏已导出到 \"{path}\"");
     }
 
     /// <summary>
-    /// MobaXterm 导出前的明文警告（英文原文）。"是(Y)" 返回 true。
+    /// 导出前的明文警告（2026-10-28 应用户要求汉化）。"是(Y)" 返回 true。
     /// </summary>
     internal async Task<bool> ShowMacroExportWarnAsync()
     {
         var dialog = new Window
         {
-            Title = "Warning",
+            Title = "警告",
             Width = 460,
             Height = 200,
             MinWidth = 340,
@@ -3712,9 +3712,9 @@ public partial class MainWindow : Window
             {
                 new TextBlock
                 {
-                    Text = "WARNING: your macros will be exported without encryption. "
-                         + "This can be dangerous if they contain confidential information. "
-                         + "Are you sure you wish to continue?",
+                    Text = "警告：宏将在不加密的情况下导出。"
+                         + "如果宏包含机密信息，这可能是危险的。"
+                         + "您确定要继续吗？",
                     FontSize = 12,
                     TextWrapping = TextWrapping.Wrap,
                 },
@@ -3799,14 +3799,14 @@ public partial class MainWindow : Window
     internal Window? LastMacroInfoDialogForTests { get; private set; }
 
     /// <summary>
-    /// "Please enter a name for this macro" — default name pre-filled and
-    /// selected. Returns the trimmed name on OK, null on cancel/empty.
+    /// <summary>
+    /// "请为此宏输入一个名称" — 默认名预填并选中。OK 返回去空格后的名称，取消/空返回 null。
     /// </summary>
     internal async Task<string?> ShowMacroNameAsync(string defaultName)
     {
         var dialog = new Window
         {
-            Title = "Macro",
+            Title = "宏",
             Width = 420,
             Height = 170,
             MinWidth = 320,
@@ -3846,7 +3846,7 @@ public partial class MainWindow : Window
             {
                 new TextBlock
                 {
-                    Text = "Please enter a name for this macro",
+                    Text = "请为此宏输入一个名称",
                     FontSize = 12,
                 },
                 box,
