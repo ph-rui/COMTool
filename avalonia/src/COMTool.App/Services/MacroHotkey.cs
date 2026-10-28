@@ -81,7 +81,8 @@ public static class MacroHotkey
             var c = keyPart[0];
             if (char.IsLetter(c))
             {
-                key = (Key)c;
+                // Avalonia Key enum is NOT ascii-based: Key.A==44, Key.Z==69.
+                key = (Key)((int)Key.A + (c - 'A'));
             }
             else if (char.IsDigit(c))
             {
@@ -110,8 +111,8 @@ public static class MacroHotkey
 
         string keyStr = key switch
         {
-            >= Key.A and <= Key.Z => ((char)(int)key).ToString(),
-            >= Key.D0 and <= Key.D9 => ((char)((int)key - (int)Key.D0 + '0')).ToString(),
+            >= Key.A and <= Key.Z => ((char)('A' + (int)key - (int)Key.A)).ToString(),
+            >= Key.D0 and <= Key.D9 => ((char)('0' + (int)key - (int)Key.D0)).ToString(),
             _ => key.ToString()
         };
 

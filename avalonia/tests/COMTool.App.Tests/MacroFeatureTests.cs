@@ -881,6 +881,231 @@ public sealed class MacroFeatureTests
         }
     }
 
+    [AvaloniaFact]
+    public void MAC16_BannerShowsWhileRecording()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                window = CreateWindow(env);
+                var vm = Vm(window);
+                var sidebar = Sidebar(window);
+
+                var terminal = new TerminalControl { Process = string.Empty };
+                vm.AddTab(TestTab.Create(terminal, title: "t", sessionId: "t",
+                    kind: SessionKind.Local, terminal: terminal));
+                RunJobs(window);
+
+                var banner = window.FindControl<Border>("MacroStatusBanner")!;
+                Assert.False(banner.IsVisible);
+
+                // 录制中: 横幅出现, 文案含 MobaXterm 原文
+                sidebar.RaiseMacroRecordToggleForTests();
+                RunJobs(window);
+                Assert.True(banner.IsVisible);
+                Assert.True(banner.GetVisualDescendants().OfType<TextBlock>()
+                    .Any(t => t.Text != null && t.Text.Contains("正在录制新宏")));
+
+                // 停止(空录制): 横幅隐藏
+                sidebar.RaiseMacroRecordToggleForTests();
+                RunJobs(window);
+                Assert.False(vm.IsRecording);
+                Assert.False(banner.IsVisible);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task MAC17_ExecutionBannerAndCancel()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        InMemoryPty? pty = null;
+        try
+        {
+            await env.RunAsync(async () =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                window = CreateWindow(env);
+                var vm = Vm(window);
+
+                pty = new InMemoryPty();
+                var terminal = new TerminalControl { Process = string.Empty };
+                vm.AddTab(TestTab.Create(terminal, title: "t", sessionId: "t",
+                    kind: SessionKind.Local, terminal: terminal));
+                RunJobs(window);
+                terminal.ApplyTemplate();
+                terminal.AttachConnection(pty);
+                RunJobs(window);
+
+                vm.Macros.Add(new MacroItem("m1", "Slow", new List<MacroStep>
+                {
+                    MacroStep.SleepStep(3000),
+                    MacroStep.TextStep("never"),
+                }));
+
+                _ = vm.ExecuteMacroAsync(vm.Macros[0]);
+                await Task.Delay(50);
+                RunJobs(window);
+
+                var banner = window.FindControl<Border>("MacroStatusBanner")!;
+                Assert.True(banner.IsVisible);
+                Assert.True(banner.GetVisualDescendants().OfType<TextBlock>()
+                    .Any(t => t.Text != null && t.Text.Contains("正在执行宏")));
+
+                // 点横幅"取消" → 执行终止, 状态复位, 后续步骤未发送
+                RaiseClick(window.FindControl<Button>("MacroBannerActionButton")!);
+                WaitUntil(() => !vm.IsExecutingMacro, "execution cancelled");
+                RunJobs(window);
+                Assert.False(banner.IsVisible);
+                Assert.False(pty!.WriterText.Contains("never"));
+            });
+        }
+        finally
+        {
+            window?.Close();
+            pty?.Dispose();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task MAC11_HotkeyAssignAndTrigger()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        InMemoryPty? pty = null;
+        try
+        {
+            await env.RunAsync(async () =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                window = CreateWindow(env);
+                var vm = Vm(window);
+
+                pty = new InMemoryPty();
+                var terminal = new TerminalControl { Process = string.Empty };
+                vm.AddTab(TestTab.Create(terminal, title: "t", sessionId: "t",
+                    kind: SessionKind.Local, terminal: terminal));
+                RunJobs(window);
+                terminal.ApplyTemplate();
+                terminal.AttachConnection(pty);
+                RunJobs(window);
+
+                var item = new MacroItem("m1", "Hk", new List<MacroStep>
+                {
+                    MacroStep.TextStep("hot"),
+                    MacroStep.KeyStep("RETURN"),
+                });
+                vm.Macros.Add(item);
+
+                // 保留组合
+                Assert.True(MacroHotkey.IsReserved(Key.Space, KeyModifiers.Control));
+                Assert.True(MacroHotkey.IsReserved(Key.F11, KeyModifiers.None));
+                Assert.True(MacroHotkey.IsReserved(Key.W, KeyModifiers.Control));
+
+                // 分配正常, 重复分配被拒
+                Assert.True(vm.AssignHotkey(item, "Ctrl+Shift+M"));
+                Assert.Equal("Ctrl+Shift+M", item.Hotkey);
+                var other = new MacroItem("m2", "Other",
+                    new List<MacroStep> { MacroStep.TextStep("x") });
+                vm.Macros.Add(other);
+                Assert.False(vm.AssignHotkey(other, "Ctrl+Shift+M"));
+                Assert.Null(other.Hotkey);
+
+                // 触发: 在终端子树内按下 Ctrl+Shift+M → 宏字节到达 pty
+                PressKey(terminal, Key.M, KeyModifiers.Control | KeyModifiers.Shift);
+                WaitUntil(() => pty!.WriterText == "hot\r", "hotkey macro bytes");
+                Assert.Equal("hot\r", pty.WriterText);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            pty?.Dispose();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task MAC12_CtrlSpacePopupListsAndExecutes()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        InMemoryPty? pty = null;
+        try
+        {
+            await env.RunAsync(async () =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                window = CreateWindow(env);
+                var vm = Vm(window);
+
+                pty = new InMemoryPty();
+                var terminal = new TerminalControl { Process = string.Empty };
+                vm.AddTab(TestTab.Create(terminal, title: "t", sessionId: "t",
+                    kind: SessionKind.Local, terminal: terminal));
+                RunJobs(window);
+                terminal.ApplyTemplate();
+                terminal.AttachConnection(pty);
+                RunJobs(window);
+
+                vm.Macros.Add(new MacroItem("m1", "First", new List<MacroStep>
+                {
+                    MacroStep.TextStep("one"),
+                    MacroStep.KeyStep("RETURN"),
+                }));
+                vm.Macros.Add(new MacroItem("m2", "Second", new List<MacroStep>
+                {
+                    MacroStep.TextStep("two"),
+                    MacroStep.KeyStep("RETURN"),
+                }));
+                RunJobs(window);
+
+                var popup = window.FindControl<Border>("MacroPopup")!;
+                Assert.False(popup.IsVisible);
+
+                // Ctrl+Space 打开
+                PressKey(terminal, Key.Space, KeyModifiers.Control);
+                RunJobs(window);
+                Assert.True(popup.IsVisible);
+
+                // Esc 关闭, 不执行
+                PressKey(terminal, Key.Escape, KeyModifiers.None);
+                RunJobs(window);
+                Assert.False(popup.IsVisible);
+                Assert.Equal(string.Empty, pty!.WriterText);
+
+                // 再打开, ArrowDown 到第二个, Enter 执行
+                PressKey(terminal, Key.Space, KeyModifiers.Control);
+                RunJobs(window);
+                Assert.True(popup.IsVisible);
+                PressKey(terminal, Key.Down, KeyModifiers.None);
+                RunJobs(window);
+                PressKey(terminal, Key.Enter, KeyModifiers.None);
+                WaitUntil(() => pty!.WriterText == "two\r", "popup macro bytes");
+                RunJobs(window);
+                Assert.False(popup.IsVisible);
+                Assert.Equal("two\r", pty.WriterText);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            pty?.Dispose();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
     // --- Helpers (mirrored from SidebarRailTests) ---
 
     /// <summary>Opens the macro step editor via the sidebar event and waits for it.</summary>
@@ -894,6 +1119,17 @@ public sealed class MacroFeatureTests
     /// <summary>Fires a button's Click handler without geometry (headless-safe).</summary>
     private static void RaiseClick(Control control) =>
         control.RaiseEvent(new RoutedEventArgs(Button.ClickEvent, control));
+
+    /// <summary>Raised a raw key-down on a control (tunnel reaches MainWindow).</summary>
+    private static void PressKey(Control target, Key key, KeyModifiers mods)
+    {
+        target.RaiseEvent(new KeyEventArgs
+        {
+            RoutedEvent = InputElement.KeyDownEvent,
+            Key = key,
+            KeyModifiers = mods,
+        });
+    }
 
     private static MainWindow CreateWindow(TestEnvironment env)
     {
