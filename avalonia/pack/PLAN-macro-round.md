@@ -50,6 +50,14 @@
     绕开 AngleEgl(D3D11) 走 CPU framebuffer（Avalonia 12.1.4 API 已用元数据核验：
     Win32PlatformOptions.RenderingMode / Win32RenderingMode.Software 均存在；
     默认行为 { AngleEgl, Software } 按序回退不受影响）
+   - gate 第 6 轮（2026-10-28 08:21Z）全 PASS（build/328 单测/193 App/26 E2E/TestGate）
+   - 发布 win-x64（154,887,681 B，SHA256 F3C4C987…）+ deploy_r3 双份部署校验 OK；
+     用户目录另放 "COMTool-软件渲染.bat"（set COMTOOL_SW_RENDER=1 后启动）
+   - Session 0 冒烟 A/B（120s，smoke-ab.ps1）：默认 D3D 路径 CPU 18.98s
+     （~15.8% 单核持续占用，虚拟 GPU 上 D3D 心跳/交换链空转）；
+     COMTOOL_SW_RENDER=1 时 CPU 2.67s（~2.2%）、日志干净 → 开关生效，
+     卡顿主嫌疑锁定虚拟 GPU 的 D3D11 渲染路径；待用户交互桌面实测确认
+   - 提交 3445771
 
 ## 已知偏差（已写入 spec 附录）
 
