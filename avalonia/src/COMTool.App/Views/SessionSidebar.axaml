@@ -390,14 +390,12 @@
                     <StackPanel Orientation="Horizontal"
                                 Spacing="6"
                                 VerticalAlignment="Center">
-                      <!-- MobaXterm 行图标：灰环 + 蓝色播放三角（play-circle 双色，RDP 实机核对 2026-10-28） -->
+                      <!-- MobaXterm 行图标：灰环 + 蓝色播放三角（RDP 实机核对 2026-10-28）。
+                           圆环用矢量 Border 绘制（FA6 solid 无空心圆字形，f10c 是实心盘） -->
                       <Grid Width="13" Height="13" VerticalAlignment="Center">
-                        <TextBlock Text="&#xf10c;"
-                                   FontFamily="{DynamicResource IconFontAwesome}"
-                                   FontSize="12"
-                                   Foreground="#6e6e6e"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center" />
+                        <Border Width="12" Height="12" CornerRadius="6"
+                                BorderBrush="#6e6e6e" BorderThickness="1.2"
+                                HorizontalAlignment="Center" VerticalAlignment="Center" />
                         <TextBlock Text="&#xf04b;"
                                    FontFamily="{DynamicResource IconFontAwesome}"
                                    FontSize="6"
