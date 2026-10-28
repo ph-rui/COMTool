@@ -102,7 +102,10 @@ public partial class SessionSidebar : UserControl
     private MacroItem? MacroOf(object? sender) =>
         sender is Control { DataContext: MacroItem item } ? item : null;
 
-    private void OnMacroRowDoubleTapped(object? sender, TappedEventArgs e)
+    /// <summary>
+    /// 单击执行（MobaXterm 行为，RDP 实机核对 2026-10-28）；右键出上下文菜单。
+    /// </summary>
+    private void OnMacroRowTapped(object? sender, TappedEventArgs e)
     {
         if (MacroOf(sender) is { } item)
         {

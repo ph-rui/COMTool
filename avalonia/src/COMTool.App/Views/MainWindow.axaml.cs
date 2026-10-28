@@ -4099,8 +4099,9 @@ public partial class MainWindow : Window
     // ------------------------------------------------------------------
 
     /// <summary>
-    /// Updates the red strip above the terminal: recording (Stop) or
-    /// executing (Cancel); hidden when neither is active.
+    /// Updates the red strip above the terminal: recording (Stop) only;
+    /// macro EXECUTION shows no banner at all (MobaXterm parity, user
+    /// request 2026-10-28).
     /// </summary>
     private void UpdateMacroBanner()
     {
@@ -4113,12 +4114,6 @@ public partial class MainWindow : Window
         {
             MacroBannerText.Text = "● 正在录制新宏: 您在当前终端中键入的所有内容都将被保存。";
             MacroBannerActionButton.Content = "停止";
-            MacroStatusBanner.IsVisible = true;
-        }
-        else if (viewModel.IsExecutingMacro)
-        {
-            MacroBannerText.Text = $"正在执行宏: {viewModel.ExecutingMacroName}";
-            MacroBannerActionButton.Content = "取消";
             MacroStatusBanner.IsVisible = true;
         }
         else
@@ -4142,10 +4137,6 @@ public partial class MainWindow : Window
             {
                 await SaveRecordedAsync(steps);
             }
-        }
-        else if (viewModel.IsExecutingMacro)
-        {
-            viewModel.CancelMacroExecution();
         }
     }
 

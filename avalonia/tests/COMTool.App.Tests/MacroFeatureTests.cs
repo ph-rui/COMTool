@@ -951,20 +951,20 @@ public sealed class MacroFeatureTests
                     MacroStep.TextStep("never"),
                 }));
 
+                var banner = window.FindControl<Border>("MacroStatusBanner")!;
+                Assert.False(banner.IsVisible);
+
                 _ = vm.ExecuteMacroAsync(vm.Macros[0]);
-                await Task.Delay(50);
+                WaitUntil(() => vm.IsExecutingMacro, "macro executing");
                 RunJobs(window);
 
-                var banner = window.FindControl<Border>("MacroStatusBanner")!;
-                Assert.True(banner.IsVisible);
-                Assert.True(banner.GetVisualDescendants().OfType<TextBlock>()
-                    .Any(t => t.Text != null && t.Text.Contains("正在执行宏")));
+                // 执行中不显示任何横幅（MobaXterm 行为，2026-10-28 用户要求去掉"正在执行宏"横幅）
+                Assert.False(banner.IsVisible);
 
-                // 点横幅"取消" → 执行终止, 状态复位, 后续步骤未发送
-                RaiseClick(window.FindControl<Button>("MacroBannerActionButton")!);
+                // 取消 → 执行终止, 状态复位, 后续步骤未发送
+                vm.CancelMacroExecution();
                 WaitUntil(() => !vm.IsExecutingMacro, "execution cancelled");
                 RunJobs(window);
-                Assert.False(banner.IsVisible);
                 Assert.False(pty!.WriterText.Contains("never"));
             });
         }
@@ -1354,6 +1354,122 @@ public sealed class MacroFeatureTests
         finally
         {
             window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task MAC24_RowSingleTapExecutesMacro()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        InMemoryPty? pty = null;
+        try
+        {
+            await env.RunAsync(async () =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                window = CreateWindow(env);
+                var vm = Vm(window);
+                var sidebar = Sidebar(window);
+
+                pty = new InMemoryPty();
+                var terminal = new TerminalControl { Process = string.Empty };
+                vm.AddTab(TestTab.Create(terminal, title: "t", sessionId: "t",
+                    kind: SessionKind.Local, terminal: terminal));
+                RunJobs(window);
+                terminal.ApplyTemplate();
+                terminal.AttachConnection(pty);
+                RunJobs(window);
+
+                // 宏页可见 → 行容器生成
+                vm.SidebarTab = SidebarTab.Macros;
+                vm.Macros.Add(new MacroItem("m24", "t4", new List<MacroStep>
+                {
+                    MacroStep.TextStep("t4"),
+                    MacroStep.KeyStep("RETURN"),
+                }));
+                RunJobs(window);
+
+                var row = sidebar.GetVisualDescendants().OfType<Border>()
+                    .First(b => b.Name == "MacroRowBorder");
+                var press = new PointerPressedEventArgs(
+                    row,
+                    new Avalonia.Input.Pointer(0, PointerType.Mouse, isPrimary: true),
+                    window,
+                    row.TranslatePoint(new Point(5, 5), window) ?? new Point(5, 5),
+                    0,
+                    new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.LeftButtonPressed),
+                    KeyModifiers.None,
+                    1);
+                // 单击（MobaXterm 行为，2026-10-28 RDP 实机核对）即执行
+                row.RaiseEvent(new TappedEventArgs(InputElement.TappedEvent, press));
+
+                WaitUntil(() => pty!.WriterText == "t4\r", "tap-executed macro bytes");
+                Assert.Equal("t4\r", pty.WriterText);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            pty?.Dispose();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task MAC25_NoBannerDuringMacroExecution()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        InMemoryPty? pty = null;
+        try
+        {
+            await env.RunAsync(async () =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                window = CreateWindow(env);
+                var vm = Vm(window);
+
+                pty = new InMemoryPty();
+                var terminal = new TerminalControl { Process = string.Empty };
+                vm.AddTab(TestTab.Create(terminal, title: "t", sessionId: "t",
+                    kind: SessionKind.Local, terminal: terminal));
+                RunJobs(window);
+                terminal.ApplyTemplate();
+                terminal.AttachConnection(pty);
+                RunJobs(window);
+
+                var banner = window.FindControl<Border>("MacroStatusBanner");
+                Assert.NotNull(banner);
+                Assert.False(banner.IsVisible);
+
+                // 执行中（3s 睡眠步骤保活）：不显示任何横幅（MobaXterm 行为，用户要求）
+                vm.Macros.Add(new MacroItem("m25", "sleepy", new List<MacroStep>
+                {
+                    MacroStep.SleepStep(3000),
+                }));
+                RunJobs(window);
+                _ = vm.ExecuteMacroAsync(vm.Macros[0]);
+                WaitUntil(() => vm.IsExecutingMacro, "macro executing");
+                RunJobs(window);
+                Assert.False(banner.IsVisible);
+                vm.CancelMacroExecution();
+                RunJobs(window);
+
+                // 录制中：横幅保留（MobaXterm 录制横幅一致）
+                Assert.True(vm.StartRecording());
+                RunJobs(window);
+                Assert.True(banner.IsVisible);
+                vm.StopRecording();
+                RunJobs(window);
+                Assert.False(banner.IsVisible);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            pty?.Dispose();
             Dispatcher.UIThread.RunJobs();
         }
     }

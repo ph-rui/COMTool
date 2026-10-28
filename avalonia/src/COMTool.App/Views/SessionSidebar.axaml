@@ -333,7 +333,7 @@
                           Margin="2,1"
                           Padding="4,3"
                           Cursor="Hand"
-                          DoubleTapped="OnMacroRowDoubleTapped">
+                          Tapped="OnMacroRowTapped">
                     <Border.ContextMenu>
                       <ContextMenu>
                         <MenuItem Header="{Binding MenuRenameHeader}" Click="OnMacroRenameClick">
@@ -390,11 +390,21 @@
                     <StackPanel Orientation="Horizontal"
                                 Spacing="6"
                                 VerticalAlignment="Center">
-                      <TextBlock Text="&#xf110;"
-                                 FontFamily="{DynamicResource IconFontAwesome}"
-                                 FontSize="11"
-                                 Foreground="#2f7ed8"
-                                 VerticalAlignment="Center" />
+                      <!-- MobaXterm 行图标：灰环 + 蓝色播放三角（play-circle 双色，RDP 实机核对 2026-10-28） -->
+                      <Grid Width="13" Height="13" VerticalAlignment="Center">
+                        <TextBlock Text="&#xf10c;"
+                                   FontFamily="{DynamicResource IconFontAwesome}"
+                                   FontSize="12"
+                                   Foreground="#6e6e6e"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Text="&#xf04b;"
+                                   FontFamily="{DynamicResource IconFontAwesome}"
+                                   FontSize="6"
+                                   Foreground="#2196f3"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center" />
+                      </Grid>
                       <TextBlock Classes="SessionName"
                                  Text="{Binding Name}"
                                  FontSize="11"
