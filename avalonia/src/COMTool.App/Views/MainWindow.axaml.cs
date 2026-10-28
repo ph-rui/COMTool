@@ -3453,17 +3453,6 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnMacroMenuRecordToggleClick(object? sender, RoutedEventArgs e) =>
-        OnMacroRecordToggleRequested(this, EventArgs.Empty);
-
-    private void OnMacroMenuSavedClick(object? sender, RoutedEventArgs e)
-    {
-        if (DataContext is MainViewModel viewModel)
-        {
-            viewModel.SidebarTab = SidebarTab.Macros;
-        }
-    }
-
     private void OnMacroExecuteRequested(object? sender, MacroItem item)
     {
         if (item is not null && DataContext is MainViewModel viewModel)
