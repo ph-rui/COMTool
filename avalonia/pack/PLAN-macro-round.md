@@ -13,8 +13,12 @@
 - [x] 修复：标题栏加"宏"列后 min/max/close 的 Grid.Column 未后移（5/6/7→6/7/8），关闭按钮落空列导致 E2E APP01 点关闭不退出（commit b72cebd）
 - [x] Task 8 文档：parity-matrix MAC-01~08 拆条、feature-test-matrix 登记 22 App+32 Core 测试（MAC-01~08 八行）、manual-acceptance WIN-27、本文件
 - [x] 全量 gate（pack/verify.sh，2026-10-28 04:01Z：build/328 单测/192 App/26 项 Xvfb E2E/TestGate 全 PASS，520 项）
-- [ ] 发布 win-x64 单文件 R2R + deploy_r3.py 双份部署远程机
-- [ ] SSH 冒烟：进程起来、config.json 可读写、无崩溃日志
+- [x] 发布 win-x64 单文件 R2R（154,887,681 B，SHA256 4A39AF2C…）+ deploy_r3.py 双份部署
+  （C:\Users\devuser\COMTool-Avalonia.exe 与 D:\Users\devuser\Desktop\ 双份校验 OK）
+- [x] SSH 冒烟：进程起来（Session 0 存活 180s+，WS 240MB）、config.json 可读写
+  （run.log starting+Config loaded，config 内容完好 v3）、无崩溃日志
+  （仅 Skia swap chain 0x887A0022 刷屏 = Session 0 非交互桌面 D3D 设备丢失，
+  phase0-report L129 已有同类记录；交互桌面不受影响）
 - [ ] 用户实机目验（WIN-27 清单；对照 MobaXterm 22.1 并排）
 - [ ] 用户确认后 push（本轮不 push）
 
@@ -30,5 +34,5 @@
 ## 测试基线
 
 - Core：32 项宏测试（MacroModel 4/MacroFile 9/MacroRecorder 9/MacroRunner 8/Config 2）
-- App：192→195 项全绿（新增 MacroFeatureTests 22 项；删除旧 MAC01 3 项）
-- 全量 gate：待跑
+- App：173→192 项全绿（新增 MacroFeatureTests 22 项；删除旧 MAC01 3 项）
+- 全量 gate：2026-10-28 04:01Z 全 PASS（build/328 单测/192 App/26 项 Xvfb E2E/TestGate 矩阵校验，共 520 项）
