@@ -73,6 +73,12 @@ public partial class SessionSidebar : UserControl
     internal void RaiseMacroDeleteForTests(MacroItem item) =>
         MacroDeleteRequested?.Invoke(this, item);
 
+    internal void RaiseMacroImportForTests() =>
+        MacroImportRequested?.Invoke(this, EventArgs.Empty);
+
+    internal void RaiseMacroExportForTests() =>
+        MacroExportRequested?.Invoke(this, EventArgs.Empty);
+
     internal void RaiseMacroEditForTests(MacroItem item) =>
         MacroEditRequested?.Invoke(this, item);
 

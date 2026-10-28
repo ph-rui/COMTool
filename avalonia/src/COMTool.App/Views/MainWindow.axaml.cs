@@ -3584,17 +3584,230 @@ public partial class MainWindow : Window
 
     internal Window? LastMacroEditorWindowForTests { get; private set; }
 
+    /// <summary>
+    /// 导入宏: 选择 .mxtmacros → 解析 → 重名加 " (imported)" 后缀 → 持久化。
+    /// 解析告警取前 3 条随结果提示。
+    /// </summary>
     private async void OnMacroImportRequested(object? sender, EventArgs e)
     {
-        // .mxtmacros import/export lands in a later round.
-        _ = ShowErrorAsync("导入宏（.mxtmacros）将在后续轮次提供。");
+        if (_config is null || DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        var pickers = MacroFilePickers.Create(this);
+        if (pickers is null)
+        {
+            return;
+        }
+
+        var path = await pickers.PickImportPathAsync("导入宏");
+        if (string.IsNullOrEmpty(path) || !File.Exists(path))
+        {
+            return; // 取消选择
+        }
+
+        string content;
+        try
+        {
+            content = File.ReadAllText(path);
+        }
+        catch (Exception ex)
+        {
+            _ = ShowErrorAsync($"读取宏文件失败：{ex.Message}");
+            return;
+        }
+
+        var (imported, warnings) = viewModel.ImportMacrosText(content);
+        PersistMacros();
+
+        var message = $"导入 {imported} 个宏";
+        if (warnings.Count > 0)
+        {
+            var lines = new List<string>();
+            for (var i = 0; i < warnings.Count && i < 3; i++)
+            {
+                lines.Add(warnings[i]);
+            }
+            message += $"，警告 {warnings.Count} 条：\n" + string.Join("\n", lines);
+            if (warnings.Count > 3)
+            {
+                message += "\n…";
+            }
+        }
+        _ = ShowMacroInfoAsync("导入宏", message);
     }
 
+    /// <summary>
+    /// 导出宏: MobaXterm 明文警告（英文原文，是/否）→ 选择文件 → 写
+    /// .mxtmacros → 成功提示。否 = 中止，不产生文件。
+    /// </summary>
     private async void OnMacroExportRequested(object? sender, EventArgs e)
     {
-        // .mxtmacros import/export lands in a later round.
-        _ = ShowErrorAsync("导出宏（.mxtmacros）将在后续轮次提供。");
+        if (DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        if (!await ShowMacroExportWarnAsync())
+        {
+            return;
+        }
+
+        var pickers = MacroFilePickers.Create(this);
+        if (pickers is null)
+        {
+            return;
+        }
+
+        var path = await pickers.PickExportPathAsync("导出宏", MacroFile.DefaultFileName);
+        if (string.IsNullOrEmpty(path))
+        {
+            return; // 取消选择
+        }
+
+        try
+        {
+            File.WriteAllText(path, viewModel.ExportMacrosText());
+        }
+        catch (Exception ex)
+        {
+            _ = ShowErrorAsync($"导出宏失败：{ex.Message}");
+            return;
+        }
+
+        _ = ShowMacroInfoAsync("导出宏", $"Your macros have been exported to \"{path}\"");
     }
+
+    /// <summary>
+    /// MobaXterm 导出前的明文警告（英文原文）。"是(Y)" 返回 true。
+    /// </summary>
+    internal async Task<bool> ShowMacroExportWarnAsync()
+    {
+        var dialog = new Window
+        {
+            Title = "Warning",
+            Width = 460,
+            Height = 200,
+            MinWidth = 340,
+            MinHeight = 150,
+            CanResize = false,
+            ShowInTaskbar = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+        };
+        var yes = new Button
+        {
+            Name = "MacroExportWarnYesButton",
+            Content = "是(Y)",
+            Width = 80,
+            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+        };
+        yes.Click += (_, _) =>
+        {
+            dialog.Tag = true;
+            dialog.Close();
+        };
+        var no = new Button
+        {
+            Name = "MacroExportWarnNoButton",
+            Content = "否(N)",
+            Width = 80,
+            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+        };
+        no.Click += (_, _) => dialog.Close();
+        dialog.Content = new StackPanel
+        {
+            Margin = new Thickness(16),
+            Spacing = 10,
+            Children =
+            {
+                new TextBlock
+                {
+                    Text = "WARNING: your macros will be exported without encryption. "
+                         + "This can be dangerous if they contain confidential information. "
+                         + "Are you sure you wish to continue?",
+                    FontSize = 12,
+                    TextWrapping = TextWrapping.Wrap,
+                },
+                new StackPanel
+                {
+                    Orientation = Avalonia.Layout.Orientation.Horizontal,
+                    Spacing = 8,
+                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                    Children = { yes, no },
+                },
+            },
+        };
+        LastMacroExportWarnDialogForTests = dialog;
+        try
+        {
+            await dialog.ShowDialog(this);
+        }
+        finally
+        {
+            if (ReferenceEquals(LastMacroExportWarnDialogForTests, dialog))
+            {
+                LastMacroExportWarnDialogForTests = null;
+            }
+        }
+
+        return Equals(dialog.Tag, true);
+    }
+
+    internal Window? LastMacroExportWarnDialogForTests { get; private set; }
+
+    /// <summary>导出/导入成功提示框（OK 关闭）。</summary>
+    internal async Task ShowMacroInfoAsync(string title, string message)
+    {
+        var dialog = new Window
+        {
+            Title = title,
+            Width = 460,
+            Height = 190,
+            MinWidth = 340,
+            MinHeight = 150,
+            CanResize = false,
+            ShowInTaskbar = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+        };
+        var ok = new Button
+        {
+            Name = "MacroInfoOkButton",
+            Content = "OK",
+            Width = 80,
+            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+        };
+        ok.Click += (_, _) => dialog.Close();
+        dialog.Content = new StackPanel
+        {
+            Margin = new Thickness(16),
+            Spacing = 10,
+            Children =
+            {
+                new TextBlock
+                {
+                    Text = message,
+                    FontSize = 12,
+                    TextWrapping = TextWrapping.Wrap,
+                },
+                ok,
+            },
+        };
+        LastMacroInfoDialogForTests = dialog;
+        try
+        {
+            await dialog.ShowDialog(this);
+        }
+        finally
+        {
+            if (ReferenceEquals(LastMacroInfoDialogForTests, dialog))
+            {
+                LastMacroInfoDialogForTests = null;
+            }
+        }
+    }
+
+    internal Window? LastMacroInfoDialogForTests { get; private set; }
 
     /// <summary>
     /// "Please enter a name for this macro" — default name pre-filled and

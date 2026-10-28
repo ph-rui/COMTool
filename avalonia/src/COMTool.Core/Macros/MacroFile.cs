@@ -36,6 +36,10 @@ public static class MacroFile
 
     public const string FileFilter = "Macros file (*.mxtmacros)|*.mxtmacros";
 
+    public const string FileFilterLabel = "Macros file";
+
+    public const string FileFilterPattern = "*.mxtmacros";
+
     public const int TypeSleep = 0;
     public const int TypeText = 12;
     public const int TypeKey = 258;

@@ -1106,6 +1106,220 @@ public sealed class MacroFeatureTests
         }
     }
 
+    [AvaloniaFact]
+    public async Task MAC18_ImportExportRoundTrip()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        var oldExport = Environment.GetEnvironmentVariable("COMTOOL_E2E_MACRO_EXPORT_PATH");
+        var oldImport = Environment.GetEnvironmentVariable("COMTOOL_E2E_MACRO_IMPORT_PATH");
+        try
+        {
+            await env.RunAsync(async () =>
+            {
+                var exportPath = System.IO.Path.Combine(env.Root, "exported.mxtmacros");
+                var importPath = System.IO.Path.Combine(env.Root, "reimport.mxtmacros");
+                Environment.SetEnvironmentVariable("COMTOOL_E2E_MACRO_EXPORT_PATH", exportPath);
+
+                env.SeedConfig(new ComtoolConfig());
+                window = CreateWindow(env);
+                var vm = Vm(window);
+                var sidebar = Sidebar(window);
+
+                vm.Macros.Add(new MacroItem("m1", "Alpha", new List<MacroStep>
+                {
+                    MacroStep.TextStep("echo hello", 30),
+                    MacroStep.KeyStep("TAB"),
+                    MacroStep.SleepStep(500),
+                    MacroStep.WaitStep("ready", 8000),
+                }));
+                vm.Macros.Add(new MacroItem("m2", "Beta", new List<MacroStep>
+                {
+                    MacroStep.TextStep("pwd"),
+                }));
+                window.PersistMacros();
+
+                // 导出: 警告框点"是" → 脚本化 picker 给路径 → 写文件 → 成功提示
+                sidebar.RaiseMacroExportForTests();
+                WaitUntil(() => window.LastMacroExportWarnDialogForTests is not null, "export warn dialog");
+                var warn = window.LastMacroExportWarnDialogForTests!;
+                warn.GetVisualDescendants().OfType<Button>()
+                    .First(b => b.Content is string s && s == "是(Y)")
+                    .RaiseEvent(new RoutedEventArgs(Button.ClickEvent, warn));
+                WaitUntil(() => System.IO.File.Exists(exportPath), "export file written");
+                RunJobs(window);
+
+                WaitUntil(() => window.LastMacroInfoDialogForTests is not null, "export info dialog");
+                var info = window.LastMacroInfoDialogForTests!;
+                Assert.True(info.GetVisualDescendants().OfType<TextBlock>()
+                    .Any(t => t.Text != null && t.Text.Contains("exported to")));
+                info.GetVisualDescendants().OfType<Button>()
+                    .First(b => b.Content is string s && s == "OK")
+                    .RaiseEvent(new RoutedEventArgs(Button.ClickEvent, info));
+                WaitUntil(() => window.LastMacroInfoDialogForTests is null, "info closed");
+
+                var exported = System.IO.File.ReadAllText(exportPath);
+                Assert.Contains("[Macros]", exported);
+                Assert.Contains("Alpha=", exported);
+                Assert.Contains("Beta=", exported);
+                Assert.Contains("[MacrosHotkeys]", exported);
+                Assert.Contains("12:30:0:echo hello", exported); // 文本步带 keyDelay
+
+                // 清空后从文件导入, 步骤应逐一还原
+                vm.Macros.Clear();
+                window.PersistMacros();
+                Environment.SetEnvironmentVariable("COMTOOL_E2E_MACRO_IMPORT_PATH", importPath);
+                System.IO.File.Copy(exportPath, importPath);
+
+                sidebar.RaiseMacroImportForTests();
+                WaitUntil(() => vm.Macros.Count == 2, "macros imported");
+                RunJobs(window);
+
+                // 关掉导入结果提示框
+                WaitUntil(() => window.LastMacroInfoDialogForTests is not null, "import info dialog");
+                var info2 = window.LastMacroInfoDialogForTests!;
+                info2.GetVisualDescendants().OfType<Button>()
+                    .First(b => b.Content is string s && s == "OK")
+                    .RaiseEvent(new RoutedEventArgs(Button.ClickEvent, info2));
+                WaitUntil(() => window.LastMacroInfoDialogForTests is null, "import info closed");
+                RunJobs(window);
+
+                var alpha = vm.Macros.First(m => m.Name == "Alpha");
+                Assert.Equal(4, alpha.Steps.Count);
+                Assert.Equal(MacroStepKind.Text, alpha.Steps[0].Kind);
+                Assert.Equal("echo hello", alpha.Steps[0].Text);
+                Assert.Equal(30, alpha.Steps[0].KeyDelayMs);
+                Assert.Equal(MacroStepKind.Key, alpha.Steps[1].Kind);
+                Assert.Equal("TAB", alpha.Steps[1].KeyName);
+                Assert.Equal(MacroStepKind.Sleep, alpha.Steps[2].Kind);
+                Assert.Equal(500, alpha.Steps[2].Milliseconds);
+                Assert.Equal(MacroStepKind.WaitString, alpha.Steps[3].Kind);
+                Assert.Equal("ready", alpha.Steps[3].Pattern);
+                Assert.Equal(8000, alpha.Steps[3].TimeoutMs);
+                var beta = vm.Macros.First(m => m.Name == "Beta");
+                Assert.Single(beta.Steps);
+                Assert.Equal("pwd", beta.Steps[0].Text);
+            });
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("COMTOOL_E2E_MACRO_EXPORT_PATH", oldExport);
+            Environment.SetEnvironmentVariable("COMTOOL_E2E_MACRO_IMPORT_PATH", oldImport);
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task MAC19_ExportShowsPlaintextWarning()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        var oldExport = Environment.GetEnvironmentVariable("COMTOOL_E2E_MACRO_EXPORT_PATH");
+        try
+        {
+            await env.RunAsync(async () =>
+            {
+                var exportPath = System.IO.Path.Combine(env.Root, "should-not-exist.mxtmacros");
+                Environment.SetEnvironmentVariable("COMTOOL_E2E_MACRO_EXPORT_PATH", exportPath);
+
+                env.SeedConfig(new ComtoolConfig());
+                window = CreateWindow(env);
+                var vm = Vm(window);
+                vm.Macros.Add(new MacroItem("m1", "A", new List<MacroStep>
+                {
+                    MacroStep.TextStep("x"),
+                }));
+
+                var sidebar = Sidebar(window);
+                sidebar.RaiseMacroExportForTests();
+                WaitUntil(() => window.LastMacroExportWarnDialogForTests is not null, "warn dialog");
+                var warn = window.LastMacroExportWarnDialogForTests!;
+                Assert.True(warn.GetVisualDescendants().OfType<TextBlock>()
+                    .Any(t => t.Text != null && t.Text.Contains("exported without encryption")));
+
+                // 点"否" → 中止, 不产生文件
+                warn.GetVisualDescendants().OfType<Button>()
+                    .First(b => b.Content is string s && s == "否(N)")
+                    .RaiseEvent(new RoutedEventArgs(Button.ClickEvent, warn));
+                WaitUntil(() => window.LastMacroExportWarnDialogForTests is null, "warn closed");
+                RunJobs(window);
+
+                Assert.False(System.IO.File.Exists(exportPath));
+                Assert.Single(vm.Macros);
+            });
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("COMTOOL_E2E_MACRO_EXPORT_PATH", oldExport);
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task MAC20_ImportMalformedFile_SkipsBadEntries()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        var oldImport = Environment.GetEnvironmentVariable("COMTOOL_E2E_MACRO_IMPORT_PATH");
+        try
+        {
+            await env.RunAsync(async () =>
+            {
+                var importPath = System.IO.Path.Combine(env.Root, "bad.mxtmacros");
+                System.IO.File.WriteAllText(importPath,
+                    "[Macros]\r\n" +
+                    "Good=12:0:0:echo good|258:13:0:RETURN|\r\n" +
+                    "OnlyBad=77:0:0:???\r\n" +
+                    "Dup=12:0:0:x|\r\n" +
+                    "Dup=12:0:0:y|\r\n" +
+                    "Mixed=12:0:0:ok|99:1:2:MYSTERY|0:0:0:SLEEPEQUAL100|\r\n" +
+                    "\r\n" +
+                    "[MacrosHotkeys]\r\n" +
+                    "Good=0\r\n");
+                Environment.SetEnvironmentVariable("COMTOOL_E2E_MACRO_IMPORT_PATH", importPath);
+
+                var config = new ComtoolConfig();
+                config.Macros.Add(new MacroConfig
+                {
+                    Id = "d1",
+                    Name = "Dup",
+                    Steps = new List<MacroStepDto> { new() { Kind = "text", Text = "orig" } },
+                });
+                env.SeedConfig(config);
+
+                window = CreateWindow(env);
+                var vm = Vm(window);
+                var sidebar = Sidebar(window);
+
+                sidebar.RaiseMacroImportForTests();
+                WaitUntil(() => vm.Macros.Count == 4, "import finished");
+                RunJobs(window);
+
+                Assert.Contains(vm.Macros, m => m.Name == "Dup");          // 原宏保留
+                Assert.Contains(vm.Macros, m => m.Name == "Dup (imported)"); // 重名加后缀
+                var good = vm.Macros.First(m => m.Name == "Good");
+                Assert.Equal(2, good.Steps.Count);
+                var mixed = vm.Macros.First(m => m.Name == "Mixed");
+                Assert.Equal(2, mixed.Steps.Count);                          // 99 号步被跳过
+                Assert.False(vm.Macros.Any(m => m.Name.StartsWith("OnlyBad")));
+                Assert.True(window.LastMacroInfoDialogForTests is not null);
+                var info3 = window.LastMacroInfoDialogForTests!;
+                info3.GetVisualDescendants().OfType<Button>()
+                    .First(b => b.Content is string s && s == "OK")
+                    .RaiseEvent(new RoutedEventArgs(Button.ClickEvent, info3));
+                WaitUntil(() => window.LastMacroInfoDialogForTests is null, "import info closed");
+            });
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("COMTOOL_E2E_MACRO_IMPORT_PATH", oldImport);
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
     // --- Helpers (mirrored from SidebarRailTests) ---
 
     /// <summary>Opens the macro step editor via the sidebar event and waits for it.</summary>
