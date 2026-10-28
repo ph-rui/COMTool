@@ -1,0 +1,88 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:COMTool.App.ViewModels"
+        xmlns:core="using:COMTool.Core.Macros"
+        x:Class="COMTool.App.Views.MacroEditorWindow"
+        x:DataType="vm:MacroItem"
+        Title="Macro 编辑"
+        Width="560"
+        Height="400"
+        MinWidth="480"
+        MinHeight="340"
+        CanResize="False"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource WindowBackgroundBrush}"
+        FontSize="12">
+  <Grid RowDefinitions="Auto,*,Auto" Margin="12">
+    <TextBlock Grid.Row="0"
+               Text="{Binding Name}"
+               FontSize="13"
+               FontWeight="Bold"
+               Margin="0,0,0,8"
+               TextTrimming="CharacterEllipsis" />
+
+    <Grid Grid.Row="1" ColumnDefinitions="*,10,Auto">
+      <ListBox Grid.Column="0"
+               Name="StepList"
+               Background="{DynamicResource SidebarListBackgroundBrush}"
+               BorderBrush="{DynamicResource SidebarBorderBrush}"
+               BorderThickness="1">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="core:MacroStep">
+            <TextBlock Text="{Binding DisplaySummary}"
+                       FontSize="12"
+                       Margin="2,2"
+                       TextTrimming="CharacterEllipsis" />
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+
+      <StackPanel Grid.Column="2" Spacing="6">
+        <Button Name="EditStepButton"
+                Content="编辑选定的行"
+                MinWidth="132"
+                Click="OnEditStep" />
+        <Button Name="InsertAboveButton"
+                Content="Insert new line above"
+                MinWidth="132"
+                Click="OnInsertAbove" />
+        <Button Name="InsertBelowButton"
+                Content="在下方插入新行"
+                MinWidth="132"
+                Click="OnInsertBelow" />
+        <Button Name="DeleteStepButton"
+                Content="删除行"
+                MinWidth="132"
+                Click="OnDeleteStep" />
+      </StackPanel>
+    </Grid>
+
+    <Grid Grid.Row="2"
+          ColumnDefinitions="Auto,*,Auto"
+          Margin="0,10,0,0">
+      <StackPanel Grid.Column="0"
+                  Orientation="Horizontal"
+                  Spacing="6"
+                  VerticalAlignment="Center">
+        <TextBlock Text="快捷键:"
+                   VerticalAlignment="Center" />
+        <ComboBox Name="HotkeyCombo" Width="140" />
+      </StackPanel>
+      <TextBlock Grid.Column="1"
+                 Text="or use Ctrl+SPACE in order to display the popup macros menu"
+                 FontSize="10"
+                 Foreground="#9e9e9e"
+                 VerticalAlignment="Center"
+                 Margin="10,0,10,0"
+                 TextWrapping="Wrap"
+                 TextAlignment="Center" />
+      <StackPanel Grid.Column="2"
+                  Orientation="Horizontal"
+                  Spacing="8">
+        <Button Name="OkButton" Content="确定" Width="80" Click="OnOkClick" />
+        <Button Name="CancelButton" Content="取消" Width="80" Click="OnCancelClick" />
+      </StackPanel>
+    </Grid>
+  </Grid>
+</Window>

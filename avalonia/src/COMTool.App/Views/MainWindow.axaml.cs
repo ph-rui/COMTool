@@ -2461,8 +2461,21 @@ public partial class MainWindow : Window
                 ok,
             },
         };
-        await dialog.ShowDialog(this);
+        LastErrorDialogForTests = dialog;
+        try
+        {
+            await dialog.ShowDialog(this);
+        }
+        finally
+        {
+            if (ReferenceEquals(LastErrorDialogForTests, dialog))
+            {
+                LastErrorDialogForTests = null;
+            }
+        }
     }
+
+    internal Window? LastErrorDialogForTests { get; private set; }
 
     private void OnTitleBarPointerPressed(object? sender, PointerPressedEventArgs e)
     {
@@ -3478,8 +3491,12 @@ public partial class MainWindow : Window
 
     private async void OnMacroEditRequested(object? sender, MacroItem item)
     {
-        // Step editor window lands in a later round.
-        _ = ShowErrorAsync("宏步骤编辑器将在后续轮次提供。");
+        if (item is null || DataContext is not MainViewModel)
+        {
+            return;
+        }
+
+        await OpenMacroEditorAsync(item);
     }
 
     private void OnMacroDuplicateRequested(object? sender, MacroItem item)
@@ -3511,25 +3528,61 @@ public partial class MainWindow : Window
 
     private async void OnMacroHotkeyRequested(object? sender, MacroItem item)
     {
-        if (item is null || DataContext is not MainViewModel viewModel)
+        if (item is null || DataContext is not MainViewModel)
         {
             return;
         }
 
-        var hotkey = await ShowMacroHotkeyAsync(item);
-        if (hotkey is null)
+        // MobaXterm: "Assign hotkey to X" opens the same macro editor; the
+        // hotkey combo sits at the bottom of that window.
+        await OpenMacroEditorAsync(item);
+    }
+
+    /// <summary>
+    /// Opens the "Macro 编辑" step editor for the given macro. On 确定 the
+    /// working copy (steps + hotkey) is written back to the item and
+    /// persisted; on cancel nothing changes.
+    /// </summary>
+    private async Task OpenMacroEditorAsync(MacroItem item)
+    {
+        var editor = MacroEditorWindow.Create();
+        editor.DataContext = item;
+        editor.LoadFrom(item);
+        LastMacroEditorWindowForTests = editor;
+        try
         {
-            return;
+            await editor.ShowDialog(this);
+        }
+        finally
+        {
+            if (ReferenceEquals(LastMacroEditorWindowForTests, editor))
+            {
+                LastMacroEditorWindowForTests = null;
+            }
         }
 
-        if (!viewModel.AssignHotkey(item, hotkey))
+        var result = editor.Result;
+        if (result is null)
         {
-            _ = ShowErrorAsync("快捷键不可用（保留组合或已被其他宏占用），未分配。");
-            return;
+            return; // 取消: item untouched
+        }
+
+        item.SetSteps(result.Value.Steps);
+
+        var hotkey = result.Value.Hotkey;
+        if (hotkey != item.Hotkey && DataContext is MainViewModel viewModel)
+        {
+            if (!viewModel.AssignHotkey(item, hotkey))
+            {
+                _ = ShowErrorAsync("快捷键不可用（保留组合或已被其他宏占用），未分配。");
+                return;
+            }
         }
 
         PersistMacros();
     }
+
+    internal Window? LastMacroEditorWindowForTests { get; private set; }
 
     private async void OnMacroImportRequested(object? sender, EventArgs e)
     {
@@ -3695,90 +3748,6 @@ public partial class MainWindow : Window
     }
 
     internal Window? LastMacroDeleteDialogForTests { get; private set; }
-
-    /// <summary>
-    /// Hotkey assignment dialog: &lt;none&gt; + F5..F12 + Ctrl+Shift/Alt+A..Z.
-    /// Returns the selected option string, or null on cancel.
-    /// </summary>
-    internal async Task<string?> ShowMacroHotkeyAsync(MacroItem item)
-    {
-        var dialog = new Window
-        {
-            Title = $"Assign hotkey to \"{item.Name}\"",
-            Width = 360,
-            Height = 190,
-            MinWidth = 300,
-            MinHeight = 150,
-            CanResize = false,
-            ShowInTaskbar = false,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-        };
-        var combo = new ComboBox { Name = "MacroHotkeyCombo", FontSize = 12 };
-        foreach (var option in MacroHotkey.Options())
-        {
-            combo.Items.Add(option);
-        }
-        var current = item.Hotkey ?? "<none>";
-        var idx = combo.Items.IndexOf(current);
-        combo.SelectedIndex = idx >= 0 ? idx : 0;
-        var ok = new Button
-        {
-            Name = "MacroHotkeyOkButton",
-            Content = "确定",
-            Width = 80,
-            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
-        };
-        ok.Click += (_, _) =>
-        {
-            dialog.Tag = combo.SelectedItem as string;
-            dialog.Close();
-        };
-        var cancel = new Button
-        {
-            Name = "MacroHotkeyCancelButton",
-            Content = "取消",
-            Width = 80,
-            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
-        };
-        cancel.Click += (_, _) => dialog.Close();
-        dialog.Content = new StackPanel
-        {
-            Margin = new Thickness(16),
-            Spacing = 10,
-            Children =
-            {
-                new TextBlock
-                {
-                    Text = "为宏分配快捷键",
-                    FontSize = 12,
-                },
-                combo,
-                new StackPanel
-                {
-                    Orientation = Avalonia.Layout.Orientation.Horizontal,
-                    Spacing = 8,
-                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
-                    Children = { ok, cancel },
-                },
-            },
-        };
-        LastMacroHotkeyDialogForTests = dialog;
-        try
-        {
-            await dialog.ShowDialog(this);
-        }
-        finally
-        {
-            if (ReferenceEquals(LastMacroHotkeyDialogForTests, dialog))
-            {
-                LastMacroHotkeyDialogForTests = null;
-            }
-        }
-
-        return dialog.Tag as string;
-    }
-
-    internal Window? LastMacroHotkeyDialogForTests { get; private set; }
 
     // ------------------------------------------------------------------
     // Macro status banner + Ctrl+Space popup

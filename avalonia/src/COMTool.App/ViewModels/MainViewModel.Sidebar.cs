@@ -30,7 +30,10 @@ public sealed partial class MacroItem : ObservableObject
     [ObservableProperty]
     private string? _hotkey;
 
-    public IReadOnlyList<MacroStep> Steps { get; }
+    public IReadOnlyList<MacroStep> Steps { get; private set; }
+
+    /// <summary>Replaces the step list (editor 确定后回写).</summary>
+    public void SetSteps(IEnumerable<MacroStep> steps) => Steps = steps.ToList();
 
     public MacroItem(string id, string name, IReadOnlyList<MacroStep> steps, string? hotkey = null)
     {

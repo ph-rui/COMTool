@@ -335,9 +335,8 @@ public sealed class MacroFeatureTests
                 rec.FeedKey("RETURN");
 
                 // The terminal should still be independently usable (no key swallowing)
-                terminal.SendInputAsync("forwarded").GetAwaiter().GetResult();
-                RunJobs(window);
-                Assert.Contains("forwarded", pty.WriterText);
+                _ = terminal.SendInputAsync("forwarded");
+                WaitUntil(() => pty!.WriterText.Contains("forwarded"), "forwarded bytes");
 
                 // Finish and verify steps
                 var steps = vm.StopRecording();
@@ -523,7 +522,378 @@ public sealed class MacroFeatureTests
         }
     }
 
+    [AvaloniaFact]
+    public void MAC06_EditorOpensWithSteps()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                var config = new ComtoolConfig();
+                config.Macros.Add(new MacroConfig
+                {
+                    Id = "probe",
+                    Name = "Probe",
+                    Steps = new List<MacroStepDto>
+                    {
+                        new() { Kind = "text", Text = "echo probe-macro" },
+                        new() { Kind = "key", Key = "RETURN" },
+                        new() { Kind = "sleep", Milliseconds = 1200 },
+                    },
+                });
+                env.SeedConfig(config);
+                window = CreateWindow(env);
+                var vm = Vm(window);
+                var item = vm.Macros[0];
+
+                var editor = OpenEditor(window, item);
+                try
+                {
+                    Assert.Equal(3, editor.StepsForTests.Count);
+                    Assert.Equal("\"echo probe-macro\"", editor.StepsForTests[0].DisplaySummary);
+                    Assert.Equal("RETURN", editor.StepsForTests[1].DisplaySummary);
+                    Assert.Equal("SLEEP ms=1200", editor.StepsForTests[2].DisplaySummary);
+                    Assert.NotNull(editor.FindControl<ListBox>("StepList"));
+                    Assert.NotNull(editor.FindControl<Button>("EditStepButton"));
+                    Assert.NotNull(editor.FindControl<Button>("InsertAboveButton"));
+                    Assert.NotNull(editor.FindControl<Button>("InsertBelowButton"));
+                    Assert.NotNull(editor.FindControl<Button>("DeleteStepButton"));
+                    Assert.NotNull(editor.FindControl<ComboBox>("HotkeyCombo"));
+                }
+                finally
+                {
+                    RaiseClick(editor.FindControl<Button>("CancelButton")!);
+                    WaitUntil(() => window.LastMacroEditorWindowForTests is null, "editor closed");
+                }
+
+                // 取消后宏不变
+                Assert.Equal(3, vm.Macros[0].Steps.Count);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public void MAC06b_EditorHandlesLargeStepList()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                var steps = Enumerable.Range(0, 1001)
+                    .Select(i => new MacroStepDto { Kind = "text", Text = $"step{i}" })
+                    .ToList();
+                var config = new ComtoolConfig();
+                config.Macros.Add(new MacroConfig { Id = "big", Name = "Big", Steps = steps });
+                env.SeedConfig(config);
+                window = CreateWindow(env);
+                var vm = Vm(window);
+                var item = vm.Macros[0];
+
+                var editor = OpenEditor(window, item);
+                try
+                {
+                    Assert.Equal(1001, editor.StepsForTests.Count);
+                    Assert.NotNull(editor.FindControl<ListBox>("StepList"));
+                }
+                finally
+                {
+                    RaiseClick(editor.FindControl<Button>("OkButton")!);
+                    WaitUntil(() => window.LastMacroEditorWindowForTests is null, "editor closed");
+                }
+
+                RunJobs(window);
+                Assert.Equal(1001, vm.Macros[0].Steps.Count);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public void MAC07_StepEditorShowsFourTypes()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                var config = new ComtoolConfig();
+                config.Macros.Add(new MacroConfig
+                {
+                    Id = "m1",
+                    Name = "M",
+                    Steps = new List<MacroStepDto> { new() { Kind = "text", Text = "hi" } },
+                });
+                env.SeedConfig(config);
+                window = CreateWindow(env);
+                var vm = Vm(window);
+                var item = vm.Macros[0];
+
+                var editor = OpenEditor(window, item);
+                try
+                {
+                    editor.FindControl<ListBox>("StepList")!.SelectedIndex = 0;
+                    RunJobs(window);
+                    RaiseClick(editor.FindControl<Button>("EditStepButton")!);
+                    WaitUntil(() => editor.LastMacroStepDialogForTests is not null, "step dialog");
+                    var dlg = editor.LastMacroStepDialogForTests!;
+
+                    // 4 radio 类型齐全
+                    Assert.NotNull(dlg.FindControl<RadioButton>("RadioText"));
+                    Assert.NotNull(dlg.FindControl<RadioButton>("RadioKey"));
+                    Assert.NotNull(dlg.FindControl<RadioButton>("RadioSleep"));
+                    Assert.NotNull(dlg.FindControl<RadioButton>("RadioWait"));
+
+                    // 默认文本：延迟字段可见
+                    Assert.True(dlg.FindControl<StackPanel>("TextPanel")!.IsVisible);
+                    Assert.Equal("按键之间的延迟:",
+                        dlg.FindControl<TextBlock>("TextDelayLabel")!.Text);
+                    Assert.False(dlg.FindControl<StackPanel>("SleepPanel")!.IsVisible);
+                    Assert.False(dlg.FindControl<StackPanel>("KeyPanel")!.IsVisible);
+                    Assert.Equal(26, dlg.FindControl<ComboBox>("KeyValue")!.Items.Count);
+
+                    // 切到睡眠：ms 字段出现
+                    dlg.FindControl<RadioButton>("RadioSleep")!.IsChecked = true;
+                    RunJobs(window);
+                    Assert.True(dlg.FindControl<StackPanel>("SleepPanel")!.IsVisible);
+                    Assert.False(dlg.FindControl<StackPanel>("TextPanel")!.IsVisible);
+
+                    // 切到按键
+                    dlg.FindControl<RadioButton>("RadioKey")!.IsChecked = true;
+                    RunJobs(window);
+                    Assert.True(dlg.FindControl<StackPanel>("KeyPanel")!.IsVisible);
+
+                    RaiseClick(dlg.FindControl<Button>("CancelButton")!);
+                    WaitUntil(() => editor.LastMacroStepDialogForTests is null, "step dialog closed");
+                }
+                finally
+                {
+                    RaiseClick(editor.FindControl<Button>("CancelButton")!);
+                    WaitUntil(() => window.LastMacroEditorWindowForTests is null, "editor closed");
+                }
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public void MAC07b_HotkeyConflictRejected()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                var config = new ComtoolConfig();
+                config.Macros.Add(new MacroConfig
+                {
+                    Id = "a", Name = "A",
+                    Steps = new List<MacroStepDto> { new() { Kind = "text", Text = "a" } },
+                });
+                config.Macros.Add(new MacroConfig
+                {
+                    Id = "b", Name = "B",
+                    Steps = new List<MacroStepDto> { new() { Kind = "text", Text = "b" } },
+                });
+                env.SeedConfig(config);
+                window = CreateWindow(env);
+                var vm = Vm(window);
+                var a = vm.Macros[0];
+                var b = vm.Macros[1];
+
+                Assert.True(vm.AssignHotkey(a, "Ctrl+Shift+A"));
+
+                // 打开 B 的编辑器，抢 A 的热键
+                var editor = OpenEditor(window, b);
+                try
+                {
+                    editor.FindControl<ComboBox>("HotkeyCombo")!.SelectedItem = "Ctrl+Shift+A";
+                    RaiseClick(editor.FindControl<Button>("OkButton")!);
+                }
+                finally
+                {
+                    WaitUntil(() => window.LastMacroEditorWindowForTests is null, "editor closed");
+                }
+
+                RunJobs(window);
+                Assert.Null(b.Hotkey);              // 冲突被拒
+                Assert.Equal("Ctrl+Shift+A", a.Hotkey); // A 保留
+
+                // 错误提示出现
+                WaitUntil(() => window.LastErrorDialogForTests is not null, "error dialog");
+                var err = window.LastErrorDialogForTests!;
+                Assert.True(err.GetVisualDescendants().OfType<TextBlock>()
+                    .Any(t => t.Text != null && t.Text.Contains("快捷键不可用")));
+                var errOk = err.GetVisualDescendants().OfType<Button>()
+                    .First(bt => bt.Content is string s && s == "OK");
+                RaiseClick(errOk);
+                WaitUntil(() => window.LastErrorDialogForTests is null, "error dialog closed");
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public void MAC08_EditorInsertDeleteSteps()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                var config = new ComtoolConfig();
+                config.Macros.Add(new MacroConfig
+                {
+                    Id = "m1",
+                    Name = "M",
+                    Steps = new List<MacroStepDto>
+                    {
+                        new() { Kind = "text", Text = "x" },
+                        new() { Kind = "text", Text = "y" },
+                    },
+                });
+                env.SeedConfig(config);
+                window = CreateWindow(env);
+                var vm = Vm(window);
+                var item = vm.Macros[0];
+
+                var editor = OpenEditor(window, item);
+                try
+                {
+                    Assert.Equal(2, editor.StepsForTests.Count);
+
+                    // 在第 0 行上方插入文本 "a"
+                    editor.FindControl<ListBox>("StepList")!.SelectedIndex = 0;
+                    RunJobs(window);
+                    RaiseClick(editor.FindControl<Button>("InsertAboveButton")!);
+                    WaitUntil(() => editor.LastMacroStepDialogForTests is not null, "step dialog");
+                    var dlg = editor.LastMacroStepDialogForTests!;
+                    dlg.FindControl<TextBox>("TextValue")!.Text = "a";
+                    RaiseClick(dlg.FindControl<Button>("OkButton")!);
+                    WaitUntil(() => editor.LastMacroStepDialogForTests is null, "step dialog closed");
+                    RunJobs(window);
+
+                    Assert.Equal(3, editor.StepsForTests.Count);
+                    Assert.Equal("a", editor.StepsForTests[0].Text);
+
+                    // 删除选中的第 0 行（"a"）
+                    RaiseClick(editor.FindControl<Button>("DeleteStepButton")!);
+                    RunJobs(window);
+                    Assert.Equal(2, editor.StepsForTests.Count);
+
+                    // 确定回写
+                    RaiseClick(editor.FindControl<Button>("OkButton")!);
+                }
+                finally
+                {
+                    WaitUntil(() => window.LastMacroEditorWindowForTests is null, "editor closed");
+                }
+
+                RunJobs(window);
+                Assert.Equal(2, vm.Macros[0].Steps.Count);
+                Assert.Equal("x", vm.Macros[0].Steps[0].Text);
+                Assert.Equal("y", vm.Macros[0].Steps[1].Text);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public void MAC08b_EditorCancelDiscards()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                var config = new ComtoolConfig();
+                config.Macros.Add(new MacroConfig
+                {
+                    Id = "m1",
+                    Name = "M",
+                    Steps = new List<MacroStepDto> { new() { Kind = "text", Text = "orig" } },
+                });
+                env.SeedConfig(config);
+                window = CreateWindow(env);
+                var vm = Vm(window);
+                var item = vm.Macros[0];
+
+                var editor = OpenEditor(window, item);
+                try
+                {
+                    editor.FindControl<ListBox>("StepList")!.SelectedIndex = 0;
+                    RunJobs(window);
+                    RaiseClick(editor.FindControl<Button>("InsertAboveButton")!);
+                    WaitUntil(() => editor.LastMacroStepDialogForTests is not null, "step dialog");
+                    var dlg = editor.LastMacroStepDialogForTests!;
+                    dlg.FindControl<TextBox>("TextValue")!.Text = "new";
+                    RaiseClick(dlg.FindControl<Button>("OkButton")!);
+                    WaitUntil(() => editor.LastMacroStepDialogForTests is null, "step dialog closed");
+                    RunJobs(window);
+
+                    Assert.Equal(2, editor.StepsForTests.Count); // 工作副本已变
+
+                    // 取消编辑器 → 全部丢弃
+                    RaiseClick(editor.FindControl<Button>("CancelButton")!);
+                }
+                finally
+                {
+                    WaitUntil(() => window.LastMacroEditorWindowForTests is null, "editor closed");
+                }
+
+                RunJobs(window);
+                Assert.Equal(1, vm.Macros[0].Steps.Count);
+                Assert.Equal("orig", vm.Macros[0].Steps[0].Text);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
     // --- Helpers (mirrored from SidebarRailTests) ---
+
+    /// <summary>Opens the macro step editor via the sidebar event and waits for it.</summary>
+    private static MacroEditorWindow OpenEditor(MainWindow window, MacroItem item)
+    {
+        Sidebar(window).RaiseMacroEditForTests(item);
+        WaitUntil(() => window.LastMacroEditorWindowForTests is not null, "macro editor window");
+        return (MacroEditorWindow)window.LastMacroEditorWindowForTests!;
+    }
+
+    /// <summary>Fires a button's Click handler without geometry (headless-safe).</summary>
+    private static void RaiseClick(Control control) =>
+        control.RaiseEvent(new RoutedEventArgs(Button.ClickEvent, control));
 
     private static MainWindow CreateWindow(TestEnvironment env)
     {

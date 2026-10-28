@@ -1,0 +1,69 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="COMTool.App.Views.MacroStepEditorDialog"
+        Title="Macro 编辑"
+        Width="440"
+        Height="300"
+        MinWidth="380"
+        MinHeight="260"
+        CanResize="False"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource WindowBackgroundBrush}"
+        FontSize="12">
+  <Grid RowDefinitions="*,Auto" Margin="14">
+    <StackPanel Grid.Row="0" Spacing="8">
+      <RadioButton Name="RadioText"
+                   Content="文本"
+                   GroupName="StepType"
+                   IsChecked="True" />
+      <StackPanel Name="TextPanel" Margin="24,0,0,0" Spacing="6">
+        <TextBox Name="TextValue" Watermark="要发送的文本" />
+        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+          <TextBlock Name="TextDelayLabel"
+                     Text="按键之间的延迟:"
+                     VerticalAlignment="Center" />
+          <NumericUpDown Name="TextDelay"
+                         Minimum="0" Maximum="5000" Value="0"
+                         Width="90" />
+          <TextBlock Text="ms" VerticalAlignment="Center" />
+        </StackPanel>
+      </StackPanel>
+
+      <RadioButton Name="RadioKey"
+                   Content="按键"
+                   GroupName="StepType" />
+      <StackPanel Name="KeyPanel" Margin="24,0,0,0" Spacing="6" IsVisible="False">
+        <ComboBox Name="KeyValue" />
+      </StackPanel>
+
+      <RadioButton Name="RadioSleep"
+                   Content="睡眠"
+                   GroupName="StepType" />
+      <StackPanel Name="SleepPanel" Margin="24,0,0,0" Spacing="6" IsVisible="False">
+        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+          <NumericUpDown Name="SleepValue"
+                         Minimum="0" Maximum="600000" Value="1000"
+                         Width="120" />
+          <TextBlock Text="ms" VerticalAlignment="Center" />
+        </StackPanel>
+      </StackPanel>
+
+      <RadioButton Name="RadioWait"
+                   Content="等待字符串"
+                   GroupName="StepType" />
+      <StackPanel Name="WaitPanel" Margin="24,0,0,0" Spacing="6" IsVisible="False">
+        <TextBox Name="WaitValue" Watermark="模式（可用 * / ? 通配符）" />
+      </StackPanel>
+    </StackPanel>
+
+    <StackPanel Grid.Row="1"
+                Orientation="Horizontal"
+                Spacing="8"
+                HorizontalAlignment="Right"
+                Margin="0,12,0,0">
+      <Button Name="OkButton" Content="确定" Width="80" Click="OnOkClick" />
+      <Button Name="CancelButton" Content="取消" Width="80" Click="OnCancelClick" />
+    </StackPanel>
+  </Grid>
+</Window>

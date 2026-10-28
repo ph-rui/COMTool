@@ -73,6 +73,9 @@ public partial class SessionSidebar : UserControl
     internal void RaiseMacroDeleteForTests(MacroItem item) =>
         MacroDeleteRequested?.Invoke(this, item);
 
+    internal void RaiseMacroEditForTests(MacroItem item) =>
+        MacroEditRequested?.Invoke(this, item);
+
     private void OnRailTabClick(object? sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: string tag }
