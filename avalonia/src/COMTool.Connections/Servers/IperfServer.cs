@@ -3,10 +3,11 @@ using System.Diagnostics;
 namespace COMTool.Connections.Servers;
 
 /// <summary>
-/// Iperf throughput-test server: locates iperf3 (or iperf v2) on PATH and
-/// runs it as a child process in server mode ("iperf3 -s -p PORT"), streaming
-/// its output through LogMessage. When no iperf binary is installed the row
-/// stays unstarted and the reason is reported in the server output.
+/// Iperf throughput-test server: locates iperf3 (or iperf v2) bundled with the
+/// app (same directory as the executable) or on PATH, and runs it as a child
+/// process in server mode ("iperf3 -s -p PORT"), streaming its output through
+/// LogMessage. When no iperf binary is available the row stays unstarted and
+/// the reason is reported in the server output.
 /// </summary>
 public sealed class IperfServer : IServerHost
 {
@@ -41,7 +42,7 @@ public sealed class IperfServer : IServerHost
         var binary = BinaryOverride is not null ? BinaryOverride : FindIperf();
         if (binary is null || !File.Exists(binary))
         {
-            LogMessage?.Invoke("未找到 iperf3 / iperf：请先安装 iperf3 并加入 PATH，再启动本服务器");
+            LogMessage?.Invoke("未找到 iperf3 / iperf：请确认程序目录里随包捆绑的 iperf3 可用，或安装 iperf3 并加入 PATH，再启动本服务器");
             return Task.CompletedTask;
         }
 
@@ -137,6 +138,27 @@ public sealed class IperfServer : IServerHost
             ? new[] { "iperf3.exe", "iperf.exe" }
             : new[] { "iperf3", "iperf" };
 
+        // 1:1 与 MobaXterm 一致：优先使用随程序捆绑的 iperf（exe 所在目录 /
+        // 程序基目录），找不到再回退 PATH。
+        foreach (var dir in AppDirectories())
+        {
+            foreach (var name in names)
+            {
+                try
+                {
+                    var candidate = Path.Combine(dir, name);
+                    if (File.Exists(candidate))
+                    {
+                        return candidate;
+                    }
+                }
+                catch (Exception)
+                {
+                    // 目录不可读，跳过
+                }
+            }
+        }
+
         var pathVar = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
         foreach (var dir in pathVar.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
         {
@@ -158,5 +180,41 @@ public sealed class IperfServer : IServerHost
         }
 
         return null;
+    }
+
+    /// <summary>程序 exe 所在目录与基目录（去重，忽略不可用项）。</summary>
+    private static string[] AppDirectories()
+    {
+        var dirs = new List<string>();
+        try
+        {
+            var fileName = Process.GetCurrentProcess().MainModule?.FileName;
+            if (fileName is not null)
+            {
+                var dir = Path.GetDirectoryName(fileName);
+                if (dir is not null && !dirs.Contains(dir))
+                {
+                    dirs.Add(dir);
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // MainModule 在某些环境不可用，忽略
+        }
+
+        try
+        {
+            var baseDir = AppContext.BaseDirectory;
+            if (baseDir is not null && !dirs.Contains(baseDir.TrimEnd(Path.DirectorySeparatorChar)))
+            {
+                dirs.Add(baseDir.TrimEnd(Path.DirectorySeparatorChar));
+            }
+        }
+        catch (Exception)
+        {
+        }
+
+        return dirs.ToArray();
     }
 }

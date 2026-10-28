@@ -3631,7 +3631,9 @@ public partial class MainWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         PersistWindowSize();
-        // 退出时停止随主窗口自启的 Cron 服务器（对话框自启的由对话框收尾）
+        // 退出时停止网络服务器服务（对话框本身关闭已不停服务——对齐 MobaXterm，
+        // 服务由进程级 ServersSession 持有）；CronAutoStart 覆盖应用自启的实例。
+        _ = ServersSession.Shared?.StopAllAsync();
         _ = CronAutoStart.StopAsync();
         _portTimer?.Stop();
         _portTimer = null;

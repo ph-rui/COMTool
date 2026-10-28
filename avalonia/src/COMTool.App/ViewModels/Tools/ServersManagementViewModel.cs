@@ -1011,7 +1011,15 @@ public sealed partial class ServersManagementViewModel : ObservableObject
                     return cron;
                 }
             case ServerConfigKind.Iperf:
-                return new IperfServer(Iperf.Port);
+                {
+                    var iperf = new IperfServer(Iperf.Port);
+                    var bundled = IperfBinary.Locate();
+                    if (bundled is not null)
+                    {
+                        iperf.BinaryOverride = bundled;
+                    }
+                    return iperf;
+                }
             default:
                 throw new NotSupportedException($"未知的服务器类型: {kind}");
         }

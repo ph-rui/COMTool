@@ -7,7 +7,9 @@
         Title="Servers management"
         Width="740"
         Height="472"
-        CanResize="False"
+        MinWidth="740"
+        MinHeight="472"
+        CanResize="True"
         ShowInTaskbar="True"
         WindowStartupLocation="CenterScreen"
         Background="White"
@@ -32,6 +34,30 @@
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="HorizontalContentAlignment" Value="Center" />
       <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <!-- ▶/■ 图标启用色走 class 样式（不写局部值），:disabled 才能覆盖 -->
+    <Style Selector="Button.ServerPlay TextBlock">
+      <Setter Property="Foreground" Value="#1e95f3" />
+    </Style>
+    <Style Selector="Button.ServerStop TextBlock">
+      <Setter Property="Foreground" Value="#008181" />
+    </Style>
+    <!-- ▶/■ 按钮随运行状态变化（对齐 MobaXterm 实测行为）：
+         停止时 ▶ 可用、■ 禁用；运行时 ▶ 禁用、■ 可用。
+         禁用态按钮面 #cccccc、边框 #bfbfbf、图标灰化（MobaXterm 22.1 实测值） -->
+    <Style Selector="Button.ServerPlay:disabled">
+      <Setter Property="Background" Value="#cccccc" />
+      <Setter Property="BorderBrush" Value="#bfbfbf" />
+    </Style>
+    <Style Selector="Button.ServerPlay:disabled TextBlock">
+      <Setter Property="Foreground" Value="#75b0df" />
+    </Style>
+    <Style Selector="Button.ServerStop:disabled">
+      <Setter Property="Background" Value="#cccccc" />
+      <Setter Property="BorderBrush" Value="#bfbfbf" />
+    </Style>
+    <Style Selector="Button.ServerStop:disabled TextBlock">
+      <Setter Property="Foreground" Value="#c0c0c0" />
     </Style>
     <!-- 经典 Win32 复选框：白色方框 + 黑色勾，文字在框右侧 -->
     <Style Selector="ToggleButton.ClassicCheck">
@@ -243,7 +269,7 @@
     </Style>
   </Window.Styles>
 
-  <Grid ColumnDefinitions="305,*">
+  <Grid ColumnDefinitions="305,*" RowDefinitions="*,Auto">
     <!-- 左：九个服务器行（名称 + 播放/停止/设置按钮） -->
     <ItemsControl Grid.Column="0"
                   ItemsSource="{Binding Rows}"
@@ -263,19 +289,19 @@
                           VerticalAlignment="Center">
                 <Button Classes="ServerButton ServerPlay"
                         Tag="{Binding Id}"
+                        IsEnabled="{Binding !IsRunning}"
                         Click="OnPlayClick">
                   <TextBlock Text="&#xf04b;"
                              FontFamily="{DynamicResource IconFontAwesome}"
-                             FontSize="10"
-                             Foreground="#1e95f3" />
+                             FontSize="10" />
                 </Button>
                 <Button Classes="ServerButton ServerStop"
                         Tag="{Binding Id}"
+                        IsEnabled="{Binding IsRunning}"
                         Click="OnStopClick">
                   <TextBlock Text="&#xf28d;"
                              FontFamily="{DynamicResource IconFontAwesome}"
-                             FontSize="10"
-                             Foreground="#66a6a6" />
+                             FontSize="10" />
                 </Button>
                 <Button Classes="ServerButton ServerGear"
                         Tag="{Binding Id}"
@@ -304,10 +330,10 @@
     <!-- 右：欢迎页或所选服务器的设置面板（MobaXterm 22.1 逐像素对齐） -->
     <!-- 单格 Grid 容器：子控件用 Margin + VerticalAlignment=Top 做绝对定位，
          避免裸 Panel 对 Grid/复合控件的测量-排布错乱（部署面板错位事故根因） -->
-    <Grid Grid.Column="1">
+    <Grid Grid.Column="1" RowDefinitions="43,*">
       <!-- 欢迎页 -->
       <Grid IsVisible="{Binding IsWelcome}"
-            Margin="0,43,20,0" Height="304" VerticalAlignment="Top">
+            Grid.Row="1" Margin="0,0,20,0">
         <StackPanel Width="292"
                     HorizontalAlignment="Left"
                     VerticalAlignment="Center"
@@ -342,7 +368,7 @@
 
       <!-- TFTP 服务器设置 -->
       <Border IsVisible="{Binding IsTftpSelected}"
-              Margin="0,43,20,0" Height="304" VerticalAlignment="Top"
+              Grid.Row="1" Margin="0,0,20,0"
               Background="White" BorderBrush="#a0a0a0" BorderThickness="1">
         <Grid>
           <TextBlock Text="TFTP 服务器设置"
@@ -382,15 +408,15 @@
           </StackPanel>
           <TextBlock Text="服务器输出" Margin="20,167,0,0" VerticalAlignment="Top" />
           <ListBox Name="TftpLogBox" Classes="ClassicLog"
-                   Margin="20,182,14,0" Width="376" Height="96"
-                   VerticalAlignment="Top"
+                   Margin="20,182,14,24" Width="376"
+                   VerticalAlignment="Stretch"
                    ItemsSource="{Binding TftpLog}" />
         </Grid>
       </Border>
 
       <!-- FTP 服务器设置 -->
       <Border IsVisible="{Binding IsFtpSelected}"
-              Margin="0,43,20,0" Height="304" VerticalAlignment="Top"
+              Grid.Row="1" Margin="0,0,20,0"
               Background="White" BorderBrush="#a0a0a0" BorderThickness="1">
         <Grid>
           <TextBlock Text="FTP 服务器设置"
@@ -437,15 +463,15 @@
           </StackPanel>
           <TextBlock Text="服务器输出" Margin="20,167,0,0" VerticalAlignment="Top" />
           <ListBox Name="FtpLogBox" Classes="ClassicLog"
-                   Margin="20,182,14,0" Width="376" Height="96"
-                   VerticalAlignment="Top"
+                   Margin="20,182,14,24" Width="376"
+                   VerticalAlignment="Stretch"
                    ItemsSource="{Binding Selected.Log}" />
         </Grid>
       </Border>
 
       <!-- HTTP 服务器设置 -->
       <Border IsVisible="{Binding IsHttpSelected}"
-              Margin="0,43,20,0" Height="304" VerticalAlignment="Top"
+              Grid.Row="1" Margin="0,0,20,0"
               Background="White" BorderBrush="#a0a0a0" BorderThickness="1">
         <Grid>
           <TextBlock Text="HTTP 服务器设置"
@@ -482,15 +508,15 @@
           </StackPanel>
           <TextBlock Text="服务器输出" Margin="20,167,0,0" VerticalAlignment="Top" />
           <ListBox Name="HttpLogBox" Classes="ClassicLog"
-                   Margin="20,182,14,0" Width="376" Height="96"
-                   VerticalAlignment="Top"
+                   Margin="20,182,14,24" Width="376"
+                   VerticalAlignment="Stretch"
                    ItemsSource="{Binding HttpLog}" />
         </Grid>
       </Border>
 
       <!-- SSH/SFTP 服务器设置 -->
       <Border IsVisible="{Binding IsSshSelected}"
-              Margin="0,43,20,0" Height="304" VerticalAlignment="Top"
+              Grid.Row="1" Margin="0,0,20,0"
               Background="White" BorderBrush="#a0a0a0" BorderThickness="1">
         <Grid>
           <TextBlock Text="SSH/SFTP 服务器设置"
@@ -520,15 +546,15 @@
           </StackPanel>
           <TextBlock Text="服务器输出" Margin="20,183,0,0" VerticalAlignment="Top" />
           <ListBox Name="SshLogBox" Classes="ClassicLog"
-                   Margin="20,198,14,0" Width="376" Height="80"
-                   VerticalAlignment="Top"
+                   Margin="20,198,14,24" Width="376"
+                   VerticalAlignment="Stretch"
                    ItemsSource="{Binding Selected.Log}" />
         </Grid>
       </Border>
 
       <!-- Telnet 服务器设置 -->
       <Border IsVisible="{Binding IsTelnetSelected}"
-              Margin="0,43,20,0" Height="304" VerticalAlignment="Top"
+              Grid.Row="1" Margin="0,0,20,0"
               Background="White" BorderBrush="#a0a0a0" BorderThickness="1">
         <Grid>
           <TextBlock Text="Telnet 服务器设置"
@@ -559,15 +585,15 @@
           </StackPanel>
           <TextBlock Text="服务器输出" Margin="20,167,0,0" VerticalAlignment="Top" />
           <ListBox Name="TelnetLogBox" Classes="ClassicLog"
-                   Margin="20,182,14,0" Width="376" Height="96"
-                   VerticalAlignment="Top"
+                   Margin="20,182,14,24" Width="376"
+                   VerticalAlignment="Stretch"
                    ItemsSource="{Binding Selected.Log}" />
         </Grid>
       </Border>
 
       <!-- NFS 服务器设置（占位，实验性） -->
       <Border IsVisible="{Binding IsNfsSelected}"
-              Margin="0,43,20,0" Height="304" VerticalAlignment="Top"
+              Grid.Row="1" Margin="0,0,20,0"
               Background="White" BorderBrush="#a0a0a0" BorderThickness="1">
         <Grid>
           <TextBlock Text="NFS 服务器设置 (实验性)"
@@ -587,15 +613,15 @@
           </StackPanel>
           <TextBlock Text="服务器输出" Margin="20,167,0,0" VerticalAlignment="Top" />
           <ListBox Name="NfsLogBox" Classes="ClassicLog"
-                   Margin="20,182,14,0" Width="376" Height="96"
-                   VerticalAlignment="Top"
+                   Margin="20,182,14,24" Width="376"
+                   VerticalAlignment="Stretch"
                    ItemsSource="{Binding Selected.Log}" />
         </Grid>
       </Border>
 
       <!-- VNC 服务器设置（占位） -->
       <Border IsVisible="{Binding IsVncSelected}"
-              Margin="0,43,20,0" Height="304" VerticalAlignment="Top"
+              Grid.Row="1" Margin="0,0,20,0"
               Background="White" BorderBrush="#a0a0a0" BorderThickness="1">
         <Grid>
           <TextBlock Text="VNC 服务器设置"
@@ -635,15 +661,15 @@
           </StackPanel>
           <TextBlock Text="服务器输出" Margin="20,168,0,0" VerticalAlignment="Top" />
           <ListBox Name="VncLogBox" Classes="ClassicLog"
-                   Margin="20,183,14,0" Width="376" Height="96"
-                   VerticalAlignment="Top"
+                   Margin="20,183,14,23" Width="376"
+                   VerticalAlignment="Stretch"
                    ItemsSource="{Binding Selected.Log}" />
         </Grid>
       </Border>
 
       <!-- Cron 服务器设置 -->
       <Border IsVisible="{Binding IsCronSelected}"
-              Margin="0,43,20,0" Height="304" VerticalAlignment="Top"
+              Grid.Row="1" Margin="0,0,20,0"
               Background="White" BorderBrush="#a0a0a0" BorderThickness="1">
         <Grid>
           <TextBlock Text="Cron 服务器设置"
@@ -677,15 +703,15 @@
           </StackPanel>
           <TextBlock Text="服务器输出" Margin="20,210,0,0" VerticalAlignment="Top" />
           <ListBox Name="CronLogBox" Classes="ClassicLog"
-                   Margin="20,225,14,0" Width="376" Height="54"
-                   VerticalAlignment="Top"
+                   Margin="20,225,14,23" Width="376"
+                   VerticalAlignment="Stretch"
                    ItemsSource="{Binding Selected.Log}" />
         </Grid>
       </Border>
 
       <!-- IPERF 服务器设置 -->
       <Border IsVisible="{Binding IsIperfSelected}"
-              Margin="0,43,20,0" Height="304" VerticalAlignment="Top"
+              Grid.Row="1" Margin="0,0,20,0"
               Background="White" BorderBrush="#a0a0a0" BorderThickness="1">
         <Grid>
           <TextBlock Text="IPERF 服务器设置"
@@ -705,20 +731,20 @@
           </StackPanel>
           <TextBlock Text="服务器输出" Margin="20,167,0,0" VerticalAlignment="Top" />
           <ListBox Name="IperfLogBox" Classes="ClassicLog"
-                   Margin="20,182,14,0" Width="376" Height="96"
-                   VerticalAlignment="Top"
+                   Margin="20,182,14,24" Width="376"
+                   VerticalAlignment="Stretch"
                    ItemsSource="{Binding Selected.Log}" />
         </Grid>
       </Border>
     </Grid>
 
-    <!-- 底部：确定（保存全部设置并关闭，关闭时停止所有运行中的服务器） -->
-    <Button Grid.Column="0" Grid.ColumnSpan="2"
+    <!-- 底部：确定（保存全部设置并关闭；关窗不停服务——见 ServersSession） -->
+    <Button Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
             Name="ServersOkButton"
             Classes="ServerOkButton"
             HorizontalAlignment="Center"
             VerticalAlignment="Top"
-            Margin="0,381,0,0"
+            Margin="0,34,0,33"
             Click="OnOkClick">
       <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
         <TextBlock Text="&#xf058;"

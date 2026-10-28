@@ -1384,7 +1384,7 @@ public sealed class SidebarRailTests
         {
             env.Run(() =>
             {
-                window = new ServersManagementWindow();
+                window = new ServersManagementWindow(new ServersManagementViewModel(null));
                 window.Show();
                 Dispatcher.UIThread.RunJobs();
                 var vm = window.ViewModel;
@@ -1428,7 +1428,7 @@ public sealed class SidebarRailTests
         {
             env.Run(() =>
             {
-                window = new ServersManagementWindow();
+                window = new ServersManagementWindow(new ServersManagementViewModel(null));
                 window.Show();
                 Dispatcher.UIThread.RunJobs();
 
@@ -1463,7 +1463,7 @@ public sealed class SidebarRailTests
         {
             env.Run(() =>
             {
-                window = new ServersManagementWindow();
+                window = new ServersManagementWindow(new ServersManagementViewModel(null));
                 window.Show();
                 window.UpdateLayout();
                 Dispatcher.UIThread.RunJobs();
@@ -1550,7 +1550,7 @@ public sealed class SidebarRailTests
         {
             env.Run(() =>
             {
-                window = new ServersManagementWindow();
+                window = new ServersManagementWindow(new ServersManagementViewModel(null));
                 window.Show();
                 Dispatcher.UIThread.RunJobs();
                 var vm = window.ViewModel;
@@ -1590,7 +1590,7 @@ public sealed class SidebarRailTests
             env.Run(() =>
             {
                 var fake = new FakeServerHost();
-                window = new ServersManagementWindow { ServerFactoryForTests = _ => fake };
+                window = new ServersManagementWindow(new ServersManagementViewModel(null)) { ServerFactoryForTests = _ => fake };
                 window.Show();
                 Dispatcher.UIThread.RunJobs();
                 var vm = window.ViewModel;
@@ -1646,7 +1646,7 @@ public sealed class SidebarRailTests
                 {
                     StartException = new InvalidOperationException("port already in use"),
                 };
-                window = new ServersManagementWindow { ServerFactoryForTests = _ => fake };
+                window = new ServersManagementWindow(new ServersManagementViewModel(null)) { ServerFactoryForTests = _ => fake };
                 window.Show();
                 Dispatcher.UIThread.RunJobs();
                 var vm = window.ViewModel;
@@ -1675,10 +1675,11 @@ public sealed class SidebarRailTests
     }
 
     [AvaloniaFact]
-    public void SRV01_ClosingWindowStopsServers()
+    public void SRV01_ClosingWindowKeepsServersRunningAndRestoresOnReopen()
     {
         using var env = new TestEnvironment();
         ServersManagementWindow? window = null;
+        ServersManagementWindow? reopened = null;
         var root = Path.Combine(Path.GetTempPath(), "comtool-srv-close",
             Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -1687,23 +1688,42 @@ public sealed class SidebarRailTests
             env.Run(() =>
             {
                 var fake = new FakeServerHost();
-                window = new ServersManagementWindow { ServerFactoryForTests = _ => fake };
+                var vm = new ServersManagementViewModel(null);
+                window = new ServersManagementWindow(vm) { ServerFactoryForTests = _ => fake };
                 window.Show();
                 Dispatcher.UIThread.RunJobs();
                 window.ViewModel.Http.RootDirectory = root;
 
                 Click(window, ServerRowButton(window, "http", "ServerPlay"));
                 WaitUntil(() => window.ViewModel.HttpRow.IsRunning, "HTTP server to start");
+                Assert.Equal(1, fake.StartCount);
 
+                // 对齐 MobaXterm：关窗不停服务
                 window.Close();
-                WaitUntil(() => fake.StopCount == 1, "stop on window close");
+                Dispatcher.UIThread.RunJobs();
                 RunJobs(window);
+                Assert.True(fake.StopCount == 0, "关窗不应停止服务器");
+                Assert.True(fake.IsRunning, "关窗后服务器应保持运行");
+
+                // 重开窗口（同一共享 VM）：运行状态与按钮可用态恢复，不重复启动
+                reopened = new ServersManagementWindow(vm) { ServerFactoryForTests = _ => fake };
+                reopened.Show();
+                Dispatcher.UIThread.RunJobs();
+                Assert.True(reopened.ViewModel.HttpRow.IsRunning, "重开后运行状态应恢复");
+                Assert.True(fake.StartCount == 1, "重开窗口不应重复启动服务器");
+                Assert.False(ServerRowButton(reopened, "http", "ServerPlay").IsEnabled);
+                Assert.True(ServerRowButton(reopened, "http", "ServerStop").IsEnabled);
+
+                // 面板内点 ■ 正常停止
+                Click(reopened, ServerRowButton(reopened, "http", "ServerStop"));
+                WaitUntil(() => fake.StopCount == 1, "stop via reopened window");
                 Assert.Equal(1, fake.StopCount);
             });
         }
         finally
         {
             window?.Close();
+            reopened?.Close();
             Dispatcher.UIThread.RunJobs();
             try
             {
