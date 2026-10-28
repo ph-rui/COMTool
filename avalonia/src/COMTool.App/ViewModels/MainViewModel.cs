@@ -245,7 +245,7 @@ public partial class MainViewModel : ViewModelBase
 
             OnPropertyChanged();
             OnPropertyChanged(nameof(SshBrowserPane));
-            OnPropertyChanged(nameof(CanSendMacro));
+            OnPropertyChanged(nameof(CanExecuteMacro));
 
             if (previousPane is not null && !ReferenceEquals(previousPane, _selectedTab?.SftpPane))
             {

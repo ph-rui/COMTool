@@ -40,7 +40,7 @@
           <MenuItem Header="About COMTool" Click="OnAboutClick" />
         </ContextMenu>
       </Border.ContextMenu>
-      <Grid ColumnDefinitions="40,104,40,35,*,35,35,35">
+      <Grid ColumnDefinitions="40,104,40,35,35,*,35,35,35">
         <Image Grid.Column="0"
                Name="TitleBarLogo"
                Source="/Assets/logo.png"
@@ -74,6 +74,25 @@
           <TextBlock Text="&#xf03a;"
                      FontFamily="{DynamicResource IconFontAwesome}"
                      FontSize="18"
+                     Foreground="{DynamicResource TitleBarForegroundBrush}" />
+        </Button>
+        <Button Grid.Column="4"
+                Name="MacroMenuButton"
+                Classes="TitleBarButton"
+                ToolTip.Tip="宏">
+          <Button.Flyout>
+            <MenuFlyout Placement="BottomEdgeAlignedLeft">
+              <MenuItem Name="MacroMenuRecordItem"
+                        Header="{Binding RecordButtonText}"
+                        Click="OnMacroMenuRecordToggleClick" />
+              <Separator />
+              <MenuItem Header="已保存的宏"
+                        IsEnabled="{Binding HasMacros}"
+                        Click="OnMacroMenuSavedClick" />
+            </MenuFlyout>
+          </Button.Flyout>
+          <TextBlock Text="宏"
+                     FontSize="12"
                      Foreground="{DynamicResource TitleBarForegroundBrush}" />
         </Button>
 
@@ -274,8 +293,32 @@
               </StackPanel>
             </Grid>
 
-            <Grid Grid.Row="1" RowDefinitions="*,6,30">
+            <Grid Grid.Row="1" RowDefinitions="Auto,*,6,30">
               <Border Grid.Row="0"
+                      Name="MacroStatusBanner"
+                      Height="26"
+                      Background="#fff3f3"
+                      BorderBrush="#e03131"
+                      BorderThickness="0,1,0,0"
+                      IsVisible="False">
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Grid.Column="0"
+                             Name="MacroBannerText"
+                             FontSize="11"
+                             Foreground="#c92a2a"
+                             Margin="8,0,0,0"
+                             VerticalAlignment="Center"
+                             TextTrimming="CharacterEllipsis" />
+                  <Button Grid.Column="1"
+                          Name="MacroBannerActionButton"
+                          Content="停止"
+                          Width="64" Height="20"
+                          MinWidth="0" MinHeight="0"
+                          Margin="8,0,8,0"
+                          Click="OnMacroBannerActionClick" />
+                </Grid>
+              </Border>
+              <Border Grid.Row="1"
                       Background="White"
                       BorderBrush="{DynamicResource SidebarBorderBrush}"
                       BorderThickness="1"
@@ -286,7 +329,7 @@
                                 HorizontalContentAlignment="Stretch"
                                 VerticalContentAlignment="Stretch" />
               </Border>
-              <Grid Grid.Row="2" ColumnDefinitions="*,Auto">
+              <Grid Grid.Row="3" ColumnDefinitions="*,Auto">
                 <TextBlock Grid.Column="0"
                            Text="{Binding SelectedTab.StatusMessage}"
                            FontSize="12"
@@ -326,6 +369,43 @@
             </Grid>
           </Grid>
         </Grid>
+
+        <!-- Ctrl+Space popup: the saved-macros list floating over the content area -->
+        <Border Name="MacroPopup"
+                IsVisible="False"
+                Width="300"
+                Background="#f5f5f5"
+                BorderBrush="#9aa0a6"
+                BorderThickness="1"
+                CornerRadius="2"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                ZIndex="100">
+          <ItemsControl Name="MacroPopupList" ItemsSource="{Binding Macros}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:MacroItem">
+                <Button Name="MacroPopupRow"
+                        Classes="MacroPopupRow"
+                        Tag="{Binding}"
+                        Click="OnMacroPopupRowClick">
+                  <Grid ColumnDefinitions="*,Auto" Margin="8,5">
+                    <TextBlock Grid.Column="0"
+                               Text="{Binding Name}"
+                               FontSize="12"
+                               TextTrimming="CharacterEllipsis"
+                               VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding Hotkey}"
+                               FontSize="11"
+                               Foreground="#9e9e9e"
+                               VerticalAlignment="Center"
+                               IsVisible="{Binding Hotkey, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                  </Grid>
+                </Button>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </Border>
       </Grid>
     </Grid>
   </Grid>

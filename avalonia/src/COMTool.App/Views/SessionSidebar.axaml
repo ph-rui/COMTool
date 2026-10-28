@@ -138,17 +138,6 @@
                      FontSize="13"
                      Foreground="White" />
         </Button>
-        <Button Grid.Column="4"
-                Name="SidebarAddMacroButton"
-                Classes="SidebarAddButton"
-                IsVisible="{Binding IsMacrosTab}"
-                Click="OnAddMacroClick"
-                ToolTip.Tip="新建宏">
-          <TextBlock Text="&#xf067;"
-                     FontFamily="{DynamicResource IconFontAwesome}"
-                     FontSize="13"
-                     Foreground="White" />
-        </Button>
       </Grid>
 
       <!-- Sessions -->
@@ -263,111 +252,111 @@
         </Border>
       </Grid>
 
-      <!-- Macros -->
-      <Grid Grid.Row="2" Name="MacrosPanel" RowDefinitions="Auto,*" Margin="4,0,2,0" IsVisible="{Binding IsMacrosTab}">
-        <Border Grid.Row="0"
-                Classes="SidebarCard"
-                Margin="0,0,0,4"
-                IsVisible="{Binding IsMacroEditorOpen}">
-          <StackPanel Spacing="4">
-            <TextBlock Classes="SidebarFieldLabel" Text="宏名称" />
-            <TextBox Name="MacroNameBox"
-                     Text="{Binding MacroEditorName}"
-                     PlaceholderText="例如：重启"
-                     FontSize="11" />
-            <TextBlock Classes="SidebarFieldLabel" Text="命令" />
-            <TextBox Name="MacroTextBox"
-                     Text="{Binding MacroEditorText}"
-                     PlaceholderText="要发送的命令"
-                     FontSize="11"
-                     AcceptsReturn="True"
-                     Height="48" />
-            <CheckBox Content="发送后回车"
-                      IsChecked="{Binding MacroEditorAppendEnter}"
-                      FontSize="11" />
-            <TextBlock Classes="SidebarError"
-                       Text="{Binding MacroEditorError}"
-                       IsVisible="{Binding MacroEditorError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-            <StackPanel Orientation="Horizontal"
-                        Spacing="6"
-                        Margin="0,2,0,0">
-              <Button Name="MacroSaveButton"
-                      Classes="SidebarActionButton"
-                      Content="保存"
-                      Click="OnMacroSaveClick" />
-              <Button Name="MacroCancelButton"
-                      Classes="SidebarActionButton"
-                      Content="取消"
-                      Click="OnMacroCancelClick" />
-            </StackPanel>
+      <!-- Macros (MobaXterm 22.1 style: record button + saved list + context menu) -->
+      <Grid Grid.Row="2" Name="MacrosPanel" RowDefinitions="Auto,Auto,*" Margin="4,0,2,0" IsVisible="{Binding IsMacrosTab}">
+        <Button Grid.Row="0"
+                Name="MacroRecordButton"
+                Classes="MacroRecordButton"
+                IsEnabled="{Binding CanToggleRecording}"
+                Click="OnMacroRecordToggleClick"
+                ToolTip.Tip="录制新宏 / 停止录制">
+          <StackPanel Orientation="Horizontal"
+                      Spacing="6"
+                      HorizontalAlignment="Center"
+                      VerticalAlignment="Center">
+            <TextBlock Name="MacroRecordDot"
+                       Text="&#xf111;"
+                       FontFamily="{DynamicResource IconFontAwesome}"
+                       FontSize="12"
+                       Foreground="#e03131"
+                       VerticalAlignment="Center"
+                       IsVisible="{Binding IsRecording}" />
+            <TextBlock Name="MacroRecordText"
+                       Text="{Binding RecordButtonText}"
+                       FontSize="11"
+                       VerticalAlignment="Center" />
           </StackPanel>
-        </Border>
+        </Button>
         <Border Grid.Row="1"
+                Margin="0,4,0,4"
+                Background="{DynamicResource SidebarListBackgroundBrush}"
+                BorderBrush="{DynamicResource SidebarBorderBrush}"
+                BorderThickness="1"
+                CornerRadius="3"
+                Padding="6,4">
+          <Grid>
+            <TextBlock Name="SavedMacrosHeader"
+                       Text="已保存的宏"
+                       FontSize="11"
+                       Foreground="#3c4043"
+                       VerticalAlignment="Center"
+                       IsVisible="{Binding HasMacros}" />
+            <TextBlock Name="SavedMacrosHeaderEmpty"
+                       Text="已保存的宏"
+                       FontSize="11"
+                       Foreground="#9e9e9e"
+                       VerticalAlignment="Center"
+                       IsVisible="{Binding !HasMacros}" />
+          </Grid>
+        </Border>
+        <Border Grid.Row="2"
                 Background="{DynamicResource SidebarListBackgroundBrush}"
                 BorderBrush="{DynamicResource SidebarBorderBrush}"
                 BorderThickness="1"
                 CornerRadius="3"
                 Padding="2">
-          <Grid>
-            <ScrollViewer HorizontalScrollBarVisibility="Disabled"
-                          VerticalScrollBarVisibility="Auto">
-              <ItemsControl ItemsSource="{Binding Macros}">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="vm:MacroItem">
-                    <Grid Margin="4,2,2,2"
-                          ColumnDefinitions="*,Auto,Auto,Auto"
-                          Background="Transparent">
-                      <StackPanel Grid.Column="0"
-                                  Margin="0,0,4,0"
-                                  VerticalAlignment="Center"
-                                  Spacing="0">
-                        <TextBlock Classes="SessionName"
-                                   Text="{Binding Name}"
-                                   FontSize="11" />
-                        <TextBlock Classes="SessionDetail"
-                                   Text="{Binding Text}"
-                                   TextTrimming="CharacterEllipsis" />
-                      </StackPanel>
-                      <Button Grid.Column="1"
-                              Classes="SidebarIconButton"
-                              ToolTip.Tip="发送到当前终端"
-                              IsEnabled="{Binding $parent[UserControl].DataContext.CanSendMacro}"
-                              Click="OnMacroSendClick">
-                        <TextBlock Text="&#xf1d8;"
-                                   FontFamily="{DynamicResource IconFontAwesome}"
-                                   FontSize="12"
-                                   Foreground="#2f7ed8" />
-                      </Button>
-                      <Button Grid.Column="2"
-                              Classes="SidebarIconButton"
-                              ToolTip.Tip="编辑"
-                              Click="OnMacroEditClick">
-                        <TextBlock Text="&#xf044;"
-                                   FontFamily="{DynamicResource IconFontAwesome}"
-                                   FontSize="12"
-                                   Foreground="#607d8b" />
-                      </Button>
-                      <Button Grid.Column="3"
-                              Classes="SidebarIconButton"
-                              ToolTip.Tip="删除"
-                              Click="OnMacroDeleteClick">
-                        <TextBlock Text="&#xf1f8;"
-                                   FontFamily="{DynamicResource IconFontAwesome}"
-                                   FontSize="12"
-                                   Foreground="#c62828" />
-                      </Button>
-                    </Grid>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-            </ScrollViewer>
-            <TextBlock Text="暂无宏"
-                       FontSize="12"
-                       Foreground="{DynamicResource WindowTextBrush}"
-                       Margin="4,8,4,0"
-                       VerticalAlignment="Top"
-                       IsVisible="{Binding !HasMacros}" />
-          </Grid>
+          <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                        VerticalScrollBarVisibility="Auto">
+            <ItemsControl Name="MacroList" ItemsSource="{Binding Macros}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:MacroItem">
+                  <Border Name="MacroRowBorder"
+                          Classes="MacroRow"
+                          Margin="2,1"
+                          Padding="4,3"
+                          Cursor="Hand"
+                          DoubleTapped="OnMacroRowDoubleTapped">
+                    <Border.ContextMenu>
+                      <ContextMenu>
+                        <MenuItem Header="{Binding MenuRenameHeader}" Click="OnMacroRenameClick" />
+                        <MenuItem Header="{Binding MenuEditHeader}" Click="OnMacroEditClick" />
+                        <MenuItem Header="{Binding MenuDuplicateHeader}" Click="OnMacroDuplicateClick" />
+                        <MenuItem Header="{Binding MenuDeleteHeader}" Click="OnMacroDeleteClick" />
+                        <Separator />
+                        <MenuItem Header="{Binding MenuHotkeyHeader}" Click="OnMacroHotkeyClick" />
+                        <MenuItem Header="{Binding MenuExecuteHeader}" Click="OnMacroExecuteClick" />
+                        <MenuItem Header="创建桌面快捷方式(W)"
+                                  IsEnabled="False"
+                                  ToolTip.Tip="暂不支持（框架已预留）" />
+                        <Separator />
+                        <MenuItem Header="导入宏(Y)" Click="OnMacroImportClick" />
+                        <MenuItem Header="导出宏(Z)" Click="OnMacroExportClick" />
+                      </ContextMenu>
+                    </Border.ContextMenu>
+                    <StackPanel Orientation="Horizontal"
+                                Spacing="6"
+                                VerticalAlignment="Center">
+                      <TextBlock Text="&#xf202;"
+                                 FontFamily="{DynamicResource IconFontAwesome}"
+                                 FontSize="12"
+                                 Foreground="#2f7ed8"
+                                 VerticalAlignment="Center" />
+                      <TextBlock Classes="SessionName"
+                                 Text="{Binding Name}"
+                                 FontSize="11"
+                                 TextTrimming="CharacterEllipsis"
+                                 VerticalAlignment="Center" />
+                      <TextBlock Text="{Binding Hotkey}"
+                                 FontSize="10"
+                                 Foreground="#9e9e9e"
+                                 VerticalAlignment="Center"
+                                 IsVisible="{Binding Hotkey, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                    </StackPanel>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
         </Border>
       </Grid>
     </Grid>

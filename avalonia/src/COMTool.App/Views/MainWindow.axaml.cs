@@ -14,6 +14,7 @@ using COMTool.App.ViewModels;
 using COMTool.Connections;
 using COMTool.Connections.NetworkScan;
 using COMTool.Core.Config;
+using COMTool.Core.Macros;
 using COMTool.Sftp;
 using COMTool.Terminal;
 using COMTool.Zmodem;
@@ -90,6 +91,7 @@ public partial class MainWindow : Window
         SizeChanged += OnWindowSizeChanged;
         ApplySavedWindowSizeBeforeShow();
         AddHandler(KeyDownEvent, OnWindowKeyDown, RoutingStrategies.Tunnel);
+        AddHandler(TextInputEvent, OnRecordingTextInput, RoutingStrategies.Tunnel);
         AddHandler(PointerWheelChangedEvent, OnWindowPointerWheelChanged, RoutingStrategies.Tunnel, handledEventsToo: true);
         AddHandler(PointerMovedEvent, OnWindowPointerMoved, RoutingStrategies.Tunnel, handledEventsToo: true);
         AddHandler(PointerPressedEvent, OnWindowPointerPressed, RoutingStrategies.Tunnel);
@@ -103,10 +105,15 @@ public partial class MainWindow : Window
         Sidebar.EditRequested += OnSessionEditRequested;
         Sidebar.RemoveRequested += OnSessionRemoveRequested;
         Sidebar.NewSessionRequested += OnSidebarNewSessionRequested;
-        Sidebar.MacroSendRequested += OnMacroSendRequested;
+        Sidebar.MacroRecordToggleRequested += OnMacroRecordToggleRequested;
+        Sidebar.MacroExecuteRequested += OnMacroExecuteRequested;
+        Sidebar.MacroRenameRequested += OnMacroRenameRequested;
+        Sidebar.MacroEditRequested += OnMacroEditRequested;
+        Sidebar.MacroDuplicateRequested += OnMacroDuplicateRequested;
         Sidebar.MacroDeleteRequested += OnMacroDeleteRequested;
-        Sidebar.MacroSaveRequested += OnMacroSaveRequested;
-        Sidebar.MacroCancelRequested += OnMacroCancelRequested;
+        Sidebar.MacroHotkeyRequested += OnMacroHotkeyRequested;
+        Sidebar.MacroImportRequested += OnMacroImportRequested;
+        Sidebar.MacroExportRequested += OnMacroExportRequested;
         Sidebar.RailTabRequested += OnRailTabRequested;
         Sidebar.SshBrowserRequested += OnSshBrowserRequested;
         Sidebar.ToolRequested += OnToolRequested;
@@ -339,6 +346,8 @@ public partial class MainWindow : Window
     internal Window? LastRestartDialogForTests { get; private set; }
 
     internal void StopPortTimerForTests() => _portTimer?.Stop();
+
+    internal void CloseTabForTests(TerminalTab tab) => CloseTab(tab);
 
     private (HashSet<string> Serial, HashSet<string> Ssh, HashSet<string> Telnet, HashSet<string> Tcp)
         ConnectedSessions()
@@ -2216,6 +2225,24 @@ public partial class MainWindow : Window
         tab.IsZmodemActive = false;
         _zmodemTimings.Remove(tab);
         _zmodemStreams.Remove(tab);
+
+        // Recording on this terminal stops with the tab: keep the captured
+        // steps and ask for a name (MobaXterm behavior on disconnect).
+        if (viewModel.ActiveRecording is { Target: var recTarget }
+            && ReferenceEquals(recTarget, tab.Terminal))
+        {
+            var recSteps = viewModel.StopRecording();
+            UpdateMacroBanner();
+            if (recSteps is not null)
+            {
+                _ = SaveRecordedAsync(recSteps);
+            }
+        }
+
+        // A macro executing on this terminal is cancelled; the runner's
+        // finally-block resets IsExecutingMacro and the banner follows.
+        viewModel.CancelIfExecutingOn(tab.Terminal);
+
         viewModel.CloseTab(tab);
         UpdateConnectionStates();
         RestoreTerminalFocus();
@@ -2487,6 +2514,75 @@ public partial class MainWindow : Window
 
     private void OnWindowKeyDown(object? sender, KeyEventArgs e)
     {
+        if (DataContext is MainViewModel viewModel)
+        {
+            // 1) Ctrl+Space popup open: the nav keys are consumed by the popup.
+            if (MacroPopup.IsVisible)
+            {
+                switch (e.Key)
+                {
+                    case Key.Up:
+                        MoveMacroPopupSelection(-1);
+                        e.Handled = true;
+                        return;
+                    case Key.Down:
+                        MoveMacroPopupSelection(1);
+                        e.Handled = true;
+                        return;
+                    case Key.Enter:
+                        ExecuteMacroPopupSelection();
+                        e.Handled = true;
+                        return;
+                    case Key.Escape:
+                        HideMacroPopup();
+                        e.Handled = true;
+                        return;
+                }
+            }
+
+            if (viewModel.IsRecording)
+            {
+                // 2) Recording: special keys inside the recording target's
+                //    subtree are fed to the recorder but NOT consumed, so the
+                //    terminal still receives them. Modifier combos and
+                //    printable text are not part of the macro here (text goes
+                //    through OnRecordingTextInput; known MobaXterm deviation).
+                if (viewModel.ActiveRecording is { } recording
+                    && e.Source is Visual recordingSource
+                    && IsInSubtree(recordingSource, recording.Target)
+                    && MapKeyToMacroName(e.Key) is { } macroKeyName)
+                {
+                    recording.FeedKey(macroKeyName);
+                }
+            }
+            else if (!viewModel.IsExecutingMacro)
+            {
+                // 3) Ctrl+Space toggles the macro popup (MobaXterm behavior).
+                if (e.Key == Key.Space && e.KeyModifiers == KeyModifiers.Control)
+                {
+                    if (MacroPopup.IsVisible)
+                    {
+                        HideMacroPopup();
+                    }
+                    else
+                    {
+                        ShowMacroPopup();
+                    }
+                    e.Handled = true;
+                    return;
+                }
+
+                // 4) Per-macro hotkeys (window-level, not system-wide).
+                if (viewModel.TryMatchHotkey(e.Key, e.KeyModifiers, out var hotMacro)
+                    && hotMacro is not null)
+                {
+                    _ = viewModel.ExecuteMacroAsync(hotMacro);
+                    e.Handled = true;
+                    return;
+                }
+            }
+        }
+
         if (e.Key != Key.F11)
         {
             return;
@@ -2499,6 +2595,62 @@ public partial class MainWindow : Window
         TitleBar.IsVisible = fullScreen;
         RootGrid.RowDefinitions[0].Height = new GridLength(fullScreen ? 35 : 0);
         e.Handled = true;
+    }
+
+    /// <summary>
+    /// Tunnel-level text input: while recording, printable text typed into
+    /// the recording target's terminal is fed to the recorder. The event is
+    /// NOT marked handled, so the terminal/pty still receives it.
+    /// </summary>
+    private void OnRecordingTextInput(object? sender, TextInputEventArgs e)
+    {
+        if (DataContext is not MainViewModel viewModel
+            || viewModel.ActiveRecording is not { } recording
+            || e.Source is not Visual source
+            || string.IsNullOrEmpty(e.Text))
+        {
+            return;
+        }
+
+        if (IsInSubtree(source, recording.Target))
+        {
+            recording.FeedText(e.Text);
+        }
+    }
+
+    /// <summary>Maps an Avalonia key to a <see cref="COMTool.Core.Macros.MacroKeys"/> name, or null.</summary>
+    private static string? MapKeyToMacroName(Key key) => key switch
+    {
+        Key.Enter => "RETURN",
+        Key.Tab => "TAB",
+        Key.Back => "BACKSPACE",
+        Key.Escape => "ESC",
+        Key.Up => "UP",
+        Key.Down => "DOWN",
+        Key.Left => "LEFT",
+        Key.Right => "RIGHT",
+        Key.Home => "HOME",
+        Key.End => "END",
+        Key.PageUp => "PAGEUP",
+        Key.PageDown => "PAGEDOWN",
+        Key.Insert => "INSERT",
+        Key.Delete => "DELETE",
+        >= Key.F1 and <= Key.F12 => $"F{(int)key - (int)Key.F1 + 1}",
+        _ => null,
+    };
+
+    /// <summary>True when <paramref name="source"/> is <paramref name="root"/> or inside it.</summary>
+    private static bool IsInSubtree(Visual source, Visual root)
+    {
+        for (var visual = source; visual is not null; visual = visual.GetVisualParent())
+        {
+            if (ReferenceEquals(visual, root))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void OnLightThemeClick(object? sender, RoutedEventArgs e) =>
@@ -2822,12 +2974,17 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName != nameof(MainViewModel.IsSshBrowserTab))
+        if (e.PropertyName == nameof(MainViewModel.IsSshBrowserTab))
         {
-            return;
+            ApplySidebarMode();
         }
 
-        ApplySidebarMode();
+        if (e.PropertyName == nameof(MainViewModel.IsRecording)
+            || e.PropertyName == nameof(MainViewModel.IsExecutingMacro)
+            || e.PropertyName == nameof(MainViewModel.ExecutingMacroName))
+        {
+            UpdateMacroBanner();
+        }
     }
 
     private void ApplySidebarMode()
@@ -3152,8 +3309,10 @@ public partial class MainWindow : Window
     // ------------------------------------------------------------------
 
     /// <summary>
-    /// Loads the persisted macro list into the view model. Called once
-    /// after the config is available.
+    /// Loads the persisted macro list into the view model. Legacy macros
+    /// (single command text + appendEnter) are migrated to the step model on
+    /// load (MobaXterm parity), keeping the exact bytes that were sent.
+    /// Called once after the config is available.
     /// </summary>
     private void LoadSidebarData()
     {
@@ -3164,9 +3323,10 @@ public partial class MainWindow : Window
 
         viewModel.Macros.Clear();
         var idAssigned = false;
+        var migrated = false;
         foreach (var macro in _config.Config.Macros)
         {
-            if (string.IsNullOrWhiteSpace(macro.Name) || string.IsNullOrEmpty(macro.Text))
+            if (string.IsNullOrWhiteSpace(macro.Name))
             {
                 continue;
             }
@@ -3177,113 +3337,569 @@ public partial class MainWindow : Window
                 idAssigned = true;
             }
 
-            viewModel.Macros.Add(new MacroItem
+            // Legacy migration: no steps but text present -> steps.
+            if ((macro.Steps is null || macro.Steps.Count == 0)
+                && !string.IsNullOrEmpty(macro.Text))
             {
-                Id = macro.Id,
-                Name = macro.Name,
-                Text = macro.Text,
-                AppendEnter = macro.AppendEnter,
-            });
+                macro.Steps = MacroMigrator.FromLegacy(macro.Text, macro.AppendEnter)
+                    .Select(step => step.ToDto())
+                    .ToList();
+                macro.Text = string.Empty;
+                migrated = true;
+            }
+
+            var steps = (macro.Steps ?? new List<MacroStepDto>())
+                .Select(MacroStep.FromDto)
+                .ToList();
+            if (steps.Count == 0)
+            {
+                continue;
+            }
+
+            viewModel.Macros.Add(new MacroItem(macro.Id, macro.Name, steps, macro.Hotkey));
         }
 
-        if (idAssigned)
+        if (idAssigned || migrated)
         {
             _config.Save();
         }
     }
 
-    private void OnMacroSaveRequested(object? sender, EventArgs e)
+    /// <summary>
+    /// Full resync of vm.Macros into config + save. All macro mutations
+    /// (record/rename/duplicate/delete/edit/import) funnel through here.
+    /// </summary>
+    internal void PersistMacros()
     {
         if (_config is null || DataContext is not MainViewModel viewModel)
         {
             return;
         }
 
-        var name = viewModel.MacroEditorName.Trim();
-        var text = viewModel.MacroEditorText;
-        if (name.Length == 0 || string.IsNullOrEmpty(text))
+        var stored = _config.Config.Macros;
+        stored.Clear();
+        foreach (var item in viewModel.Macros)
         {
-            viewModel.MacroEditorError = "名称和命令不能为空";
-            return;
-        }
-
-        var id = viewModel.EditingMacroId;
-        if (id is not null
-            && _config.Config.Macros.FirstOrDefault(m => m.Id == id) is { } existing)
-        {
-            existing.Name = name;
-            existing.Text = text;
-            existing.AppendEnter = viewModel.MacroEditorAppendEnter;
-            var item = viewModel.FindMacro(id);
-            if (item is not null)
+            stored.Add(new MacroConfig
             {
-                item.Name = name;
-                item.Text = text;
-                item.AppendEnter = viewModel.MacroEditorAppendEnter;
-            }
-        }
-        else
-        {
-            var stored = new MacroConfig
-            {
-                Id = Guid.NewGuid().ToString("N"),
-                Name = name,
-                Text = text,
-                AppendEnter = viewModel.MacroEditorAppendEnter,
-            };
-            _config.Config.Macros.Add(stored);
-            viewModel.Macros.Add(new MacroItem
-            {
-                Id = stored.Id,
-                Name = name,
-                Text = text,
-                AppendEnter = viewModel.MacroEditorAppendEnter,
+                Id = item.Id,
+                Name = item.Name,
+                Steps = item.Steps.Select(s => s.ToDto()).ToList(),
+                Hotkey = item.Hotkey,
+                Text = string.Empty,
+                AppendEnter = false,
             });
         }
 
         _config.Save();
-        viewModel.CloseMacroEditor();
     }
 
-    private void OnMacroDeleteRequested(object? sender, MacroItem item)
-    {
-        if (_config is null || DataContext is not MainViewModel viewModel)
-        {
-            return;
-        }
-
-        viewModel.Macros.Remove(item);
-        _config.Config.Macros.RemoveAll(m => m.Id == item.Id);
-        _config.Save();
-    }
-
-    private async void OnMacroSendRequested(object? sender, MacroItem item)
+    private async void OnMacroRecordToggleRequested(object? sender, EventArgs e)
     {
         if (DataContext is not MainViewModel viewModel)
         {
             return;
         }
 
-        var terminal = viewModel.SelectedTab?.Terminal;
-        if (terminal is null)
+        if (viewModel.IsRecording)
+        {
+            var steps = viewModel.StopRecording();
+            UpdateMacroBanner();
+            if (steps is not null)
+            {
+                await SaveRecordedAsync(steps);
+            }
+            // Empty recording: discarded silently, matching MobaXterm.
+        }
+        else if (viewModel.StartRecording())
+        {
+            UpdateMacroBanner();
+        }
+    }
+
+    /// <summary>
+    /// After a recording produces steps, prompt for a name (default derived
+    /// from the first recorded line) and persist.
+    /// </summary>
+    private async Task SaveRecordedAsync(IReadOnlyList<MacroStep> steps)
+    {
+        if (DataContext is not MainViewModel viewModel)
         {
             return;
         }
 
-        try
+        var name = await ShowMacroNameAsync(MainViewModel.DefaultRecordedName(steps));
+        if (name is null)
         {
-            await terminal.SendInputAsync(
-                item.AppendEnter ? item.Text + "\r" : item.Text);
+            return;
         }
-        catch (Exception ex)
+
+        if (viewModel.SaveNewMacro(name, steps))
         {
-            _ = ShowErrorAsync($"发送宏失败：{ex.Message}");
+            PersistMacros();
         }
     }
 
-    private void OnMacroCancelRequested(object? sender, EventArgs e)
+    private void OnMacroMenuRecordToggleClick(object? sender, RoutedEventArgs e) =>
+        OnMacroRecordToggleRequested(this, EventArgs.Empty);
+
+    private void OnMacroMenuSavedClick(object? sender, RoutedEventArgs e)
     {
-        // The view already closed the editor; nothing to persist.
+        if (DataContext is MainViewModel viewModel)
+        {
+            viewModel.SidebarTab = SidebarTab.Macros;
+        }
+    }
+
+    private void OnMacroExecuteRequested(object? sender, MacroItem item)
+    {
+        if (item is not null && DataContext is MainViewModel viewModel)
+        {
+            _ = viewModel.ExecuteMacroAsync(item);
+        }
+    }
+
+    private async void OnMacroRenameRequested(object? sender, MacroItem item)
+    {
+        if (item is null || DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        var name = await ShowMacroNameAsync(item.Name);
+        if (name is null)
+        {
+            return;
+        }
+
+        viewModel.RenameMacro(item, name);
+        PersistMacros();
+    }
+
+    private async void OnMacroEditRequested(object? sender, MacroItem item)
+    {
+        // Step editor window lands in a later round.
+        _ = ShowErrorAsync("宏步骤编辑器将在后续轮次提供。");
+    }
+
+    private void OnMacroDuplicateRequested(object? sender, MacroItem item)
+    {
+        if (item is null || DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        viewModel.DuplicateMacro(item);
+        PersistMacros();
+    }
+
+    private async void OnMacroDeleteRequested(object? sender, MacroItem item)
+    {
+        if (item is null || DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        if (!await ShowMacroDeleteConfirmAsync(item.Name))
+        {
+            return;
+        }
+
+        viewModel.RemoveMacro(item);
+        PersistMacros();
+    }
+
+    private async void OnMacroHotkeyRequested(object? sender, MacroItem item)
+    {
+        if (item is null || DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        var hotkey = await ShowMacroHotkeyAsync(item);
+        if (hotkey is null)
+        {
+            return;
+        }
+
+        if (!viewModel.AssignHotkey(item, hotkey))
+        {
+            _ = ShowErrorAsync("快捷键不可用（保留组合或已被其他宏占用），未分配。");
+            return;
+        }
+
+        PersistMacros();
+    }
+
+    private async void OnMacroImportRequested(object? sender, EventArgs e)
+    {
+        // .mxtmacros import/export lands in a later round.
+        _ = ShowErrorAsync("导入宏（.mxtmacros）将在后续轮次提供。");
+    }
+
+    private async void OnMacroExportRequested(object? sender, EventArgs e)
+    {
+        // .mxtmacros import/export lands in a later round.
+        _ = ShowErrorAsync("导出宏（.mxtmacros）将在后续轮次提供。");
+    }
+
+    /// <summary>
+    /// "Please enter a name for this macro" — default name pre-filled and
+    /// selected. Returns the trimmed name on OK, null on cancel/empty.
+    /// </summary>
+    internal async Task<string?> ShowMacroNameAsync(string defaultName)
+    {
+        var dialog = new Window
+        {
+            Title = "Macro",
+            Width = 420,
+            Height = 170,
+            MinWidth = 320,
+            MinHeight = 130,
+            CanResize = false,
+            ShowInTaskbar = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+        };
+        var box = new TextBox { Name = "MacroNameBox", FontSize = 12 };
+        box.Text = defaultName;
+        box.Loaded += (_, _) => box.SelectAll();
+        var ok = new Button
+        {
+            Name = "MacroNameOkButton",
+            Content = "确定",
+            Width = 80,
+            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+        };
+        ok.Click += (_, _) =>
+        {
+            dialog.Tag = box.Text.Trim();
+            dialog.Close();
+        };
+        var cancel = new Button
+        {
+            Name = "MacroNameCancelButton",
+            Content = "取消",
+            Width = 80,
+            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+        };
+        cancel.Click += (_, _) => dialog.Close();
+        dialog.Content = new StackPanel
+        {
+            Margin = new Thickness(16),
+            Spacing = 10,
+            Children =
+            {
+                new TextBlock
+                {
+                    Text = "Please enter a name for this macro",
+                    FontSize = 12,
+                },
+                box,
+                new StackPanel
+                {
+                    Orientation = Avalonia.Layout.Orientation.Horizontal,
+                    Spacing = 8,
+                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                    Children = { ok, cancel },
+                },
+            },
+        };
+        LastMacroNameDialogForTests = dialog;
+        try
+        {
+            await dialog.ShowDialog(this);
+        }
+        finally
+        {
+            if (ReferenceEquals(LastMacroNameDialogForTests, dialog))
+            {
+                LastMacroNameDialogForTests = null;
+            }
+        }
+
+        var result = dialog.Tag as string;
+        return string.IsNullOrWhiteSpace(result) ? null : result;
+    }
+
+    internal Window? LastMacroNameDialogForTests { get; private set; }
+
+    /// <summary>是/否 delete confirmation. Returns true on "是".</summary>
+    internal async Task<bool> ShowMacroDeleteConfirmAsync(string name)
+    {
+        var dialog = new Window
+        {
+            Title = "删除宏",
+            Width = 420,
+            Height = 170,
+            MinWidth = 320,
+            MinHeight = 130,
+            CanResize = false,
+            ShowInTaskbar = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+        };
+        var yes = new Button
+        {
+            Name = "MacroDeleteYesButton",
+            Content = "是",
+            Width = 80,
+            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+        };
+        yes.Click += (_, _) =>
+        {
+            dialog.Tag = true;
+            dialog.Close();
+        };
+        var no = new Button
+        {
+            Name = "MacroDeleteNoButton",
+            Content = "否",
+            Width = 80,
+            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+        };
+        no.Click += (_, _) => dialog.Close();
+        dialog.Content = new StackPanel
+        {
+            Margin = new Thickness(16),
+            Spacing = 10,
+            Children =
+            {
+                new TextBlock
+                {
+                    Text = $"确定删除宏 \"{name}\" 吗？",
+                    FontSize = 12,
+                    TextWrapping = TextWrapping.Wrap,
+                },
+                new StackPanel
+                {
+                    Orientation = Avalonia.Layout.Orientation.Horizontal,
+                    Spacing = 8,
+                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                    Children = { yes, no },
+                },
+            },
+        };
+        LastMacroDeleteDialogForTests = dialog;
+        try
+        {
+            await dialog.ShowDialog(this);
+        }
+        finally
+        {
+            if (ReferenceEquals(LastMacroDeleteDialogForTests, dialog))
+            {
+                LastMacroDeleteDialogForTests = null;
+            }
+        }
+
+        return Equals(dialog.Tag, true);
+    }
+
+    internal Window? LastMacroDeleteDialogForTests { get; private set; }
+
+    /// <summary>
+    /// Hotkey assignment dialog: &lt;none&gt; + F5..F12 + Ctrl+Shift/Alt+A..Z.
+    /// Returns the selected option string, or null on cancel.
+    /// </summary>
+    internal async Task<string?> ShowMacroHotkeyAsync(MacroItem item)
+    {
+        var dialog = new Window
+        {
+            Title = $"Assign hotkey to \"{item.Name}\"",
+            Width = 360,
+            Height = 190,
+            MinWidth = 300,
+            MinHeight = 150,
+            CanResize = false,
+            ShowInTaskbar = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+        };
+        var combo = new ComboBox { Name = "MacroHotkeyCombo", FontSize = 12 };
+        foreach (var option in MacroHotkey.Options())
+        {
+            combo.Items.Add(option);
+        }
+        var current = item.Hotkey ?? "<none>";
+        var idx = combo.Items.IndexOf(current);
+        combo.SelectedIndex = idx >= 0 ? idx : 0;
+        var ok = new Button
+        {
+            Name = "MacroHotkeyOkButton",
+            Content = "确定",
+            Width = 80,
+            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+        };
+        ok.Click += (_, _) =>
+        {
+            dialog.Tag = combo.SelectedItem as string;
+            dialog.Close();
+        };
+        var cancel = new Button
+        {
+            Name = "MacroHotkeyCancelButton",
+            Content = "取消",
+            Width = 80,
+            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+        };
+        cancel.Click += (_, _) => dialog.Close();
+        dialog.Content = new StackPanel
+        {
+            Margin = new Thickness(16),
+            Spacing = 10,
+            Children =
+            {
+                new TextBlock
+                {
+                    Text = "为宏分配快捷键",
+                    FontSize = 12,
+                },
+                combo,
+                new StackPanel
+                {
+                    Orientation = Avalonia.Layout.Orientation.Horizontal,
+                    Spacing = 8,
+                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                    Children = { ok, cancel },
+                },
+            },
+        };
+        LastMacroHotkeyDialogForTests = dialog;
+        try
+        {
+            await dialog.ShowDialog(this);
+        }
+        finally
+        {
+            if (ReferenceEquals(LastMacroHotkeyDialogForTests, dialog))
+            {
+                LastMacroHotkeyDialogForTests = null;
+            }
+        }
+
+        return dialog.Tag as string;
+    }
+
+    internal Window? LastMacroHotkeyDialogForTests { get; private set; }
+
+    // ------------------------------------------------------------------
+    // Macro status banner + Ctrl+Space popup
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// Updates the red strip above the terminal: recording (Stop) or
+    /// executing (Cancel); hidden when neither is active.
+    /// </summary>
+    private void UpdateMacroBanner()
+    {
+        if (DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        if (viewModel.IsRecording)
+        {
+            MacroBannerText.Text = "● 正在录制新宏: 您在当前终端中键入的所有内容都将被保存。";
+            MacroBannerActionButton.Content = "停止";
+            MacroStatusBanner.IsVisible = true;
+        }
+        else if (viewModel.IsExecutingMacro)
+        {
+            MacroBannerText.Text = $"正在执行宏: {viewModel.ExecutingMacroName}";
+            MacroBannerActionButton.Content = "取消";
+            MacroStatusBanner.IsVisible = true;
+        }
+        else
+        {
+            MacroStatusBanner.IsVisible = false;
+        }
+    }
+
+    private async void OnMacroBannerActionClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        if (viewModel.IsRecording)
+        {
+            var steps = viewModel.StopRecording();
+            UpdateMacroBanner();
+            if (steps is not null)
+            {
+                await SaveRecordedAsync(steps);
+            }
+        }
+        else if (viewModel.IsExecutingMacro)
+        {
+            viewModel.CancelMacroExecution();
+        }
+    }
+
+    private int _macroPopupSelected;
+
+    private void ShowMacroPopup()
+    {
+        if (DataContext is not MainViewModel viewModel || viewModel.Macros.Count == 0)
+        {
+            return;
+        }
+
+        _macroPopupSelected = 0;
+        MacroPopup.IsVisible = true;
+        UpdateMacroPopupHighlight();
+    }
+
+    private void HideMacroPopup()
+    {
+        MacroPopup.IsVisible = false;
+    }
+
+    private void MoveMacroPopupSelection(int delta)
+    {
+        if (DataContext is not MainViewModel viewModel || viewModel.Macros.Count == 0)
+        {
+            return;
+        }
+
+        _macroPopupSelected = (_macroPopupSelected + delta + viewModel.Macros.Count) % viewModel.Macros.Count;
+        UpdateMacroPopupHighlight();
+    }
+
+    private void UpdateMacroPopupHighlight()
+    {
+        var rows = MacroPopupList.GetVisualDescendants().OfType<Button>().ToList();
+        for (var i = 0; i < rows.Count; i++)
+        {
+            rows[i].Background = i == _macroPopupSelected
+                ? new SolidColorBrush(Color.Parse("#cfe3ff"))
+                : null;
+        }
+    }
+
+    private void ExecuteMacroPopupSelection()
+    {
+        if (DataContext is MainViewModel viewModel
+            && viewModel.Macros.Count > 0
+            && _macroPopupSelected < viewModel.Macros.Count)
+        {
+            var item = viewModel.Macros[_macroPopupSelected];
+            HideMacroPopup();
+            _ = viewModel.ExecuteMacroAsync(item);
+        }
+        else
+        {
+            HideMacroPopup();
+        }
+    }
+
+    private async void OnMacroPopupRowClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: MacroItem item }
+            && DataContext is MainViewModel viewModel)
+        {
+            HideMacroPopup();
+            await viewModel.ExecuteMacroAsync(item);
+        }
     }
 
     /// <summary>

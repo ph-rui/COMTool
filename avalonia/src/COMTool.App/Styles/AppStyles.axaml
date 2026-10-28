@@ -110,6 +110,46 @@
     <Setter Property="BorderThickness" Value="0" />
   </Style>
 
+  <!-- MobaXterm-style macro record button: full-width, subtle border. -->
+  <Style Selector="Button.MacroRecordButton">
+    <Setter Property="MinHeight" Value="30" />
+    <Setter Property="Padding" Value="8,4" />
+    <Setter Property="Background" Value="{DynamicResource SidebarListBackgroundBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource SidebarBorderBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="3" />
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+  <Style Selector="Button.MacroRecordButton:pointerover">
+    <Setter Property="Background" Value="{DynamicResource SidebarRailActiveBrush}" />
+  </Style>
+  <Style Selector="Button.MacroRecordButton:disabled">
+    <Setter Property="Opacity" Value="0.5" />
+  </Style>
+
+  <!-- A saved-macro row: hover highlight for click/double-click. -->
+  <Style Selector="Border.MacroRow">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="CornerRadius" Value="2" />
+  </Style>
+  <Style Selector="Border.MacroRow:pointerover">
+    <Setter Property="Background" Value="{DynamicResource SidebarRailActiveBrush}" />
+  </Style>
+
+  <!-- Ctrl+Space popup rows. -->
+  <Style Selector="Button.MacroPopupRow">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="CornerRadius" Value="2" />
+    <Setter Property="Focusable" Value="False" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+  </Style>
+  <Style Selector="Button.MacroPopupRow:pointerover">
+    <Setter Property="Background" Value="#cfe3ff" />
+  </Style>
+
   <!-- Sidebar sub-panels (Tools / Macros). -->
   <Style Selector="Border.SidebarCard">
     <Setter Property="Background" Value="{DynamicResource SidebarListBackgroundBrush}" />

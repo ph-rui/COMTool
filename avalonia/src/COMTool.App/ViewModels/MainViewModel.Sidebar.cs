@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.Linq;
 using COMTool.Core.Config;
+using COMTool.Core.Macros;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace COMTool.App.ViewModels;
@@ -20,16 +22,40 @@ public enum SidebarTab
 
 public sealed partial class MacroItem : ObservableObject
 {
-    public required string Id { get; init; }
+    public string Id { get; init; } = string.Empty;
 
     [ObservableProperty]
     private string _name = "";
 
     [ObservableProperty]
-    private string _text = "";
+    private string? _hotkey;
 
-    [ObservableProperty]
-    private bool _appendEnter = true;
+    public IReadOnlyList<MacroStep> Steps { get; }
+
+    public MacroItem(string id, string name, IReadOnlyList<MacroStep> steps, string? hotkey = null)
+    {
+        Id = id;
+        _name = name;
+        _hotkey = hotkey;
+        Steps = steps.ToList();
+    }
+
+    public string MenuRenameHeader => $"Rename \"{Name}\"";
+    public string MenuEditHeader => $"Edit \"{Name}\"";
+    public string MenuDuplicateHeader => $"Duplicate \"{Name}\"";
+    public string MenuDeleteHeader => $"Delete \"{Name}\"";
+    public string MenuHotkeyHeader => $"Assign hotkey to \"{Name}\"";
+    public string MenuExecuteHeader => $"Execute \"{Name}\"";
+
+    partial void OnNameChanged(string value)
+    {
+        OnPropertyChanged(nameof(MenuRenameHeader));
+        OnPropertyChanged(nameof(MenuEditHeader));
+        OnPropertyChanged(nameof(MenuDuplicateHeader));
+        OnPropertyChanged(nameof(MenuDeleteHeader));
+        OnPropertyChanged(nameof(MenuHotkeyHeader));
+        OnPropertyChanged(nameof(MenuExecuteHeader));
+    }
 }
 
 /// <summary>
@@ -62,24 +88,6 @@ public partial class MainViewModel
     /// </summary>
     [ObservableProperty]
     private bool _isSshBrowserVisible;
-
-    [ObservableProperty]
-    private bool _isMacroEditorOpen;
-
-    [ObservableProperty]
-    private string _macroEditorName = "";
-
-    [ObservableProperty]
-    private string _macroEditorText = "";
-
-    [ObservableProperty]
-    private bool _macroEditorAppendEnter = true;
-
-    [ObservableProperty]
-    private string? _macroEditorError;
-
-    [ObservableProperty]
-    private string? _editingMacroId;
 
     public ObservableCollection<MacroItem> Macros { get; } = new();
     public ObservableCollection<ToolMenuItem> ToolMenu { get; } = new();
@@ -159,8 +167,6 @@ public partial class MainViewModel
         _ => "User sessions",
     };
 
-    public bool CanSendMacro => SelectedTab?.Terminal is not null;
-
     private void OnSidebarCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
         => UpdateSidebarEmptyStates();
 
@@ -170,27 +176,6 @@ public partial class MainViewModel
     }
 
     public bool HasMacros => Macros.Count > 0;
-
-    /// <summary>
-    /// Opens the inline macro editor, optionally pre-filled for editing an
-    /// existing macro.
-    /// </summary>
-    public void OpenMacroEditor(MacroItem? existing = null)
-    {
-        EditingMacroId = existing?.Id;
-        MacroEditorName = existing?.Name ?? "";
-        MacroEditorText = existing?.Text ?? "";
-        MacroEditorAppendEnter = existing?.AppendEnter ?? true;
-        MacroEditorError = null;
-        IsMacroEditorOpen = true;
-    }
-
-    public void CloseMacroEditor()
-    {
-        IsMacroEditorOpen = false;
-        EditingMacroId = null;
-        MacroEditorError = null;
-    }
 
     public MacroItem? FindMacro(string? id) =>
         id is null ? null : Macros.FirstOrDefault(m => m.Id == id);

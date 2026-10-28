@@ -26,15 +26,23 @@ public partial class SessionSidebar : UserControl
 
     public event EventHandler<string>? NewSessionRequested;
 
-    public event EventHandler<MacroItem>? MacroSendRequested;
+    public event EventHandler? MacroRecordToggleRequested;
+
+    public event EventHandler<MacroItem>? MacroExecuteRequested;
+
+    public event EventHandler<MacroItem>? MacroRenameRequested;
 
     public event EventHandler<MacroItem>? MacroEditRequested;
 
+    public event EventHandler<MacroItem>? MacroDuplicateRequested;
+
     public event EventHandler<MacroItem>? MacroDeleteRequested;
 
-    public event EventHandler? MacroSaveRequested;
+    public event EventHandler<MacroItem>? MacroHotkeyRequested;
 
-    public event EventHandler? MacroCancelRequested;
+    public event EventHandler? MacroImportRequested;
+
+    public event EventHandler? MacroExportRequested;
 
     /// <summary>
     /// Raised when the Sessions, Tools or Macros rail icon is clicked. The
@@ -59,6 +67,12 @@ public partial class SessionSidebar : UserControl
     internal SidebarTab SelectedSidebarTabForTests =>
         DataContext is MainViewModel vm ? vm.SidebarTab : SidebarTab.Sessions;
 
+    internal void RaiseMacroRecordToggleForTests() =>
+        MacroRecordToggleRequested?.Invoke(this, EventArgs.Empty);
+
+    internal void RaiseMacroDeleteForTests(MacroItem item) =>
+        MacroDeleteRequested?.Invoke(this, item);
+
     private void OnRailTabClick(object? sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: string tag }
@@ -73,34 +87,25 @@ public partial class SessionSidebar : UserControl
         RailTabRequested?.Invoke(this, tab);
     }
 
-    private void OnAddMacroClick(object? sender, RoutedEventArgs e)
-    {
-        if (DataContext is MainViewModel viewModel)
-        {
-            viewModel.OpenMacroEditor();
-        }
-    }
-
-    private void OnMacroSaveClick(object? sender, RoutedEventArgs e) =>
-        MacroSaveRequested?.Invoke(this, EventArgs.Empty);
-
-    private void OnMacroCancelClick(object? sender, RoutedEventArgs e)
-    {
-        MacroCancelRequested?.Invoke(this, EventArgs.Empty);
-        if (DataContext is MainViewModel viewModel)
-        {
-            viewModel.CloseMacroEditor();
-        }
-    }
+    private void OnMacroRecordToggleClick(object? sender, RoutedEventArgs e) =>
+        MacroRecordToggleRequested?.Invoke(this, EventArgs.Empty);
 
     private MacroItem? MacroOf(object? sender) =>
         sender is Control { DataContext: MacroItem item } ? item : null;
 
-    private void OnMacroSendClick(object? sender, RoutedEventArgs e)
+    private void OnMacroRowDoubleTapped(object? sender, TappedEventArgs e)
     {
         if (MacroOf(sender) is { } item)
         {
-            MacroSendRequested?.Invoke(this, item);
+            MacroExecuteRequested?.Invoke(this, item);
+        }
+    }
+
+    private void OnMacroRenameClick(object? sender, RoutedEventArgs e)
+    {
+        if (MacroOf(sender) is { } item)
+        {
+            MacroRenameRequested?.Invoke(this, item);
         }
     }
 
@@ -109,10 +114,14 @@ public partial class SessionSidebar : UserControl
         if (MacroOf(sender) is { } item)
         {
             MacroEditRequested?.Invoke(this, item);
-            if (DataContext is MainViewModel viewModel)
-            {
-                viewModel.OpenMacroEditor(item);
-            }
+        }
+    }
+
+    private void OnMacroDuplicateClick(object? sender, RoutedEventArgs e)
+    {
+        if (MacroOf(sender) is { } item)
+        {
+            MacroDuplicateRequested?.Invoke(this, item);
         }
     }
 
@@ -123,6 +132,28 @@ public partial class SessionSidebar : UserControl
             MacroDeleteRequested?.Invoke(this, item);
         }
     }
+
+    private void OnMacroHotkeyClick(object? sender, RoutedEventArgs e)
+    {
+        if (MacroOf(sender) is { } item)
+        {
+            MacroHotkeyRequested?.Invoke(this, item);
+        }
+    }
+
+    private void OnMacroExecuteClick(object? sender, RoutedEventArgs e)
+    {
+        if (MacroOf(sender) is { } item)
+        {
+            MacroExecuteRequested?.Invoke(this, item);
+        }
+    }
+
+    private void OnMacroImportClick(object? sender, RoutedEventArgs e) =>
+        MacroImportRequested?.Invoke(this, EventArgs.Empty);
+
+    private void OnMacroExportClick(object? sender, RoutedEventArgs e) =>
+        MacroExportRequested?.Invoke(this, EventArgs.Empty);
 
     private void OnRailSshBrowserClick(object? sender, RoutedEventArgs e) =>
         SshBrowserRequested?.Invoke(this, EventArgs.Empty);
