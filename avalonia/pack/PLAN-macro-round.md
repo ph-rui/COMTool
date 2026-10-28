@@ -43,5 +43,5 @@
 ## 测试基线
 
 - Core：32 项宏测试（MacroModel 4/MacroFile 9/MacroRecorder 9/MacroRunner 8/Config 2）
-- App：173→192 项全绿（新增 MacroFeatureTests 22 项；删除旧 MAC01 3 项）
-- 全量 gate：2026-10-28 04:01Z 全 PASS（build/328 单测/192 App/26 项 Xvfb E2E/TestGate 矩阵校验，共 520 项）
+- App：173→193 项全绿（新增 MacroFeatureTests 23 项，含 MAC21；删除旧 MAC01 3 项）
+- 全量 gate：2026-10-28 06:53Z 第四轮全 PASS（build/328 单测/193 App/26 项 Xvfb E2E/TestGate，共 521 项）
