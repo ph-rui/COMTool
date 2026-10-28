@@ -280,9 +280,7 @@ public sealed class MacroFeatureTests
                 Assert.Equal("echo hi", nameBox.Text);
 
                 // Click OK to accept
-                var okBtn = dialog.GetVisualDescendants()
-                    .OfType<Button>()
-                    .First(b => string.Equals(b.Content?.ToString(), "确定", StringComparison.Ordinal));
+                var okBtn = ButtonByLabel(dialog, "确定");
                 okBtn.RaiseEvent(new RoutedEventArgs(Button.ClickEvent, okBtn));
                 RunJobs(window);
 
@@ -1153,8 +1151,7 @@ public sealed class MacroFeatureTests
                 var info = window.LastMacroInfoDialogForTests!;
                 Assert.True(info.GetVisualDescendants().OfType<TextBlock>()
                     .Any(t => t.Text != null && t.Text.Contains("宏已导出到")));
-                info.GetVisualDescendants().OfType<Button>()
-                    .First(b => b.Content is string s && s == "OK")
+                ButtonByLabel(info, "确定")
                     .RaiseEvent(new RoutedEventArgs(Button.ClickEvent, info));
                 WaitUntil(() => window.LastMacroInfoDialogForTests is null, "info closed");
 
@@ -1178,8 +1175,7 @@ public sealed class MacroFeatureTests
                 // 关掉导入结果提示框
                 WaitUntil(() => window.LastMacroInfoDialogForTests is not null, "import info dialog");
                 var info2 = window.LastMacroInfoDialogForTests!;
-                info2.GetVisualDescendants().OfType<Button>()
-                    .First(b => b.Content is string s && s == "OK")
+                ButtonByLabel(info2, "确定")
                     .RaiseEvent(new RoutedEventArgs(Button.ClickEvent, info2));
                 WaitUntil(() => window.LastMacroInfoDialogForTests is null, "import info closed");
                 RunJobs(window);
@@ -1306,8 +1302,7 @@ public sealed class MacroFeatureTests
                 Assert.False(vm.Macros.Any(m => m.Name.StartsWith("OnlyBad")));
                 Assert.True(window.LastMacroInfoDialogForTests is not null);
                 var info3 = window.LastMacroInfoDialogForTests!;
-                info3.GetVisualDescendants().OfType<Button>()
-                    .First(b => b.Content is string s && s == "OK")
+                ButtonByLabel(info3, "确定")
                     .RaiseEvent(new RoutedEventArgs(Button.ClickEvent, info3));
                 WaitUntil(() => window.LastMacroInfoDialogForTests is null, "import info closed");
             });
@@ -1362,6 +1357,11 @@ public sealed class MacroFeatureTests
             Dispatcher.UIThread.RunJobs();
         }
     }
+
+    /// <summary>Finds a button by a text label among its descendant TextBlocks (icon+text content safe).</summary>
+    private static Button ButtonByLabel(Control root, string label) =>
+        root.GetVisualDescendants().OfType<Button>()
+            .First(b => b.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == label));
 
     // --- Helpers (mirrored from SidebarRailTests) ---
 

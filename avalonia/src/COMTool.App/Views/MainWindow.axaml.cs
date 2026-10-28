@@ -3745,12 +3745,12 @@ public partial class MainWindow : Window
 
     internal Window? LastMacroExportWarnDialogForTests { get; private set; }
 
-    /// <summary>导出/导入成功提示框（OK 关闭）。</summary>
+    /// <summary>导出/导入成功提示框（蓝色 info 图标 + 确定，对齐 MobaXterm 提示样式）。</summary>
     internal async Task ShowMacroInfoAsync(string title, string message)
     {
         var dialog = new Window
         {
-            Title = title,
+            Title = "COMTool",
             Width = 460,
             Height = 190,
             MinWidth = 340,
@@ -3762,26 +3762,39 @@ public partial class MainWindow : Window
         var ok = new Button
         {
             Name = "MacroInfoOkButton",
-            Content = "OK",
-            Width = 80,
+            Content = "确定",
+            Width = 96,
+            Height = 30,
             HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+            Margin = new Thickness(0, 10, 0, 0),
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
         };
         ok.Click += (_, _) => dialog.Close();
-        dialog.Content = new StackPanel
+        var icon = new TextBlock
+        {
+            Text = "\uf05a",
+            FontFamily = IconFont(),
+            FontSize = 28,
+            Foreground = new SolidColorBrush(Color.Parse("#0078d7")),
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top,
+            Margin = new Thickness(0, 2, 14, 0),
+        };
+        var content = new StackPanel { Spacing = 10 };
+        content.Children.Add(new TextBlock
+        {
+            Text = message,
+            FontSize = 12,
+            TextWrapping = TextWrapping.Wrap,
+        });
+        content.Children.Add(ok);
+        var grid = new Grid
         {
             Margin = new Thickness(16),
-            Spacing = 10,
-            Children =
-            {
-                new TextBlock
-                {
-                    Text = message,
-                    FontSize = 12,
-                    TextWrapping = TextWrapping.Wrap,
-                },
-                ok,
-            },
+            ColumnDefinitions = new ColumnDefinitions("Auto,*"),
+            Children = { icon, content },
         };
+        Grid.SetColumn(content, 1);
+        dialog.Content = grid;
         LastMacroInfoDialogForTests = dialog;
         try
         {
@@ -3799,32 +3812,64 @@ public partial class MainWindow : Window
     internal Window? LastMacroInfoDialogForTests { get; private set; }
 
     /// <summary>
+    /// <summary>图标字体（Font Awesome 6 Solid，与主题资源同源）。</summary>
+    private static FontFamily IconFont() => new(
+        "avares://COMTool.App/Assets/Fonts/fontawesome6-solid.ttf#Font Awesome 6 Free Solid");
+
+    /// <summary>对话框按钮内容：图标 + 文字（MobaXterm 风格 ✓确定 / ✗取消）。</summary>
+    private static StackPanel DialogButtonContent(string label, string faGlyph, string colorHex)
+    {
+        var panel = new StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            Spacing = 6,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+        };
+        panel.Children.Add(new TextBlock
+        {
+            Text = faGlyph,
+            FontFamily = IconFont(),
+            FontSize = 12,
+            Foreground = new SolidColorBrush(Color.Parse(colorHex)),
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+        });
+        panel.Children.Add(new TextBlock
+        {
+            Text = label,
+            FontSize = 12,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+        });
+        return panel;
+    }
+
     /// <summary>
-    /// "请为此宏输入一个名称" — 默认名预填并选中。OK 返回去空格后的名称，取消/空返回 null。
+    /// "请为此宏输入一个名称" — MobaXterm 版式：左侧铅笔图标、右侧标签+输入框
+    /// （默认名预填并选中）、底部居中 ✓确定/✗取消。OK 返回去空格后的名称，取消/空返回 null。
     /// </summary>
     internal async Task<string?> ShowMacroNameAsync(string defaultName)
     {
         var dialog = new Window
         {
-            Title = "宏",
-            Width = 420,
-            Height = 170,
-            MinWidth = 320,
-            MinHeight = 130,
+            Title = "COMTool",
+            Width = 460,
+            Height = 200,
+            MinWidth = 360,
+            MinHeight = 160,
             CanResize = false,
             ShowInTaskbar = false,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
         };
-        var box = new TextBox { Name = "MacroNameBox", FontSize = 12 };
+        var box = new TextBox { Name = "MacroNameBox", FontSize = 13, Margin = new Thickness(0, 8, 0, 0) };
         box.Text = defaultName;
         box.Loaded += (_, _) => box.SelectAll();
         var ok = new Button
         {
             Name = "MacroNameOkButton",
-            Content = "确定",
-            Width = 80,
-            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+            Content = DialogButtonContent("确定", "\uf00c", "#16a34a"),
+            Width = 96,
+            Height = 30,
         };
+        ok.IsDefault = true;
         ok.Click += (_, _) =>
         {
             dialog.Tag = box.Text.Trim();
@@ -3833,32 +3878,49 @@ public partial class MainWindow : Window
         var cancel = new Button
         {
             Name = "MacroNameCancelButton",
-            Content = "取消",
-            Width = 80,
-            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+            Content = DialogButtonContent("取消", "\uf00d", "#dc2626"),
+            Width = 96,
+            Height = 30,
         };
         cancel.Click += (_, _) => dialog.Close();
-        dialog.Content = new StackPanel
+
+        var icon = new TextBlock
+        {
+            Text = "\uf303",
+            FontFamily = IconFont(),
+            FontSize = 40,
+            Foreground = new SolidColorBrush(Color.Parse("#2f7ed8")),
+            Margin = new Thickness(0, 4, 18, 0),
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top,
+        };
+        var inputArea = new StackPanel();
+        inputArea.Children.Add(new TextBlock
+        {
+            Text = "请为此宏输入一个名称",
+            FontSize = 12,
+        });
+        inputArea.Children.Add(box);
+        var buttons = new StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            Spacing = 12,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+            Margin = new Thickness(0, 16, 0, 0),
+            Children = { ok, cancel },
+        };
+        var grid = new Grid
         {
             Margin = new Thickness(16),
-            Spacing = 10,
-            Children =
-            {
-                new TextBlock
-                {
-                    Text = "请为此宏输入一个名称",
-                    FontSize = 12,
-                },
-                box,
-                new StackPanel
-                {
-                    Orientation = Avalonia.Layout.Orientation.Horizontal,
-                    Spacing = 8,
-                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
-                    Children = { ok, cancel },
-                },
-            },
+            RowDefinitions = new RowDefinitions("*,Auto"),
+            ColumnDefinitions = new ColumnDefinitions("Auto,*"),
+            Children = { icon, inputArea, buttons },
         };
+        Grid.SetColumn(icon, 0);
+        Grid.SetRowSpan(icon, 2);
+        Grid.SetColumn(inputArea, 1);
+        Grid.SetRow(buttons, 1);
+        Grid.SetColumnSpan(buttons, 2);
+        dialog.Content = grid;
         LastMacroNameDialogForTests = dialog;
         try
         {

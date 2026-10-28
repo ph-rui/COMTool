@@ -264,13 +264,31 @@
                       Spacing="6"
                       HorizontalAlignment="Center"
                       VerticalAlignment="Center">
-            <TextBlock Name="MacroRecordDot"
-                       Text="&#xf111;"
-                       FontFamily="{DynamicResource IconFontAwesome}"
-                       FontSize="12"
-                       Foreground="#e03131"
-                       VerticalAlignment="Center"
-                       IsVisible="{Binding IsRecording}" />
+            <Grid Width="14" Height="14" VerticalAlignment="Center">
+              <!-- MobaXterm 风格：灰环 + 红点（空闲常显）；录制中仅红点放大 -->
+              <TextBlock Text="&#xf05c;"
+                         FontFamily="{DynamicResource IconFontAwesome}"
+                         FontSize="13"
+                         Foreground="#8a8a8a"
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center"
+                         IsVisible="{Binding !IsRecording}" />
+              <TextBlock Text="&#xf111;"
+                         FontFamily="{DynamicResource IconFontAwesome}"
+                         FontSize="6"
+                         Foreground="#e03131"
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center"
+                         IsVisible="{Binding !IsRecording}" />
+              <TextBlock Name="MacroRecordDot"
+                         Text="&#xf111;"
+                         FontFamily="{DynamicResource IconFontAwesome}"
+                         FontSize="11"
+                         Foreground="#e03131"
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center"
+                         IsVisible="{Binding IsRecording}" />
+            </Grid>
             <TextBlock Name="MacroRecordText"
                        Text="{Binding RecordButtonText}"
                        FontSize="11"
@@ -318,27 +336,63 @@
                           DoubleTapped="OnMacroRowDoubleTapped">
                     <Border.ContextMenu>
                       <ContextMenu>
-                        <MenuItem Header="{Binding MenuRenameHeader}" Click="OnMacroRenameClick" />
-                        <MenuItem Header="{Binding MenuEditHeader}" Click="OnMacroEditClick" />
-                        <MenuItem Header="{Binding MenuDuplicateHeader}" Click="OnMacroDuplicateClick" />
-                        <MenuItem Header="{Binding MenuDeleteHeader}" Click="OnMacroDeleteClick" />
+                        <MenuItem Header="{Binding MenuRenameHeader}" Click="OnMacroRenameClick">
+                          <MenuItem.Icon>
+                            <TextBlock Text="&#xf044;" FontFamily="{DynamicResource IconFontAwesome}" FontSize="11" Foreground="#e8a33d" />
+                          </MenuItem.Icon>
+                        </MenuItem>
+                        <MenuItem Header="{Binding MenuEditHeader}" Click="OnMacroEditClick">
+                          <MenuItem.Icon>
+                            <TextBlock Text="&#xf044;" FontFamily="{DynamicResource IconFontAwesome}" FontSize="11" Foreground="#5f6368" />
+                          </MenuItem.Icon>
+                        </MenuItem>
+                        <MenuItem Header="{Binding MenuDuplicateHeader}" Click="OnMacroDuplicateClick">
+                          <MenuItem.Icon>
+                            <TextBlock Text="&#xf24d;" FontFamily="{DynamicResource IconFontAwesome}" FontSize="11" Foreground="#5f6368" />
+                          </MenuItem.Icon>
+                        </MenuItem>
+                        <MenuItem Header="{Binding MenuDeleteHeader}" Click="OnMacroDeleteClick">
+                          <MenuItem.Icon>
+                            <TextBlock Text="&#xf1f8;" FontFamily="{DynamicResource IconFontAwesome}" FontSize="11" Foreground="#d13438" />
+                          </MenuItem.Icon>
+                        </MenuItem>
                         <Separator />
-                        <MenuItem Header="{Binding MenuHotkeyHeader}" Click="OnMacroHotkeyClick" />
-                        <MenuItem Header="{Binding MenuExecuteHeader}" Click="OnMacroExecuteClick" />
+                        <MenuItem Header="{Binding MenuHotkeyHeader}" Click="OnMacroHotkeyClick">
+                          <MenuItem.Icon>
+                            <TextBlock Text="&#xf11b;" FontFamily="{DynamicResource IconFontAwesome}" FontSize="11" Foreground="#5f6368" />
+                          </MenuItem.Icon>
+                        </MenuItem>
+                        <MenuItem Header="{Binding MenuExecuteHeader}" Click="OnMacroExecuteClick">
+                          <MenuItem.Icon>
+                            <TextBlock Text="&#xf144;" FontFamily="{DynamicResource IconFontAwesome}" FontSize="11" Foreground="#2f7ed8" />
+                          </MenuItem.Icon>
+                        </MenuItem>
                         <MenuItem Header="创建桌面快捷方式(W)"
                                   IsEnabled="False"
-                                  ToolTip.Tip="暂不支持（框架已预留）" />
+                                  ToolTip.Tip="暂不支持（框架已预留）">
+                          <MenuItem.Icon>
+                            <TextBlock Text="&#xf005;" FontFamily="{DynamicResource IconFontAwesome}" FontSize="11" Foreground="#e8a33d" />
+                          </MenuItem.Icon>
+                        </MenuItem>
                         <Separator />
-                        <MenuItem Header="导入宏(Y)" Click="OnMacroImportClick" />
-                        <MenuItem Header="导出宏(Z)" Click="OnMacroExportClick" />
+                        <MenuItem Header="导入宏(Y)" Click="OnMacroImportClick">
+                          <MenuItem.Icon>
+                            <TextBlock Text="&#xf305;" FontFamily="{DynamicResource IconFontAwesome}" FontSize="11" Foreground="#d13438" />
+                          </MenuItem.Icon>
+                        </MenuItem>
+                        <MenuItem Header="导出宏(Z)" Click="OnMacroExportClick">
+                          <MenuItem.Icon>
+                            <TextBlock Text="&#xf306;" FontFamily="{DynamicResource IconFontAwesome}" FontSize="11" Foreground="#2f7ed8" />
+                          </MenuItem.Icon>
+                        </MenuItem>
                       </ContextMenu>
                     </Border.ContextMenu>
                     <StackPanel Orientation="Horizontal"
                                 Spacing="6"
                                 VerticalAlignment="Center">
-                      <TextBlock Text="&#xf202;"
+                      <TextBlock Text="&#xf110;"
                                  FontFamily="{DynamicResource IconFontAwesome}"
-                                 FontSize="12"
+                                 FontSize="11"
                                  Foreground="#2f7ed8"
                                  VerticalAlignment="Center" />
                       <TextBlock Classes="SessionName"
