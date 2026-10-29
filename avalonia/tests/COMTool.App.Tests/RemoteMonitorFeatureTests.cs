@@ -305,4 +305,80 @@ public sealed class RemoteMonitorFeatureTests
         Assert.False(reloaded.IsOption("cpu"));
         Assert.True(reloaded.IsOption("partitions"));
     }
+
+    [AvaloniaFact]
+    public void RM04_StatusBarMenuHas13ItemsWithSevenCheckedByDefault()
+    {
+        using var env = new TestEnvironment();
+        env.Run(() =>
+        {
+            var vm = new MainViewModel();
+            var window = new COMTool.App.Views.MainWindow { DataContext = vm };
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+
+            var menu = window.FindControl<Avalonia.Controls.ContextMenu>("MonitorBarMenu");
+            Assert.NotNull(menu);
+            // 复制 / 保存到文件 / separator / 11 checkable options:
+            // 13 functional items + 1 Separator = 14 entries (spec: "13 items").
+            Assert.Equal(14, menu.Items.Count);
+            var items = menu.Items.OfType<Avalonia.Controls.MenuItem>().ToList();
+            Assert.Equal(13, items.Count); // 14 entries minus the Separator
+            Assert.Equal("复制(O)", items[0].Header);
+            Assert.Equal("保存到文件(P)", items[1].Header);
+            var checkable = items.Skip(2).ToList();
+            Assert.Equal(11, checkable.Count);
+            foreach (var mi in checkable)
+            {
+                Assert.Equal(Avalonia.Controls.MenuItemToggleType.CheckBox, mi.ToggleType);
+            }
+            var tags = checkable.Select(mi => (string)mi.Tag!).ToList();
+            Assert.Equal(
+                new[] { "host", "cpu", "ram", "netup", "netdown", "clients",
+                        "processes", "fds", "uptime", "users", "partitions" },
+                tags);
+
+            // Headless cannot present the ContextMenu popup (Opening fires at
+            // presentation time), so verify the wiring and sync logic
+            // deterministically: the MainWindow constructor must have
+            // subscribed OnMonitorMenuOpening to this menu's Opening event,
+            // and invoking that exact delegate must sync the check states
+            // from the view model (7 of 11 on by default, per MobaXterm 22.1).
+            var field = typeof(Avalonia.Controls.ContextMenu)
+                .GetField("Opening", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            Assert.NotNull(field);
+            var del = field!.GetValue(menu) as System.Delegate;
+            Assert.True(del is not null, "no handlers subscribed to MonitorBarMenu.Opening");
+            var handler = del!.GetInvocationList().FirstOrDefault(x =>
+                x.Method.Name == "OnMonitorMenuOpening" && ReferenceEquals(x.Target, window));
+            Assert.NotNull(handler);
+            Assert.True(handler is not null,
+                "MainWindow ctor did not subscribe OnMonitorMenuOpening to MonitorBarMenu.Opening");
+            handler.DynamicInvoke(menu, new System.ComponentModel.CancelEventArgs());
+            var byTag = tags.ToDictionary(
+                t => t,
+                t => checkable.First(mi => (string)mi.Tag! == t));
+            Assert.True(byTag["host"].IsChecked);
+            Assert.True(byTag["cpu"].IsChecked);
+            Assert.True(byTag["ram"].IsChecked);
+            Assert.True(byTag["netup"].IsChecked);
+            Assert.True(byTag["netdown"].IsChecked);
+            Assert.False(byTag["clients"].IsChecked);
+            Assert.False(byTag["processes"].IsChecked);
+            Assert.False(byTag["fds"].IsChecked);
+            Assert.True(byTag["uptime"].IsChecked);
+            Assert.False(byTag["users"].IsChecked);
+            Assert.True(byTag["partitions"].IsChecked);
+
+            // Toggle one off via the view model (the same path the menu
+            // click handler takes) and re-open: check states follow the VM.
+            vm.MonitorMenu.SetOption("partitions", false);
+            vm.ReformatMonitorLine();
+            handler.DynamicInvoke(menu, new System.ComponentModel.CancelEventArgs());
+            Assert.False(vm.MonitorMenu.IsOption("partitions"));
+            Assert.False(byTag["partitions"].IsChecked);
+            Assert.True(byTag["host"].IsChecked);
+            window.Close();
+        });
+    }
 }
