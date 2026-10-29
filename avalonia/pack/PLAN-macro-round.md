@@ -111,7 +111,7 @@
         completed 顺序，回环真实端口）+ 4 处调用加 null 参；SidebarRailTests 加
         NET05_ScanRowsAppearIncrementally（扫描中途行先出现+名称后补+6 个“…”→0），
         FakeScanner 加 DiscoverDelayMs/DiscoveredOpenPorts（500ms 间隔保证中途状态稳定捕获）。
-     200/200 App + 112/112 Connections，gate 第 14 轮全 PASS；提交 <hash>，发布部署双份。
+     200/200 App + 112/112 Connections，gate 第 14 轮全 PASS；提交 fe63f06，发布部署双份。
 
 ## 已知偏差（已写入 spec 附录）
 
