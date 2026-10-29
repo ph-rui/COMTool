@@ -454,6 +454,8 @@ public sealed class RemoteMonitorFeatureTests
             Assert.True(vm.SegCpuVisible);
             Assert.Equal("40%", vm.SegCpuText);
             Assert.Equal(MainViewModel.CpuBarMaxWidth * 0.4, vm.SegCpuBarWidth, 2);
+            // 40% 属低负载 -> 绿色填充（MobaXterm 随负载变色）。
+            Assert.Equal(Color.Parse("#2e9e4f"), ((SolidColorBrush)vm.SegCpuBarBrush).Color);
             Assert.True(vm.SegRamVisible);
             Assert.Contains(" GB / ", vm.SegRamText);
             Assert.True(vm.SegNetUpVisible);
@@ -652,5 +654,29 @@ public sealed class RemoteMonitorFeatureTests
 
             window.Close();
         });
+    }
+
+    [Fact]
+    public void RM06_CpuBarBrushTracksLoad()
+    {
+        // MobaXterm 的 CPU 迷你条随负载变色：低绿 / 中高橙 / ≥80% 红。
+        Assert.Equal(Color.Parse("#2e9e4f"), MainViewModel.CpuBarBrush(0).Color);
+        Assert.Equal(Color.Parse("#2e9e4f"), MainViewModel.CpuBarBrush(40).Color);
+        Assert.Equal(Color.Parse("#e8a31a"), MainViewModel.CpuBarBrush(50).Color);
+        Assert.Equal(Color.Parse("#e8a31a"), MainViewModel.CpuBarBrush(79).Color);
+        Assert.Equal(Color.Parse("#d84a2f"), MainViewModel.CpuBarBrush(80).Color);
+        Assert.Equal(Color.Parse("#d84a2f"), MainViewModel.CpuBarBrush(81).Color);
+        Assert.Equal(Color.Parse("#d84a2f"), MainViewModel.CpuBarBrush(120).Color); // clamped to 100
+    }
+
+    [Fact]
+    public void RM06_EdgeResizeDragExemptsToggleButton()
+    {
+        // 窗口边缘 resize 的隧道处理器不能吞掉落在边缘的按钮点击；
+        // SFTP“远程监控”通栏是 ToggleButton（ButtonBase，不是 Button）。
+        Assert.True(MainWindow.IsEdgeInteractiveControl(new ToggleButton()));
+        Assert.True(MainWindow.IsEdgeInteractiveControl(new Button()));
+        Assert.False(MainWindow.IsEdgeInteractiveControl(new TextBlock()));
+        Assert.False(MainWindow.IsEdgeInteractiveControl(new Border()));
     }
 }

@@ -3340,6 +3340,18 @@ public partial class MainWindow : Window
         };
     }
 
+    /// <summary>
+    /// True when the pointer-down originates on a button-family control
+    /// (Button / ToggleButton / RepeatButton) or its descendant. Such
+    /// controls that sit at a window edge must keep their click rather than
+    /// starting a window resize drag. Avalonia 12 has no shared ButtonBase
+    /// type, so the family is enumerated explicitly.
+    /// </summary>
+    internal static bool IsEdgeInteractiveControl(Control control) =>
+        control.FindAncestorOfType<Button>(includeSelf: true) is not null
+        || control.FindAncestorOfType<ToggleButton>(includeSelf: true) is not null
+        || control.FindAncestorOfType<RepeatButton>(includeSelf: true) is not null;
+
     private void OnWindowPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         _windowPointerPressed = true;
@@ -3349,9 +3361,14 @@ public partial class MainWindow : Window
             return;
         }
 
-        // Window buttons at the very edge must still receive their click.
+        // Window controls at the very edge must still receive their click
+        // instead of starting a window resize drag. This covers the title-bar
+        // buttons and, importantly, the full-width SFTP "远程监控" band, which
+        // is a ToggleButton (NOT a Button) sitting on the window's bottom
+        // edge. Checking only for Button is exactly why the monitor toggle
+        // intermittently swallowed its first click.
         if (e.Source is Control source
-            && source.FindAncestorOfType<Button>(includeSelf: true) is not null)
+            && IsEdgeInteractiveControl(source))
         {
             return;
         }

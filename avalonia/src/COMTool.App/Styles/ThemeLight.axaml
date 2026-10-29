@@ -30,7 +30,6 @@
   <SolidColorBrush x:Key="MonSegBorderBrush" Color="#cfd8dc" />
   <SolidColorBrush x:Key="MonIconBrush" Color="#5f6368" />
   <SolidColorBrush x:Key="MonCpuBarTrackBrush" Color="#1f1f1f" />
-  <SolidColorBrush x:Key="MonCpuBarFillBrush" Color="#d6d6d6" />
   <!-- 分段图标配色（对齐 MobaXterm 状态栏：主机/用户深灰、磁盘灰蓝、运行时长灰绿）。 -->
   <SolidColorBrush x:Key="MonIconDarkBrush" Color="#3d3d3d" />
   <SolidColorBrush x:Key="MonIconDiskBrush" Color="#5b6b7b" />

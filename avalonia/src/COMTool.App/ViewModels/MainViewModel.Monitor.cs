@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Linq;
+using Avalonia.Media;
 using Avalonia.Threading;
 using COMTool.App.Services;
 using COMTool.Connections.RemoteMonitoring;
@@ -123,6 +124,9 @@ public partial class MainViewModel
     private string _segCpuText = "";
     [ObservableProperty]
     private double _segCpuBarWidth;
+    /// <summary>CPU 迷你条填充色，随负载变化（对齐 MobaXterm：低绿/中高橙/高红）。</summary>
+    [ObservableProperty]
+    private IBrush _segCpuBarBrush = new SolidColorBrush(CpuBarGreenColor);
     [ObservableProperty]
     private bool _segRamVisible;
     [ObservableProperty]
@@ -146,6 +150,24 @@ public partial class MainViewModel
 
     /// <summary>分段 CPU 条最大宽度（px），与 XAML 中 CPU 条轨道宽度一致。</summary>
     internal const double CpuBarMaxWidth = 56;
+
+    /// <summary>
+    /// CPU 条填充色随负载变化，对齐 MobaXterm（低绿 / 中高橙 / ≥80% 红）。
+    /// 每次返回新建画刷：Avalonia 12 的 SolidColorBrush 是线程亲和的，
+    /// 静态共享实例在跨线程（UI 线程 / 并行测试线程）访问时会抛异常。
+    /// </summary>
+    internal static SolidColorBrush CpuBarBrush(double cpuPercent) =>
+        new(CpuBarColor(cpuPercent));
+
+    internal static Color CpuBarColor(double cpuPercent)
+    {
+        var pct = (int)Math.Clamp(Math.Round(cpuPercent), 0, 100);
+        return pct >= 80 ? CpuBarRedColor : pct >= 50 ? CpuBarOrangeColor : CpuBarGreenColor;
+    }
+
+    private static readonly Color CpuBarGreenColor = Color.Parse("#2e9e4f");
+    private static readonly Color CpuBarOrangeColor = Color.Parse("#e8a31a");
+    private static readonly Color CpuBarRedColor = Color.Parse("#d84a2f");
 
     /// <summary>
     /// 远程监控菜单 7 项的勾选态（状态栏右键菜单的数据源）。
@@ -284,10 +306,12 @@ public partial class MainViewModel
             SegCpuVisible = true;
             SegCpuText = pct.ToString(CultureInfo.InvariantCulture) + "%";
             SegCpuBarWidth = CpuBarMaxWidth * pct / 100.0;
+            SegCpuBarBrush = CpuBarBrush(cpu);
         }
         else
         {
             SegCpuVisible = false;
+            SegCpuBarBrush = CpuBarBrush(0);
         }
 
         if (o.ShowRam && snap.Ram is { } ram)

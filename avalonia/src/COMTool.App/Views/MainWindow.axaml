@@ -383,7 +383,7 @@
                               Background="{DynamicResource MonCpuBarTrackBrush}"
                               VerticalAlignment="Center">
                         <Border Width="{Binding SegCpuBarWidth}" CornerRadius="2"
-                                Background="{DynamicResource MonCpuBarFillBrush}"
+                                Background="{Binding SegCpuBarBrush}"
                                 HorizontalAlignment="Left" />
                       </Border>
                     </StackPanel>
