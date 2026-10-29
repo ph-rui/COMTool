@@ -59,7 +59,7 @@
      卡顿主嫌疑锁定虚拟 GPU 的 D3D11 渲染路径；待用户交互桌面实测确认
    - 提交 3445771
    - 追加（2026-10-29）：RDP 实机核对 MobaXterm 22.1 后三项修正：
-     ① 执行宏不显示任何横帗（MobaXterm 执行时无 UI，录制横帗保留）；
+     ① 执行宏不显示任何横幅（MobaXterm 执行时无 UI，录制横幅保留）；
      ② 单击行即执行宏（RDP 实测 MobaXterm 单击即触发）；
      ③ 行图标改为灰环+蓝色播放三角（实机像素采样 #6e6e6e/#2196f3）；
      f10c 在 solid 字体中是实心盘非环 → 改用矢量 Border 圆环；
@@ -67,6 +67,12 @@
      提交 c215ad2 + 图标修复；发布 15cd67aa 双份部署。
      另：已从用户 MobaXterm.ini 删除 RDP 测试宏 echo moba_test（保持其安全净净）；
      录制文本丢失 bug 修复见 970d1f4（MAC22/23）。
+   - 追加（2026-10-29）：宏对话框 UI 优化（用户截图反馈）：新增 CreateMacroDialog
+     工厂（COMTool 标题/不显示任务栏/居中/不可缩放）+ Windows 剥离 min/max 按钮
+     （SetWindowLongPtr 去 WS_MINIMIZEBOX|WS_MAXIMIZEBOX；CanResize=false 在 VDI 上去不掉）；4 个宏对话框统一（命名/删除/导出警告/成功提示）：f05a info 图标
+     + DialogButtonContent 图标按钮（是(Y)✓/否(N)✗，IsDefault/IsCancel）；修复导出警告按钮竖排 bug；
+     MAC15/导出警告测试改 ButtonByLabel；197/197，gate 第 10 轮全 PASS；
+     提交 <hash>，发布部署双份。
 
 ## 已知偏差（已写入 spec 附录）
 

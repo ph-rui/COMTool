@@ -493,8 +493,7 @@ public sealed class MacroFeatureTests
                 sidebar.RaiseMacroDeleteForTests(item);
                 WaitUntil(() => window.LastMacroDeleteDialogForTests is not null, "delete dialog");
                 var dlg = window.LastMacroDeleteDialogForTests;
-                dlg.GetVisualDescendants().OfType<Button>()
-                    .First(b => string.Equals(b.Content?.ToString(), "否", StringComparison.Ordinal))
+                ButtonByLabel(dlg, "否(N)")
                     .RaiseEvent(new RoutedEventArgs(Button.ClickEvent, dlg));
                 RunJobs(window);
                 Assert.Single(vm.Macros); // rejected: still there
@@ -503,8 +502,7 @@ public sealed class MacroFeatureTests
                 sidebar.RaiseMacroDeleteForTests(item);
                 WaitUntil(() => window.LastMacroDeleteDialogForTests is not null, "delete dialog 2");
                 dlg = window.LastMacroDeleteDialogForTests;
-                dlg.GetVisualDescendants().OfType<Button>()
-                    .First(b => string.Equals(b.Content?.ToString(), "是", StringComparison.Ordinal))
+                ButtonByLabel(dlg, "是(Y)")
                     .RaiseEvent(new RoutedEventArgs(Button.ClickEvent, dlg));
                 RunJobs(window);
 
@@ -1141,8 +1139,7 @@ public sealed class MacroFeatureTests
                 sidebar.RaiseMacroExportForTests();
                 WaitUntil(() => window.LastMacroExportWarnDialogForTests is not null, "export warn dialog");
                 var warn = window.LastMacroExportWarnDialogForTests!;
-                warn.GetVisualDescendants().OfType<Button>()
-                    .First(b => b.Content is string s && s == "是(Y)")
+                ButtonByLabel(warn, "是(Y)")
                     .RaiseEvent(new RoutedEventArgs(Button.ClickEvent, warn));
                 WaitUntil(() => System.IO.File.Exists(exportPath), "export file written");
                 RunJobs(window);
@@ -1235,8 +1232,7 @@ public sealed class MacroFeatureTests
                     .Any(t => t.Text != null && t.Text.Contains("不加密")));
 
                 // 点"否" → 中止, 不产生文件
-                warn.GetVisualDescendants().OfType<Button>()
-                    .First(b => b.Content is string s && s == "否(N)")
+                ButtonByLabel(warn, "否(N)")
                     .RaiseEvent(new RoutedEventArgs(Button.ClickEvent, warn));
                 WaitUntil(() => window.LastMacroExportWarnDialogForTests is null, "warn closed");
                 RunJobs(window);

@@ -179,6 +179,8 @@ public partial class MainWindow : Window
 
     private const int GwlStyle = -16;
     private const long WsThickFrame = 0x00040000L;
+    private const long WsMinimizeBox = 0x00020000L;
+    private const long WsMaximizeBox = 0x00010000L;
     private const uint SwpNoMove = 0x0002;
     private const uint SwpNoSize = 0x0001;
     private const uint SwpNoZOrder = 0x0004;
@@ -3754,24 +3756,15 @@ public partial class MainWindow : Window
     /// </summary>
     internal async Task<bool> ShowMacroExportWarnAsync()
     {
-        var dialog = new Window
-        {
-            Title = "警告",
-            Width = 460,
-            Height = 200,
-            MinWidth = 340,
-            MinHeight = 150,
-            CanResize = false,
-            ShowInTaskbar = false,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-        };
+        var dialog = CreateMacroDialog(460, 200);
         var yes = new Button
         {
             Name = "MacroExportWarnYesButton",
-            Content = "是(Y)",
-            Width = 80,
-            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+            Content = DialogButtonContent("是(Y)", "\uf00c", "#16a34a"),
+            Width = 96,
+            Height = 30,
         };
+        yes.IsDefault = true;
         yes.Click += (_, _) =>
         {
             dialog.Tag = true;
@@ -3780,34 +3773,46 @@ public partial class MainWindow : Window
         var no = new Button
         {
             Name = "MacroExportWarnNoButton",
-            Content = "否(N)",
-            Width = 80,
-            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+            Content = DialogButtonContent("否(N)", "\uf00d", "#dc2626"),
+            Width = 96,
+            Height = 30,
         };
+        no.IsCancel = true;
         no.Click += (_, _) => dialog.Close();
-        dialog.Content = new StackPanel
+        var icon = new TextBlock
+        {
+            Text = "\uf05a",
+            FontFamily = IconFont(),
+            FontSize = 28,
+            Foreground = new SolidColorBrush(Color.Parse("#0078d7")),
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top,
+            Margin = new Thickness(0, 2, 14, 0),
+        };
+        var content = new StackPanel { Spacing = 10 };
+        content.Children.Add(new TextBlock
+        {
+            Text = "警告：宏将在不加密的情况下导出。"
+                 + "如果宏包含机密信息，这可能是危险的。"
+                 + "您确定要继续吗？",
+            FontSize = 12,
+            TextWrapping = TextWrapping.Wrap,
+        });
+        content.Children.Add(new StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            Spacing = 8,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+            Margin = new Thickness(0, 6, 0, 0),
+            Children = { yes, no },
+        });
+        var grid = new Grid
         {
             Margin = new Thickness(16),
-            Spacing = 10,
-            Children =
-            {
-                new TextBlock
-                {
-                    Text = "警告：宏将在不加密的情况下导出。"
-                         + "如果宏包含机密信息，这可能是危险的。"
-                         + "您确定要继续吗？",
-                    FontSize = 12,
-                    TextWrapping = TextWrapping.Wrap,
-                },
-                new StackPanel
-                {
-                    Orientation = Avalonia.Layout.Orientation.Horizontal,
-                    Spacing = 8,
-                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
-                    Children = { yes, no },
-                },
-            },
+            ColumnDefinitions = new ColumnDefinitions("Auto,*"),
+            Children = { icon, content },
         };
+        Grid.SetColumn(content, 1);
+        dialog.Content = grid;
         LastMacroExportWarnDialogForTests = dialog;
         try
         {
@@ -3829,25 +3834,14 @@ public partial class MainWindow : Window
     /// <summary>导出/导入成功提示框（蓝色 info 图标 + 确定，对齐 MobaXterm 提示样式）。</summary>
     internal async Task ShowMacroInfoAsync(string title, string message)
     {
-        var dialog = new Window
-        {
-            Title = "COMTool",
-            Width = 460,
-            Height = 190,
-            MinWidth = 340,
-            MinHeight = 150,
-            CanResize = false,
-            ShowInTaskbar = false,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-        };
+        var dialog = CreateMacroDialog(460, 190);
         var ok = new Button
         {
             Name = "MacroInfoOkButton",
-            Content = "确定",
+            Content = DialogButtonContent("确定", "\uf00c", "#16a34a"),
             Width = 96,
             Height = 30,
-            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
-            Margin = new Thickness(0, 10, 0, 0),
+            Margin = new Thickness(0, 6, 0, 0),
             HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
         };
         ok.Click += (_, _) => dialog.Close();
@@ -3924,22 +3918,70 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// 统一的宏对话框工厂：标题固定 COMTool、不显示任务栏、居中于主窗口、不可缩放，
+    /// 并在 Windows 下剥离最小化/最大化按钮（CanResize=false 在 VDI 上仍显示灰显的
+    /// min/max，2026-10-29 用户截图反馈），仅保留关闭按钮，贴近系统消息框观感。
+    /// </summary>
+    private Window CreateMacroDialog(double width, double height)
+    {
+        var dialog = new Window
+        {
+            Title = "COMTool",
+            Width = width,
+            Height = height,
+            CanResize = false,
+            ShowInTaskbar = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+        };
+        // 主窗口先例：Avalonia 会从自身装饰模型重写 Win32 样式，激活时补一次
+        // （StripDialogMinimizeMaximize 幂等，无变化时直接返回）。
+        dialog.Opened += (_, _) => StripDialogMinimizeMaximize(dialog);
+        dialog.Activated += (_, _) => StripDialogMinimizeMaximize(dialog);
+        return dialog;
+    }
+
+    /// <summary>
+    /// Windows 下移除对话框的最小化/最大化框（WS_MINIMIZEBOX / WS_MAXIMIZEBOX），
+    /// 仅保留关闭按钮；非 Windows 平台（含 headless 测试）无操作。
+    /// </summary>
+    private void StripDialogMinimizeMaximize(Window dialog)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var handle = dialog.TryGetPlatformHandle();
+        if (handle is null || handle.Handle == IntPtr.Zero)
+        {
+            return;
+        }
+
+        var style = GetWindowLongPtr(handle.Handle, GwlStyle).ToInt64();
+        var newStyle = style & ~WsMinimizeBox & ~WsMaximizeBox;
+        if (newStyle == style)
+        {
+            return;
+        }
+
+        SetWindowLongPtr(handle.Handle, GwlStyle, new IntPtr(newStyle));
+        SetWindowPos(
+            handle.Handle,
+            IntPtr.Zero,
+            0,
+            0,
+            0,
+            0,
+            SwpNoMove | SwpNoSize | SwpNoZOrder | SwpFrameChanged);
+    }
+
+    /// <summary>
     /// "请为此宏输入一个名称" — MobaXterm 版式：左侧铅笔图标、右侧标签+输入框
     /// （默认名预填并选中）、底部居中 ✓确定/✗取消。OK 返回去空格后的名称，取消/空返回 null。
     /// </summary>
     internal async Task<string?> ShowMacroNameAsync(string defaultName)
     {
-        var dialog = new Window
-        {
-            Title = "COMTool",
-            Width = 460,
-            Height = 200,
-            MinWidth = 360,
-            MinHeight = 160,
-            CanResize = false,
-            ShowInTaskbar = false,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-        };
+        var dialog = CreateMacroDialog(460, 200);
         var box = new TextBox { Name = "MacroNameBox", FontSize = 13, Margin = new Thickness(0, 8, 0, 0) };
         box.Text = defaultName;
         box.Loaded += (_, _) => box.SelectAll();
@@ -4021,27 +4063,18 @@ public partial class MainWindow : Window
 
     internal Window? LastMacroNameDialogForTests { get; private set; }
 
-    /// <summary>是/否 delete confirmation. Returns true on "是".</summary>
+    /// <summary>是/否 delete confirmation. Returns true on "是(Y)".</summary>
     internal async Task<bool> ShowMacroDeleteConfirmAsync(string name)
     {
-        var dialog = new Window
-        {
-            Title = "删除宏",
-            Width = 420,
-            Height = 170,
-            MinWidth = 320,
-            MinHeight = 130,
-            CanResize = false,
-            ShowInTaskbar = false,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-        };
+        var dialog = CreateMacroDialog(460, 170);
         var yes = new Button
         {
             Name = "MacroDeleteYesButton",
-            Content = "是",
-            Width = 80,
-            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+            Content = DialogButtonContent("是(Y)", "\uf00c", "#16a34a"),
+            Width = 96,
+            Height = 30,
         };
+        yes.IsDefault = true;
         yes.Click += (_, _) =>
         {
             dialog.Tag = true;
@@ -4050,32 +4083,45 @@ public partial class MainWindow : Window
         var no = new Button
         {
             Name = "MacroDeleteNoButton",
-            Content = "否",
-            Width = 80,
-            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+            Content = DialogButtonContent("否(N)", "\uf00d", "#dc2626"),
+            Width = 96,
+            Height = 30,
         };
+        no.IsCancel = true;
         no.Click += (_, _) => dialog.Close();
-        dialog.Content = new StackPanel
+
+        var icon = new TextBlock
+        {
+            Text = "\uf05a",
+            FontFamily = IconFont(),
+            FontSize = 28,
+            Foreground = new SolidColorBrush(Color.Parse("#0078d7")),
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top,
+            Margin = new Thickness(0, 2, 14, 0),
+        };
+        var content = new StackPanel { Spacing = 10 };
+        content.Children.Add(new TextBlock
+        {
+            Text = $"确定删除宏 \"{name}\" 吗？",
+            FontSize = 12,
+            TextWrapping = TextWrapping.Wrap,
+        });
+        content.Children.Add(new StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            Spacing = 8,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+            Margin = new Thickness(0, 6, 0, 0),
+            Children = { yes, no },
+        });
+        var grid = new Grid
         {
             Margin = new Thickness(16),
-            Spacing = 10,
-            Children =
-            {
-                new TextBlock
-                {
-                    Text = $"确定删除宏 \"{name}\" 吗？",
-                    FontSize = 12,
-                    TextWrapping = TextWrapping.Wrap,
-                },
-                new StackPanel
-                {
-                    Orientation = Avalonia.Layout.Orientation.Horizontal,
-                    Spacing = 8,
-                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
-                    Children = { yes, no },
-                },
-            },
+            ColumnDefinitions = new ColumnDefinitions("Auto,*"),
+            Children = { icon, content },
         };
+        Grid.SetColumn(content, 1);
+        dialog.Content = grid;
         LastMacroDeleteDialogForTests = dialog;
         try
         {
