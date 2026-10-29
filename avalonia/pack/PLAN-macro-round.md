@@ -168,6 +168,30 @@
      仅 Linux 远端有效（用户场景=Ubuntu 192.0.2.48）；非 Linux 静默停止。提交 bd2244f，发布部署双份；
      Windows 实机 WIN-28 由用户核对（或 RDP 自验）。
 
+   - 追加（2026-10-29，第 19 轮）：远程监控状态栏 MobaXterm 式分段 UI + 会话监控记忆
+     （用户反馈 2026-10-29：“mobaxterm 是一隔一隔分开的，而且还有对应的图标”；
+     “远程监控有记忆功能的……下次打开应用时，自动开启远程监控”）：
+     ① 状态栏分段：MonitorTextBlock 单行文本 → Row3 col0 改为一行分段盒子
+        （每指标=带边框 Border+FontAwesome 图标+文本，主题色 MonSeg* Light/Dark）：
+        host f390 / cpu f624+56px 迷你 CPU 条（宽=56*pct/100）/ ram f538 / netup f062 绿 /
+        netdown f063 蓝 / clients f0c0 / processes f53f / fds f15b / uptime f017 / users f007 /
+        partitions f0a0（分区每区一盒，首盒带图标，≥80% 橙色 #e2590b）。
+        VM 新增 Seg*Visible/Seg*Text/SegCpuBarWidth/Partitions（RefreshMonitorSegments 挂
+        ApplySnapshot/ReformatMonitorLine，StopMonitorPolling 清段）；
+        整串 MonitorText 保留供“复制/保存到文件”（RM01 锚定的格式不变）。
+     ② 实机 bug 修复（RDP 发现）：Row3 Grid Background=null → Avalonia 中 null 背景 Panel
+        不参与指针命中测试 → 右键穿透到窗口根、13 项菜单弹不出（标题栏 Border 有背景，右键正常）。
+        Row3 加 Background="Transparent"；回归测试 RM04_StatusBarGridHasBackgroundForContextMenuHitTest。
+     ③ 会话监控记忆（MobaXterm 行为）：SshSession 加 monitor 键（旧配置缺键=false）；
+        OpenSshSessionAsync 按会话恢复 tab.MonitorEnabled（标签选中即自动恢复轮询）；
+        SFTP 面板开关回调经 SshSessionStore.SetMonitor+Save 持久化（编辑会话 Upsert 不丢开关）。
+     ④ 测试：App RM04_SegmentsRenderPerEnabledOptionAndFollowToggles（真实引擎 40% CPU 确定性/
+        分区 hot/图标/XAML 绑定/勾选即时重画/停止清段）；Core RM03_SshSessionMonitorFlagRoundTripsAndPersistsThroughStore
+        （往返/旧配置/SetMonitor/Upsert 不丢）；E2E RM05_MonitorMemoryAcrossRestartE2E（第一阶段手动开
+        监控→轮询，杀进程重启，重连不点任何按钮轮询恢复=记忆链路通）。
+     App 212/212、Core 86/86、TestGate 49/49；gate 第 19 轮全 PASS（E2E 15/15，含 RM05）；提交 bbb39b53，发布部署双份。
+     Windows 实机 WIN-28 补核：分段盒子+图标外观、菜单外观、复制/保存、记忆行为。
+
 ## 已知偏差（已写入 spec 附录）
 
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
