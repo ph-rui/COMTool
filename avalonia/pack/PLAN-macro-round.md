@@ -112,6 +112,19 @@
         NET05_ScanRowsAppearIncrementally（扫描中途行先出现+名称后补+6 个“…”→0），
         FakeScanner 加 DiscoverDelayMs/DiscoveredOpenPorts（500ms 间隔保证中途状态稳定捕获）。
      200/200 App + 112/112 Connections，gate 第 14 轮全 PASS；提交 fe63f06，发布部署双份。
+   - 追加（2026-10-29）：修复实机网络扫描“已发现行滞留 …”缺陷（用户 VDI 192.0.2.251 截图反馈：
+     扫描状态已“完成”但该行 7 个服务列仍是灰色省略号、名称未回填）：
+     ① 根因：行定格依赖 completed 阶段 progress 回调；实机时序下最后完成主机的回调
+        与 UI 队列/扫描收尾竞态时该行永不定格。对策=权威对账：ScanAsync 返回存活主机权威列表
+        （IReadOnlyList<NetworkScanHost>，按地址排序），窗口 await 后逐行 reconcile（缺行补行、
+        有 pending 列则 UpdateFrom 定格），幂等；
+     ② INetworkScanner.ScanAsync 返回值改为存活主机权威列表（IReadOnlyList<NetworkScanHost>，
+        按地址排序）；NetworkScanner/FakeScanner 两实现同步（忽略返回值的调用点不受影响）；
+     ③ 双通道回调加 AppLog 诊断：discovered 插行、completed 兜底补行、最终计数、
+        guard 丢弃上报（区分 newScan/stopped 两原因）、reconcile 定格行数；
+     ④ 新增回归测试 NET05_ScanReconcilesRowsWhenCompletedReportLost（FakeScanner 加 DropCompletedReports
+        模拟 completed 回调丢失，断言扫描结束后行仍被对账定格、无 … 残留）。
+     201/201 App + 112/112 Connections，gate 第 15 轮全 PASS；提交 <hash>，发布部署双份。
 
 ## 已知偏差（已写入 spec 附录）
 

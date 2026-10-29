@@ -659,6 +659,51 @@ public sealed class SidebarRailTests
     }
 
     [AvaloniaFact]
+    public void NET05_ScanReconcilesRowsWhenCompletedReportLost()
+    {
+        using var env = new TestEnvironment();
+        NetworkScanWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                window = new NetworkScanWindow
+                {
+                    // discovered 正常上报，completed 阶段 host 丢失（模拟 UI 回调被丢）；
+                    // 扫描结束后必须以 ScanAsync 返回的权威列表对账定格
+                    ScannerForTests = new FakeScanner(new List<NetworkScanHost>
+                    {
+                        new(new IPAddress(new byte[] { 192, 168, 1, 7 }), "lost7", new[] { 22 }, 1),
+                    })
+                    { DelayMs = 1, DiscoverDelayMs = 1, DropCompletedReports = true },
+                };
+                window.Show();
+                Dispatcher.UIThread.RunJobs();
+                var vm = window.ViewModel;
+                vm.OctetTo = "2";
+
+                Click(window, window.FindControl<Button>("ScanStartButton")!);
+                var finished = WaitUntilTry(() => vm.Status.Contains("完成"), 10);
+                Assert.True(finished, $"scan did not finish: status='{vm.Status}'");
+                RunJobs(window);
+
+                // 对账定格：行存在、名称回填、无 "…" 残留
+                Assert.Single(vm.Rows);
+                Assert.Equal("lost7", vm.Rows[0].HostName);
+                Assert.True(vm.Rows[0].Cells[0].IsOpen);
+                Assert.All(vm.Rows[0].Cells, c => Assert.False(c.IsPending));
+                Assert.DoesNotContain(window.GetVisualDescendants().OfType<TextBlock>(),
+                    tb => tb.Text == "\uf141");
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
     public void NET05_ScanResultColumnsMatchMobaXtermWidths()
     {
         using var env = new TestEnvironment();
@@ -1748,6 +1793,10 @@ public sealed class SidebarRailTests
         /// <summary>Open ports carried by the discovered (partial) report.</summary>
         public IReadOnlyList<int> DiscoveredOpenPorts { get; init; } = Array.Empty<int>();
 
+        /// <summary>Simulates a lost completed progress callback: progress reports carry
+        /// host=null while the returned authoritative list still contains the host.</summary>
+        public bool DropCompletedReports { get; init; }
+
         public int DeepDelayMs { get; init; }
 
         public IReadOnlyList<int> DeepPorts { get; init; } = Array.Empty<int>();
@@ -1786,13 +1835,14 @@ public sealed class SidebarRailTests
             return open;
         }
 
-        public async Task ScanAsync(
+        public async Task<IReadOnlyList<NetworkScanHost>> ScanAsync(
             IReadOnlyList<IPAddress> targets,
             IReadOnlyList<int> ports,
             IProgress<NetworkScanProgress>? progress,
             IProgress<NetworkScanHost>? discovered,
             CancellationToken cancellationToken)
         {
+            var up = new List<NetworkScanHost>();
             for (var i = 0; i < targets.Count; i++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -1808,11 +1858,18 @@ public sealed class SidebarRailTests
                     await Task.Delay(DelayMs, cancellationToken);
                 }
 
+                var host = i < _hosts.Count ? _hosts[i] : null;
+                if (host is not null)
+                {
+                    up.Add(host);
+                }
+
                 progress?.Report(new NetworkScanProgress(
                     i + 1,
                     targets.Count,
-                    i < _hosts.Count ? _hosts[i] : null));
+                    host is null || DropCompletedReports ? null : host));
             }
+            return up;
         }
     }
 

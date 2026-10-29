@@ -198,12 +198,17 @@ public partial class NetworkScanWindow : Window
             // 停止后忽略已排队的上报，避免“已停止”被迟到的上报覆盖
             if (!ReferenceEquals(_cts, cts) || cts.IsCancellationRequested)
             {
+                AppLog.Warn("[NetScan] report dropped: newScan="
+                    + (!ReferenceEquals(_cts, cts)).ToString() + " stopped="
+                    + cts.IsCancellationRequested.ToString());
                 return;
             }
 
             // 发现阶段：立即插行（名称空、已确认开放列✓、未确认列“…”，
             // MobaXterm 式增量显示，2026-10-29 用户要求）
             vm.Rows.Add(ToScanGridRow(h, false));
+            AppLog.Info("[NetScan] discovered " + h.Address
+                + " open=" + h.OpenPorts.Count);
         });
 
         var progress = new UiProgress<NetworkScanProgress>(p =>
@@ -211,6 +216,9 @@ public partial class NetworkScanWindow : Window
             // 停止后忽略已排队的进度，避免“已停止”被迟到的“完成”覆盖
             if (!ReferenceEquals(_cts, cts) || cts.IsCancellationRequested)
             {
+                AppLog.Warn("[NetScan] report dropped: newScan="
+                    + (!ReferenceEquals(_cts, cts)).ToString() + " stopped="
+                    + cts.IsCancellationRequested.ToString());
                 return;
             }
 
@@ -226,11 +234,13 @@ public partial class NetworkScanWindow : Window
                 else
                 {
                     vm.Rows.Add(ToScanGridRow(host, true));
+                    AppLog.Warn("[NetScan] completed row missing, fallback add: " + host.Address);
                 }
             }
 
             if (p.Completed >= p.Total)
             {
+                AppLog.Info("[NetScan] final progress applied, rows=" + vm.Rows.Count);
                 // 最终进度上报时写终止状态，保证与增量更新顺序一致
                 vm.IsScanning = false;
                 vm.Status = $"完成：发现 {vm.Rows.Count} 台在线设备";
@@ -243,7 +253,28 @@ public partial class NetworkScanWindow : Window
 
         try
         {
-            await Scanner.ScanAsync(targets, ports, progress, discovered, cts.Token);
+            var finalHosts = await Scanner.ScanAsync(targets, ports, progress, discovered, cts.Token);
+            // 对账定格：以扫描器返回的权威存活列表为准，补齐任何未被
+            // progress 回调定格的行（2026-10-29 实机 192.0.2.251 行滞留 "…" 修复）
+            var reconciled = 0;
+            foreach (var host in finalHosts)
+            {
+                var row = vm.Rows.FirstOrDefault(r => r.Address == host.Address.ToString());
+                if (row is null)
+                {
+                    vm.Rows.Add(ToScanGridRow(host, true));
+                    reconciled++;
+                }
+                else if (row.Cells.Any(c => c.IsPending))
+                {
+                    row.UpdateFrom(host);
+                    reconciled++;
+                }
+            }
+            if (reconciled > 0)
+            {
+                AppLog.Warn("[NetScan] reconcile finalized " + reconciled + " row(s)");
+            }
             // 兜底：若扫描器未上报最终计数
             if (vm.IsScanning)
             {

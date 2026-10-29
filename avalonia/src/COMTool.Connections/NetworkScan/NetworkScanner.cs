@@ -14,8 +14,11 @@ public interface INetworkScanner
     /// reported through progress as their full probe (all ports + name
     /// resolution) finishes; the task throws OperationCanceledException when
     /// the token is cancelled.
+    /// Returns the definitive list of up hosts (sorted by address) so the UI
+    /// can reconcile/finalize rows even if individual progress callbacks are
+    /// dropped after the scan ends.
     /// </summary>
-    Task ScanAsync(
+    Task<IReadOnlyList<NetworkScanHost>> ScanAsync(
         IReadOnlyList<IPAddress> targets,
         IReadOnlyList<int> ports,
         IProgress<NetworkScanProgress>? progress,
@@ -72,7 +75,7 @@ public sealed class NetworkScanner : INetworkScanner
     /// </summary>
     public int NetbiosTimeoutMs { get; init; } = NetbiosNameResolver.DefaultTimeoutMs;
 
-    public async Task ScanAsync(
+    public async Task<IReadOnlyList<NetworkScanHost>> ScanAsync(
         IReadOnlyList<IPAddress> targets,
         IReadOnlyList<int> ports,
         IProgress<NetworkScanProgress>? progress,
@@ -81,12 +84,13 @@ public sealed class NetworkScanner : INetworkScanner
     {
         if (targets is null || targets.Count == 0)
         {
-            return;
+            return Array.Empty<NetworkScanHost>();
         }
 
         using var gate = new SemaphoreSlim(Math.Max(1, Concurrency));
         int completed = 0;
         var total = targets.Count;
+        var upHosts = new System.Collections.Concurrent.ConcurrentBag<NetworkScanHost>();
 
         // Task.Run：探测任务体（raw ICMP socket + 7 个 TCP socket 的创建）
         // 必须在线程池上跑。若用 Select(async ...) 内联创建，254 台主机的
@@ -110,6 +114,11 @@ public sealed class NetworkScanner : INetworkScanner
                     // A single bad host must not kill the whole scan.
                 }
 
+                if (host is not null)
+                {
+                    upHosts.Add(host);
+                }
+
                 var done = Interlocked.Increment(ref completed);
                 progress?.Report(new NetworkScanProgress(done, total, host));
             }
@@ -120,6 +129,13 @@ public sealed class NetworkScanner : INetworkScanner
         }, cancellationToken)).ToArray();
 
         await Task.WhenAll(tasks);
+
+        // 权威结果：即使个别 progress 回调在扫描结束后被 UI 丢弃，窗口也能
+        // 用这份列表做最终对账（2026-10-29 实机 192.0.2.251 行滞留 "…" 修复）
+        return upHosts
+            .OrderBy(h => h.Address.GetAddressBytes(),
+                System.Collections.Generic.Comparer<byte[]>.Create((a, b) => a.SequenceCompareTo(b)))
+            .ToList();
     }
 
     public Task<IReadOnlyList<int>> ScanHostPortsAsync(
