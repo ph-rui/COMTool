@@ -95,7 +95,7 @@
      两个坑：Avalonia 12 TranslatePoint 返回 Point?（Nullable 值类型），null-forgiving `!` 对其无效
         （最小复现证实 p!.Y 仍 CS1061，`!` 只去引用类型可空性），须用 .Value.Y/.Value.X；
         纯代码创建的对话框无 NameScope，FindControl 抛 "Could not find parent name scope"，测试须用 ButtonByLabel。
-     199/199，gate 第 13 轮全 PASS；提交 <hash>，发布部署双份。
+     199/199，gate 第 13 轮全 PASS；提交 11f78dc，发布部署双份。
 
 ## 已知偏差（已写入 spec 附录）
 
