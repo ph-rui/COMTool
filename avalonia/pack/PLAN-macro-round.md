@@ -77,7 +77,7 @@
      收起后星形图标发白你被点住）： VM 增 RailSessions/Tools/Macros/SshBrowserActive
      （=IsSidebarVisible&&对应 Tab）， IsSidebarVisible  ApplySidebarMode  _sidebarVisible； 4 个 rail 按钮 Classes.active ¹ Rail*Active；
      新增 UI16_RailActiveClearedWhenDockCollapsed； 198/198， gate 第 10c 轮全 PASS；
-     提交 <hash>，发布部署双份。
+     提交 c1abecb，发布部署双份。
 
 ## 已知偏差（已写入 spec 附录）
 
