@@ -233,6 +233,65 @@ public sealed class ConfigTests : IDisposable
     }
 
     [Fact]
+    public void SaveAndLoad_RoundTripsRemoteMonitorOptions()
+    {
+        var path = Path.Combine(_directory, "config.json");
+        var config = new ComtoolConfig
+        {
+            RemoteMonitor = new RemoteMonitorConfig
+            {
+                ShowHost = false,
+                ShowCpu = true,
+                ShowRam = false,
+                ShowNetUp = true,
+                ShowNetDown = false,
+                ShowClients = true,
+                ShowProcesses = true,
+                ShowFileDescriptors = true,
+                ShowUptime = true,
+                ShowUsers = true,
+                ShowPartitions = false,
+            },
+        };
+
+        config.Save(path);
+        var loaded = ComtoolConfig.Load(path);
+
+        Assert.False(loaded.RemoteMonitor.ShowHost);
+        Assert.True(loaded.RemoteMonitor.ShowCpu);
+        Assert.False(loaded.RemoteMonitor.ShowRam);
+        Assert.True(loaded.RemoteMonitor.ShowNetUp);
+        Assert.False(loaded.RemoteMonitor.ShowNetDown);
+        Assert.True(loaded.RemoteMonitor.ShowClients);
+        Assert.True(loaded.RemoteMonitor.ShowProcesses);
+        Assert.True(loaded.RemoteMonitor.ShowFileDescriptors);
+        Assert.True(loaded.RemoteMonitor.ShowUptime);
+        Assert.True(loaded.RemoteMonitor.ShowUsers);
+        Assert.False(loaded.RemoteMonitor.ShowPartitions);
+    }
+
+    [Fact]
+    public void Load_ConfigWithoutRemoteMonitor_UsesMobaXtermDefaults()
+    {
+        var path = Path.Combine(_directory, "config.json");
+        File.WriteAllText(path, """{"version":3,"skin":"dark"}""");
+
+        var loaded = ComtoolConfig.Load(path);
+
+        Assert.True(loaded.RemoteMonitor.ShowHost);
+        Assert.True(loaded.RemoteMonitor.ShowCpu);
+        Assert.True(loaded.RemoteMonitor.ShowRam);
+        Assert.True(loaded.RemoteMonitor.ShowNetUp);
+        Assert.True(loaded.RemoteMonitor.ShowNetDown);
+        Assert.False(loaded.RemoteMonitor.ShowClients);
+        Assert.False(loaded.RemoteMonitor.ShowProcesses);
+        Assert.False(loaded.RemoteMonitor.ShowFileDescriptors);
+        Assert.True(loaded.RemoteMonitor.ShowUptime);
+        Assert.False(loaded.RemoteMonitor.ShowUsers);
+        Assert.True(loaded.RemoteMonitor.ShowPartitions);
+    }
+
+    [Fact]
     public void SaveAndLoad_RoundTripsMacros()
     {
         var path = Path.Combine(_directory, "config.json");

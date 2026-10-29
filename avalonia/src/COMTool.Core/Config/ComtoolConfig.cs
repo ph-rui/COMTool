@@ -86,6 +86,13 @@ public sealed class ComtoolConfig
     [JsonPropertyName("portScan")]
     public PortScanConfig PortScan { get; set; } = new();
 
+    /// <summary>
+    /// 远程监控状态栏菜单 11 项勾选状态。旧配置缺失该键时
+    /// 取 MobaXterm 22.1 默认（7 项开启）。
+    /// </summary>
+    [JsonPropertyName("remoteMonitor")]
+    public RemoteMonitorConfig RemoteMonitor { get; set; } = new();
+
     [JsonPropertyName("window")]
     public WindowConfig Window { get; set; } = new();
 
@@ -364,6 +371,50 @@ public sealed class PortScanConfig
 
     [JsonPropertyName("to")]
     public string To { get; set; } = "65535";
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? Extra { get; set; }
+}
+
+/// <summary>
+/// 远程监控（remote monitoring）状态栏右键菜单的 11 项开关。
+/// 默认与 MobaXterm 22.1 一致：主机/CPU/RAM/网络上传/网络下载/
+/// 正常运行时间/分区信息 7 项开启，其余 4 项关闭。
+/// </summary>
+public sealed class RemoteMonitorConfig
+{
+    [JsonPropertyName("show_host")]
+    public bool ShowHost { get; set; } = true;
+
+    [JsonPropertyName("show_cpu")]
+    public bool ShowCpu { get; set; } = true;
+
+    [JsonPropertyName("show_ram")]
+    public bool ShowRam { get; set; } = true;
+
+    [JsonPropertyName("show_net_up")]
+    public bool ShowNetUp { get; set; } = true;
+
+    [JsonPropertyName("show_net_down")]
+    public bool ShowNetDown { get; set; } = true;
+
+    [JsonPropertyName("show_clients")]
+    public bool ShowClients { get; set; }
+
+    [JsonPropertyName("show_processes")]
+    public bool ShowProcesses { get; set; }
+
+    [JsonPropertyName("show_file_descriptors")]
+    public bool ShowFileDescriptors { get; set; }
+
+    [JsonPropertyName("show_uptime")]
+    public bool ShowUptime { get; set; } = true;
+
+    [JsonPropertyName("show_users")]
+    public bool ShowUsers { get; set; }
+
+    [JsonPropertyName("show_partitions")]
+    public bool ShowPartitions { get; set; } = true;
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? Extra { get; set; }
