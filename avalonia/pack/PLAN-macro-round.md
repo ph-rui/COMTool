@@ -72,7 +72,7 @@
      （SetWindowLongPtr 去 WS_MINIMIZEBOX|WS_MAXIMIZEBOX；CanResize=false 在 VDI 上去不掉）；4 个宏对话框统一（命名/删除/导出警告/成功提示）：f05a info 图标
      + DialogButtonContent 图标按钮（是(Y)✓/否(N)✗，IsDefault/IsCancel）；修复导出警告按钮竖排 bug；
      MAC15/导出警告测试改 ButtonByLabel；197/197，gate 第 10 轮全 PASS；
-     提交 <hash>，发布部署双份。
+     提交 efabcab，发布部署双份。
 
 ## 已知偏差（已写入 spec 附录）
 
