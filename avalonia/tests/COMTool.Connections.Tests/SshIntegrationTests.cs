@@ -281,4 +281,242 @@ public sealed class SshIntegrationTests
         process.WaitForExit();
         return (process.ExitCode, output, error);
     }
+    [Fact]
+    public async Task RM02_ExecChannelRunsCommandWithoutPollutingShell()
+    {
+        if (!OperatingSystem.IsLinux()
+            || !File.Exists("/usr/sbin/sshd")
+            || !File.Exists("/usr/bin/ssh-keygen"))
+        {
+            return;
+        }
+
+        var directory = Path.Combine(
+            Path.GetTempPath(),
+            "comtool-sshd-exec-tests",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var port = FreePort();
+        Process? sshd = null;
+        SshConnection? connection = null;
+        try
+        {
+            var hostKey = Path.Combine(directory, "host_key");
+            var clientKey = Path.Combine(directory, "client_key");
+            var authorizedKeys = Path.Combine(directory, "authorized_keys");
+            Run("/usr/bin/ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", hostKey);
+            Run("/usr/bin/ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", clientKey);
+            File.Copy(clientKey + ".pub", authorizedKeys);
+            File.SetUnixFileMode(authorizedKeys, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            File.SetUnixFileMode(clientKey, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+
+            var config = Path.Combine(directory, "sshd_config");
+            File.WriteAllText(config, $"""
+                Port {port}
+                ListenAddress 127.0.0.1
+                HostKey {hostKey}
+                AuthorizedKeysFile {authorizedKeys}
+                PubkeyAuthentication yes
+                PasswordAuthentication no
+                KbdInteractiveAuthentication no
+                UsePAM no
+                StrictModes no
+                PidFile {Path.Combine(directory, "sshd.pid")}
+                LogLevel ERROR
+                AllowUsers {Environment.UserName}
+                """);
+
+            var check = RunCapture("/usr/sbin/sshd", "-t", "-f", config);
+            if (check.ExitCode != 0)
+            {
+                return;
+            }
+
+            sshd = Process.Start(new ProcessStartInfo
+            {
+                FileName = "/usr/sbin/sshd",
+                ArgumentList = { "-D", "-f", config, "-E", Path.Combine(directory, "sshd.log") },
+                RedirectStandardError = true,
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+            });
+            Assert.NotNull(sshd);
+            await WaitForPortAsync(port, TimeSpan.FromSeconds(5));
+
+            var options = new SshConnectionOptions(
+                "127.0.0.1",
+                port,
+                Environment.UserName,
+                KeyFile: clientKey,
+                Columns: 100,
+                Rows: 40,
+                Timeout: TimeSpan.FromSeconds(10));
+            connection = SshConnection.Connect(options);
+
+            // The exec channel returns the command output untouched.
+            var marker = $"RM02-{Guid.NewGuid():N}";
+            var output = await connection.RunCommandAsync($"echo {marker}");
+            Assert.Contains(marker, output, StringComparison.Ordinal);
+
+            // /proc is readable through the exec channel: /proc/uptime starts with a float.
+            var uptime = await connection.RunCommandAsync("head -c 32 /proc/uptime");
+            Assert.Matches(@"^\d+\.\d", uptime.Trim());
+
+            // The interactive shell channel and the exec channel are independent.
+            var shellMarker = $"RM02SHELL-{Guid.NewGuid():N}";
+            var shellTask = ReadCommand(
+                connection,
+                $"printf '{shellMarker}\n'\n",
+                shellMarker,
+                TimeSpan.FromSeconds(10));
+            var secondExec = await connection.RunCommandAsync("echo exec-again");
+            var shellOutput = await shellTask;
+            Assert.Contains(shellMarker, shellOutput, StringComparison.Ordinal);
+            Assert.Contains("exec-again", secondExec, StringComparison.Ordinal);
+
+            connection.Dispose();
+            connection = null!;
+        }
+        finally
+        {
+            if (sshd is not null)
+            {
+                sshd.Kill(entireProcessTree: true);
+                sshd.WaitForExit(2000);
+            }
+
+            if (connection is not null)
+            {
+                try
+                {
+                    connection.Dispose();
+                }
+                catch
+                {
+                    // best effort
+                }
+            }
+
+            try
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+            catch
+            {
+                // best effort
+            }
+        }
+    }
+
+    [Fact]
+    public async Task RM02_RunCommandOnDisposedConnectionThrows()
+    {
+        if (!OperatingSystem.IsLinux()
+            || !File.Exists("/usr/sbin/sshd")
+            || !File.Exists("/usr/bin/ssh-keygen"))
+        {
+            return;
+        }
+
+        var directory = Path.Combine(
+            Path.GetTempPath(),
+            "comtool-sshd-exec-tests",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var port = FreePort();
+        Process? sshd = null;
+        SshConnection? connection = null;
+        try
+        {
+            var hostKey = Path.Combine(directory, "host_key");
+            var clientKey = Path.Combine(directory, "client_key");
+            var authorizedKeys = Path.Combine(directory, "authorized_keys");
+            Run("/usr/bin/ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", hostKey);
+            Run("/usr/bin/ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", clientKey);
+            File.Copy(clientKey + ".pub", authorizedKeys);
+            File.SetUnixFileMode(authorizedKeys, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            File.SetUnixFileMode(clientKey, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+
+            var config = Path.Combine(directory, "sshd_config");
+            File.WriteAllText(config, $"""
+                Port {port}
+                ListenAddress 127.0.0.1
+                HostKey {hostKey}
+                AuthorizedKeysFile {authorizedKeys}
+                PubkeyAuthentication yes
+                PasswordAuthentication no
+                KbdInteractiveAuthentication no
+                UsePAM no
+                StrictModes no
+                PidFile {Path.Combine(directory, "sshd.pid")}
+                LogLevel ERROR
+                AllowUsers {Environment.UserName}
+                """);
+
+            var check = RunCapture("/usr/sbin/sshd", "-t", "-f", config);
+            if (check.ExitCode != 0)
+            {
+                return;
+            }
+
+            sshd = Process.Start(new ProcessStartInfo
+            {
+                FileName = "/usr/sbin/sshd",
+                ArgumentList = { "-D", "-f", config, "-E", Path.Combine(directory, "sshd.log") },
+                RedirectStandardError = true,
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+            });
+            Assert.NotNull(sshd);
+            await WaitForPortAsync(port, TimeSpan.FromSeconds(5));
+
+            var options = new SshConnectionOptions(
+                "127.0.0.1",
+                port,
+                Environment.UserName,
+                KeyFile: clientKey,
+                Columns: 100,
+                Rows: 40,
+                Timeout: TimeSpan.FromSeconds(10));
+            connection = SshConnection.Connect(options);
+            var ok = await connection.RunCommandAsync("echo alive");
+            Assert.Contains("alive", ok, StringComparison.Ordinal);
+
+            // After Dispose, RunCommandAsync must throw immediately, not hang.
+            var dead = connection;
+            dead.Dispose();
+            connection = null!;
+            await Assert.ThrowsAsync<ObjectDisposedException>(() => dead.RunCommandAsync("echo x"));
+        }
+        finally
+        {
+            if (sshd is not null)
+            {
+                sshd.Kill(entireProcessTree: true);
+                sshd.WaitForExit(2000);
+            }
+
+            if (connection is not null)
+            {
+                try
+                {
+                    connection.Dispose();
+                }
+                catch
+                {
+                    // best effort
+                }
+            }
+
+            try
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+            catch
+            {
+                // best effort
+            }
+        }
+    }
+
 }

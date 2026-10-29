@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using COMTool.Connections.RemoteMonitoring;
 using COMTool.Sftp;
 using Renci.SshNet;
 using Renci.SshNet.Common;
@@ -21,7 +22,7 @@ public sealed record SshConnectionOptions(
 /// order is explicit key, then explicit password; callers are responsible for
 /// looking up cached or DPAPI-protected passwords before constructing this.
 /// </summary>
-public sealed class SshConnection : IDisposable
+public sealed class SshConnection : IDisposable, IExecRunner
 {
     private readonly SshClient _client;
     private readonly ShellStream _shell;
@@ -197,6 +198,33 @@ public sealed class SshConnection : IDisposable
         var created = new SshSftpFileSystem(_connectionInfo);
         _sftp = created;
         return created;
+    }
+
+    /// <summary>
+    /// Runs a non-interactive command on a dedicated exec channel and returns
+    /// its standard output. The interactive shell channel is not touched, so
+    /// terminal I/O and monitoring polls can run concurrently. A hung remote
+    /// command is abandoned after the timeout; the channel is always disposed.
+    /// </summary>
+    public async Task<string> RunCommandAsync(string command, int timeoutMs = 5000)
+    {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        if (!IsConnected)
+        {
+            throw new IOException("The SSH connection is not open.");
+        }
+
+        // SshNet's SshCommand wraps a dedicated exec channel per call, so the
+        // interactive shell channel is never touched. CommandTimeout abandons
+        // a hung remote command; a failed command still returns whatever
+        // stdout it produced - the monitor parser treats missing sections
+        // as null instead of erroring.
+        using (var cmd = _client.CreateCommand(command))
+        {
+            cmd.CommandTimeout = TimeSpan.FromMilliseconds(timeoutMs);
+            await cmd.ExecuteAsync(CancellationToken.None).ConfigureAwait(false);
+            return cmd.Result;
+        }
     }
 
     /// <summary>
