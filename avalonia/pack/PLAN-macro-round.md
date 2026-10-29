@@ -124,7 +124,7 @@
         guard 丢弃上报（区分 newScan/stopped 两原因）、reconcile 定格行数；
      ④ 新增回归测试 NET05_ScanReconcilesRowsWhenCompletedReportLost（FakeScanner 加 DropCompletedReports
         模拟 completed 回调丢失，断言扫描结束后行仍被对账定格、无 … 残留）。
-     201/201 App + 112/112 Connections，gate 第 15 轮全 PASS；提交 <hash>，发布部署双份。
+     201/201 App + 112/112 Connections，gate 第 15 轮全 PASS；提交 8e58b55，发布部署双份。
 
 ## 已知偏差（已写入 spec 附录）
 
