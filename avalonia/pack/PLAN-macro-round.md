@@ -88,6 +88,14 @@
      ⑤ 侧栏分组标题 Serial→串口（SSH/Telnet/TCP 协议名保留）；设置窗测试连接同套文案同步。
      SessionEditTests/SerialHotplugTests/MacroFeatureTests（错误框 OK 按钮）断言同步；
      198/198，gate 第 12 轮全 PASS；提交 b518e1c，发布部署双份。
+   - 追加（2026-10-29）：对话框按钮版式改“消息在上、按钮沉底水平居中对称”（用户截图要求“是、否放在下面一点，然后对称”，系统消息框版式）：
+     ① MainWindow 新增 BottomButtonRow 助手（水平居中按钮行）；删除确认/导出警告/成功提示/错误框 4 个对话框 Grid 改
+        RowDefinitions="*,Auto"，按钮行跨列沉底、图标跨两行；
+     ② 新增回归 MAC26_DeleteConfirmButtonsCenteredAtBottom（按钮在消息下方+落对话框下半区+两按钮同行+行中心≈对话框中心±2px）。
+     两个坑：Avalonia 12 TranslatePoint 返回 Point?（Nullable 值类型），null-forgiving `!` 对其无效
+        （最小复现证实 p!.Y 仍 CS1061，`!` 只去引用类型可空性），须用 .Value.Y/.Value.X；
+        纯代码创建的对话框无 NameScope，FindControl 抛 "Could not find parent name scope"，测试须用 ButtonByLabel。
+     199/199，gate 第 13 轮全 PASS；提交 <hash>，发布部署双份。
 
 ## 已知偏差（已写入 spec 附录）
 

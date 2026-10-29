@@ -2445,8 +2445,6 @@ public partial class MainWindow : Window
             Content = DialogButtonContent("确定", "\uf00c", "#16a34a"),
             Width = 96,
             Height = 30,
-            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
-            Margin = new Thickness(0, 10, 0, 0),
         };
         ok.IsDefault = true;
         ok.IsCancel = true;
@@ -2460,21 +2458,29 @@ public partial class MainWindow : Window
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top,
             Margin = new Thickness(0, 2, 14, 0),
         };
-        var content = new StackPanel { Spacing = 10 };
-        content.Children.Add(new TextBlock
+        var text = new TextBlock
         {
             Text = message,
             FontSize = 12,
             TextWrapping = TextWrapping.Wrap,
-        });
-        content.Children.Add(ok);
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top,
+            Margin = new Thickness(0, 2, 0, 0),
+        };
+        var buttons = BottomButtonRow(ok);
         var grid = new Grid
         {
             Margin = new Thickness(16),
+            RowDefinitions = new RowDefinitions("*,Auto"),
             ColumnDefinitions = new ColumnDefinitions("Auto,*"),
-            Children = { icon, content },
         };
-        Grid.SetColumn(content, 1);
+        grid.Children.Add(icon);
+        grid.Children.Add(text);
+        grid.Children.Add(buttons);
+        Grid.SetColumn(icon, 0);
+        Grid.SetRowSpan(icon, 2);
+        Grid.SetColumn(text, 1);
+        Grid.SetRow(buttons, 1);
+        Grid.SetColumnSpan(buttons, 2);
         dialog.Content = grid;
         LastErrorDialogForTests = dialog;
         try
@@ -3806,30 +3812,31 @@ public partial class MainWindow : Window
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top,
             Margin = new Thickness(0, 2, 14, 0),
         };
-        var content = new StackPanel { Spacing = 10 };
-        content.Children.Add(new TextBlock
+        var message = new TextBlock
         {
             Text = "警告：宏将在不加密的情况下导出。"
                  + "如果宏包含机密信息，这可能是危险的。"
                  + "您确定要继续吗？",
             FontSize = 12,
             TextWrapping = TextWrapping.Wrap,
-        });
-        content.Children.Add(new StackPanel
-        {
-            Orientation = Avalonia.Layout.Orientation.Horizontal,
-            Spacing = 8,
-            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
-            Margin = new Thickness(0, 6, 0, 0),
-            Children = { yes, no },
-        });
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top,
+            Margin = new Thickness(0, 2, 0, 0),
+        };
+        var buttons = BottomButtonRow(yes, no);
         var grid = new Grid
         {
             Margin = new Thickness(16),
+            RowDefinitions = new RowDefinitions("*,Auto"),
             ColumnDefinitions = new ColumnDefinitions("Auto,*"),
-            Children = { icon, content },
         };
-        Grid.SetColumn(content, 1);
+        grid.Children.Add(icon);
+        grid.Children.Add(message);
+        grid.Children.Add(buttons);
+        Grid.SetColumn(icon, 0);
+        Grid.SetRowSpan(icon, 2);
+        Grid.SetColumn(message, 1);
+        Grid.SetRow(buttons, 1);
+        Grid.SetColumnSpan(buttons, 2);
         dialog.Content = grid;
         LastMacroExportWarnDialogForTests = dialog;
         try
@@ -3859,8 +3866,6 @@ public partial class MainWindow : Window
             Content = DialogButtonContent("确定", "\uf00c", "#16a34a"),
             Width = 96,
             Height = 30,
-            Margin = new Thickness(0, 6, 0, 0),
-            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
         };
         ok.Click += (_, _) => dialog.Close();
         var icon = new TextBlock
@@ -3872,21 +3877,29 @@ public partial class MainWindow : Window
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top,
             Margin = new Thickness(0, 2, 14, 0),
         };
-        var content = new StackPanel { Spacing = 10 };
-        content.Children.Add(new TextBlock
+        var text = new TextBlock
         {
             Text = message,
             FontSize = 12,
             TextWrapping = TextWrapping.Wrap,
-        });
-        content.Children.Add(ok);
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top,
+            Margin = new Thickness(0, 2, 0, 0),
+        };
+        var buttons = BottomButtonRow(ok);
         var grid = new Grid
         {
             Margin = new Thickness(16),
+            RowDefinitions = new RowDefinitions("*,Auto"),
             ColumnDefinitions = new ColumnDefinitions("Auto,*"),
-            Children = { icon, content },
         };
-        Grid.SetColumn(content, 1);
+        grid.Children.Add(icon);
+        grid.Children.Add(text);
+        grid.Children.Add(buttons);
+        Grid.SetColumn(icon, 0);
+        Grid.SetRowSpan(icon, 2);
+        Grid.SetColumn(text, 1);
+        Grid.SetRow(buttons, 1);
+        Grid.SetColumnSpan(buttons, 2);
         dialog.Content = grid;
         LastMacroInfoDialogForTests = dialog;
         try
@@ -3933,6 +3946,26 @@ public partial class MainWindow : Window
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
         });
         return panel;
+    }
+
+    /// <summary>
+    /// 底部居中的按钮行（系统消息框版式：消息在上、按钮沉底且左右对称，
+    /// 2026-10-29 用户截图要求）。
+    /// </summary>
+    private static StackPanel BottomButtonRow(params Button[] buttons)
+    {
+        var row = new StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            Spacing = 12,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+        };
+        foreach (var b in buttons)
+        {
+            row.Children.Add(b);
+        }
+
+        return row;
     }
 
     /// <summary>
@@ -4117,28 +4150,30 @@ public partial class MainWindow : Window
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top,
             Margin = new Thickness(0, 2, 14, 0),
         };
-        var content = new StackPanel { Spacing = 10 };
-        content.Children.Add(new TextBlock
+        var message = new TextBlock
         {
             Text = $"确定删除宏 \"{name}\" 吗？",
             FontSize = 12,
             TextWrapping = TextWrapping.Wrap,
-        });
-        content.Children.Add(new StackPanel
-        {
-            Orientation = Avalonia.Layout.Orientation.Horizontal,
-            Spacing = 8,
-            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
-            Margin = new Thickness(0, 6, 0, 0),
-            Children = { yes, no },
-        });
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top,
+            Margin = new Thickness(0, 2, 0, 0),
+        };
+        // 系统消息框版式：消息在上，按钮行沉底水平居中（左右对称）
         var grid = new Grid
         {
             Margin = new Thickness(16),
+            RowDefinitions = new RowDefinitions("*,Auto"),
             ColumnDefinitions = new ColumnDefinitions("Auto,*"),
-            Children = { icon, content },
         };
-        Grid.SetColumn(content, 1);
+        var buttons = BottomButtonRow(yes, no);
+        grid.Children.Add(icon);
+        grid.Children.Add(message);
+        grid.Children.Add(buttons);
+        Grid.SetColumn(icon, 0);
+        Grid.SetRowSpan(icon, 2);
+        Grid.SetColumn(message, 1);
+        Grid.SetRow(buttons, 1);
+        Grid.SetColumnSpan(buttons, 2);
         dialog.Content = grid;
         LastMacroDeleteDialogForTests = dialog;
         try

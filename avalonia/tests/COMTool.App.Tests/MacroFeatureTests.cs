@@ -1469,6 +1469,74 @@ public sealed class MacroFeatureTests
         }
     }
 
+    [AvaloniaFact]
+    public async Task MAC26_DeleteConfirmButtonsCenteredAtBottom()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            await env.RunAsync(async () =>
+            {
+                var config = new ComtoolConfig();
+                config.Macros.Add(new MacroConfig
+                {
+                    Id = "m1",
+                    Name = "Del",
+                    Steps = new List<MacroStepDto>
+                    {
+                        new() { Kind = "text", Text = "x" },
+                    },
+                });
+                env.SeedConfig(config);
+                window = CreateWindow(env);
+                var vm = Vm(window);
+                var sidebar = Sidebar(window);
+                RunJobs(window);
+
+                sidebar.RaiseMacroDeleteForTests(vm.Macros[0]);
+                WaitUntil(() => window.LastMacroDeleteDialogForTests is not null, "delete dialog");
+                var dlg = window.LastMacroDeleteDialogForTests!;
+                dlg.ApplyTemplate();
+                RunJobs(window);
+
+                var yes = ButtonByLabel(dlg, "是(Y)");
+                var no = ButtonByLabel(dlg, "否(N)");
+                var msg = dlg.GetVisualDescendants().OfType<TextBlock>()
+                    .First(t => t.Text != null && t.Text.Contains("确定删除宏"));
+
+                var dlgW = dlg.Bounds.Width;
+                var dlgH = dlg.Bounds.Height;
+                var yesTop = yes.TranslatePoint(new Point(0, 0), dlg).Value.Y;
+                var noTop = no.TranslatePoint(new Point(0, 0), dlg).Value.Y;
+                var msgBottom = msg.TranslatePoint(new Point(0, msg.Bounds.Height), dlg).Value.Y;
+
+                // 按钮行沉底：位于消息下方，且落在对话框下半区（2026-10-29 用户要求）
+                Assert.True(yesTop > msgBottom, $"yes top {yesTop} below message bottom {msgBottom}");
+                Assert.True(noTop > msgBottom, "no top below message bottom");
+                Assert.True(yesTop > dlgH * 0.55, $"yes top {yesTop} in lower half (h={dlgH})");
+                Assert.Equal(yesTop, noTop, precision: 1); // 两按钮同一行
+
+                // 左右对称：按钮行中心 ≈ 对话框中心
+                var yesCx = yes.TranslatePoint(new Point(yes.Bounds.Width / 2, 0), dlg).Value.X;
+                var noCx = no.TranslatePoint(new Point(no.Bounds.Width / 2, 0), dlg).Value.X;
+                var rowCx = (yesCx + noCx) / 2;
+                Assert.True(Math.Abs(rowCx - dlgW / 2) <= 2,
+                    $"row center {rowCx} vs dialog center {dlgW / 2}");
+
+                ButtonByLabel(dlg, "否(N)")
+                    .RaiseEvent(new RoutedEventArgs(Button.ClickEvent, dlg));
+                RunJobs(window);
+                Assert.Single(vm.Macros); // 拒绝后宏仍在
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
     /// <summary>Finds a button by a text label among its descendant TextBlocks (icon+text content safe).</summary>
     private static Button ButtonByLabel(Control root, string label) =>
         root.GetVisualDescendants().OfType<Button>()
