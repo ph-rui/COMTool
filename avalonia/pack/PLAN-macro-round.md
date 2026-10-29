@@ -78,6 +78,16 @@
      （=IsSidebarVisible&&对应 Tab）， IsSidebarVisible  ApplySidebarMode  _sidebarVisible； 4 个 rail 按钮 Classes.active ¹ Rail*Active；
      新增 UI16_RailActiveClearedWhenDockCollapsed； 198/198， gate 第 10c 轮全 PASS；
      提交 c1abecb，发布部署双份。
+   - 追加（2026-10-29）：错误弹窗/会话右键菜单/分组标题汉化 + 连接取消不弹错（用户截图反馈）：
+     ① 会话右键菜单：打开/编辑会话/移除会话（原 Open/Edit session/Remove session）；
+     ② 错误弹窗：标题“错误”、绿勾“确定”图标按钮、红 exclamation 图标，走 CreateDialog 工厂（无 min/max）；
+        前缀 连接失败/打开失败（原 Connect/Open Failed）+ 4 处消息前缀汉化（配置加载/终端附加/终端启动/标签分离）；
+     ③ 连接被取消（OCE）不再弹错误框（MobaXterm 行为，仅复位 Connecting 状态 + 记日志）；
+     ④ 环境坑：.NET 10 起 OCE 移入 System 命名空间（System.Threading.OCE 编译 CS0234，最小复现证实），
+        catch 改无修饰名（经隐式 using System 解析）；
+     ⑤ 侧栏分组标题 Serial→串口（SSH/Telnet/TCP 协议名保留）；设置窗测试连接同套文案同步。
+     SessionEditTests/SerialHotplugTests/MacroFeatureTests（错误框 OK 按钮）断言同步；
+     198/198，gate 第 12 轮全 PASS；提交 <hash>，发布部署双份。
 
 ## 已知偏差（已写入 spec 附录）
 

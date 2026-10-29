@@ -319,11 +319,11 @@ public partial class ConnectionSettingsWindow : Window
         {
             var action = ConnectionTypeCombo.SelectedIndex switch
             {
-                1 or 2 => "Connect Failed",
+                1 or 2 => "连接失败",
                 3 => TcpProtocolCombo.SelectedIndex == 1 || TcpModeCombo.SelectedIndex == 1
-                    ? "Open Failed"
-                    : "Connect Failed",
-                _ => "Open Failed",
+                    ? "打开失败"
+                    : "连接失败",
+                _ => "打开失败",
             };
             await _showError($"{action}\n{ex.Message}");
         }

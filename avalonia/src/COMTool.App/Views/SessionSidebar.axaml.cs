@@ -220,11 +220,11 @@ public partial class SessionSidebar : UserControl
     internal ContextMenu CreateSessionContextMenu(SessionItem item)
     {
         var menu = new ContextMenu();
-        var open = new MenuItem { Header = "Open" };
+        var open = new MenuItem { Header = "打开" };
         open.Click += (_, _) => SessionActivated?.Invoke(this, item);
-        var edit = new MenuItem { Header = "Edit session" };
+        var edit = new MenuItem { Header = "编辑会话" };
         edit.Click += (_, _) => EditRequested?.Invoke(this, item);
-        var remove = new MenuItem { Header = "Remove session" };
+        var remove = new MenuItem { Header = "移除会话" };
         remove.Click += (_, _) => RemoveRequested?.Invoke(this, item);
         menu.Items.Add(open);
         menu.Items.Add(edit);

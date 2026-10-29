@@ -73,7 +73,7 @@ public sealed class SerialHotplugTests
 
     private static bool HasSerial(MainViewModel viewModel, string port) =>
         viewModel.Sections
-            .Where(section => section.Title == "Serial")
+            .Where(section => section.Title == "串口")
             .SelectMany(section => section.Items)
             .Any(item => string.Equals(
                 item.SessionId,

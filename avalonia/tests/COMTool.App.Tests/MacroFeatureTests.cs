@@ -738,9 +738,8 @@ public sealed class MacroFeatureTests
                 var err = window.LastErrorDialogForTests!;
                 Assert.True(err.GetVisualDescendants().OfType<TextBlock>()
                     .Any(t => t.Text != null && t.Text.Contains("快捷键不可用")));
-                var errOk = err.GetVisualDescendants().OfType<Button>()
-                    .First(bt => bt.Content is string s && s == "OK");
-                RaiseClick(errOk);
+                ButtonByLabel(err, "确定")
+                    .RaiseEvent(new RoutedEventArgs(Button.ClickEvent, err));
                 WaitUntil(() => window.LastErrorDialogForTests is null, "error dialog closed");
             });
         }

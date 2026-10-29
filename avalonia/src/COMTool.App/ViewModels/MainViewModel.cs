@@ -310,7 +310,7 @@ public partial class MainViewModel : ViewModelBase
     public void LoadDemoSessions()
     {
         Sections.Clear();
-        var serial = new SidebarSection { Title = "Serial", ShowHeader = true };
+        var serial = new SidebarSection { Title = "串口", ShowHeader = true };
         serial.Items.Add(new SessionItem
         {
             Name = "COM99",
@@ -391,7 +391,7 @@ public partial class MainViewModel : ViewModelBase
         IsSshBrowserVisible = connectedSsh.Count > 0;
         LeaveBrowserWhenNoSshIsLeft();
 
-        var serial = new SidebarSection { Title = "Serial", ShowHeader = true };
+        var serial = new SidebarSection { Title = "串口", ShowHeader = true };
         var availableSerial = config.PortScanSucceeded
             ? config.PortMap.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase)
             : null;

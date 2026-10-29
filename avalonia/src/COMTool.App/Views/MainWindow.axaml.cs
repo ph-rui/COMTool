@@ -239,7 +239,7 @@ public partial class MainWindow : Window
             catch (Exception ex)
             {
                 AppLog.Error("Failed to load config", ex);
-                _ = ShowErrorAsync($"Failed to load config: {ex.Message}");
+                _ = ShowErrorAsync($"配置加载失败：{ex.Message}");
             }
         }
 
@@ -526,13 +526,19 @@ public partial class MainWindow : Window
                 await OpenTcpSessionAsync(item.SessionId);
             }
         }
+        // .NET 10 起 OCE 移入 System 命名空间（System.Threading 下已无此类型）
+        catch (OperationCanceledException)
+        {
+            // 取消 ≠ 连接失败（连接中被用户中断/会话被移除）：MobaXterm 对
+            // 取消不弹错误框，只复位 Connecting 状态（finally 处理）。
+            AppLog.Info($"Session {item.SessionId} connection cancelled");
+        }
         catch (Exception ex)
         {
-            item.IsConnecting = false;
             var action = item.Kind == SessionKind.Serial
                 || (item.Kind == SessionKind.Tcp && IsTcpServerSession(item.SessionId))
-                ? "Open Failed"
-                : "Connect Failed";
+                ? "打开失败"
+                : "连接失败";
             await ShowErrorAsync($"{action}\n{ex.Message}");
         }
         finally
@@ -1632,7 +1638,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             tab.IsAlive = false;
-            _ = ShowErrorAsync($"Failed to attach terminal: {ex.Message}");
+            _ = ShowErrorAsync($"终端附加失败：{ex.Message}");
         }
     }
 
@@ -1986,7 +1992,7 @@ public partial class MainWindow : Window
             {
                 launched = false;
                 tab.IsAlive = false;
-                _ = ShowErrorAsync($"Failed to start terminal: {ex.Message}");
+                _ = ShowErrorAsync($"终端启动失败：{ex.Message}");
             }
         };
 
@@ -2132,7 +2138,7 @@ public partial class MainWindow : Window
                 viewModel.InsertDetachedTab(tab, index);
             }
 
-            _ = ShowErrorAsync($"Failed to detach tab: {ex.Message}");
+            _ = ShowErrorAsync($"标签分离失败：{ex.Message}");
         }
     }
 
@@ -2433,39 +2439,43 @@ public partial class MainWindow : Window
 
     private async Task ShowErrorAsync(string message)
     {
-        var dialog = new Window
-        {
-            Title = "Error",
-            Width = 440,
-            Height = 190,
-            MinWidth = 320,
-            MinHeight = 160,
-            CanResize = false,
-            ShowInTaskbar = false,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-        };
+        var dialog = CreateDialog(440, 190);
         var ok = new Button
         {
-            Content = "OK",
-            Width = 80,
+            Content = DialogButtonContent("确定", "\uf00c", "#16a34a"),
+            Width = 96,
+            Height = 30,
             HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
-            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+            Margin = new Thickness(0, 10, 0, 0),
         };
+        ok.IsDefault = true;
+        ok.IsCancel = true;
         ok.Click += (_, _) => dialog.Close();
-        dialog.Content = new StackPanel
+        var icon = new TextBlock
+        {
+            Text = "\uf05e",
+            FontFamily = IconFont(),
+            FontSize = 28,
+            Foreground = new SolidColorBrush(Color.Parse("#dc2626")),
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top,
+            Margin = new Thickness(0, 2, 14, 0),
+        };
+        var content = new StackPanel { Spacing = 10 };
+        content.Children.Add(new TextBlock
+        {
+            Text = message,
+            FontSize = 12,
+            TextWrapping = TextWrapping.Wrap,
+        });
+        content.Children.Add(ok);
+        var grid = new Grid
         {
             Margin = new Thickness(16),
-            Spacing = 12,
-            Children =
-            {
-                new TextBlock
-                {
-                    Text = message,
-                    TextWrapping = TextWrapping.Wrap,
-                },
-                ok,
-            },
+            ColumnDefinitions = new ColumnDefinitions("Auto,*"),
+            Children = { icon, content },
         };
+        Grid.SetColumn(content, 1);
+        dialog.Content = grid;
         LastErrorDialogForTests = dialog;
         try
         {
@@ -3764,7 +3774,7 @@ public partial class MainWindow : Window
     /// </summary>
     internal async Task<bool> ShowMacroExportWarnAsync()
     {
-        var dialog = CreateMacroDialog(460, 200);
+        var dialog = CreateDialog(460, 200);
         var yes = new Button
         {
             Name = "MacroExportWarnYesButton",
@@ -3842,7 +3852,7 @@ public partial class MainWindow : Window
     /// <summary>导出/导入成功提示框（蓝色 info 图标 + 确定，对齐 MobaXterm 提示样式）。</summary>
     internal async Task ShowMacroInfoAsync(string title, string message)
     {
-        var dialog = CreateMacroDialog(460, 190);
+        var dialog = CreateDialog(460, 190);
         var ok = new Button
         {
             Name = "MacroInfoOkButton",
@@ -3930,7 +3940,7 @@ public partial class MainWindow : Window
     /// 并在 Windows 下剥离最小化/最大化按钮（CanResize=false 在 VDI 上仍显示灰显的
     /// min/max，2026-10-29 用户截图反馈），仅保留关闭按钮，贴近系统消息框观感。
     /// </summary>
-    private Window CreateMacroDialog(double width, double height)
+    private Window CreateDialog(double width, double height)
     {
         var dialog = new Window
         {
@@ -3989,7 +3999,7 @@ public partial class MainWindow : Window
     /// </summary>
     internal async Task<string?> ShowMacroNameAsync(string defaultName)
     {
-        var dialog = CreateMacroDialog(460, 200);
+        var dialog = CreateDialog(460, 200);
         var box = new TextBox { Name = "MacroNameBox", FontSize = 13, Margin = new Thickness(0, 8, 0, 0) };
         box.Text = defaultName;
         box.Loaded += (_, _) => box.SelectAll();
@@ -4074,7 +4084,7 @@ public partial class MainWindow : Window
     /// <summary>是/否 delete confirmation. Returns true on "是(Y)".</summary>
     internal async Task<bool> ShowMacroDeleteConfirmAsync(string name)
     {
-        var dialog = CreateMacroDialog(460, 170);
+        var dialog = CreateDialog(460, 170);
         var yes = new Button
         {
             Name = "MacroDeleteYesButton",

@@ -27,11 +27,11 @@ public sealed class SessionEditTests
 
         var menu = sidebar.CreateSessionContextMenu(item);
         Assert.Equal(
-            new[] { "Open", "Edit session", "Remove session" },
+            new[] { "打开", "编辑会话", "移除会话" },
             menu.Items.OfType<MenuItem>().Select(entry => entry.Header?.ToString()).ToArray());
 
         var edit = menu.Items.OfType<MenuItem>().Single(
-            entry => entry.Header?.ToString() == "Edit session");
+            entry => entry.Header?.ToString() == "编辑会话");
         edit.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
 
         Assert.Same(item, edited);
@@ -71,7 +71,7 @@ public sealed class SessionEditTests
                 var menu = window.FindControl<SessionSidebar>("Sidebar")!
                     .CreateSessionContextMenu(item);
                 var edit = menu.Items.OfType<MenuItem>().Single(
-                    entry => entry.Header?.ToString() == "Edit session");
+                    entry => entry.Header?.ToString() == "编辑会话");
                 edit.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
                 Dispatcher.UIThread.RunJobs();
 
