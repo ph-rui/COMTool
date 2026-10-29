@@ -105,7 +105,7 @@
         （新增 NormalizeReverseName internal 静态方法，FQDN/IP 回显/空名不受影响）。
      ③ 测试：NET05_NormalizeReverseNameStripsLocalSuffixForShortNames 新增；NET05_ScanDefaultsTargetTwoSecondSubnetScan
         的 DNS 断言 ≤500 放宽为 ≤6000（附慢网段实测依据注释）。
-     201/201 App + 113/113 Connections，gate 第 16 轮全 PASS；提交 <hash>，发布部署双份。
+     201/201 App + 113/113 Connections，gate 第 16 轮全 PASS；提交 785648b，发布部署双份。
    - 追加（2026-10-29）：网络扫描仪改 MobaXterm 式增量显示（用户截图反馈“扫描到一台之后立即显示”）：
      ① 引擎 ProbeAsync 两阶段：第一个存活信号（ping 回复或任一端口连通）立即上报 discovered
         （名称空、rtt 空、开放端口=当时已确认子集）；全部探测+名称解析完由 progress 报最终结果；
