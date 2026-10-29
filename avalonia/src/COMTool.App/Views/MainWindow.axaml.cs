@@ -3085,7 +3085,15 @@ public partial class MainWindow : Window
 
     private void ApplySidebarMode()
     {
-        var browser = (DataContext as MainViewModel)?.IsSshBrowserTab == true;
+        var vm = DataContext as MainViewModel;
+        var browser = vm?.IsSshBrowserTab == true;
+
+        // Rail icon highlights follow the actual open/collapsed state, not
+        // just the selected tab (user feedback 2026-10-29).
+        if (vm is not null)
+        {
+            vm.IsSidebarVisible = _sidebarVisible;
+        }
 
         // The rail is always on screen: it is the only way to reopen the
         // panel after a collapse. The panel content simply loses its star

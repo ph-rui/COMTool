@@ -73,6 +73,11 @@
      + DialogButtonContent 图标按钮（是(Y)✓/否(N)✗，IsDefault/IsCancel）；修复导出警告按钮竖排 bug；
      MAC15/导出警告测试改 ButtonByLabel；197/197，gate 第 10 轮全 PASS；
      提交 efabcab，发布部署双份。
+   - 追加（2026-10-29）：收起侧栏时 rail 图标再保持"选中"白底（用户截图反馈：
+     收起后星形图标发白你被点住）： VM 增 RailSessions/Tools/Macros/SshBrowserActive
+     （=IsSidebarVisible&&对应 Tab）， IsSidebarVisible  ApplySidebarMode  _sidebarVisible； 4 个 rail 按钮 Classes.active ¹ Rail*Active；
+     新增 UI16_RailActiveClearedWhenDockCollapsed； 198/198， gate 第 10c 轮全 PASS；
+     提交 <hash>，发布部署双份。
 
 ## 已知偏差（已写入 spec 附录）
 

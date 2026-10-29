@@ -247,6 +247,53 @@ public sealed class SidebarRailTests
     }
 
     [AvaloniaFact]
+    public void UI16_RailActiveClearedWhenDockCollapsed()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                env.SeedConfig(new ComtoolConfig
+                {
+                    SessionSidebar = new SessionSidebarConfig { Visible = true, Width = 260 },
+                });
+                window = CreateWindow(env);
+                var vm = Vm(window);
+                var sidebar = Sidebar(window);
+                var sessions = sidebar.FindControl<Button>("RailSessionsButton")!;
+                var tools = sidebar.FindControl<Button>("RailToolsButton")!;
+                var macros = sidebar.FindControl<Button>("RailMacrosButton")!;
+                RunJobs(window);
+
+                // 展开且停在会话页：会话图标高亮，其余不高亮。
+                Assert.True(vm.IsSidebarVisible);
+                Assert.True(sessions.Classes.Contains("active"));
+                Assert.False(tools.Classes.Contains("active"));
+                Assert.False(macros.Classes.Contains("active"));
+
+                // 收起面板：rail 图标不应保持高亮（用户反馈：收起后图标像被点住）。
+                Click(window, sessions);
+                Assert.False(vm.IsSidebarVisible);
+                Assert.False(sessions.Classes.Contains("active"));
+                Assert.False(tools.Classes.Contains("active"));
+                Assert.False(macros.Classes.Contains("active"));
+
+                // 重新展开：当前页图标恢复高亮。
+                Click(window, sessions);
+                Assert.True(vm.IsSidebarVisible);
+                Assert.True(sessions.Classes.Contains("active"));
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
     public void UI16_NetScanDefaultsMatchMobaXterm()
     {
         using var env = new TestEnvironment();

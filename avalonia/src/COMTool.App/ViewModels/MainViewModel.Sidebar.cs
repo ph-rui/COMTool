@@ -130,6 +130,10 @@ public partial class MainViewModel
         OnPropertyChanged(nameof(IsToolsTab));
         OnPropertyChanged(nameof(IsMacrosTab));
         OnPropertyChanged(nameof(IsSshBrowserTab));
+        OnPropertyChanged(nameof(RailSessionsActive));
+        OnPropertyChanged(nameof(RailToolsActive));
+        OnPropertyChanged(nameof(RailMacrosActive));
+        OnPropertyChanged(nameof(RailSshBrowserActive));
         OnPropertyChanged(nameof(SidebarTitle));
 
         if (value == SidebarTab.SshBrowser)
@@ -161,6 +165,16 @@ public partial class MainViewModel
     public bool IsToolsTab => SidebarTab == SidebarTab.Tools;
     public bool IsMacrosTab => SidebarTab == SidebarTab.Macros;
     public bool IsSshBrowserTab => SidebarTab == SidebarTab.SshBrowser;
+
+    /// <summary>
+    /// Rail icon highlight state: only while the panel is actually open on
+    /// the matching tab. A collapsed panel shows no active rail icon
+    /// (user feedback 2026-10-29: collapsed star looked stuck pressed).
+    /// </summary>
+    public bool RailSessionsActive => IsSidebarVisible && IsSessionsTab;
+    public bool RailToolsActive => IsSidebarVisible && IsToolsTab;
+    public bool RailMacrosActive => IsSidebarVisible && IsMacrosTab;
+    public bool RailSshBrowserActive => IsSidebarVisible && IsSshBrowserTab;
 
     public string SidebarTitle => SidebarTab switch
     {

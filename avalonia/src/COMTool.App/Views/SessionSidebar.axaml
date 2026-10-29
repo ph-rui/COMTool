@@ -15,7 +15,7 @@
       <StackPanel>
         <Button Name="RailSessionsButton"
                 Classes="RailButton"
-                Classes.active="{Binding IsSessionsTab}"
+                Classes.active="{Binding RailSessionsActive}"
                 Tag="Sessions"
                 Click="OnRailTabClick"
                 ToolTip.Tip="会话（保存的会话列表）">
@@ -26,7 +26,7 @@
         </Button>
         <Button Name="RailToolsButton"
                 Classes="RailButton"
-                Classes.active="{Binding IsToolsTab}"
+                Classes.active="{Binding RailToolsActive}"
                 Tag="Tools"
                 Click="OnRailTabClick"
                 ToolTip.Tip="工具（网络服务器/扫描仪）">
@@ -37,7 +37,7 @@
         </Button>
         <Button Name="RailMacrosButton"
                 Classes="RailButton"
-                Classes.active="{Binding IsMacrosTab}"
+                Classes.active="{Binding RailMacrosActive}"
                 Tag="Macros"
                 Click="OnRailTabClick"
                 ToolTip.Tip="宏（命令一键发送）">
@@ -49,7 +49,7 @@
         <!-- MobaXterm shows this globe only while an SSH login is live. -->
         <Button Name="RailSshBrowserButton"
                 Classes="RailButton"
-                Classes.active="{Binding IsSshBrowserTab}"
+                Classes.active="{Binding RailSshBrowserActive}"
                 IsVisible="{Binding IsSshBrowserVisible}"
                 Click="OnRailSshBrowserClick"
                 ToolTip.Tip="SSH 浏览器（SFTP）">

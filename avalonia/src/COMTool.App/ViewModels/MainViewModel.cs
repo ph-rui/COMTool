@@ -212,7 +212,32 @@ public partial class MainViewModel : ViewModelBase
 
     public bool HasTabs => Tabs.Count > 0;
 
-    public bool IsSidebarVisible { get; set; } = true;
+    private bool _isSidebarVisible = true;
+
+    /// <summary>
+    /// Whether the sidebar panel is expanded (the 40px rail is always on
+    /// screen). Kept in sync with the view's _sidebarVisible via
+    /// ApplySidebarMode; the rail icons only show their active highlight
+    /// while the panel is open on the matching tab.
+    /// </summary>
+    public bool IsSidebarVisible
+    {
+        get => _isSidebarVisible;
+        set
+        {
+            if (_isSidebarVisible == value)
+            {
+                return;
+            }
+
+            _isSidebarVisible = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(RailSessionsActive));
+            OnPropertyChanged(nameof(RailToolsActive));
+            OnPropertyChanged(nameof(RailMacrosActive));
+            OnPropertyChanged(nameof(RailSshBrowserActive));
+        }
+    }
 
     public event Action<TerminalTab?>? SelectedTabChanging;
 
