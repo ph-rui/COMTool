@@ -226,6 +226,26 @@
      App 214/214、Core 86/86、Connections 135/135、TestGate 49/49；gate 第 21 轮全 PASS（E2E 15/15）；提交 ce2c433，发布部署双份。
      Windows 实机 WIN-28 补核：通栏按钮宽度、热分区粗体无斜体、菜单只剩 7 项指标。
 
+   - 追加（2026-10-30，第 22 轮）：CPU 迷你条随负载变色 + 修复“远程监控”按钮偶发点不动
+     （用户反馈 2026-10-30：附 MobaXterm 参考图“这个进度条要红色，与 mobaxterm 一样”；
+     另报“有时候点击远程监控这个按钮没反应，需要多点击几下”）：
+     ① CPU 迷你条：填充色由固定浅灰改为随负载变色（对齐 MobaXterm，参考图 81% 取色
+        #d84a2f 红）：<50% 绿 #2e9e4f / 50–79% 橙 #e8a31a / ≥80% 红 #d84a2f。
+        MainViewModel 新增 CpuBarBrush/CpuBarColor；XAML 填充 Background 改绑 SegCpuBarBrush；
+        删除不再使用的 MonCpuBarFillBrush（Light/Dark）。注意 Avalonia 12 的 SolidColorBrush
+        线程亲和（跨线程读 .Color 抛 InvalidOperationException），故不缓存静态画刷、每次新建。
+     ② 按钮偶发点不动根因：MainWindow 的无边框窗口边缘 resize 隧道处理器
+        OnWindowPointerPressed 在距窗口边缘 5px 内会 BeginResizeDrag + e.Handled=true 吞掉点击，
+        而豁免判断只认 Button；“远程监控”是 ToggleButton（Avalonia 12 无 ButtonBase 公共基类），
+        又恰是贴窗口底边的整条通栏，故点击落在底边 5px 内时首击被吞 → “要再点几下”。
+        修：抽出 IsEdgeInteractiveControl，豁免 Button/ToggleButton/RepeatButton 三类。
+     ③ 测试：RM06_CpuBarBrushTracksLoad（0/40 绿、50/79 橙、80/81/120 红）、
+        RM06_EdgeResizeDragExemptsToggleButton（ToggleButton/Button 豁免、TextBlock/Border 不豁免）、
+        RM04 补 40%→绿 断言。
+     App 216/216（连跑 3 次无 flaky）、Core 86/86、Connections 135/135、TestGate 49/49；
+     gate 第 22 轮全 PASS（E2E 15/15）；提交 2d3116e，发布部署双份。
+     Windows 实机 WIN-28 补核：高负载时 CPU 条变红、点“远程监控”一次即生效。
+
 ## 已知偏差（已写入 spec 附录）
 
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
