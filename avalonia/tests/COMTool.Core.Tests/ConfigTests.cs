@@ -245,11 +245,7 @@ public sealed class ConfigTests : IDisposable
                 ShowRam = false,
                 ShowNetUp = true,
                 ShowNetDown = false,
-                ShowClients = true,
-                ShowProcesses = true,
-                ShowFileDescriptors = true,
                 ShowUptime = true,
-                ShowUsers = true,
                 ShowPartitions = false,
             },
         };
@@ -262,11 +258,7 @@ public sealed class ConfigTests : IDisposable
         Assert.False(loaded.RemoteMonitor.ShowRam);
         Assert.True(loaded.RemoteMonitor.ShowNetUp);
         Assert.False(loaded.RemoteMonitor.ShowNetDown);
-        Assert.True(loaded.RemoteMonitor.ShowClients);
-        Assert.True(loaded.RemoteMonitor.ShowProcesses);
-        Assert.True(loaded.RemoteMonitor.ShowFileDescriptors);
         Assert.True(loaded.RemoteMonitor.ShowUptime);
-        Assert.True(loaded.RemoteMonitor.ShowUsers);
         Assert.False(loaded.RemoteMonitor.ShowPartitions);
     }
 
@@ -283,11 +275,7 @@ public sealed class ConfigTests : IDisposable
         Assert.True(loaded.RemoteMonitor.ShowRam);
         Assert.True(loaded.RemoteMonitor.ShowNetUp);
         Assert.True(loaded.RemoteMonitor.ShowNetDown);
-        Assert.False(loaded.RemoteMonitor.ShowClients);
-        Assert.False(loaded.RemoteMonitor.ShowProcesses);
-        Assert.False(loaded.RemoteMonitor.ShowFileDescriptors);
         Assert.True(loaded.RemoteMonitor.ShowUptime);
-        Assert.False(loaded.RemoteMonitor.ShowUsers);
         Assert.True(loaded.RemoteMonitor.ShowPartitions);
     }
 

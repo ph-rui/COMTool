@@ -15,10 +15,6 @@ public sealed class RemoteMonitorTests
         "MON_CPU=cpu  382491 3327 112519 2454520 5706 0 2068 0 0 0\n" +
         "MON_MEM=MemTotal:       16346496 kB|MemAvailable:     8321232 kB|\n" +
         "MON_UP=1234567.89 2345678.90\n" +
-        "MON_CLIENTS=2\n" +
-        "MON_PROC=245\n" +
-        "MON_FD=1024\n" +
-        "MON_WHO=devuser,root\n" +
         "MON_NET=987654321 123456789\n" +
         "MON_DF=49% /|1% /boot/efi|82% /media/sangfor/vdb\n" +
         "MON_END\n";
@@ -37,10 +33,6 @@ public sealed class RemoteMonitorTests
         Assert.Equal((16346496L, 8025264L), dump.Mem!.Value);
         Assert.Equal((987654321L, 123456789L), dump.Net!.Value);
         Assert.Equal(1234567.89, dump.UptimeSeconds!.Value, 2);
-        Assert.Equal(2, dump.ConnectedClients);
-        Assert.Equal(245, dump.ProcessCount);
-        Assert.Equal(1024, dump.FileDescriptorCount);
-        Assert.Equal(new[] { "devuser", "root" }, dump.Users);
         Assert.NotNull(dump.Partitions);
         Assert.Equal(3, dump.Partitions!.Length);
         Assert.Equal(("/", 49), dump.Partitions[0]);
@@ -76,11 +68,10 @@ public sealed class RemoteMonitorTests
     [Fact]
     public void RM01_DumpIgnoresMalformedSections()
     {
-        var dump = RemoteMetricsParser.Dump("MON_NET=abc\nMON_DF=52%\nMON_PROC=12\nMON_MEM=MemTotal: 100 kB\n");
+        var dump = RemoteMetricsParser.Dump("MON_NET=abc\nMON_DF=52%\nMON_MEM=MemTotal: 100 kB\n");
 
         Assert.Null(dump.Net);          // not two integers
         Assert.Null(dump.Partitions);   // no mount after the percent
-        Assert.Equal(12, dump.ProcessCount);
         Assert.Null(dump.Mem);          // MemAvailable missing
     }
 
@@ -173,7 +164,6 @@ public sealed class RemoteMonitorTests
             ShowNetUp = true,
             ShowNetDown = false,
             ShowUptime = false,
-            ShowUsers = true,
             ShowPartitions = false,
         };
         var snap = new MonitorSnapshot
@@ -184,38 +174,10 @@ public sealed class RemoteMonitorTests
             NetUpMbps = 1.5,
             NetDownMbps = 2.5,
             Uptime = TimeSpan.FromDays(38),
-            Users = new[] { "a", "b" },
             Partitions = new (string Mount, int UsePct)[] { ("/", 49) },
         };
 
-        Assert.Equal("\u21911.50Mb/s  a,b", snap.Format(o));
-    }
-
-    [Fact]
-    public void RM01_FormatOptionalCountersBareNumbers()
-    {
-        var o = new MonitorOptions
-        {
-            ShowHost = false,
-            ShowCpu = false,
-            ShowRam = false,
-            ShowNetUp = false,
-            ShowNetDown = false,
-            ShowClients = true,
-            ShowProcesses = true,
-            ShowFileDescriptors = true,
-            ShowUptime = false,
-            ShowUsers = false,
-            ShowPartitions = false,
-        };
-        var snap = new MonitorSnapshot
-        {
-            ConnectedClients = 2,
-            ProcessCount = 245,
-            FileDescriptorCount = 1024,
-        };
-
-        Assert.Equal("2  245  1024", snap.Format(o));
+        Assert.Equal("\u21911.50Mb/s", snap.Format(o));
     }
 
     [Fact]
@@ -251,10 +213,6 @@ public sealed class RemoteMonitorTests
                "MON_CPU=" + cpuLine + "\n" +
                "MON_MEM=MemTotal:       16384000 kB|MemAvailable:     8388608 kB|\n" +
                "MON_UP=100000.00 0.00\n" +
-               "MON_CLIENTS=1\n" +
-               "MON_PROC=100\n" +
-               "MON_FD=256\n" +
-               "MON_WHO=root\n" +
                "MON_NET=" + netLine + "\n" +
                "MON_DF=49% /\n" +
                "MON_END\n";

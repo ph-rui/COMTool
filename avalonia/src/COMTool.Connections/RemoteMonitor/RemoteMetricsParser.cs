@@ -21,18 +21,12 @@ public static class RemoteMetricsParser
         /// <summary>(rxBytes, txBytes)，/proc/net/dev 全接口（除 lo）累计。</summary>
         public (long Rx, long Tx)? Net { get; set; }
         public double? UptimeSeconds { get; set; }
-        public int? ConnectedClients { get; set; }
-        public int? ProcessCount { get; set; }
-        public int? FileDescriptorCount { get; set; }
-        public string[]? Users { get; set; }
         public (string Mount, int UsePct)[]? Partitions { get; set; }
 
         /// <summary>非 Linux 远端（无任何可解析段）时为 false。</summary>
         public bool HasAnySection =>
             !string.IsNullOrEmpty(Host) || Cpu is not null || Mem is not null
             || Net is not null || UptimeSeconds is not null
-            || ConnectedClients is not null || ProcessCount is not null
-            || FileDescriptorCount is not null || Users is not null
             || Partitions is not null;
     }
 
@@ -68,10 +62,6 @@ public static class RemoteMetricsParser
                 case "MON_MEM": data.Mem = ParseMemInfo(value); break;
                 case "MON_NET": data.Net = ParseNetDev(value); break;
                 case "MON_UP": data.UptimeSeconds = ParseSeconds(value); break;
-                case "MON_CLIENTS": data.ConnectedClients = ParseNonNegativeInt(value); break;
-                case "MON_PROC": data.ProcessCount = ParseNonNegativeInt(value); break;
-                case "MON_FD": data.FileDescriptorCount = ParseNonNegativeInt(value); break;
-                case "MON_WHO": data.Users = ParseUsers(value); break;
                 case "MON_DF": data.Partitions = ParseDf(value); break;
             }
         }
@@ -232,23 +222,6 @@ public static class RemoteMetricsParser
                && s >= 0
             ? s
             : null;
-    }
-
-    private static int? ParseNonNegativeInt(string value)
-    {
-        return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var v) && v >= 0
-            ? v
-            : null;
-    }
-
-    private static string[]? ParseUsers(string value)
-    {
-        var parts = value
-            .Split(',')
-            .Select(p => p.Trim())
-            .Where(p => p.Length > 0)
-            .ToArray();
-        return parts.Length > 0 ? parts : null;
     }
 
     private static (string Mount, int UsePct)[]? ParseDf(string value)

@@ -296,9 +296,9 @@ public sealed class RemoteMonitorFeatureTests
         Assert.True(state.IsOption("host"));
         Assert.True(state.IsOption("cpu"));
         Assert.True(state.IsOption("uptime"));
-        Assert.False(state.IsOption("clients"));
+        Assert.True(state.IsOption("netdown"));
 
-        state.SetOption("clients", true);
+        state.SetOption("netdown", false);
         state.SetOption("cpu", false);
 
         var cfg = new COMTool.Core.Config.RemoteMonitorConfig();
@@ -306,13 +306,13 @@ public sealed class RemoteMonitorFeatureTests
         var reloaded = new MonitorMenuState();
         reloaded.LoadFrom(cfg);
 
-        Assert.True(reloaded.IsOption("clients"));
+        Assert.False(reloaded.IsOption("netdown"));
         Assert.False(reloaded.IsOption("cpu"));
         Assert.True(reloaded.IsOption("partitions"));
     }
 
     [AvaloniaFact]
-    public void RM04_StatusBarMenuHas13ItemsWithSevenCheckedByDefault()
+    public void RM04_StatusBarMenuHas9ItemsWithAllSevenCheckedByDefault()
     {
         using var env = new TestEnvironment();
         env.Run(() =>
@@ -324,23 +324,22 @@ public sealed class RemoteMonitorFeatureTests
 
             var menu = window.FindControl<Avalonia.Controls.ContextMenu>("MonitorBarMenu");
             Assert.NotNull(menu);
-            // 复制 / 保存到文件 / separator / 11 checkable options:
-            // 13 functional items + 1 Separator = 14 entries (spec: "13 items").
-            Assert.Equal(14, menu.Items.Count);
+            // 复制 / 保存到文件 / separator / 7 checkable options:
+            // 9 functional items + 1 Separator = 10 entries.
+            Assert.Equal(10, menu.Items.Count);
             var items = menu.Items.OfType<Avalonia.Controls.MenuItem>().ToList();
-            Assert.Equal(13, items.Count); // 14 entries minus the Separator
+            Assert.Equal(9, items.Count); // 10 entries minus the Separator
             Assert.Equal("复制(O)", items[0].Header);
             Assert.Equal("保存到文件(P)", items[1].Header);
             var checkable = items.Skip(2).ToList();
-            Assert.Equal(11, checkable.Count);
+            Assert.Equal(7, checkable.Count);
             foreach (var mi in checkable)
             {
                 Assert.Equal(Avalonia.Controls.MenuItemToggleType.CheckBox, mi.ToggleType);
             }
             var tags = checkable.Select(mi => (string)mi.Tag!).ToList();
             Assert.Equal(
-                new[] { "host", "cpu", "ram", "netup", "netdown", "clients",
-                        "processes", "fds", "uptime", "users", "partitions" },
+                new[] { "host", "cpu", "ram", "netup", "netdown", "uptime", "partitions" },
                 tags);
 
             // Headless cannot present the ContextMenu popup (Opening fires at
@@ -368,11 +367,7 @@ public sealed class RemoteMonitorFeatureTests
             Assert.True(byTag["ram"].IsChecked);
             Assert.True(byTag["netup"].IsChecked);
             Assert.True(byTag["netdown"].IsChecked);
-            Assert.False(byTag["clients"].IsChecked);
-            Assert.False(byTag["processes"].IsChecked);
-            Assert.False(byTag["fds"].IsChecked);
             Assert.True(byTag["uptime"].IsChecked);
-            Assert.False(byTag["users"].IsChecked);
             Assert.True(byTag["partitions"].IsChecked);
 
             // Toggle one off via the view model (the same path the menu
@@ -467,13 +462,6 @@ public sealed class RemoteMonitorFeatureTests
             Assert.EndsWith("Mb/s", vm.SegNetDownText);
             Assert.True(vm.SegUptimeVisible);
             Assert.Equal("40 days", vm.SegUptimeText);
-            Assert.False(vm.SegClientsVisible);
-            Assert.False(vm.SegProcessesVisible);
-            Assert.False(vm.SegFdsVisible);
-            Assert.False(vm.SegUsersVisible);
-
-            // Partitions: one box per mount, first carries the disk icon,
-            // >=80% usage is flagged hot (orange).
             Assert.True(vm.SegPartitionsVisible);
             Assert.Equal(2, vm.Partitions.Count);
             Assert.Equal("/: 49%", vm.Partitions[0].Text);
@@ -486,7 +474,7 @@ public sealed class RemoteMonitorFeatureTests
             // XAML bindings: named segments exist and follow the view model.
             Dispatcher.UIThread.RunJobs();
             Assert.True(window.FindControl<Avalonia.Controls.Border>("MonSegCpu")!.IsVisible);
-            Assert.False(window.FindControl<Avalonia.Controls.Border>("MonSegClients").IsVisible);
+            Assert.True(window.FindControl<Avalonia.Controls.Border>("MonSegNetDown")!.IsVisible);
             var parts = window.FindControl<Avalonia.Controls.ItemsControl>("MonPartitions");
             Assert.True(parts!.IsVisible);
             Assert.Equal(2, parts.Items.Count);
@@ -494,15 +482,14 @@ public sealed class RemoteMonitorFeatureTests
             // Toggling menu options re-renders the segments immediately
             // (same path as the status-bar menu click handler).
             vm.MonitorMenu.SetOption("partitions", false);
-            vm.MonitorMenu.SetOption("clients", true);
+            vm.MonitorMenu.SetOption("netdown", false);
             vm.ReformatMonitorLine();
             Dispatcher.UIThread.RunJobs();
             Assert.False(vm.SegPartitionsVisible);
             Assert.Empty(vm.Partitions);
             Assert.False(window.FindControl<Avalonia.Controls.ItemsControl>("MonPartitions").IsVisible);
-            Assert.True(vm.SegClientsVisible);
-            Assert.Equal("1", vm.SegClientsText);
-            Assert.True(window.FindControl<Avalonia.Controls.Border>("MonSegClients").IsVisible);
+            Assert.False(vm.SegNetDownVisible);
+            Assert.False(window.FindControl<Avalonia.Controls.Border>("MonSegNetDown").IsVisible);
 
             // Stopping the monitor clears every segment.
             vm.SetMonitorEnabled(tab, false);
@@ -510,7 +497,7 @@ public sealed class RemoteMonitorFeatureTests
             Assert.False(vm.IsMonitorActive);
             Assert.False(vm.SegHostVisible);
             Assert.False(vm.SegCpuVisible);
-            Assert.False(vm.SegClientsVisible);
+            Assert.False(vm.SegNetDownVisible);
             Assert.False(vm.SegPartitionsVisible);
             Assert.Empty(vm.Partitions);
             window.Close();
@@ -555,20 +542,14 @@ public sealed class RemoteMonitorFeatureTests
             window.Show();
             Dispatcher.UIThread.RunJobs();
 
-            var runner = new FakeExecRunner(() => Task.FromResult(
-                Dump("cpu 100 0 0 900 0", "0 0")
-                    .Replace("MON_WHO=root", "MON_WHO=root,admin")));
+            var runner = new FakeExecRunner(() =>
+                Task.FromResult(Dump("cpu 100 0 0 900 0", "0 0")));
             var tab = SshTab(runner);
             vm.AddTab(tab);
             vm.SetMonitorEnabled(tab, true);
-            foreach (var key in new[] { "clients", "processes", "fds", "users" })
-            {
-                vm.MonitorMenu.SetOption(key, true);
-            }
-            vm.ReformatMonitorLine();
 
             var deadline = DateTime.UtcNow.AddSeconds(8);
-            while (!vm.SegUsersVisible && DateTime.UtcNow < deadline)
+            while (!vm.SegPartitionsVisible && DateTime.UtcNow < deadline)
             {
                 Dispatcher.UIThread.RunJobs();
                 Thread.Sleep(20);
@@ -576,15 +557,18 @@ public sealed class RemoteMonitorFeatureTests
             window.UpdateLayout();
             Dispatcher.UIThread.RunJobs();
 
-            Assert.True(vm.SegUsersVisible);
-            // MobaXterm 参考图里用户之间以空格分隔（不是逗号）。
-            Assert.Equal("root admin", vm.SegUsersText);
+            Assert.True(vm.SegPartitionsVisible);
 
-            // 图标码位与配色必须与参考图一致：主机/用户深灰，CPU/内存/上传绿，
-            // 下载/文件描述符蓝，连接青，进程橙，运行时长灰绿，磁盘灰蓝。
+            // 已移除的四个指标（客户端/进程/FD/用户）不再有分段。
+            Assert.Null(window.FindControl<Border>("MonSegClients"));
+            Assert.Null(window.FindControl<Border>("MonSegProcesses"));
+            Assert.Null(window.FindControl<Border>("MonSegFds"));
+            Assert.Null(window.FindControl<Border>("MonSegUsers"));
+
+            // 图标码位与配色必须与参考图一致：主机深灰，CPU/内存/上传绿，
+            // 下载蓝，运行时长灰绿，磁盘灰蓝。
             var dark = ResourceColor(window, "MonIconDarkBrush");
             var uptime = ResourceColor(window, "MonIconUptimeBrush");
-            var disk = ResourceColor(window, "MonIconDiskBrush");
             var green = Color.Parse("#2e9e4f");
             var blue = Color.Parse("#2f7ed8");
 
@@ -593,13 +577,9 @@ public sealed class RemoteMonitorFeatureTests
             AssertIcon(window, "MonSegRam", '\uF538', green);
             AssertIcon(window, "MonSegNetUp", '\uF093', green);
             AssertIcon(window, "MonSegNetDown", '\uF019', blue);
-            AssertIcon(window, "MonSegClients", '\uF0C0', Color.Parse("#1aa3d8"));
-            AssertIcon(window, "MonSegProcesses", '\uF085', Color.Parse("#e8701a"));
-            AssertIcon(window, "MonSegFds", '\uF15C', blue);
             AssertIcon(window, "MonSegUptime", '\uF017', uptime);
-            AssertIcon(window, "MonSegUsers", '\uF007', dark);
 
-            // 分区：磁盘图标灰蓝；占用最高的分区是粗斜体的橙红文字。
+            // 分区：磁盘图标灰蓝；占用最高的分区是粗体橙红文字（不斜体）。
             var parts = window.FindControl<ItemsControl>("MonPartitions")!;
             Assert.True(parts.IsVisible);
             var partTexts = Avalonia.VisualTree.VisualExtensions
@@ -612,7 +592,7 @@ public sealed class RemoteMonitorFeatureTests
             Assert.Equal(ResourceColor(window, "MonIconDiskBrush"), diskBrush.Color);
             var hot = partTexts.Single(t => t.Text == "/data: 82%");
             Assert.Equal(FontWeight.Bold, hot.FontWeight);
-            Assert.Equal(FontStyle.Italic, hot.FontStyle);
+            Assert.Equal(FontStyle.Normal, hot.FontStyle);
             var hotBrush = Assert.IsAssignableFrom<ISolidColorBrush>(hot.Foreground);
             Assert.Equal(ResourceColor(window, "MonSegHotBrush"), hotBrush.Color);
             var cool = partTexts.Single(t => t.Text == "/: 49%");
@@ -624,7 +604,7 @@ public sealed class RemoteMonitorFeatureTests
     }
 
     [AvaloniaFact]
-    public void RM06_MonitorButtonShowsDisplayIconAndGreenOnState()
+    public void RM06_MonitorButtonIsFullWidthBandWithDisplayIcon()
     {
         using var env = new TestEnvironment();
         env.Run(() =>
@@ -639,6 +619,7 @@ public sealed class RemoteMonitorFeatureTests
             window.UpdateLayout();
 
             var button = pane.FindControl<ToggleButton>("MonitorToggleButton")!;
+            var bar = pane.FindControl<Border>("MonitorBar")!;
             Assert.False(button.IsChecked);
             var panel = Assert.IsType<StackPanel>(button.Content);
             var icon = Assert.IsType<TextBlock>(panel.Children[0]);
@@ -646,20 +627,25 @@ public sealed class RemoteMonitorFeatureTests
             Assert.Equal("\uE163", icon.Text);
             Assert.Equal("远程监控", label.Text);
 
-            // 关：白底、浅灰边框、灰字；图标与文字继承按钮前景色。
-            AssertColor(button.Background, "#ffffff");
-            AssertColor(button.BorderBrush, "#d5dce3");
+            // MobaXterm 的“远程监控”是跟侧栏同宽的一条底栏，不是按文字收缩的小按钮。
+            Assert.Equal(Avalonia.Layout.HorizontalAlignment.Stretch, button.HorizontalAlignment);
+            AssertColor(bar.Background, "#f1f1f1");
+            Assert.True(button.Bounds.Width >= 850,
+                $"monitor button width {button.Bounds.Width} is not the pane width");
+            Assert.True(Math.Abs(button.Bounds.Width - bar.Bounds.Width) < 0.5,
+                "monitor button does not span the full bar");
+
+            // 关：灰字；图标与文字继承按钮前景色。
             AssertColor(button.Foreground, "#666666");
             AssertColor(icon.Foreground, "#666666");
             AssertColor(label.Foreground, "#666666");
 
-            // 开：浅绿底、绿边框、绿字、半粗体。
+            // 开：浅绿底、绿字、半粗体。
             paneVm.IsMonitorOn = true;
             Dispatcher.UIThread.RunJobs();
             window.UpdateLayout();
             Assert.True(button.IsChecked);
             AssertColor(button.Background, "#e8f5ee");
-            AssertColor(button.BorderBrush, "#b7dfc9");
             AssertColor(button.Foreground, "#0f8a63");
             AssertColor(icon.Foreground, "#0f8a63");
             Assert.Equal(FontWeight.SemiBold, button.FontWeight);

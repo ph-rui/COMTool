@@ -10,8 +10,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 namespace COMTool.App.ViewModels;
 
 /// <summary>
-/// 状态栏右键菜单的 11 项勾选态，与 MobaXterm 远程监控菜单一一对应，
-/// 默认 7 项开启（主机/CPU/RAM/网络上传/网络下载/正常运行时间/分区信息）。
+/// 状态栏右键菜单的 7 项勾选态，与 MobaXterm 远程监控菜单一一对应，
+/// 默认全部开启（主机/CPU/RAM/网络上传/网络下载/正常运行时间/分区信息）。
 /// 持久化映射到 <see cref="RemoteMonitorConfig"/>；写 config.json 由视图层负责。
 /// </summary>
 public sealed partial class MonitorMenuState : ObservableObject
@@ -21,11 +21,7 @@ public sealed partial class MonitorMenuState : ObservableObject
     [ObservableProperty] private bool _showRam = true;
     [ObservableProperty] private bool _showNetUp = true;
     [ObservableProperty] private bool _showNetDown = true;
-    [ObservableProperty] private bool _showClients;
-    [ObservableProperty] private bool _showProcesses;
-    [ObservableProperty] private bool _showFileDescriptors;
     [ObservableProperty] private bool _showUptime = true;
-    [ObservableProperty] private bool _showUsers;
     [ObservableProperty] private bool _showPartitions = true;
 
     public void LoadFrom(RemoteMonitorConfig cfg)
@@ -35,11 +31,7 @@ public sealed partial class MonitorMenuState : ObservableObject
         ShowRam = cfg.ShowRam;
         ShowNetUp = cfg.ShowNetUp;
         ShowNetDown = cfg.ShowNetDown;
-        ShowClients = cfg.ShowClients;
-        ShowProcesses = cfg.ShowProcesses;
-        ShowFileDescriptors = cfg.ShowFileDescriptors;
         ShowUptime = cfg.ShowUptime;
-        ShowUsers = cfg.ShowUsers;
         ShowPartitions = cfg.ShowPartitions;
     }
 
@@ -50,11 +42,7 @@ public sealed partial class MonitorMenuState : ObservableObject
         cfg.ShowRam = ShowRam;
         cfg.ShowNetUp = ShowNetUp;
         cfg.ShowNetDown = ShowNetDown;
-        cfg.ShowClients = ShowClients;
-        cfg.ShowProcesses = ShowProcesses;
-        cfg.ShowFileDescriptors = ShowFileDescriptors;
         cfg.ShowUptime = ShowUptime;
-        cfg.ShowUsers = ShowUsers;
         cfg.ShowPartitions = ShowPartitions;
     }
 
@@ -65,11 +53,7 @@ public sealed partial class MonitorMenuState : ObservableObject
         ShowRam = ShowRam,
         ShowNetUp = ShowNetUp,
         ShowNetDown = ShowNetDown,
-        ShowClients = ShowClients,
-        ShowProcesses = ShowProcesses,
-        ShowFileDescriptors = ShowFileDescriptors,
         ShowUptime = ShowUptime,
-        ShowUsers = ShowUsers,
         ShowPartitions = ShowPartitions,
     };
 
@@ -81,11 +65,7 @@ public sealed partial class MonitorMenuState : ObservableObject
         "ram" => ShowRam,
         "netup" => ShowNetUp,
         "netdown" => ShowNetDown,
-        "clients" => ShowClients,
-        "processes" => ShowProcesses,
-        "fds" => ShowFileDescriptors,
         "uptime" => ShowUptime,
-        "users" => ShowUsers,
         "partitions" => ShowPartitions,
         _ => false,
     };
@@ -99,11 +79,7 @@ public sealed partial class MonitorMenuState : ObservableObject
             case "ram": ShowRam = value; break;
             case "netup": ShowNetUp = value; break;
             case "netdown": ShowNetDown = value; break;
-            case "clients": ShowClients = value; break;
-            case "processes": ShowProcesses = value; break;
-            case "fds": ShowFileDescriptors = value; break;
             case "uptime": ShowUptime = value; break;
-            case "users": ShowUsers = value; break;
             case "partitions": ShowPartitions = value; break;
         }
     }
@@ -111,14 +87,14 @@ public sealed partial class MonitorMenuState : ObservableObject
 
 /// <summary>
 /// 状态栏分区段（MobaXterm 风格：每分区一个盒子，第一个带磁盘图标，
-/// 使用率 ≥80% 橙色警示）。
+/// 使用率 ≥80% 橙红粗体警示）。
 /// </summary>
 public sealed partial class PartitionSegment : ObservableObject
 {
     [ObservableProperty]
     private string _text = "";
 
-    /// <summary>使用率 ≥80%，橙色显示。</summary>
+    /// <summary>使用率 ≥80%，橙红粗体显示。</summary>
     [ObservableProperty]
     private bool _isHot;
 
@@ -160,25 +136,9 @@ public partial class MainViewModel
     [ObservableProperty]
     private string _segNetDownText = "";
     [ObservableProperty]
-    private bool _segClientsVisible;
-    [ObservableProperty]
-    private string _segClientsText = "";
-    [ObservableProperty]
-    private bool _segProcessesVisible;
-    [ObservableProperty]
-    private string _segProcessesText = "";
-    [ObservableProperty]
-    private bool _segFdsVisible;
-    [ObservableProperty]
-    private string _segFdsText = "";
-    [ObservableProperty]
     private bool _segUptimeVisible;
     [ObservableProperty]
     private string _segUptimeText = "";
-    [ObservableProperty]
-    private bool _segUsersVisible;
-    [ObservableProperty]
-    private string _segUsersText = "";
     [ObservableProperty]
     private bool _segPartitionsVisible;
     [ObservableProperty]
@@ -188,7 +148,7 @@ public partial class MainViewModel
     internal const double CpuBarMaxWidth = 56;
 
     /// <summary>
-    /// 远程监控菜单 11 项的勾选态（状态栏右键菜单的数据源）。
+    /// 远程监控菜单 7 项的勾选态（状态栏右键菜单的数据源）。
     /// </summary>
     public MonitorMenuState MonitorMenu { get; } = new MonitorMenuState();
 
@@ -301,7 +261,7 @@ public partial class MainViewModel
     /// <summary>
     /// 按最新快照与菜单勾选态刷新状态栏分段盒子（MobaXterm 风格：
     /// 每指标一个带图标的独立小盒子）。段序与菜单一致：
-    /// 主机/CPU/RAM/网络上传/网络下载/客户端/进程/FD/运行时长/用户/分区。
+    /// 主机/CPU/RAM/网络上传/网络下载/运行时长/分区。
     /// 整串 <see cref="MonitorText"/> 供菜单"复制/保存到文件"使用，不受影响。
     /// </summary>
     private void RefreshMonitorSegments()
@@ -361,36 +321,6 @@ public partial class MainViewModel
             SegNetDownVisible = false;
         }
 
-        if (o.ShowClients && snap.ConnectedClients is { } clients)
-        {
-            SegClientsVisible = true;
-            SegClientsText = clients.ToString(CultureInfo.InvariantCulture);
-        }
-        else
-        {
-            SegClientsVisible = false;
-        }
-
-        if (o.ShowProcesses && snap.ProcessCount is { } processes)
-        {
-            SegProcessesVisible = true;
-            SegProcessesText = processes.ToString(CultureInfo.InvariantCulture);
-        }
-        else
-        {
-            SegProcessesVisible = false;
-        }
-
-        if (o.ShowFileDescriptors && snap.FileDescriptorCount is { } fds)
-        {
-            SegFdsVisible = true;
-            SegFdsText = fds.ToString(CultureInfo.InvariantCulture);
-        }
-        else
-        {
-            SegFdsVisible = false;
-        }
-
         if (o.ShowUptime && snap.Uptime is { } upTime)
         {
             SegUptimeVisible = true;
@@ -399,16 +329,6 @@ public partial class MainViewModel
         else
         {
             SegUptimeVisible = false;
-        }
-
-        if (o.ShowUsers && snap.Users is { Length: > 0 } users)
-        {
-            SegUsersVisible = true;
-            SegUsersText = string.Join(" ", users);
-        }
-        else
-        {
-            SegUsersVisible = false;
         }
 
         if (o.ShowPartitions && snap.Partitions is { Length: > 0 } parts)
@@ -439,11 +359,7 @@ public partial class MainViewModel
         SegRamVisible = false;
         SegNetUpVisible = false;
         SegNetDownVisible = false;
-        SegClientsVisible = false;
-        SegProcessesVisible = false;
-        SegFdsVisible = false;
         SegUptimeVisible = false;
-        SegUsersVisible = false;
         SegPartitionsVisible = false;
         Partitions.Clear();
     }

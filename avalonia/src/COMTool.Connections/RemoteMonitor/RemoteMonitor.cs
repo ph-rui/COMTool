@@ -23,10 +23,6 @@ public sealed class RemoteMonitor : IDisposable
         + "echo \"MON_CPU=$(head -n1 /proc/stat 2>/dev/null)\"; "
         + "echo \"MON_MEM=$(grep -E '^(MemTotal|MemAvailable):' /proc/meminfo 2>/dev/null | tr '\\n' '|')\"; "
         + "echo \"MON_UP=$(cat /proc/uptime 2>/dev/null)\"; "
-        + "echo \"MON_CLIENTS=$(who 2>/dev/null | wc -l)\"; "
-        + "echo \"MON_PROC=$(ps -e --no-headers 2>/dev/null | wc -l)\"; "
-        + "echo \"MON_FD=$(cut -d' ' -f1 /proc/sys/fs/file-nr 2>/dev/null)\"; "
-        + "echo \"MON_WHO=$(who 2>/dev/null | awk '{print $1}' | paste -sd, -)\"; "
         + "echo \"MON_NET=$(awk 'NR>2 && $1!=\"lo:\" {rx+=$2; tx+=$10} END{print rx+0\" \"tx+0}' /proc/net/dev 2>/dev/null)\"; "
         + "echo \"MON_DF=$(df -P -x tmpfs -x devtmpfs -x squashfs -x overlay 2>/dev/null | awk 'NR>1 {m=$6; for(i=7;i<=NF;i++) m=m\" \"$i; print $5\" \"m}' | paste -sd'|' -)\"; "
         + "echo MON_END";
@@ -191,11 +187,7 @@ public sealed class RemoteMonitor : IDisposable
                 : null,
             NetUpMbps = netUp,
             NetDownMbps = netDown,
-            ConnectedClients = data.ConnectedClients,
-            ProcessCount = data.ProcessCount,
-            FileDescriptorCount = data.FileDescriptorCount,
             Uptime = data.UptimeSeconds is { } s ? TimeSpan.FromSeconds(s) : null,
-            Users = data.Users,
             Partitions = data.Partitions,
         };
     }

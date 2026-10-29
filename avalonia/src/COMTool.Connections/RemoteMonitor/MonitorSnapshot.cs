@@ -19,21 +19,13 @@ public sealed class MonitorSnapshot
 
     public double? NetDownMbps { get; init; }
 
-    public int? ConnectedClients { get; init; }
-
-    public int? ProcessCount { get; init; }
-
-    public int? FileDescriptorCount { get; init; }
-
     public TimeSpan? Uptime { get; init; }
-
-    public string[]? Users { get; init; }
 
     public (string Mount, int UsePct)[]? Partitions { get; init; }
 
     /// <summary>
     /// 按 MobaXterm 状态栏样式渲染：固定顺序
-    /// 主机/CPU/RAM/网络/客户端/进程/FD/运行时长/用户/分区，
+    /// 主机/CPU/RAM/网络/运行时长/分区，
     /// 关闭或缺失的段省略，段间两个空格，数字一律 InvariantCulture。
     /// </summary>
     public string Format(MonitorOptions options)
@@ -72,29 +64,9 @@ public sealed class MonitorSnapshot
             parts.Add(string.Join(' ', net));
         }
 
-        if (options.ShowClients && ConnectedClients is { } clients)
-        {
-            parts.Add(clients.ToString(CultureInfo.InvariantCulture));
-        }
-
-        if (options.ShowProcesses && ProcessCount is { } processes)
-        {
-            parts.Add(processes.ToString(CultureInfo.InvariantCulture));
-        }
-
-        if (options.ShowFileDescriptors && FileDescriptorCount is { } fds)
-        {
-            parts.Add(fds.ToString(CultureInfo.InvariantCulture));
-        }
-
         if (options.ShowUptime && Uptime is { } uptime)
         {
             parts.Add(RemoteMetricsParser.FormatUptime(uptime));
-        }
-
-        if (options.ShowUsers && Users is { Length: > 0 } users)
-        {
-            parts.Add(string.Join(",", users));
         }
 
         if (options.ShowPartitions && Partitions is { Length: > 0 } partitions)

@@ -107,13 +107,16 @@ SFTP_PROMPT_INPUT_Y="${SFTP_PROMPT_INPUT_Y:-89}"
 # The strip that asks what to do with a target that already exists. Its
 # background is a fixed light yellow; the compact buttons sit at the right
 # of the message row. The probe reads the background left of the message.
+# The SFTP pane reserves a full-width "远程监控" band at the bottom, which
+# pushes this strip (and its buttons) up by that band height, hence the
+# smaller Y values.
 SFTP_CONFLICT_OVERWRITE_X="${SFTP_CONFLICT_OVERWRITE_X:-243}"
-SFTP_CONFLICT_OVERWRITE_Y="${SFTP_CONFLICT_OVERWRITE_Y:-546}"
+SFTP_CONFLICT_OVERWRITE_Y="${SFTP_CONFLICT_OVERWRITE_Y:-527}"
 SFTP_CONFLICT_COLOR="${SFTP_CONFLICT_COLOR:-#fff4ce}"
-SFTP_CONFLICT_PROBE_X="${SFTP_CONFLICT_PROBE_X:-30}"
-SFTP_CONFLICT_PROBE_Y="${SFTP_CONFLICT_PROBE_Y:-540}"
-SFTP_CONFLICT_PROBE_W="${SFTP_CONFLICT_PROBE_W:-40}"
-SFTP_CONFLICT_PROBE_H="${SFTP_CONFLICT_PROBE_H:-10}"
+SFTP_CONFLICT_PROBE_X="${SFTP_CONFLICT_PROBE_X:-45}"
+SFTP_CONFLICT_PROBE_Y="${SFTP_CONFLICT_PROBE_Y:-522}"
+SFTP_CONFLICT_PROBE_W="${SFTP_CONFLICT_PROBE_W:-20}"
+SFTP_CONFLICT_PROBE_H="${SFTP_CONFLICT_PROBE_H:-8}"
 # The directory that the SFTP test writes into on the server. It lives in
 # the home of the user that runs the suite, because the SSH fixture runs
 # as the same user.

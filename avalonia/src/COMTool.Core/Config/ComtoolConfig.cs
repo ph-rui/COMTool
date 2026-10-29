@@ -405,20 +405,8 @@ public sealed class RemoteMonitorConfig
     [JsonPropertyName("show_net_down")]
     public bool ShowNetDown { get; set; } = true;
 
-    [JsonPropertyName("show_clients")]
-    public bool ShowClients { get; set; }
-
-    [JsonPropertyName("show_processes")]
-    public bool ShowProcesses { get; set; }
-
-    [JsonPropertyName("show_file_descriptors")]
-    public bool ShowFileDescriptors { get; set; }
-
     [JsonPropertyName("show_uptime")]
     public bool ShowUptime { get; set; } = true;
-
-    [JsonPropertyName("show_users")]
-    public bool ShowUsers { get; set; }
 
     [JsonPropertyName("show_partitions")]
     public bool ShowPartitions { get; set; } = true;

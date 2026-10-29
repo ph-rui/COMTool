@@ -53,7 +53,6 @@
     <Style Selector="TextBlock.MonSegHot">
       <Setter Property="Foreground" Value="{DynamicResource MonSegHotBrush}" />
       <Setter Property="FontWeight" Value="Bold" />
-      <Setter Property="FontStyle" Value="Italic" />
     </Style>
   </Window.Styles>
 
@@ -357,11 +356,7 @@
                     <MenuItem Header="RAM(R)" ToggleType="CheckBox" Tag="ram" Click="OnMonitorOptionClick" />
                     <MenuItem Header="网络上传(S)" ToggleType="CheckBox" Tag="netup" Click="OnMonitorOptionClick" />
                     <MenuItem Header="网络下载(T)" ToggleType="CheckBox" Tag="netdown" Click="OnMonitorOptionClick" />
-                    <MenuItem Header="已连接客户端(U)" ToggleType="CheckBox" Tag="clients" Click="OnMonitorOptionClick" />
-                    <MenuItem Header="进程数(V)" ToggleType="CheckBox" Tag="processes" Click="OnMonitorOptionClick" />
-                    <MenuItem Header="文件描述符(W)" ToggleType="CheckBox" Tag="fds" Click="OnMonitorOptionClick" />
                     <MenuItem Header="正常运行时间(X)" ToggleType="CheckBox" Tag="uptime" Click="OnMonitorOptionClick" />
-                    <MenuItem Header="连接用户(Y)" ToggleType="CheckBox" Tag="users" Click="OnMonitorOptionClick" />
                     <MenuItem Header="分区信息(Z)" ToggleType="CheckBox" Tag="partitions" Click="OnMonitorOptionClick" />
                   </ContextMenu>
                 </Grid.ContextMenu>
@@ -411,36 +406,11 @@
                       <TextBlock Text="{Binding SegNetDownText}" Classes="MonSegText" />
                     </StackPanel>
                   </Border>
-                  <Border Name="MonSegClients" Classes="MonSeg" IsVisible="{Binding SegClientsVisible}">
-                    <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
-                      <TextBlock Text="&#xf0c0;" Classes="MonIcon" Foreground="#1aa3d8" />
-                      <TextBlock Text="{Binding SegClientsText}" Classes="MonSegText" />
-                    </StackPanel>
-                  </Border>
-                  <Border Name="MonSegProcesses" Classes="MonSeg" IsVisible="{Binding SegProcessesVisible}">
-                    <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
-                      <TextBlock Text="&#xf085;" Classes="MonIcon" Foreground="#e8701a" />
-                      <TextBlock Text="{Binding SegProcessesText}" Classes="MonSegText" />
-                    </StackPanel>
-                  </Border>
-                  <Border Name="MonSegFds" Classes="MonSeg" IsVisible="{Binding SegFdsVisible}">
-                    <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
-                      <TextBlock Text="&#xf15c;" Classes="MonIcon" Foreground="#2f7ed8" />
-                      <TextBlock Text="{Binding SegFdsText}" Classes="MonSegText" />
-                    </StackPanel>
-                  </Border>
                   <Border Name="MonSegUptime" Classes="MonSeg" IsVisible="{Binding SegUptimeVisible}">
                     <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
                       <TextBlock Text="&#xf017;" Classes="MonIcon"
                                  Foreground="{DynamicResource MonIconUptimeBrush}" />
                       <TextBlock Text="{Binding SegUptimeText}" Classes="MonSegText" />
-                    </StackPanel>
-                  </Border>
-                  <Border Name="MonSegUsers" Classes="MonSeg" IsVisible="{Binding SegUsersVisible}">
-                    <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
-                      <TextBlock Text="&#xf007;" Classes="MonIcon"
-                                 Foreground="{DynamicResource MonIconDarkBrush}" />
-                      <TextBlock Text="{Binding SegUsersText}" Classes="MonSegText" />
                     </StackPanel>
                   </Border>
                   <ItemsControl Name="MonPartitions" IsVisible="{Binding SegPartitionsVisible}"
