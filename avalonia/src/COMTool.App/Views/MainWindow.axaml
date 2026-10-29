@@ -310,7 +310,9 @@
                                 HorizontalContentAlignment="Stretch"
                                 VerticalContentAlignment="Stretch" />
               </Border>
-              <Grid Grid.Row="3" ColumnDefinitions="Auto,*,Auto">
+              <Grid Grid.Row="3"
+                    Background="Transparent"
+                    ColumnDefinitions="Auto,*,Auto">
                 <Grid.ContextMenu>
                   <ContextMenu Name="MonitorBarMenu">
                     <MenuItem Header="复制(O)" Click="OnMonitorCopyClick" />

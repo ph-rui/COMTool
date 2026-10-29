@@ -381,4 +381,35 @@ public sealed class RemoteMonitorFeatureTests
             window.Close();
         });
     }
+
+    [AvaloniaFact]
+    public void RM04_StatusBarGridHasBackgroundForContextMenuHitTest()
+    {
+        using var env = new TestEnvironment();
+        env.Run(() =>
+        {
+            var vm = new MainViewModel();
+            var window = new COMTool.App.Views.MainWindow { DataContext = vm };
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+
+            var menu = window.FindControl<Avalonia.Controls.ContextMenu>("MonitorBarMenu");
+            Assert.NotNull(menu);
+            var host = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(window).ToList()
+                .OfType<Avalonia.Controls.Control>()
+                .FirstOrDefault(c => c.ContextMenu == menu);
+            Assert.True(host is not null, "MonitorBarMenu host grid not found in the visual tree");
+
+            // Root cause of the "status-bar right-click opens nothing" bug:
+            // in Avalonia a panel whose Background is null does not
+            // participate in pointer hit-testing, so a right-click on the
+            // status row falls through to the window root and the
+            // ContextMenu never opens. The host grid therefore must carry a
+            // (transparent) Background to be a hit-test target.
+            var bg = ((Avalonia.Controls.Panel)host!).Background;
+            Assert.True(bg is not null,
+                "status-bar grid Background is null -> right-click ContextMenu unreachable");
+            window.Close();
+        });
+    }
 }
