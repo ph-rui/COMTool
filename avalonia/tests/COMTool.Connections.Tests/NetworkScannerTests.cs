@@ -304,6 +304,29 @@ public sealed class NetworkScannerTests
     }
 
     [Fact]
+    public void NET05_NormalizeReverseNameStripsLocalSuffixForShortNames()
+    {
+        var ip90 = IPAddress.Parse("192.0.2.90");
+        // Windows DNS client NetBIOS integration returns "X.local"; strip to short name
+        Assert.Equal("devuser", NetworkScanner.NormalizeReverseName("devuser.local", ip90));
+        // real FQDN untouched
+        Assert.Equal("winhost1.example.com",
+            NetworkScanner.NormalizeReverseName("winhost1.example.com", ip90));
+        // IP echo / empty are not names
+        Assert.Null(NetworkScanner.NormalizeReverseName("192.0.2.90", ip90));
+        Assert.Null(NetworkScanner.NormalizeReverseName("", ip90));
+        Assert.Null(NetworkScanner.NormalizeReverseName(null, ip90));
+        // exactly 15 chars (NetBIOS limit): stripped
+        Assert.Equal("abcdefghijklmno",
+            NetworkScanner.NormalizeReverseName("abcdefghijklmno.local", ip90));
+        // dotted or >15 chars: keep as-is
+        Assert.Equal("abcdefghijklmnop.local",
+            NetworkScanner.NormalizeReverseName("abcdefghijklmnop.local", ip90));
+        Assert.Equal("my.host.local",
+            NetworkScanner.NormalizeReverseName("my.host.local", ip90));
+    }
+
+    [Fact]
     public void NET05_ScanDefaultsTargetTwoSecondSubnetScan()
     {
         // MobaXterm 的 /24 扫描 2 秒内出结果：全部 254 个目标一波并行探测，
@@ -313,7 +336,8 @@ public sealed class NetworkScannerTests
             "concurrency must probe the whole /24 in one wave");
         Assert.True(scanner.PingTimeoutMs <= 500);
         Assert.True(scanner.ConnectTimeoutMs <= 500);
-        Assert.True(scanner.DnsTimeoutMs <= 500);
+        Assert.True(scanner.DnsTimeoutMs <= 6000,
+            "reverse DNS must wait for slow LAN DNS servers (4680 ms measured on user VDI)");
         Assert.True(scanner.NetbiosTimeoutMs <= 500);
     }
 

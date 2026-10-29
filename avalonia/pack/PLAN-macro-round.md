@@ -96,6 +96,16 @@
         （最小复现证实 p!.Y 仍 CS1061，`!` 只去引用类型可空性），须用 .Value.Y/.Value.X；
         纯代码创建的对话框无 NameScope，FindControl 抛 "Could not find parent name scope"，测试须用 ButtonByLabel。
      199/199，gate 第 13 轮全 PASS；提交 11f78dc，发布部署双份。
+   - 追加（2026-10-29）：网络扫描名称解析实机修复（用户截图：192.0.2.251 无名，MobaXterm 显示 winhost1.example.com）：
+     ① 根因：VDI 慢网段 DNS 反查需 ~4.7s（ps1 诊断实测 GetHostEntry 4680ms、raw PTR 5329ms），旧 DnsTimeoutMs=500 必超时；
+        NBSTAT 兜底亦无应答 → 名称空；MobaXterm 无此截短故能显示 FQDN。
+     ② DnsTimeoutMs 500→6000（名称解析仅对存活主机、与端口探测并行，存活判定速度不变；
+        两秒出存活结果的设计不受影响，仅名称回填在慢 DNS 网段最多多等几秒，与 MobaXterm 行为一致）；
+        反查结果 “X.local” 形态（X ≤15 字符且无点，NetBIOS 短名特征）剥 .local 与 MobaXterm 短名显示一致
+        （新增 NormalizeReverseName internal 静态方法，FQDN/IP 回显/空名不受影响）。
+     ③ 测试：NET05_NormalizeReverseNameStripsLocalSuffixForShortNames 新增；NET05_ScanDefaultsTargetTwoSecondSubnetScan
+        的 DNS 断言 ≤500 放宽为 ≤6000（附慢网段实测依据注释）。
+     201/201 App + 113/113 Connections，gate 第 16 轮全 PASS；提交 <hash>，发布部署双份。
    - 追加（2026-10-29）：网络扫描仪改 MobaXterm 式增量显示（用户截图反馈“扫描到一台之后立即显示”）：
      ① 引擎 ProbeAsync 两阶段：第一个存活信号（ping 回复或任一端口连通）立即上报 discovered
         （名称空、rtt 空、开放端口=当时已确认子集）；全部探测+名称解析完由 progress 报最终结果；

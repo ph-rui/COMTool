@@ -67,7 +67,12 @@ public sealed class NetworkScanner : INetworkScanner
 
     public int ConnectTimeoutMs { get; init; } = 300;
 
-    public int DnsTimeoutMs { get; init; } = 500;
+    /// <summary>
+    /// 反向 DNS 超时。MobaXterm 在慢 DNS 的 LAN 上不会人为截短（用户
+    /// 192.0.2.x VDI 实测反查需 4680ms 才返回 FQDN，2026-10-29）；
+    /// 名称解析只对存活主机做且与端口探测并行，不影响存活判定速度。
+    /// </summary>
+    public int DnsTimeoutMs { get; init; } = 6000;
 
     /// <summary>
     /// NetBIOS name fallback wait (only for hosts that answered ping/TCP).
@@ -336,10 +341,9 @@ public sealed class NetworkScanner : INetworkScanner
         {
             var entry = await Dns.GetHostEntryAsync(ip.ToString()).WaitAsync(cts.Token);
             // 有些平台在无 PTR 时把 IP 本身当作主机名返回；那不算名字。
-            return entry.HostName.Length > 0
-                   && !string.Equals(entry.HostName, ip.ToString(), StringComparison.OrdinalIgnoreCase)
-                ? entry.HostName
-                : null;
+            // Windows DNS 客户端对 NetBIOS 名还可能返回 "X.local" 形式，
+            // 归一化为短名（MobaXterm 显示短名，2026-10-29 实机对照）。
+            return NormalizeReverseName(entry.HostName, ip);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -349,5 +353,29 @@ public sealed class NetworkScanner : INetworkScanner
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// 反向 DNS 结果归一化：IP 回显/空名不算名字；"X.local" 且 X 为
+    /// 无点 ≤15 字符（NetBIOS 短名特征）时剥掉 .local，与 MobaXterm 显示一致。
+    /// </summary>
+    internal static string? NormalizeReverseName(string? hostName, IPAddress ip)
+    {
+        if (string.IsNullOrEmpty(hostName)
+            || string.Equals(hostName, ip.ToString(), StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        if (hostName.EndsWith(".local", StringComparison.OrdinalIgnoreCase))
+        {
+            var shortName = hostName.Substring(0, hostName.Length - 6);
+            if (shortName.Length is > 0 and <= 15 && !shortName.Contains('.'))
+            {
+                return shortName;
+            }
+        }
+
+        return hostName;
     }
 }
