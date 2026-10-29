@@ -31,6 +31,12 @@
   <SolidColorBrush x:Key="MonIconBrush" Color="#5f6368" />
   <SolidColorBrush x:Key="MonCpuBarTrackBrush" Color="#1f1f1f" />
   <SolidColorBrush x:Key="MonCpuBarFillBrush" Color="#d6d6d6" />
+  <!-- 分段图标配色（对齐 MobaXterm 状态栏：主机/用户深灰、磁盘灰蓝、运行时长灰绿）。 -->
+  <SolidColorBrush x:Key="MonIconDarkBrush" Color="#3d3d3d" />
+  <SolidColorBrush x:Key="MonIconDiskBrush" Color="#5b6b7b" />
+  <SolidColorBrush x:Key="MonIconUptimeBrush" Color="#3f7f63" />
+  <!-- 磁盘占用最高的分区（MobaXterm 用橙红粗斜体文字突出）。 -->
+  <SolidColorBrush x:Key="MonSegHotBrush" Color="#e2590b" />
 
   <FontFamily x:Key="IconFontAwesome">avares://COMTool.App/Assets/Fonts/fontawesome6-solid.ttf#Font Awesome 6 Free Solid</FontFamily>
   <FontFamily x:Key="IconMaterialDesign">avares://COMTool.App/Assets/Fonts/materialdesignicons6.ttf#Material Design Icons</FontFamily>

@@ -404,7 +404,7 @@ public partial class MainViewModel
         if (o.ShowUsers && snap.Users is { Length: > 0 } users)
         {
             SegUsersVisible = true;
-            SegUsersText = string.Join(",", users);
+            SegUsersText = string.Join(" ", users);
         }
         else
         {

@@ -45,6 +45,16 @@
       <Setter Property="Foreground" Value="{DynamicResource MonIconBrush}" />
       <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
+    <!-- DataTemplate 内的内联 DynamicResource 在模板实例化时可能解析不到主题资源
+         （实测回退成 MonIconBrush 灰），因此这里用类样式声明分区图标与热分区配色。 -->
+    <Style Selector="TextBlock.MonIconDisk">
+      <Setter Property="Foreground" Value="{DynamicResource MonIconDiskBrush}" />
+    </Style>
+    <Style Selector="TextBlock.MonSegHot">
+      <Setter Property="Foreground" Value="{DynamicResource MonSegHotBrush}" />
+      <Setter Property="FontWeight" Value="Bold" />
+      <Setter Property="FontStyle" Value="Italic" />
+    </Style>
   </Window.Styles>
 
   <Grid Name="RootGrid"
@@ -365,13 +375,14 @@
                             IsVisible="{Binding IsMonitorActive}">
                   <Border Name="MonSegHost" Classes="MonSeg" IsVisible="{Binding SegHostVisible}">
                     <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
-                      <TextBlock Text="&#xf390;" Classes="MonIcon" />
+                      <TextBlock Text="&#xf108;" Classes="MonIcon"
+                                 Foreground="{DynamicResource MonIconDarkBrush}" />
                       <TextBlock Text="{Binding SegHostText}" Classes="MonSegText" />
                     </StackPanel>
                   </Border>
                   <Border Name="MonSegCpu" Classes="MonSeg" IsVisible="{Binding SegCpuVisible}">
                     <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
-                      <TextBlock Text="&#xf624;" Classes="MonIcon" />
+                      <TextBlock Text="&#xf2db;" Classes="MonIcon" Foreground="#2e9e4f" />
                       <TextBlock Text="{Binding SegCpuText}" Classes="MonSegText" />
                       <Border Width="56" Height="12" CornerRadius="2" ClipToBounds="True"
                               Background="{DynamicResource MonCpuBarTrackBrush}"
@@ -384,49 +395,51 @@
                   </Border>
                   <Border Name="MonSegRam" Classes="MonSeg" IsVisible="{Binding SegRamVisible}">
                     <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
-                      <TextBlock Text="&#xf538;" Classes="MonIcon" />
+                      <TextBlock Text="&#xf538;" Classes="MonIcon" Foreground="#2e9e4f" />
                       <TextBlock Text="{Binding SegRamText}" Classes="MonSegText" />
                     </StackPanel>
                   </Border>
                   <Border Name="MonSegNetUp" Classes="MonSeg" IsVisible="{Binding SegNetUpVisible}">
                     <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
-                      <TextBlock Text="&#xf062;" Classes="MonIcon" Foreground="#2e9e4f" />
+                      <TextBlock Text="&#xf093;" Classes="MonIcon" Foreground="#2e9e4f" />
                       <TextBlock Text="{Binding SegNetUpText}" Classes="MonSegText" />
                     </StackPanel>
                   </Border>
                   <Border Name="MonSegNetDown" Classes="MonSeg" IsVisible="{Binding SegNetDownVisible}">
                     <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
-                      <TextBlock Text="&#xf063;" Classes="MonIcon" Foreground="#2f7ed8" />
+                      <TextBlock Text="&#xf019;" Classes="MonIcon" Foreground="#2f7ed8" />
                       <TextBlock Text="{Binding SegNetDownText}" Classes="MonSegText" />
                     </StackPanel>
                   </Border>
                   <Border Name="MonSegClients" Classes="MonSeg" IsVisible="{Binding SegClientsVisible}">
                     <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
-                      <TextBlock Text="&#xf0c0;" Classes="MonIcon" />
+                      <TextBlock Text="&#xf0c0;" Classes="MonIcon" Foreground="#1aa3d8" />
                       <TextBlock Text="{Binding SegClientsText}" Classes="MonSegText" />
                     </StackPanel>
                   </Border>
                   <Border Name="MonSegProcesses" Classes="MonSeg" IsVisible="{Binding SegProcessesVisible}">
                     <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
-                      <TextBlock Text="&#xf53f;" Classes="MonIcon" />
+                      <TextBlock Text="&#xf085;" Classes="MonIcon" Foreground="#e8701a" />
                       <TextBlock Text="{Binding SegProcessesText}" Classes="MonSegText" />
                     </StackPanel>
                   </Border>
                   <Border Name="MonSegFds" Classes="MonSeg" IsVisible="{Binding SegFdsVisible}">
                     <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
-                      <TextBlock Text="&#xf15b;" Classes="MonIcon" />
+                      <TextBlock Text="&#xf15c;" Classes="MonIcon" Foreground="#2f7ed8" />
                       <TextBlock Text="{Binding SegFdsText}" Classes="MonSegText" />
                     </StackPanel>
                   </Border>
                   <Border Name="MonSegUptime" Classes="MonSeg" IsVisible="{Binding SegUptimeVisible}">
                     <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
-                      <TextBlock Text="&#xf017;" Classes="MonIcon" />
+                      <TextBlock Text="&#xf017;" Classes="MonIcon"
+                                 Foreground="{DynamicResource MonIconUptimeBrush}" />
                       <TextBlock Text="{Binding SegUptimeText}" Classes="MonSegText" />
                     </StackPanel>
                   </Border>
                   <Border Name="MonSegUsers" Classes="MonSeg" IsVisible="{Binding SegUsersVisible}">
                     <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
-                      <TextBlock Text="&#xf007;" Classes="MonIcon" />
+                      <TextBlock Text="&#xf007;" Classes="MonIcon"
+                                 Foreground="{DynamicResource MonIconDarkBrush}" />
                       <TextBlock Text="{Binding SegUsersText}" Classes="MonSegText" />
                     </StackPanel>
                   </Border>
@@ -441,10 +454,11 @@
                       <DataTemplate>
                         <Border Classes="MonSeg">
                           <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
-                            <TextBlock Text="&#xf0a0;" Classes="MonIcon" IsVisible="{Binding ShowIcon}" />
+                            <TextBlock Text="&#xf0a0;" Classes="MonIcon MonIconDisk"
+                                       IsVisible="{Binding ShowIcon}" />
                             <TextBlock Text="{Binding Text}" Classes="MonSegText" IsVisible="{Binding !IsHot}" />
-                            <TextBlock Text="{Binding Text}" Classes="MonSegText"
-                                       Foreground="#e2590b" IsVisible="{Binding IsHot}" />
+                            <TextBlock Text="{Binding Text}" Classes="MonSegText MonSegHot"
+                                       IsVisible="{Binding IsHot}" />
                           </StackPanel>
                         </Border>
                       </DataTemplate>

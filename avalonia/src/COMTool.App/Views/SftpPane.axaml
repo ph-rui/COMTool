@@ -45,17 +45,46 @@
       <Setter Property="Foreground" Value="#c00000" />
     </Style>
     <Style Selector="ToggleButton.MonitorToggle">
-      <Setter Property="Background" Value="Transparent" />
-      <Setter Property="BorderThickness" Value="0" />
-      <Setter Property="Padding" Value="4,0" />
+      <Setter Property="Background" Value="#ffffff" />
+      <Setter Property="BorderBrush" Value="#d5dce3" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="Padding" Value="7,1" />
       <Setter Property="MinWidth" Value="0" />
       <Setter Property="MinHeight" Value="0" />
       <Setter Property="FontSize" Value="11" />
       <Setter Property="Foreground" Value="#666666" />
     </Style>
+    <Style Selector="ToggleButton.MonitorToggle:pointerover">
+      <Setter Property="Background" Value="#f2f5f8" />
+      <Setter Property="BorderBrush" Value="#bcc9d4" />
+    </Style>
     <Style Selector="ToggleButton.MonitorToggle:checked">
-      <Setter Property="Foreground" Value="#2e7d32" />
+      <Setter Property="Background" Value="#e8f5ee" />
+      <Setter Property="BorderBrush" Value="#b7dfc9" />
+      <Setter Property="Foreground" Value="#0f8a63" />
       <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="ToggleButton.MonitorToggle:checked:pointerover">
+      <Setter Property="Background" Value="#dcf0e5" />
+      <Setter Property="BorderBrush" Value="#9fd2b6" />
+    </Style>
+    <!-- 默认模板在悬停/按下时由 ContentPresenter 绘制背景，需同步覆盖，否则
+         上面的圆角底色会被主题的高亮色盖住。 -->
+    <Style Selector="ToggleButton.MonitorToggle /template/ ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ToggleButton.MonitorToggle:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#f2f5f8" />
+    </Style>
+    <Style Selector="ToggleButton.MonitorToggle:checked /template/ ContentPresenter">
+      <Setter Property="Background" Value="#e8f5ee" />
+    </Style>
+    <Style Selector="ToggleButton.MonitorToggle:checked:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#dcf0e5" />
+    </Style>
+    <Style Selector="ToggleButton.MonitorToggle:checked:pressed /template/ ContentPresenter">
+      <Setter Property="Background" Value="#d0e9dc" />
     </Style>
     <Style Selector="Button.SftpHeader">
       <Setter Property="Background" Value="Transparent" />
@@ -399,10 +428,20 @@
         <ToggleButton Grid.Column="0"
                       Name="MonitorToggleButton"
                       Classes="MonitorToggle"
-                      Content="远程监控"
                       ToolTip.Tip="远程监控"
                       IsChecked="{Binding IsMonitorOn, Mode=TwoWay}"
-                      VerticalAlignment="Center" />
+                      VerticalAlignment="Center">
+          <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+            <TextBlock Text="&#xe163;"
+                       FontFamily="{DynamicResource IconFontAwesome}"
+                       FontSize="11"
+                       VerticalAlignment="Center"
+                       Foreground="{Binding $parent[ToggleButton].Foreground}" />
+            <TextBlock Text="远程监控"
+                       VerticalAlignment="Center"
+                       Foreground="{Binding $parent[ToggleButton].Foreground}" />
+          </StackPanel>
+        </ToggleButton>
         <TextBlock Grid.Column="1"
                    Name="StatusText"
                    Text="{Binding StatusMessage}"

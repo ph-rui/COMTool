@@ -1,9 +1,14 @@
 using System.Collections.Generic;
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Headless.XUnit;
+using Avalonia.Media;
 using Avalonia.Threading;
 using COMTool.App.ViewModels;
+using COMTool.App.Views;
 using COMTool.Connections.RemoteMonitoring;
+using COMTool.Sftp.Testing;
 using Xunit;
 
 namespace COMTool.App.Tests;
@@ -508,6 +513,157 @@ public sealed class RemoteMonitorFeatureTests
             Assert.False(vm.SegClientsVisible);
             Assert.False(vm.SegPartitionsVisible);
             Assert.Empty(vm.Partitions);
+            window.Close();
+        });
+    }
+
+    private static TextBlock SegmentIcon(MainWindow window, string borderName)
+    {
+        var border = window.FindControl<Border>(borderName)!;
+        var panel = (StackPanel)border.Child!;
+        return panel.Children.OfType<TextBlock>().First();
+    }
+
+    private static Color ResourceColor(Control control, string key)
+    {
+        Assert.True(control.TryFindResource(key, out var value), key + " resource not found");
+        return Assert.IsAssignableFrom<ISolidColorBrush>(value).Color;
+    }
+
+    private static void AssertIcon(MainWindow window, string borderName, char code, Color expected)
+    {
+        var icon = SegmentIcon(window, borderName);
+        Assert.Equal(code.ToString(), icon.Text);
+        var actual = Assert.IsAssignableFrom<ISolidColorBrush>(icon.Foreground);
+        Assert.Equal(expected, actual.Color);
+    }
+
+    private static void AssertColor(IBrush? brush, string hex)
+    {
+        var solid = Assert.IsAssignableFrom<ISolidColorBrush>(brush);
+        Assert.Equal(Color.Parse(hex), solid.Color);
+    }
+
+    [AvaloniaFact]
+    public void RM06_SegmentIconsAndColorsMatchMobaXtermReference()
+    {
+        using var env = new TestEnvironment();
+        env.Run(() =>
+        {
+            var vm = new MainViewModel();
+            var window = new MainWindow { DataContext = vm };
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+
+            var runner = new FakeExecRunner(() => Task.FromResult(
+                Dump("cpu 100 0 0 900 0", "0 0")
+                    .Replace("MON_WHO=root", "MON_WHO=root,admin")));
+            var tab = SshTab(runner);
+            vm.AddTab(tab);
+            vm.SetMonitorEnabled(tab, true);
+            foreach (var key in new[] { "clients", "processes", "fds", "users" })
+            {
+                vm.MonitorMenu.SetOption(key, true);
+            }
+            vm.ReformatMonitorLine();
+
+            var deadline = DateTime.UtcNow.AddSeconds(8);
+            while (!vm.SegUsersVisible && DateTime.UtcNow < deadline)
+            {
+                Dispatcher.UIThread.RunJobs();
+                Thread.Sleep(20);
+            }
+            window.UpdateLayout();
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.True(vm.SegUsersVisible);
+            // MobaXterm 参考图里用户之间以空格分隔（不是逗号）。
+            Assert.Equal("root admin", vm.SegUsersText);
+
+            // 图标码位与配色必须与参考图一致：主机/用户深灰，CPU/内存/上传绿，
+            // 下载/文件描述符蓝，连接青，进程橙，运行时长灰绿，磁盘灰蓝。
+            var dark = ResourceColor(window, "MonIconDarkBrush");
+            var uptime = ResourceColor(window, "MonIconUptimeBrush");
+            var disk = ResourceColor(window, "MonIconDiskBrush");
+            var green = Color.Parse("#2e9e4f");
+            var blue = Color.Parse("#2f7ed8");
+
+            AssertIcon(window, "MonSegHost", '\uF108', dark);
+            AssertIcon(window, "MonSegCpu", '\uF2DB', green);
+            AssertIcon(window, "MonSegRam", '\uF538', green);
+            AssertIcon(window, "MonSegNetUp", '\uF093', green);
+            AssertIcon(window, "MonSegNetDown", '\uF019', blue);
+            AssertIcon(window, "MonSegClients", '\uF0C0', Color.Parse("#1aa3d8"));
+            AssertIcon(window, "MonSegProcesses", '\uF085', Color.Parse("#e8701a"));
+            AssertIcon(window, "MonSegFds", '\uF15C', blue);
+            AssertIcon(window, "MonSegUptime", '\uF017', uptime);
+            AssertIcon(window, "MonSegUsers", '\uF007', dark);
+
+            // 分区：磁盘图标灰蓝；占用最高的分区是粗斜体的橙红文字。
+            var parts = window.FindControl<ItemsControl>("MonPartitions")!;
+            Assert.True(parts.IsVisible);
+            var partTexts = Avalonia.VisualTree.VisualExtensions
+                .GetVisualDescendants(parts)
+                .OfType<TextBlock>()
+                .Where(t => t.IsVisible)
+                .ToList();
+            var diskIcon = partTexts.First(t => t.Text == "\uF0A0");
+            var diskBrush = Assert.IsAssignableFrom<ISolidColorBrush>(diskIcon.Foreground);
+            Assert.Equal(ResourceColor(window, "MonIconDiskBrush"), diskBrush.Color);
+            var hot = partTexts.Single(t => t.Text == "/data: 82%");
+            Assert.Equal(FontWeight.Bold, hot.FontWeight);
+            Assert.Equal(FontStyle.Italic, hot.FontStyle);
+            var hotBrush = Assert.IsAssignableFrom<ISolidColorBrush>(hot.Foreground);
+            Assert.Equal(ResourceColor(window, "MonSegHotBrush"), hotBrush.Color);
+            var cool = partTexts.Single(t => t.Text == "/: 49%");
+            Assert.Equal(FontWeight.Normal, cool.FontWeight);
+
+            vm.SetMonitorEnabled(tab, false);
+            window.Close();
+        });
+    }
+
+    [AvaloniaFact]
+    public void RM06_MonitorButtonShowsDisplayIconAndGreenOnState()
+    {
+        using var env = new TestEnvironment();
+        env.Run(() =>
+        {
+            var paneVm = new SftpPaneViewModel(
+                () => throw new InvalidOperationException("no remote in unit test"),
+                new InMemoryFileSystem("/local"));
+            var pane = new SftpPane { ViewModel = paneVm };
+            var window = new Window { Content = pane, Width = 900, Height = 600 };
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+            window.UpdateLayout();
+
+            var button = pane.FindControl<ToggleButton>("MonitorToggleButton")!;
+            Assert.False(button.IsChecked);
+            var panel = Assert.IsType<StackPanel>(button.Content);
+            var icon = Assert.IsType<TextBlock>(panel.Children[0]);
+            var label = Assert.IsType<TextBlock>(panel.Children[1]);
+            Assert.Equal("\uE163", icon.Text);
+            Assert.Equal("远程监控", label.Text);
+
+            // 关：白底、浅灰边框、灰字；图标与文字继承按钮前景色。
+            AssertColor(button.Background, "#ffffff");
+            AssertColor(button.BorderBrush, "#d5dce3");
+            AssertColor(button.Foreground, "#666666");
+            AssertColor(icon.Foreground, "#666666");
+            AssertColor(label.Foreground, "#666666");
+
+            // 开：浅绿底、绿边框、绿字、半粗体。
+            paneVm.IsMonitorOn = true;
+            Dispatcher.UIThread.RunJobs();
+            window.UpdateLayout();
+            Assert.True(button.IsChecked);
+            AssertColor(button.Background, "#e8f5ee");
+            AssertColor(button.BorderBrush, "#b7dfc9");
+            AssertColor(button.Foreground, "#0f8a63");
+            AssertColor(icon.Foreground, "#0f8a63");
+            Assert.Equal(FontWeight.SemiBold, button.FontWeight);
+
             window.Close();
         });
     }
