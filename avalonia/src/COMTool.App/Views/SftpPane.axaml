@@ -44,6 +44,19 @@
     <Style Selector="Button.SftpTool.Armed TextBlock.SftpIcon">
       <Setter Property="Foreground" Value="#c00000" />
     </Style>
+    <Style Selector="ToggleButton.MonitorToggle">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="4,0" />
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="Foreground" Value="#666666" />
+    </Style>
+    <Style Selector="ToggleButton.MonitorToggle:checked">
+      <Setter Property="Foreground" Value="#2e7d32" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
     <Style Selector="Button.SftpHeader">
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderThickness" Value="0" />
@@ -382,20 +395,27 @@
     <!-- The line that tells what happened, the progress of a transfer that
          runs and the question about a target that already exists. -->
     <Grid Grid.Row="6" RowDefinitions="Auto,Auto">
-      <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto">
-        <TextBlock Grid.Column="0"
+      <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto,Auto,Auto">
+        <ToggleButton Grid.Column="0"
+                      Name="MonitorToggleButton"
+                      Classes="MonitorToggle"
+                      Content="远程监控"
+                      ToolTip.Tip="远程监控"
+                      IsChecked="{Binding IsMonitorOn, Mode=TwoWay}"
+                      VerticalAlignment="Center" />
+        <TextBlock Grid.Column="1"
                    Name="StatusText"
                    Text="{Binding StatusMessage}"
                    Margin="6,0"
                    VerticalAlignment="Center"
                    TextTrimming="CharacterEllipsis" />
-        <Button Grid.Column="1"
+        <Button Grid.Column="2"
                 Name="RetryButton"
                 Content="Retry"
                 Margin="4,0,4,0"
                 IsVisible="{Binding HasRemoteError}"
                 Click="OnRetryClick" />
-        <ProgressBar Grid.Column="2"
+        <ProgressBar Grid.Column="3"
                      Name="TransferProgressBar"
                      Width="120"
                      Height="12"
@@ -404,7 +424,7 @@
                      Value="{Binding TransferProgress}"
                      IsVisible="{Binding IsTransferring}"
                      VerticalAlignment="Center" />
-        <Button Grid.Column="3"
+        <Button Grid.Column="4"
                 Name="CancelButton"
                 Content="Cancel"
                 Margin="4,0,4,0"

@@ -78,6 +78,9 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        // ContextMenu events cannot be wired in XAML (Avalonia 12); the
+        // remote-monitoring menu syncs its check states when it opens.
+        MonitorBarMenu.Opening += OnMonitorMenuOpening;
         WarmUpTerminalFonts();
 
         // Every platform stays frameless (WindowDecorations=None in XAML) so
@@ -224,6 +227,7 @@ public partial class MainWindow : Window
             {
                 _config = AppConfigService.Load();
                 AppLog.Info($"Config loaded: {_config.ConfigPath}");
+                viewModel.LoadMonitorOptions(_config.Config.RemoteMonitor);
                 // "COMTool 启动时启动 Cron 服务器" 勾选时随主窗口自启
                 _ = CronAutoStart.EnsureAsync(_config.Config.Servers.Cron);
                 ThemeManager.Apply(_config.Config.Skin);
@@ -875,6 +879,10 @@ public partial class MainWindow : Window
         };
         AttachSshTransport(tab, terminal, connection);
 
+        // The "远程监控" toggle of the SFTP pane drives the per-tab monitor flag
+        // and the poller through the view model.
+        pane.MonitorToggled = v => viewModel.SetMonitorEnabled(tab, v);
+
         var stoppedBehavior = new SessionStoppedBehavior(
             terminal,
             tab,
@@ -991,6 +999,13 @@ public partial class MainWindow : Window
         tab.IsTransportOpen = () => connection.IsConnected;
         tab.CloseAction = () =>
         {
+            // The monitor polls through this connection; stop it before the
+            // connection dies so the exec channel is not used post-dispose.
+            if (DataContext is MainViewModel viewModel)
+            {
+                viewModel.MonitorStopForTab(tab);
+            }
+
             // A transfer that runs when the tab is closed would write
             // against a connection that is about to die.
             tab.SftpPane?.CancelTransfer();
@@ -1021,7 +1036,20 @@ public partial class MainWindow : Window
             tab.StatusBrush = StatusWarningBrush;
             tab.TabDotBrush = StatusWarningBrush;
             UpdateConnectionStates();
+            // The shell is gone: stop the monitor (the per-tab flag stays on,
+            // so an R restart re-attaches and resumes polling automatically).
+            if (DataContext is MainViewModel viewModel)
+            {
+                viewModel.MonitorStopForTab(tab);
+            }
         });
+
+        // A freshly attached transport is by definition alive: resume
+        // monitoring if this tab has it enabled (first connect or R restart).
+        if (DataContext is MainViewModel viewModel2)
+        {
+            viewModel2.MonitorOnTransportAttached(tab);
+        }
     }
 
     private async Task RestartSshSessionAsync(TerminalTab tab)
@@ -1124,6 +1152,10 @@ public partial class MainWindow : Window
                 tab.Connection = null;
                 tab.CloseAction = null;
                 tab.IsTransportOpen = null;
+                if (DataContext is MainViewModel viewModel2)
+                {
+                    viewModel2.MonitorStopForTab(tab);
+                }
             }
 
             tab.IsAlive = false;
@@ -2213,6 +2245,82 @@ public partial class MainWindow : Window
         {
             yield return tab;
         }
+    }
+
+    // ---- Remote monitoring: status bar right-click menu (MobaXterm 13 items) ----
+
+    private void OnMonitorMenuOpening(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        if (sender is not ContextMenu menu || DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        // Checkable items carry their option tag; sync the check state from
+        // the view model each time the menu opens.
+        foreach (var item in menu.Items)
+        {
+            if (item is MenuItem mi && mi.Tag is string tag)
+            {
+                mi.IsChecked = viewModel.MonitorMenu.IsOption(tag);
+            }
+        }
+    }
+
+    private void OnMonitorOptionClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { Tag: string tag } item
+            || DataContext is not MainViewModel viewModel || _config is null)
+        {
+            return;
+        }
+
+        viewModel.MonitorMenu.SetOption(tag, item.IsChecked);
+        viewModel.ReformatMonitorLine();
+        viewModel.MonitorMenu.SaveTo(_config.Config.RemoteMonitor);
+        _config.Save();
+    }
+
+    private void OnMonitorCopyClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel viewModel || string.IsNullOrEmpty(viewModel.MonitorText))
+        {
+            return;
+        }
+
+        if (TopLevel.GetTopLevel(this) is { } topLevel)
+        {
+            var data = new DataTransfer();
+            data.Add(DataTransferItem.CreateText(viewModel.MonitorText));
+            _ = topLevel.Clipboard.SetDataAsync(data);
+        }
+    }
+
+    private async void OnMonitorSaveClick(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel viewModel || string.IsNullOrEmpty(viewModel.MonitorText))
+        {
+            return;
+        }
+
+        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Save remote monitor status",
+            SuggestedFileName = $"remote-monitor-{DateTime.Now:yyyyMMdd-HHmmss}.txt",
+            DefaultExtension = "txt",
+        });
+        if (file is null)
+        {
+            return;
+        }
+
+        await using var stream = await file.OpenWriteAsync();
+        if (stream.CanSeek)
+        {
+            stream.SetLength(0);
+        }
+
+        await stream.WriteAsync(System.Text.Encoding.UTF8.GetBytes(viewModel.MonitorText));
     }
 
     private void CloseTab(TerminalTab tab)

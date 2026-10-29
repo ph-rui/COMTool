@@ -115,6 +115,14 @@ public sealed partial class TerminalTab : ObservableObject
     [ObservableProperty]
     private bool _isSessionStopped;
 
+    /// <summary>
+    /// 远程监控开关（MobaXterm SFTP 面板左下角"远程监控"按钮的 per-tab
+    /// 运行态）。会话停止时保留，R 重启 attach 后自动恢复轮询；
+    /// 不随进程持久化。
+    /// </summary>
+    [ObservableProperty]
+    private bool _monitorEnabled;
+
     [ObservableProperty]
     private string _statusMessage = "";
 
@@ -292,6 +300,10 @@ public partial class MainViewModel : ViewModelBase
                     SidebarTab = SidebarTab.Sessions;
                 }
             }
+
+            // Remote monitoring follows the selected tab: stop the old tab's
+            // poller and resume the new one if its per-tab flag is on.
+            MonitorOnSelectedTabChanged();
         }
     }
 

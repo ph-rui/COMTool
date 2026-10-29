@@ -76,6 +76,47 @@ public sealed partial class SftpPaneViewModel : ObservableObject
     private bool _neverAskAgain;
 
     /// <summary>
+    /// 面板底部"远程监控"开关按钮的状态。用户点击时通过
+    /// <see cref="MonitorToggled"/> 通知上层（MainViewModel 负责启停轮询）；
+    /// 程序同步按钮态用 <see cref="SyncMonitorOn"/>，不触发回调。
+    /// </summary>
+    [ObservableProperty]
+    private bool _isMonitorOn;
+
+    /// <summary>
+    /// 用户切换按钮时触发（程序同步不触发）。参数为新状态。
+    /// </summary>
+    public Action<bool>? MonitorToggled { get; set; }
+
+    private bool _suppressMonitorToggle;
+
+    partial void OnIsMonitorOnChanged(bool value)
+    {
+        if (_suppressMonitorToggle)
+        {
+            return;
+        }
+
+        MonitorToggled?.Invoke(value);
+    }
+
+    /// <summary>
+    /// 切标签时同步按钮态：只更新显示，不触发 MonitorToggled，
+    /// 避免重新选中同一标签时误启/误停轮询。
+    /// </summary>
+    internal void SyncMonitorOn(bool value)
+    {
+        if (IsMonitorOn == value)
+        {
+            return;
+        }
+
+        _suppressMonitorToggle = true;
+        IsMonitorOn = value;
+        _suppressMonitorToggle = false;
+    }
+
+    /// <summary>
     /// Creates the view model of one panel. The factory is asked for the
     /// remote side when the panel loads, so that creating the view model
     /// touches no network.

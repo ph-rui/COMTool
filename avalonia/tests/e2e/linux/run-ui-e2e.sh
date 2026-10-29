@@ -31,6 +31,7 @@ E2E_TESTS=(
     TELNET02_RestartStoppedSessionE2E
     SFTP01_BrowserTransferE2E
     SFTP02_FileManagementE2E
+    RM01_MonitorBarShowsMetricsE2E
 )
 SSH_TEST_IDS=(
     UI01_TitleBarDoubleClickMaximizeE2E
@@ -43,6 +44,7 @@ SSH_TEST_IDS=(
     TERM15_DoubleClickMaximizeE2E
     SFTP01_BrowserTransferE2E
     SFTP02_FileManagementE2E
+    RM01_MonitorBarShowsMetricsE2E
 )
 TELNET_TEST_IDS=(
     TELNET01_AutoLoginE2E
@@ -892,6 +894,57 @@ run_sftp02_file_management() {
     pass "$test_id"
 }
 
+run_rm01_monitor_bar() {
+    local test_id="RM01_MonitorBarShowsMetricsE2E"
+    local btn_x="${MONITOR_BTN_X:-66}"
+    local geometry width height btn_y polls
+
+    log "Running $test_id"
+    ensure_first_shell "$test_id"
+
+    collapse_sidebar_for_tabs || fail "$test_id" "could not collapse the sidebar"
+    wait_for_ssh_browser_rail 10 \
+        || fail "$test_id" "the SSH-browser globe did not appear in the rail"
+    click_window "$SSH_BROWSER_RAIL_X" "$SSH_BROWSER_RAIL_Y" \
+        || fail "$test_id" "could not click the SSH-browser globe"
+    if ! wait_for_sshd_log "subsystem 'sftp'" 20; then
+        fail "$test_id" "the SFTP panel did not request the sftp subsystem"
+    fi
+    wait_for_sftp_browser_visible 10 \
+        || fail "$test_id" "the SFTP browser did not open"
+
+    # The remote-monitoring toggle sits at the bottom-left of the SFTP pane
+    # (window is 1000x650; the pane bottom row sits ~22px above the bottom).
+    geometry="$(xdotool getwindowgeometry --shell "$WINDOW_ID" 2>/dev/null)"
+    width="$(printf '%s\n' "$geometry" | sed -n 's/^WIDTH=//p' | sed -n '1p')"
+    height="$(printf '%s\n' "$geometry" | sed -n 's/^HEIGHT=//p' | sed -n '1p')"
+    [[ "$width" =~ ^[0-9]+$ && "$height" =~ ^[0-9]+$ ]] \
+        || fail "$test_id" "invalid window geometry"
+    width=$((10#$width))
+    height=$((10#$height))
+    btn_y=$((height - 22))
+    log "$test_id: clicking the monitor toggle at ($btn_x,$btn_y)"
+    click_window "$btn_x" "$btn_y" \
+        || fail "$test_id" "could not click the monitor toggle"
+
+    # Every poll opens an exec channel; sshd logs "Starting session: command
+    # for" per exec (interactive shell logs "shell on pts", sftp logs
+    # "subsystem"), so the count of exec sessions equals the poll count.
+    if ! wait_for_sshd_log "Starting session: command for" 30; then
+        capture_screenshot "$TMP_ROOT/rm01-no-poll.png" || true
+        fail "$test_id" "no monitor exec channel reached the SSH server"
+    fi
+    sleep 3
+    polls="$(grep -c 'Starting session: command for' "$SSH_FIXTURE_DIR/sshd.log" 2>/dev/null || true)"
+    if [[ -z "$polls" || "$polls" -lt 2 ]]; then
+        capture_screenshot "$TMP_ROOT/rm01-single-poll.png" || true
+        fail "$test_id" "expected at least 2 monitor polls, got $polls"
+    fi
+    log "$test_id: monitor polls observed: $polls"
+
+    pass "$test_id"
+}
+
 run_term15_double_click_maximize() {
     local test_id="TERM15_DoubleClickMaximizeE2E"
     local before
@@ -991,6 +1044,9 @@ if [[ -n "$SSH_TEST_ID" ]]; then
     fi
     if matches_filter "SFTP02_FileManagementE2E"; then
         run_sftp02_file_management
+    fi
+    if matches_filter "RM01_MonitorBarShowsMetricsE2E"; then
+        run_rm01_monitor_bar
     fi
 
     close_app_window "$SSH_TEST_ID"

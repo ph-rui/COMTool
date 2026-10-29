@@ -13,6 +13,24 @@ public sealed class RemoteMonitor : IDisposable
     /// <summary>默认轮询间隔，对齐 MobaXterm 手感。</summary>
     public static readonly TimeSpan DefaultInterval = TimeSpan.FromSeconds(2);
 
+    /// <summary>
+    /// 单行远端 dump 脚本：每轮监控执行一次，每个指标一行 MON_XXX=value
+    /// （spec 2026-10-29-remote-monitoring 3.2 节）。非 Linux 远端输出无
+    /// MON_ 段，引擎按 unsupported 处理。
+    /// </summary>
+    public const string DumpScript =
+        "echo \"MON_HOST=$(hostname 2>/dev/null)\"; "
+        + "echo \"MON_CPU=$(head -n1 /proc/stat 2>/dev/null)\"; "
+        + "echo \"MON_MEM=$(grep -E '^(MemTotal|MemAvailable):' /proc/meminfo 2>/dev/null | tr '\\n' '|')\"; "
+        + "echo \"MON_UP=$(cat /proc/uptime 2>/dev/null)\"; "
+        + "echo \"MON_CLIENTS=$(who 2>/dev/null | wc -l)\"; "
+        + "echo \"MON_PROC=$(ps -e --no-headers 2>/dev/null | wc -l)\"; "
+        + "echo \"MON_FD=$(cut -d' ' -f1 /proc/sys/fs/file-nr 2>/dev/null)\"; "
+        + "echo \"MON_WHO=$(who 2>/dev/null | awk '{print $1}' | paste -sd, -)\"; "
+        + "echo \"MON_NET=$(awk 'NR>2 && $1!=\"lo:\" {rx+=$2; tx+=$10} END{print rx+0\" \"tx+0}' /proc/net/dev 2>/dev/null)\"; "
+        + "echo \"MON_DF=$(df -P -x tmpfs -x devtmpfs -x squashfs -x overlay 2>/dev/null | awk 'NR>1 {m=$6; for(i=7;i<=NF;i++) m=m\" \"$i; print $5\" \"m}' | paste -sd'|' -)\"; "
+        + "echo MON_END";
+
     private const int MaxConsecutiveFailures = 2;
 
     private readonly Func<Task<string>> _dumpSource;
