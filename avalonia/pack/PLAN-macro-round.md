@@ -211,6 +211,21 @@
      App 214/214、Core 86/86、TestGate 49/49；gate 第 20 轮全 PASS（E2E 15/15）；提交 53bee6e，发布部署双份。
      Windows 实机 WIN-28 补核：分段图标/颜色与 MobaXterm 并排、热分区粗斜体、按钮开关态。
 
+   - 追加（2026-10-30，第 21 轮）：移除 4 项指标 + 热分区去斜体 + 监控按钮改通栏
+     （用户反馈 2026-10-30：“为啥最后这个分区字体是斜着的？把已连接客户端、进程数、文件描述符、连接用户都删了不要了；
+     远程监控的按钮的宽度，mobaxterm是跟侧边栏一样宽的”）：
+     ① 热分区：去掉 FontStyle=Italic，保留橙红 MonSegHotBrush + 粗体（RM06 断言 FontStyle.Normal）。
+     ② 指标精简为 MobaXterm 默认 7 项：引擎 dump 命令删除 MON_CLIENTS/MON_PROC/MON_FD/MON_WHO；
+        DumpData/MonitorSnapshot/MonitorOptions/RemoteMonitorConfig 删除对应字段；状态栏分段与右键菜单删除
+        客户端/进程/FD/用户 4 项；菜单 13→9 项（复制/保存到文件/分隔线 + 7 项勾选且默认全开）。
+        旧 config 里的 show_clients 等键由 JsonExtensionData 保留，不影响加载。
+     ③ 监控按钮：从状态行左侧小按钮移到抽屉底部独立第 8 行通栏 Border（#f1f1f1 底、1px 上边框），
+        ToggleButton HorizontalAlignment=Stretch、内容居中，宽度=侧栏宽度；关=灰字，开=浅绿底 #e8f5ee/绿字 #0f8a63 半粗。
+     ④ 测试：RM04_StatusBarMenuHas9ItemsWithAllSevenCheckedByDefault；RM06 断言
+        MonSegClients/Processes/Fds/Users 已不存在、按钮宽度与通栏一致；删除 RM01_FormatOptionalCountersBareNumbers。
+     App 214/214、Core 86/86、Connections 135/135、TestGate 49/49；gate 第 21 轮全 PASS（E2E 15/15）；提交 ce2c433，发布部署双份。
+     Windows 实机 WIN-28 补核：通栏按钮宽度、热分区粗体无斜体、菜单只剩 7 项指标。
+
 ## 已知偏差（已写入 spec 附录）
 
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
