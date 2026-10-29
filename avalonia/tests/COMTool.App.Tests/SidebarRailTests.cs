@@ -599,6 +599,66 @@ public sealed class SidebarRailTests
     }
 
     [AvaloniaFact]
+    public void NET05_ScanRowsAppearIncrementally()
+    {
+        using var env = new TestEnvironment();
+        NetworkScanWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                window = new NetworkScanWindow
+                {
+                    // 发现阶段先报 SSH(22) 已确认，名称留空；完成阶段才补名称并定格 7 列
+                    ScannerForTests = new FakeScanner(new List<NetworkScanHost>
+                    {
+                        new(new IPAddress(new byte[] { 192, 168, 1, 10 }), "host10", new[] { 22 }, 1),
+                    })
+                    // DiscoverDelayMs=20ms 出 discovered；DelayMs=500ms 拉开与 completed 的间隔，
+                    // 保证扫描中途能稳定观察到 "…" 未定格状态
+                    { DelayMs = 500, DiscoverDelayMs = 20, DiscoveredOpenPorts = new[] { 22 } },
+                };
+                window.Show();
+                Dispatcher.UIThread.RunJobs();
+                var vm = window.ViewModel;
+                vm.OctetTo = "2"; // 缩到 2 个目标，加快测试
+
+                Click(window, window.FindControl<Button>("ScanStartButton")!);
+
+                // 扫描中途：行先出现（discovered）——名称空、SSH 已确认、其余 6 列 "…"
+                var rowAppeared = WaitUntilTry(() => vm.Rows.Count == 1, 10);
+                Assert.True(rowAppeared, "row not inserted on discovery");
+                var row = vm.Rows[0];
+                Assert.Equal("192.168.1.10", row.Address);
+                Assert.Equal("", row.HostName);
+                Assert.True(row.Cells[0].IsOpen);
+                Assert.False(row.Cells[0].IsPending);
+                Assert.All(row.Cells.Skip(1), c => Assert.True(c.IsPending));
+                RunJobs(window);
+                var ellipses = window.GetVisualDescendants().OfType<TextBlock>()
+                    .Where(tb => tb.Text == "\uf141").ToList();
+                Assert.Equal(6, ellipses.Count);
+
+                // 扫描完成：名称回填、7 列全部定格
+                var finished = WaitUntilTry(() => vm.Status.Contains("完成"), 10);
+                Assert.True(finished, $"scan did not finish: status='{vm.Status}'");
+                RunJobs(window);
+                Assert.Equal("host10", row.HostName);
+                Assert.All(row.Cells, c => Assert.False(c.IsPending));
+                Assert.True(row.Cells[0].IsOpen);
+                Assert.All(row.Cells.Skip(1), c => Assert.False(c.IsOpen));
+                Assert.DoesNotContain(window.GetVisualDescendants().OfType<TextBlock>(),
+                    tb => tb.Text == "\uf141");
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
     public void NET05_ScanResultColumnsMatchMobaXtermWidths()
     {
         using var env = new TestEnvironment();
@@ -1682,6 +1742,12 @@ public sealed class SidebarRailTests
 
         public int DelayMs { get; init; }
 
+        /// <summary>When >0: report a discovered (partial) host before its completed report.</summary>
+        public int DiscoverDelayMs { get; init; }
+
+        /// <summary>Open ports carried by the discovered (partial) report.</summary>
+        public IReadOnlyList<int> DiscoveredOpenPorts { get; init; } = Array.Empty<int>();
+
         public int DeepDelayMs { get; init; }
 
         public IReadOnlyList<int> DeepPorts { get; init; } = Array.Empty<int>();
@@ -1724,11 +1790,19 @@ public sealed class SidebarRailTests
             IReadOnlyList<IPAddress> targets,
             IReadOnlyList<int> ports,
             IProgress<NetworkScanProgress>? progress,
+            IProgress<NetworkScanHost>? discovered,
             CancellationToken cancellationToken)
         {
             for (var i = 0; i < targets.Count; i++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                if (i < _hosts.Count && DiscoverDelayMs > 0)
+                {
+                    await Task.Delay(DiscoverDelayMs, cancellationToken);
+                    discovered?.Report(new NetworkScanHost(
+                        _hosts[i].Address, null, DiscoveredOpenPorts, null));
+                }
+
                 if (DelayMs > 0)
                 {
                     await Task.Delay(DelayMs, cancellationToken);

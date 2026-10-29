@@ -193,6 +193,19 @@ public partial class NetworkScanWindow : Window
         _cts = new CancellationTokenSource();
         var cts = _cts;
 
+        var discovered = new UiProgress<NetworkScanHost>(h =>
+        {
+            // 停止后忽略已排队的上报，避免“已停止”被迟到的上报覆盖
+            if (!ReferenceEquals(_cts, cts) || cts.IsCancellationRequested)
+            {
+                return;
+            }
+
+            // 发现阶段：立即插行（名称空、已确认开放列✓、未确认列“…”，
+            // MobaXterm 式增量显示，2026-10-29 用户要求）
+            vm.Rows.Add(ToScanGridRow(h, false));
+        });
+
         var progress = new UiProgress<NetworkScanProgress>(p =>
         {
             // 停止后忽略已排队的进度，避免“已停止”被迟到的“完成”覆盖
@@ -203,7 +216,17 @@ public partial class NetworkScanWindow : Window
 
             if (p.Host is { } host)
             {
-                vm.Rows.Add(ToScanGridRow(host));
+                // 完成阶段：按 Address 原位更新（名称回填 + 列定格）；
+                // 兜底：该行不存在（注入的扫描器未上报 discovered）则直接补行
+                var row = vm.Rows.FirstOrDefault(r => r.Address == host.Address.ToString());
+                if (row is not null)
+                {
+                    row.UpdateFrom(host);
+                }
+                else
+                {
+                    vm.Rows.Add(ToScanGridRow(host, true));
+                }
             }
 
             if (p.Completed >= p.Total)
@@ -220,7 +243,7 @@ public partial class NetworkScanWindow : Window
 
         try
         {
-            await Scanner.ScanAsync(targets, ports, progress, cts.Token);
+            await Scanner.ScanAsync(targets, ports, progress, discovered, cts.Token);
             // 兜底：若扫描器未上报最终计数
             if (vm.IsScanning)
             {
@@ -249,15 +272,29 @@ public partial class NetworkScanWindow : Window
         }
     }
 
-    internal static ScanGridRow ToScanGridRow(NetworkScanHost host)
+    /// <summary>
+    /// finalize=false（发现阶段）：名称留空，已确认开放列 ✓、未确认列“…”(IsPending)；
+    /// finalize=true（完成阶段/兜底补行）：名称回填、各列定格。
+    /// </summary>
+    internal static ScanGridRow ToScanGridRow(NetworkScanHost host, bool finalize)
     {
         var openPorts = new HashSet<int>(host.OpenPorts);
         return new ScanGridRow
         {
             Address = host.Address.ToString(),
-            HostName = host.HostName ?? "",
+            HostName = finalize ? (host.HostName ?? "") : "",
             Cells = NetworkServices.ServiceColumns
-                .Select(c => new PortCell { Label = c.Name, IsOpen = openPorts.Contains(c.Port) })
+                .Select(c =>
+                {
+                    bool isOpen = openPorts.Contains(c.Port);
+                    return new PortCell
+                    {
+                        Label = c.Name,
+                        Port = c.Port,
+                        IsOpen = isOpen,
+                        IsPending = !finalize && !isOpen,
+                    };
+                })
                 .ToList(),
         };
     }

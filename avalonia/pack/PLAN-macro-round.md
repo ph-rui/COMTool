@@ -96,6 +96,22 @@
         （最小复现证实 p!.Y 仍 CS1061，`!` 只去引用类型可空性），须用 .Value.Y/.Value.X；
         纯代码创建的对话框无 NameScope，FindControl 抛 "Could not find parent name scope"，测试须用 ButtonByLabel。
      199/199，gate 第 13 轮全 PASS；提交 11f78dc，发布部署双份。
+   - 追加（2026-10-29）：网络扫描仪改 MobaXterm 式增量显示（用户截图反馈“扫描到一台之后立即显示”）：
+     ① 引擎 ProbeAsync 两阶段：第一个存活信号（ping 回复或任一端口连通）立即上报 discovered
+        （名称空、rtt 空、开放端口=当时已确认子集）；全部探测+名称解析完由 progress 报最终结果；
+        死主机仍不出现；总时长不变（/24 仍 ~1-2s）；
+     ② INetworkScanner.ScanAsync 加 IProgress<NetworkScanHost>? discovered 参数；窗口双通道：
+        discovered→立即插行（已确认开放列绿✓、未确认列灰“…”f141），completed→按 Address 原位更新
+        （名称回填+列定格）；注入扫描器不上报 discovered 时兜底补行；
+     ③ PortCell/ScanGridRow 改 ObservableObject（IsPending/Port/UpdateFrom，Glyph/Foreground 联动通知）；
+        状态行保持“扫描中… X/Y”（X=完成数）；扫描中“停止”仍保留已发现行。
+     两个坑：Task.WhenAny 返回的是完成的 Task 本身，不能直接取值，需用 ReferenceEquals
+        识别后再从对应类型化任务取 Result；Task<int?>/Task<bool> 混排集合表达式报 CS0029（改显式 Add 循环）。
+     测试：NetworkScannerTests 加 NET05_DiscoveredReportedBeforeCompleted（discovered 先于
+        completed 顺序，回环真实端口）+ 4 处调用加 null 参；SidebarRailTests 加
+        NET05_ScanRowsAppearIncrementally（扫描中途行先出现+名称后补+6 个“…”→0），
+        FakeScanner 加 DiscoverDelayMs/DiscoveredOpenPorts（500ms 间隔保证中途状态稳定捕获）。
+     200/200 App + 112/112 Connections，gate 第 14 轮全 PASS；提交 <hash>，发布部署双份。
 
 ## 已知偏差（已写入 spec 附录）
 

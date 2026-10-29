@@ -25,6 +25,13 @@ public sealed class NetworkScannerTests
         public void Report(int value) => _action(value);
     }
 
+    private sealed class HostSyncProgress : IProgress<NetworkScanHost>
+    {
+        private readonly Action<NetworkScanHost> _action;
+        public HostSyncProgress(Action<NetworkScanHost> action) => _action = action;
+        public void Report(NetworkScanHost value) => _action(value);
+    }
+
     private static IReadOnlyList<IPAddress> Ips(params string[] ips)
     {
         var list = new List<IPAddress>();
@@ -145,7 +152,7 @@ public sealed class NetworkScannerTests
         });
 
         await new NetworkScanner().ScanAsync(
-            Ips("127.0.0.1"), [port], progress, default);
+            Ips("127.0.0.1"), [port], progress, null, default);
 
         Assert.Single(hosts);
         Assert.Equal("127.0.0.1", hosts[0].Address.ToString());
@@ -172,12 +179,41 @@ public sealed class NetworkScannerTests
         });
 
         await new NetworkScanner { PingTimeoutMs = 300, ConnectTimeoutMs = 300 }
-            .ScanAsync(Ips("127.0.0.1"), [1], progress, default);
+            .ScanAsync(Ips("127.0.0.1"), [1], progress, null, default);
 
         foreach (var host in hosts)
         {
             Assert.DoesNotContain(1, host.OpenPorts);
         }
+    }
+
+    [Fact]
+    public async Task NET05_DiscoveredReportedBeforeCompleted()
+    {
+        // discovered 通道：第一个存活信号（任一端口连通/ping 回复）先上报，
+        // completed 通道：全部端口 + 名称解析完才上报（2026-10-29 增量显示）
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+
+        var events = new List<string>();
+        var progress = new SyncProgress(p =>
+        {
+            if (p.Host is not null)
+            {
+                events.Add("C");
+            }
+        });
+        var discovered = new HostSyncProgress(_ => events.Add("D"));
+
+        await new NetworkScanner().ScanAsync(
+            Ips("127.0.0.1"), [port, port + 1], progress, discovered, default);
+
+        Assert.Contains("D", events);
+        Assert.Contains("C", events);
+        Assert.True(events.IndexOf("C") > events.IndexOf("D"),
+            $"discovered must precede completed: {string.Join(",", events)}");
+        listener.Stop();
     }
 
     [Fact]
@@ -194,7 +230,7 @@ public sealed class NetworkScannerTests
 
         var ex = await Record.ExceptionAsync(async () =>
             await new NetworkScanner().ScanAsync(
-                Ips("127.0.0.1", "127.0.0.2"), [22], progress, cts.Token));
+                Ips("127.0.0.1", "127.0.0.2"), [22], progress, null, cts.Token));
 
         Assert.IsAssignableFrom<OperationCanceledException>(ex);
     }
@@ -257,7 +293,7 @@ public sealed class NetworkScannerTests
         var scanner = new NetworkScanner { PingTimeoutMs = 200, ConnectTimeoutMs = 200 };
 
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var scan = scanner.ScanAsync(targets, new[] { 22 }, null, default);
+        var scan = scanner.ScanAsync(targets, new[] { 22 }, null, null, default);
         stopwatch.Stop();
         var blockedMs = stopwatch.ElapsedMilliseconds;
 

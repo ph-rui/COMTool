@@ -7,14 +7,19 @@ namespace COMTool.Connections.NetworkScan;
 public interface INetworkScanner
 {
     /// <summary>
-    /// Probes every target host in parallel (bounded by Concurrency). Up
-    /// hosts are reported through progress as they finish; the task throws
-    /// OperationCanceledException when the token is cancelled.
+    /// Probes every target host in parallel (bounded by Concurrency).
+    /// Discovered: reported once per up host at the FIRST liveness signal
+    /// (ping reply or any open port) with the ports confirmed so far, so UI
+    /// can show hosts incrementally (MobaXterm style). Up hosts are then
+    /// reported through progress as their full probe (all ports + name
+    /// resolution) finishes; the task throws OperationCanceledException when
+    /// the token is cancelled.
     /// </summary>
     Task ScanAsync(
         IReadOnlyList<IPAddress> targets,
         IReadOnlyList<int> ports,
         IProgress<NetworkScanProgress>? progress,
+        IProgress<NetworkScanHost>? discovered,
         CancellationToken cancellationToken);
 
     /// <summary>
@@ -71,6 +76,7 @@ public sealed class NetworkScanner : INetworkScanner
         IReadOnlyList<IPAddress> targets,
         IReadOnlyList<int> ports,
         IProgress<NetworkScanProgress>? progress,
+        IProgress<NetworkScanHost>? discovered,
         CancellationToken cancellationToken)
     {
         if (targets is null || targets.Count == 0)
@@ -93,7 +99,7 @@ public sealed class NetworkScanner : INetworkScanner
                 NetworkScanHost? host = null;
                 try
                 {
-                    host = await ProbeAsync(ip, ports, cancellationToken);
+                    host = await ProbeAsync(ip, ports, discovered, cancellationToken);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
@@ -187,6 +193,7 @@ public sealed class NetworkScanner : INetworkScanner
     private async Task<NetworkScanHost?> ProbeAsync(
         IPAddress ip,
         IReadOnlyList<int> ports,
+        IProgress<NetworkScanHost>? discovered,
         CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
@@ -194,19 +201,57 @@ public sealed class NetworkScanner : INetworkScanner
         var pingTask = PingAsync(ip, ct);
         var connectTasks = ports.Select(port => ConnectAsync(ip, port, ct)).ToArray();
 
-        await Task.WhenAll([pingTask, ..connectTasks]);
-        ct.ThrowIfCancellationRequested();
-
         var openPorts = new List<int>();
+        int? rtt = null;
+        bool aliveReported = false;
+
+        // 两阶段（2026-10-29 用户要求，MobaXterm 式增量显示）：
+        // 第一个存活信号（ping 回复或任一端口连通）立即经 discovered 上报
+        // （名称空、rtt 空、开放端口=当时已确认的子集），全部探测完成 +
+        // 名称解析后由 ScanAsync 经 progress 上报最终结果。总时长不变。
+        // Task.WhenAny 返回非泛型 Task，统一用引用比较识别是哪个探针完成，
+        // 再回到对应类型化句柄取结果（避免 Task<bool>[]/Task<int?> 混排歧义）
+        var pending = new List<Task>(1 + connectTasks.Length);
+        pending.Add(pingTask);
         for (var i = 0; i < connectTasks.Length; i++)
         {
-            if (connectTasks[i].Result)
-            {
-                openPorts.Add(ports[i]);
-            }
+            pending.Add(connectTasks[i]);
         }
 
-        int? rtt = pingTask.Result;
+        while (pending.Count > 0)
+        {
+            ct.ThrowIfCancellationRequested();
+            var finished = await Task.WhenAny(pending.ToArray());
+            pending.Remove(finished);
+
+            bool isAlive = false;
+            if (ReferenceEquals(finished, pingTask))
+            {
+                rtt = pingTask.Result;
+                isAlive = rtt is not null;
+            }
+            else
+            {
+                for (var i = 0; i < connectTasks.Length; i++)
+                {
+                    if (ReferenceEquals(finished, connectTasks[i]))
+                    {
+                        if (connectTasks[i].Result)
+                        {
+                            openPorts.Add(ports[i]);
+                            isAlive = true;
+                        }
+                        break;
+                    }
+                }
+            }
+
+            if (isAlive && !aliveReported)
+            {
+                aliveReported = true;
+                discovered?.Report(new NetworkScanHost(ip, null, openPorts.ToList(), null));
+            }
+        }
 
         if (rtt is null && openPorts.Count == 0)
         {
