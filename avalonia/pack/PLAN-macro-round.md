@@ -192,6 +192,25 @@
      App 212/212、Core 86/86、TestGate 49/49；gate 第 19 轮全 PASS（E2E 15/15，含 RM05）；提交 bbb39b53，发布部署双份。
      Windows 实机 WIN-28 补核：分段盒子+图标外观、菜单外观、复制/保存、记忆行为。
 
+   - 追加（2026-10-29，第 20 轮）：状态栏图标/配色对齐 MobaXterm + 远程监控按钮改版
+     （用户反馈 2026-10-29：“上面是 mobaxterm 的，在优化一些图标与颜色；远程监控的点击按钮也优化一下”）：
+     ① 图标/配色（fontTools 核对捆绑 fontawesome6-solid.ttf 码位，参考图 4x 放大比对）：
+        host f390→f108 深灰；cpu f624→f2db 绿 #2e9e4f；ram f538 绿；netup f062→f093 绿；
+        netdown f063→f019 蓝 #2f7ed8；clients f0c0 青 #1aa3d8；processes f53f→f085 橙 #e8701a；
+        fds f15b→f15c 蓝；uptime f017 灰绿（MonIconUptimeBrush）；users f007 深灰、分隔符逗号→空格；
+        partitions f0a0 灰蓝（MonIconDiskBrush）；占用最高分区按 MobaXterm 实样改为粗体+斜体橙红字
+        （MonSegHotBrush），不再用填充底色。新增主题刷 MonIconDark/MonIconDisk/MonIconUptime/MonSegHot（Light/Dark）。
+     ② DataTemplate 陷阱：分区模板里内联 DynamicResource 在实例化时解析不到主题资源（实测回退 MonIconBrush 灰，
+        被单测抓出），改由类样式 MonIconDisk/MonSegHot 提供，视觉才真正生效。
+     ③ 监控按钮：ToggleButton.MonitorToggle 由纯文字改为 显示器图标 e163 + “远程监控”文字；
+        关=白底 #ffffff/边框 #d5dce3/灰字 #666666，开=浅绿底 #e8f5ee/边框 #b7dfc9/绿字 #0f8a63 半粗，
+        圆角 3、Padding 7,1；并覆盖 :pointerover/:checked/:pressed 的 ContentPresenter 背景
+        （默认模板会用主题高亮色盖掉自定义底色）。
+     ④ 测试：RM06_SegmentIconsAndColorsMatchMobaXtermReference（11 个图标码位+配色、热分区粗斜体、
+        用户空格分隔）、RM06_MonitorButtonShowsDisplayIconAndGreenOnState（图标/文字/开关三态配色）。
+     App 214/214、Core 86/86、TestGate 49/49；gate 第 20 轮全 PASS（E2E 15/15）；提交 53bee6e，发布部署双份。
+     Windows 实机 WIN-28 补核：分段图标/颜色与 MobaXterm 并排、热分区粗斜体、按钮开关态。
+
 ## 已知偏差（已写入 spec 附录）
 
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
