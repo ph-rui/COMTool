@@ -149,6 +149,25 @@
      代码注释/文档中的 MobaXterm 参照说明全部保留。
      201/201 App，gate 第 17 轮全 PASS；提交 2f93697，发布部署双份。
 
+   - 追加（2026-10-29）：远程监控功能（用户要求 1:1 复刻 MobaXterm remote monitoring，附两张截图；设计获批后实现）：
+     ① 引擎（COMTool.Connections.RemoteMonitor 新子模块）：RemoteMetricsParser（MON_* 行协议解析 +
+        CpuDelta/NetRate 差分 + FormatUptime 主单位）、MonitorSnapshot.Format（段序=菜单序，段间两空格，
+        对齐用户截图样例）、RemoteMonitor 轮询引擎（2s 间隔、顺序 poll、连续 2 次失败 transport/unsupported
+        停并事件上报、Stop 幂等、Stop 期间迟到失败不上报）；dump 脚本=单条合并 sh 命令一次取 9 项原始数据。
+     ② SshConnection 实现 IExecRunner.RunCommandAsync（SshNet CreateCommand 独立 exec 通道，CommandTimeout
+        5s，不动交互 shell 通道；disposed 快抛 ObjectDisposedException）。
+     ③ App 胶水：MainViewModel.Monitor.cs（MonitorMenuState 11 勾选 + 启停状态机 + ApplySnapshot；
+        TerminalTab.MonitorEnabled per-tab 开关；SftpPaneViewModel.IsMonitorOn/MonitorToggled/SyncMonitorOn）；
+        接线：OpenSshSessionAsync 按钮回调、AttachSshTransport 恢复、CloseAction/ProcessExited/重启失败 三处停止。
+     ④ UI：SftpPane 底部状态行加“远程监控”ToggleButton（选中绿色 #2e7d32）；MainWindow 底部状态行加监控 TextBlock
+        + 右键 13 项 ContextMenu（ToggleType=CheckBox，Opening 码后同步勾选态，复制/保存到文件走剪贴板与 SaveFilePicker）。
+     ⑤ 配置：ComtoolConfig.remoteMonitor（11 bool，旧配置缺键取 MobaXterm 默认 7 项）。
+     ⑥ 测试：RM01 21 项（解析/差分/格式/引擎）+ RM02 2 项（本地 sshd 集成：exec/shell 独立、disposed 快抛）
+        + RM03 2 项（配置往返/缺省）+ RM04 7 项（VM 生命周期 fake-exec）+ E2E RM01_MonitorBarShowsMetricsE2E
+        （Xvfb 点“远程监控”按钮→sshd VERBOSE 日志出现 ≥2 次 dump 命令=轮询链路通）。
+     仅 Linux 远端有效（用户场景=Ubuntu 192.0.2.48）；非 Linux 静默停止。提交 bd2244f，发布部署双份；
+     Windows 实机 WIN-28 由用户核对（或 RDP 自验）。
+
 ## 已知偏差（已写入 spec 附录）
 
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
