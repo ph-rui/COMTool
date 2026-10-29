@@ -147,7 +147,7 @@
      ServersManagementWindow.axaml 欢迎页 TextBlock 改 “COMTool 网络服务器”；
      保留不动：宏导出默认文件名 MobaXterm Macros.mxtmacros（互操作约定）+ SSH 面板 MobaSSH 链接文案（1:1 基准），
      代码注释/文档中的 MobaXterm 参照说明全部保留。
-     201/201 App，gate 第 17 轮全 PASS；提交 <hash>，发布部署双份。
+     201/201 App，gate 第 17 轮全 PASS；提交 2f93697，发布部署双份。
 
 ## 已知偏差（已写入 spec 附录）
 
