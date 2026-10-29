@@ -1,3 +1,6 @@
+using System.Collections.ObjectModel;
+using System.Globalization;
+using System.Linq;
 using Avalonia.Threading;
 using COMTool.App.Services;
 using COMTool.Connections.RemoteMonitoring;
@@ -106,11 +109,83 @@ public sealed partial class MonitorMenuState : ObservableObject
     }
 }
 
+/// <summary>
+/// 状态栏分区段（MobaXterm 风格：每分区一个盒子，第一个带磁盘图标，
+/// 使用率 ≥80% 橙色警示）。
+/// </summary>
+public sealed partial class PartitionSegment : ObservableObject
+{
+    [ObservableProperty]
+    private string _text = "";
+
+    /// <summary>使用率 ≥80%，橙色显示。</summary>
+    [ObservableProperty]
+    private bool _isHot;
+
+    /// <summary>第一个分区段显示磁盘图标（与 MobaXterm 一致）。</summary>
+    [ObservableProperty]
+    private bool _showIcon = true;
+}
+
 public partial class MainViewModel
 {
     private RemoteMonitor? _remoteMonitor;
     private TerminalTab? _monitoredTab;
     private MonitorSnapshot? _lastSnapshot;
+
+    /// <summary>
+    /// 状态栏分段（MobaXterm 风格：每指标一个带图标的小盒子）。
+    /// 每个指标一组 {可见性, 文本}，分区信息是可变数量的盒子。
+    /// </summary>
+    [ObservableProperty]
+    private bool _segHostVisible;
+    [ObservableProperty]
+    private string _segHostText = "";
+    [ObservableProperty]
+    private bool _segCpuVisible;
+    [ObservableProperty]
+    private string _segCpuText = "";
+    [ObservableProperty]
+    private double _segCpuBarWidth;
+    [ObservableProperty]
+    private bool _segRamVisible;
+    [ObservableProperty]
+    private string _segRamText = "";
+    [ObservableProperty]
+    private bool _segNetUpVisible;
+    [ObservableProperty]
+    private string _segNetUpText = "";
+    [ObservableProperty]
+    private bool _segNetDownVisible;
+    [ObservableProperty]
+    private string _segNetDownText = "";
+    [ObservableProperty]
+    private bool _segClientsVisible;
+    [ObservableProperty]
+    private string _segClientsText = "";
+    [ObservableProperty]
+    private bool _segProcessesVisible;
+    [ObservableProperty]
+    private string _segProcessesText = "";
+    [ObservableProperty]
+    private bool _segFdsVisible;
+    [ObservableProperty]
+    private string _segFdsText = "";
+    [ObservableProperty]
+    private bool _segUptimeVisible;
+    [ObservableProperty]
+    private string _segUptimeText = "";
+    [ObservableProperty]
+    private bool _segUsersVisible;
+    [ObservableProperty]
+    private string _segUsersText = "";
+    [ObservableProperty]
+    private bool _segPartitionsVisible;
+    [ObservableProperty]
+    private ObservableCollection<PartitionSegment> _partitions = new();
+
+    /// <summary>分段 CPU 条最大宽度（px），与 XAML 中 CPU 条轨道宽度一致。</summary>
+    internal const double CpuBarMaxWidth = 56;
 
     /// <summary>
     /// 远程监控菜单 11 项的勾选态（状态栏右键菜单的数据源）。
@@ -220,6 +295,157 @@ public partial class MainViewModel
         }
 
         IsMonitorActive = MonitorText.Length > 0;
+        RefreshMonitorSegments();
+    }
+
+    /// <summary>
+    /// 按最新快照与菜单勾选态刷新状态栏分段盒子（MobaXterm 风格：
+    /// 每指标一个带图标的独立小盒子）。段序与菜单一致：
+    /// 主机/CPU/RAM/网络上传/网络下载/客户端/进程/FD/运行时长/用户/分区。
+    /// 整串 <see cref="MonitorText"/> 供菜单"复制/保存到文件"使用，不受影响。
+    /// </summary>
+    private void RefreshMonitorSegments()
+    {
+        var snap = _lastSnapshot;
+        if (snap is null)
+        {
+            ClearMonitorSegments();
+            return;
+        }
+
+        var o = MonitorMenu.ToOptions();
+
+        SegHostVisible = o.ShowHost && !string.IsNullOrEmpty(snap.Host);
+        SegHostText = snap.Host ?? "";
+
+        if (o.ShowCpu && snap.CpuPercent is { } cpu)
+        {
+            var pct = (int)Math.Clamp(Math.Round(cpu), 0, 100);
+            SegCpuVisible = true;
+            SegCpuText = pct.ToString(CultureInfo.InvariantCulture) + "%";
+            SegCpuBarWidth = CpuBarMaxWidth * pct / 100.0;
+        }
+        else
+        {
+            SegCpuVisible = false;
+        }
+
+        if (o.ShowRam && snap.Ram is { } ram)
+        {
+            SegRamVisible = true;
+            SegRamText = ram.UsedGb.ToString("0.00", CultureInfo.InvariantCulture)
+                + " GB / " + ram.TotalGb.ToString("0.00", CultureInfo.InvariantCulture) + " GB";
+        }
+        else
+        {
+            SegRamVisible = false;
+        }
+
+        if (o.ShowNetUp && snap.NetUpMbps is { } up)
+        {
+            SegNetUpVisible = true;
+            SegNetUpText = up.ToString("0.00", CultureInfo.InvariantCulture) + " Mb/s";
+        }
+        else
+        {
+            SegNetUpVisible = false;
+        }
+
+        if (o.ShowNetDown && snap.NetDownMbps is { } down)
+        {
+            SegNetDownVisible = true;
+            SegNetDownText = down.ToString("0.00", CultureInfo.InvariantCulture) + " Mb/s";
+        }
+        else
+        {
+            SegNetDownVisible = false;
+        }
+
+        if (o.ShowClients && snap.ConnectedClients is { } clients)
+        {
+            SegClientsVisible = true;
+            SegClientsText = clients.ToString(CultureInfo.InvariantCulture);
+        }
+        else
+        {
+            SegClientsVisible = false;
+        }
+
+        if (o.ShowProcesses && snap.ProcessCount is { } processes)
+        {
+            SegProcessesVisible = true;
+            SegProcessesText = processes.ToString(CultureInfo.InvariantCulture);
+        }
+        else
+        {
+            SegProcessesVisible = false;
+        }
+
+        if (o.ShowFileDescriptors && snap.FileDescriptorCount is { } fds)
+        {
+            SegFdsVisible = true;
+            SegFdsText = fds.ToString(CultureInfo.InvariantCulture);
+        }
+        else
+        {
+            SegFdsVisible = false;
+        }
+
+        if (o.ShowUptime && snap.Uptime is { } upTime)
+        {
+            SegUptimeVisible = true;
+            SegUptimeText = RemoteMetricsParser.FormatUptime(upTime);
+        }
+        else
+        {
+            SegUptimeVisible = false;
+        }
+
+        if (o.ShowUsers && snap.Users is { Length: > 0 } users)
+        {
+            SegUsersVisible = true;
+            SegUsersText = string.Join(",", users);
+        }
+        else
+        {
+            SegUsersVisible = false;
+        }
+
+        if (o.ShowPartitions && snap.Partitions is { Length: > 0 } parts)
+        {
+            SegPartitionsVisible = true;
+            Partitions.Clear();
+            for (var i = 0; i < parts.Length; i++)
+            {
+                Partitions.Add(new PartitionSegment
+                {
+                    Text = parts[i].Mount + ": " + parts[i].UsePct.ToString(CultureInfo.InvariantCulture) + "%",
+                    IsHot = parts[i].UsePct >= 80,
+                    ShowIcon = i == 0,
+                });
+            }
+        }
+        else
+        {
+            SegPartitionsVisible = false;
+            Partitions.Clear();
+        }
+    }
+
+    private void ClearMonitorSegments()
+    {
+        SegHostVisible = false;
+        SegCpuVisible = false;
+        SegRamVisible = false;
+        SegNetUpVisible = false;
+        SegNetDownVisible = false;
+        SegClientsVisible = false;
+        SegProcessesVisible = false;
+        SegFdsVisible = false;
+        SegUptimeVisible = false;
+        SegUsersVisible = false;
+        SegPartitionsVisible = false;
+        Partitions.Clear();
     }
 
     /// <summary>
@@ -236,6 +462,7 @@ public partial class MainViewModel
         _lastSnapshot = snapshot;
         MonitorText = snapshot.Format(MonitorMenu.ToOptions());
         IsMonitorActive = MonitorText.Length > 0;
+        RefreshMonitorSegments();
     }
 
     /// <summary>
@@ -285,5 +512,6 @@ public partial class MainViewModel
         _lastSnapshot = null;
         MonitorText = "";
         IsMonitorActive = false;
+        ClearMonitorSegments();
     }
 }

@@ -345,4 +345,54 @@ public sealed class ConfigTests : IDisposable
             Path.GetFullPath(ConfigPaths.PythonConfigDirectory()),
             Path.GetFullPath(ConfigPaths.AvaloniaConfigDirectory()));
     }
+
+    [Fact]
+    public void RM03_SshSessionMonitorFlagRoundTripsAndPersistsThroughStore()
+    {
+        // monitor=true 随配置保存/加载往返
+        var path = Path.Combine(_directory, "cfg-monitor.json");
+        var config = new ComtoolConfig();
+        config.SshSessions.Add(new SshSession
+        {
+            Key = "root@192.168.1.10:22",
+            Host = "192.168.1.10",
+            Port = 22,
+            User = "root",
+            Monitor = true,
+        });
+        config.Save(path);
+        var loaded = ComtoolConfig.Load(path);
+        Assert.True(loaded.SshSessions[0].Monitor);
+
+        // 旧配置（无 monitor 键）向后兼容 -> false
+        var legacyPath = Path.Combine(_directory, "cfg-monitor-legacy.json");
+        File.WriteAllText(legacyPath,
+            "{ \"version\": 3, \"sshSessions\": [ { \"key\": \"a@b:22\", \"host\": \"b\", \"port\": 22, \"user\": \"a\" } ] }");
+        var legacy = ComtoolConfig.Load(legacyPath);
+        Assert.False(legacy.SshSessions[0].Monitor);
+
+        // Store.SetMonitor 更新；编辑会话（Upsert）不丢已记忆的开关
+        var store = new SshSessionStore();
+        var seed = new ComtoolConfig();
+        seed.SshSessions.Add(new SshSession
+        {
+            Key = "u@h:22",
+            Host = "h",
+            Port = 22,
+            User = "u",
+            Monitor = true,
+        });
+        store.Load(seed);
+        store.SetMonitor("u@h:22", true);
+        store.Upsert("h", 22, "u", alias: "alias-x");
+        var outConfig = new ComtoolConfig();
+        store.Save(outConfig);
+        Assert.True(outConfig.SshSessions[0].Monitor);
+        Assert.Equal("alias-x", outConfig.SshSessions[0].Alias);
+
+        store.SetMonitor("u@h:22", false);
+        var outConfig2 = new ComtoolConfig();
+        store.Save(outConfig2);
+        Assert.False(outConfig2.SshSessions[0].Monitor);
+    }
 }

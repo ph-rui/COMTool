@@ -23,6 +23,30 @@
     <vm:MainViewModel />
   </Design.DataContext>
 
+  <Window.Styles>
+    <!-- 状态栏远程监控分段盒子（MobaXterm 风格：每指标一个带图标的独立小格）。 -->
+    <Style Selector="Border.MonSeg">
+      <Setter Property="Background" Value="{DynamicResource MonSegBackgroundBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource MonSegBorderBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="2" />
+      <Setter Property="Padding" Value="6,2" />
+      <Setter Property="Margin" Value="0,1" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.MonSegText">
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Foreground" Value="{DynamicResource WindowTextBrush}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.MonIcon">
+      <Setter Property="FontFamily" Value="{DynamicResource IconFontAwesome}" />
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="Foreground" Value="{DynamicResource MonIconBrush}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+  </Window.Styles>
+
   <Grid Name="RootGrid"
         RowDefinitions="35,*"
         Background="{DynamicResource WindowBackgroundBrush}">
@@ -331,15 +355,102 @@
                     <MenuItem Header="分区信息(Z)" ToggleType="CheckBox" Tag="partitions" Click="OnMonitorOptionClick" />
                   </ContextMenu>
                 </Grid.ContextMenu>
-                <TextBlock Grid.Column="0"
-                           Name="MonitorTextBlock"
-                           Text="{Binding MonitorText}"
-                           FontSize="12"
-                           Foreground="{DynamicResource WindowTextBrush}"
-                           Margin="4,0,8,0"
-                           TextTrimming="CharacterEllipsis"
-                           VerticalAlignment="Center"
-                           IsVisible="{Binding IsMonitorActive}" />
+                <!-- 远程监控分段显示（MobaXterm 风格）：每指标一个带图标的盒子。
+                     整串文本 MonitorText 保留，供菜单"复制/保存到文件"使用。 -->
+                <StackPanel Grid.Column="0"
+                            Orientation="Horizontal"
+                            Spacing="3"
+                            VerticalAlignment="Center"
+                            Margin="4,0,8,0"
+                            IsVisible="{Binding IsMonitorActive}">
+                  <Border Name="MonSegHost" Classes="MonSeg" IsVisible="{Binding SegHostVisible}">
+                    <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                      <TextBlock Text="&#xf390;" Classes="MonIcon" />
+                      <TextBlock Text="{Binding SegHostText}" Classes="MonSegText" />
+                    </StackPanel>
+                  </Border>
+                  <Border Name="MonSegCpu" Classes="MonSeg" IsVisible="{Binding SegCpuVisible}">
+                    <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                      <TextBlock Text="&#xf624;" Classes="MonIcon" />
+                      <TextBlock Text="{Binding SegCpuText}" Classes="MonSegText" />
+                      <Border Width="56" Height="12" CornerRadius="2" ClipToBounds="True"
+                              Background="{DynamicResource MonCpuBarTrackBrush}"
+                              VerticalAlignment="Center">
+                        <Border Width="{Binding SegCpuBarWidth}" CornerRadius="2"
+                                Background="{DynamicResource MonCpuBarFillBrush}"
+                                HorizontalAlignment="Left" />
+                      </Border>
+                    </StackPanel>
+                  </Border>
+                  <Border Name="MonSegRam" Classes="MonSeg" IsVisible="{Binding SegRamVisible}">
+                    <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                      <TextBlock Text="&#xf538;" Classes="MonIcon" />
+                      <TextBlock Text="{Binding SegRamText}" Classes="MonSegText" />
+                    </StackPanel>
+                  </Border>
+                  <Border Name="MonSegNetUp" Classes="MonSeg" IsVisible="{Binding SegNetUpVisible}">
+                    <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                      <TextBlock Text="&#xf062;" Classes="MonIcon" Foreground="#2e9e4f" />
+                      <TextBlock Text="{Binding SegNetUpText}" Classes="MonSegText" />
+                    </StackPanel>
+                  </Border>
+                  <Border Name="MonSegNetDown" Classes="MonSeg" IsVisible="{Binding SegNetDownVisible}">
+                    <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                      <TextBlock Text="&#xf063;" Classes="MonIcon" Foreground="#2f7ed8" />
+                      <TextBlock Text="{Binding SegNetDownText}" Classes="MonSegText" />
+                    </StackPanel>
+                  </Border>
+                  <Border Name="MonSegClients" Classes="MonSeg" IsVisible="{Binding SegClientsVisible}">
+                    <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                      <TextBlock Text="&#xf0c0;" Classes="MonIcon" />
+                      <TextBlock Text="{Binding SegClientsText}" Classes="MonSegText" />
+                    </StackPanel>
+                  </Border>
+                  <Border Name="MonSegProcesses" Classes="MonSeg" IsVisible="{Binding SegProcessesVisible}">
+                    <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                      <TextBlock Text="&#xf53f;" Classes="MonIcon" />
+                      <TextBlock Text="{Binding SegProcessesText}" Classes="MonSegText" />
+                    </StackPanel>
+                  </Border>
+                  <Border Name="MonSegFds" Classes="MonSeg" IsVisible="{Binding SegFdsVisible}">
+                    <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                      <TextBlock Text="&#xf15b;" Classes="MonIcon" />
+                      <TextBlock Text="{Binding SegFdsText}" Classes="MonSegText" />
+                    </StackPanel>
+                  </Border>
+                  <Border Name="MonSegUptime" Classes="MonSeg" IsVisible="{Binding SegUptimeVisible}">
+                    <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                      <TextBlock Text="&#xf017;" Classes="MonIcon" />
+                      <TextBlock Text="{Binding SegUptimeText}" Classes="MonSegText" />
+                    </StackPanel>
+                  </Border>
+                  <Border Name="MonSegUsers" Classes="MonSeg" IsVisible="{Binding SegUsersVisible}">
+                    <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                      <TextBlock Text="&#xf007;" Classes="MonIcon" />
+                      <TextBlock Text="{Binding SegUsersText}" Classes="MonSegText" />
+                    </StackPanel>
+                  </Border>
+                  <ItemsControl Name="MonPartitions" IsVisible="{Binding SegPartitionsVisible}"
+                                ItemsSource="{Binding Partitions}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal" Spacing="3" />
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <Border Classes="MonSeg">
+                          <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                            <TextBlock Text="&#xf0a0;" Classes="MonIcon" IsVisible="{Binding ShowIcon}" />
+                            <TextBlock Text="{Binding Text}" Classes="MonSegText" IsVisible="{Binding !IsHot}" />
+                            <TextBlock Text="{Binding Text}" Classes="MonSegText"
+                                       Foreground="#e2590b" IsVisible="{Binding IsHot}" />
+                          </StackPanel>
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
                 <TextBlock Grid.Column="1"
                            Text="{Binding SelectedTab.StatusMessage}"
                            FontSize="12"

@@ -32,6 +32,7 @@ E2E_TESTS=(
     SFTP01_BrowserTransferE2E
     SFTP02_FileManagementE2E
     RM01_MonitorBarShowsMetricsE2E
+    RM05_MonitorMemoryAcrossRestartE2E
 )
 SSH_TEST_IDS=(
     UI01_TitleBarDoubleClickMaximizeE2E
@@ -45,6 +46,7 @@ SSH_TEST_IDS=(
     SFTP01_BrowserTransferE2E
     SFTP02_FileManagementE2E
     RM01_MonitorBarShowsMetricsE2E
+    RM05_MonitorMemoryAcrossRestartE2E
 )
 TELNET_TEST_IDS=(
     TELNET01_AutoLoginE2E
@@ -945,6 +947,141 @@ run_rm01_monitor_bar() {
     pass "$test_id"
 }
 
+count_monitor_polls() {
+    grep -c 'Starting session: command for' "$SSH_FIXTURE_DIR/sshd.log" 2>/dev/null || true
+}
+
+# Wait up to $2 s for the poll count to exceed $1; return 0 on growth.
+wait_polls_grow() {
+    local base="$1"
+    local timeout_s="$2"
+    local i now
+    for ((i = 0; i < timeout_s; i++)); do
+        sleep 1
+        now="$(count_monitor_polls)"
+        if [[ -n "$now" && "$now" -gt "$base" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Read the persisted "monitor" flag of the e2e ssh session from the live app
+# config. The app saves the config synchronously on every monitor toggle, so
+# this flag is the authoritative state of the remembered switch (no
+# guesswork from poll counts, which race with a shared app instance).
+read_monitor_flag() {
+    local f="$CONFIG_ROOT/avalonia/config.json"
+    local val
+    val="$(grep -o '"monitor"[[:space:]]*:[[:space:]]*[a-z]*' "$f" 2>/dev/null | head -n1 | grep -o '[a-z]*$')"
+    if [[ -z "$val" ]]; then
+        printf 'absent'
+    else
+        printf '%s' "$val"
+    fi
+}
+
+# Click the SFTP pane's "远程监控" toggle (sidebar must be collapsed so the
+# button sits at the known position).
+click_monitor_toggle() {
+    local btn_x="${MONITOR_BTN_X:-66}"
+    local geometry width height btn_y
+    geometry="$(xdotool getwindowgeometry --shell "$WINDOW_ID" 2>/dev/null)"
+    width="$(printf '%s\n' "$geometry" | sed -n 's/^WIDTH=//p' | sed -n '1p')"
+    height="$(printf '%s\n' "$geometry" | sed -n 's/^HEIGHT=//p' | sed -n '1p')"
+    [[ "$width" =~ ^[0-9]+$ && "$height" =~ ^[0-9]+$ ]] || return 1
+    width=$((10#$width))
+    height=$((10#$height))
+    btn_y=$((height - 22))
+    click_window "$btn_x" "$btn_y"
+}
+
+run_rm05_monitor_memory() {
+    local test_id="RM05_MonitorMemoryAcrossRestartE2E"
+    local polls polls2
+
+    log "Running $test_id"
+    # ---- Phase 1: connect, drive the remembered monitor flag to ON, then
+    # restart the app and require the poller to resume without any button
+    # click. E2E tests share one app instance, so the monitor may already be
+    # ON (left by RM01) or the SFTP pane already open: the persisted flag in
+    # the live app config is the authoritative state.
+    ensure_first_shell "$test_id"
+
+    collapse_sidebar_for_tabs || fail "$test_id" "could not collapse the sidebar"
+
+    # Open the SFTP pane only if it has not been opened in this app lifetime
+    # (the sftp subsystem line in the sshd log is the authoritative marker);
+    # the toggle button lives in the pane, so it must be visible to click.
+    if ! grep -q "subsystem 'sftp'" "$SSH_FIXTURE_DIR/sshd.log" 2>/dev/null; then
+        wait_for_ssh_browser_rail 10 \
+            || fail "$test_id" "the SSH-browser globe did not appear in the rail"
+        click_window "$SSH_BROWSER_RAIL_X" "$SSH_BROWSER_RAIL_Y" \
+            || fail "$test_id" "could not click the SSH-browser globe"
+        if ! wait_for_sshd_log "subsystem 'sftp'" 20; then
+            fail "$test_id" "the SFTP panel did not request the sftp subsystem"
+        fi
+        wait_for_sftp_browser_visible 10 \
+            || fail "$test_id" "the SFTP browser did not open"
+    fi
+
+    local flag i base
+    flag="$(read_monitor_flag)"
+    if [[ "$flag" != "true" ]]; then
+        # Not remembered as ON (fresh instance, or left OFF): click the
+        # toggle and confirm the persisted flag flips to true.
+        click_monitor_toggle || fail "$test_id" "could not click the monitor toggle"
+        for ((i = 0; i < 15; i++)); do
+            sleep 1
+            flag="$(read_monitor_flag)"
+            [[ "$flag" == "true" ]] && break
+        done
+        [[ "$flag" == "true" ]] \
+            || fail "$test_id" "monitor toggle did not persist as ON (flag=$flag)"
+    fi
+
+    # Confirm the poller is actually running now (exec polls must flow).
+    base="$(count_monitor_polls)"
+    wait_polls_grow "$base" 15 \
+        || fail "$test_id" "monitor flag is ON but no exec polls are flowing"
+    sleep 2
+    polls="$(count_monitor_polls)"
+    log "$test_id: phase 1 done, flag=true, polls=$polls"
+
+    # ---- Phase 2: restart the app. The toggle is remembered on the saved
+    # session (MobaXterm behaviour), so connecting again must resume the
+    # poller without any button click: the exec-channel poll count must grow.
+    stop_app || fail "$test_id" "could not stop the app before the restart"
+    # Phase 1 的侧栏收起状态已持久化进 config；重启后应用会按收起态启动，
+    # 点不到会话行。进程已停止（不会再在退出时回写 config），直接改持久化
+    # 配置恢复侧栏可见——像素探针在空窗口（无标签页）上不可靠。
+    python3 - "$CONFIG_ROOT/avalonia/config.json" <<'PYEOF'
+import json, sys
+p = sys.argv[1]
+with open(p) as f:
+    cfg = json.load(f)
+cfg.setdefault("sessionSidebar", {})["visible"] = True
+with open(p, "w") as f:
+    json.dump(cfg, f, indent=2)
+    f.write("\n")
+PYEOF
+    if ! start_app "$CONFIG_ROOT"; then
+        fail "$test_id" "application failed to relaunch"
+    fi
+    wait_for_comtool_window "$test_id"
+    ensure_first_shell "$test_id"
+
+    if ! wait_polls_grow "$polls" 40; then
+        polls2="$(count_monitor_polls)"
+        capture_screenshot "$TMP_ROOT/rm05-no-resume.png" || true
+        fail "$test_id" "monitor did not auto-resume after restart (polls before=$polls after=$polls2)"
+    fi
+    polls2="$(count_monitor_polls)"
+    log "$test_id: monitor auto-resumed after restart, polls $polls -> $polls2"
+
+    pass "$test_id"
+}
+
 run_term15_double_click_maximize() {
     local test_id="TERM15_DoubleClickMaximizeE2E"
     local before
@@ -1047,6 +1184,9 @@ if [[ -n "$SSH_TEST_ID" ]]; then
     fi
     if matches_filter "RM01_MonitorBarShowsMetricsE2E"; then
         run_rm01_monitor_bar
+    fi
+    if matches_filter "RM05_MonitorMemoryAcrossRestartE2E"; then
+        run_rm05_monitor_memory
     fi
 
     close_app_window "$SSH_TEST_ID"

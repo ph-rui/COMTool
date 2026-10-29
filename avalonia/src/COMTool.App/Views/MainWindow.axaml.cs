@@ -875,13 +875,23 @@ public partial class MainWindow : Window
             Content = sessionView,
             Terminal = terminal,
             SftpPane = pane,
+            // MobaXterm 式记忆：会话配置里记忆的监控开关随会话恢复
+            // （标签选中后 MonitorOnSelectedTabChanged 自动开始轮询）
+            MonitorEnabled = session.Monitor,
             StatusMessage = $"Connected {SshSessionRules.Detail(session)}",
         };
         AttachSshTransport(tab, terminal, connection);
 
         // The "远程监控" toggle of the SFTP pane drives the per-tab monitor flag
-        // and the poller through the view model.
-        pane.MonitorToggled = v => viewModel.SetMonitorEnabled(tab, v);
+        // and the poller through the view model; the on/off state is also
+        // remembered on the saved session (MobaXterm behaviour) so the next
+        // launch of this session restores it automatically.
+        pane.MonitorToggled = v =>
+        {
+            viewModel.SetMonitorEnabled(tab, v);
+            _config.SshSessions.SetMonitor(session.Key, v);
+            _config.Save();
+        };
 
         var stoppedBehavior = new SessionStoppedBehavior(
             terminal,

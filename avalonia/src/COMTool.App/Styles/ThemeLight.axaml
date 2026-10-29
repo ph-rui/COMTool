@@ -25,6 +25,13 @@
   <SolidColorBrush x:Key="TabSelectedBrush" Color="#0f88eb" />
   <SolidColorBrush x:Key="TabForegroundBrush" Color="#0f88eb" />
 
+  <!-- 远程监控状态栏分段盒子（MobaXterm 风格：浅灰条上的白色小格）。 -->
+  <SolidColorBrush x:Key="MonSegBackgroundBrush" Color="#ffffff" />
+  <SolidColorBrush x:Key="MonSegBorderBrush" Color="#cfd8dc" />
+  <SolidColorBrush x:Key="MonIconBrush" Color="#5f6368" />
+  <SolidColorBrush x:Key="MonCpuBarTrackBrush" Color="#1f1f1f" />
+  <SolidColorBrush x:Key="MonCpuBarFillBrush" Color="#d6d6d6" />
+
   <FontFamily x:Key="IconFontAwesome">avares://COMTool.App/Assets/Fonts/fontawesome6-solid.ttf#Font Awesome 6 Free Solid</FontFamily>
   <FontFamily x:Key="IconMaterialDesign">avares://COMTool.App/Assets/Fonts/materialdesignicons6.ttf#Material Design Icons</FontFamily>
   <FontFamily x:Key="IconPhosphor">avares://COMTool.App/Assets/Fonts/phosphor.ttf#Phosphor</FontFamily>

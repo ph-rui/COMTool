@@ -38,6 +38,7 @@ public static class SshSessionRules
             Alias = (session.Alias ?? "").Trim(),
             SshKey = (session.SshKey ?? "").Trim(),
             EncryptedPassword = (session.EncryptedPassword ?? "").Trim(),
+            Monitor = session.Monitor,
             Updated = session.Updated,
             Extra = session.Extra,
         };
@@ -115,6 +116,8 @@ public sealed class SshSessionStore
             Alias = (alias ?? "").Trim(),
             SshKey = (sshKey ?? "").Trim(),
             EncryptedPassword = password,
+            // 编辑会话不改变已记忆的远程监控开关
+            Monitor = existingIndex >= 0 ? Sessions[existingIndex].Monitor : false,
             Updated = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
         };
 
@@ -128,6 +131,20 @@ public sealed class SshSessionStore
         }
 
         return Clone(session);
+    }
+
+    /// <summary>更新会话的远程监控开关（MobaXterm 式记忆）。</summary>
+    public void SetMonitor(string key, bool monitor)
+    {
+        var index = Sessions.FindIndex(item => item.Key == key);
+        if (index < 0)
+        {
+            return;
+        }
+
+        var session = Clone(Sessions[index]);
+        session.Monitor = monitor;
+        Sessions[index] = session;
     }
 
     public string? Remove(string key)
@@ -159,6 +176,7 @@ public sealed class SshSessionStore
         Alias = session.Alias,
         SshKey = session.SshKey,
         EncryptedPassword = session.EncryptedPassword,
+        Monitor = session.Monitor,
         Updated = session.Updated,
         Extra = session.Extra,
     };

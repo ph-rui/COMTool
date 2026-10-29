@@ -412,4 +412,103 @@ public sealed class RemoteMonitorFeatureTests
             window.Close();
         });
     }
+
+    [AvaloniaFact]
+    public void RM04_SegmentsRenderPerEnabledOptionAndFollowToggles()
+    {
+        using var env = new TestEnvironment();
+        env.Run(() =>
+        {
+            var vm = new MainViewModel();
+            var window = new COMTool.App.Views.MainWindow { DataContext = vm };
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+
+            // Stateful counters: every poll increments the /proc-style
+            // counters, so from the second sample on the CPU delta is a
+            // deterministic 40% (dTotal=500, dIdle=300).
+            long cpuBusy = 0, cpuIdle = 0, netRx = 0, netTx = 0;
+            var runner = new FakeExecRunner(() =>
+            {
+                cpuBusy += 200;
+                cpuIdle += 300;
+                netRx += 4000;
+                netTx += 1000;
+                return Task.FromResult(Dump(
+                    $"cpu {cpuBusy} 0 0 {cpuIdle} 0", $"{netRx} {netTx}"));
+            });
+            var tab = SshTab(runner);
+            vm.AddTab(tab);
+            vm.SetMonitorEnabled(tab, true);
+
+            var deadline = DateTime.UtcNow.AddSeconds(8);
+            while (!vm.SegCpuVisible && DateTime.UtcNow < deadline)
+            {
+                Dispatcher.UIThread.RunJobs();
+                Thread.Sleep(20);
+            }
+
+            // Default 7 options on -> 7 segment groups, MobaXterm order/style.
+            Assert.True(vm.SegHostVisible);
+            Assert.Equal("testhost", vm.SegHostText);
+            Assert.True(vm.SegCpuVisible);
+            Assert.Equal("40%", vm.SegCpuText);
+            Assert.Equal(MainViewModel.CpuBarMaxWidth * 0.4, vm.SegCpuBarWidth, 2);
+            Assert.True(vm.SegRamVisible);
+            Assert.Contains(" GB / ", vm.SegRamText);
+            Assert.True(vm.SegNetUpVisible);
+            Assert.EndsWith("Mb/s", vm.SegNetUpText);
+            Assert.True(vm.SegNetDownVisible);
+            Assert.EndsWith("Mb/s", vm.SegNetDownText);
+            Assert.True(vm.SegUptimeVisible);
+            Assert.Equal("40 days", vm.SegUptimeText);
+            Assert.False(vm.SegClientsVisible);
+            Assert.False(vm.SegProcessesVisible);
+            Assert.False(vm.SegFdsVisible);
+            Assert.False(vm.SegUsersVisible);
+
+            // Partitions: one box per mount, first carries the disk icon,
+            // >=80% usage is flagged hot (orange).
+            Assert.True(vm.SegPartitionsVisible);
+            Assert.Equal(2, vm.Partitions.Count);
+            Assert.Equal("/: 49%", vm.Partitions[0].Text);
+            Assert.True(vm.Partitions[0].ShowIcon);
+            Assert.False(vm.Partitions[0].IsHot);
+            Assert.Equal("/data: 82%", vm.Partitions[1].Text);
+            Assert.False(vm.Partitions[1].ShowIcon);
+            Assert.True(vm.Partitions[1].IsHot);
+
+            // XAML bindings: named segments exist and follow the view model.
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(window.FindControl<Avalonia.Controls.Border>("MonSegCpu")!.IsVisible);
+            Assert.False(window.FindControl<Avalonia.Controls.Border>("MonSegClients").IsVisible);
+            var parts = window.FindControl<Avalonia.Controls.ItemsControl>("MonPartitions");
+            Assert.True(parts!.IsVisible);
+            Assert.Equal(2, parts.Items.Count);
+
+            // Toggling menu options re-renders the segments immediately
+            // (same path as the status-bar menu click handler).
+            vm.MonitorMenu.SetOption("partitions", false);
+            vm.MonitorMenu.SetOption("clients", true);
+            vm.ReformatMonitorLine();
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(vm.SegPartitionsVisible);
+            Assert.Empty(vm.Partitions);
+            Assert.False(window.FindControl<Avalonia.Controls.ItemsControl>("MonPartitions").IsVisible);
+            Assert.True(vm.SegClientsVisible);
+            Assert.Equal("1", vm.SegClientsText);
+            Assert.True(window.FindControl<Avalonia.Controls.Border>("MonSegClients").IsVisible);
+
+            // Stopping the monitor clears every segment.
+            vm.SetMonitorEnabled(tab, false);
+            Dispatcher.UIThread.RunJobs();
+            Assert.False(vm.IsMonitorActive);
+            Assert.False(vm.SegHostVisible);
+            Assert.False(vm.SegCpuVisible);
+            Assert.False(vm.SegClientsVisible);
+            Assert.False(vm.SegPartitionsVisible);
+            Assert.Empty(vm.Partitions);
+            window.Close();
+        });
+    }
 }

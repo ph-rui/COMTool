@@ -293,6 +293,13 @@ public sealed class SshSession
     [JsonPropertyName("passwd_enc")]
     public string EncryptedPassword { get; set; } = "";
 
+    /// <summary>
+    /// 该会话的远程监控开关（MobaXterm 式记忆：再次打开该会话时自动恢复）。
+    /// 旧配置缺此键时反序列化为 false。
+    /// </summary>
+    [JsonPropertyName("monitor")]
+    public bool Monitor { get; set; }
+
     [JsonPropertyName("updated")]
     public long Updated { get; set; }
 
