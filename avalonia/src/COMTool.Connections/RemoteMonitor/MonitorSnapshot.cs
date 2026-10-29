@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace COMTool.Connections.RemoteMonitor;
+namespace COMTool.Connections.RemoteMonitoring;
 
 /// <summary>
 /// 单次轮询得到的远端主机指标快照。CPU/网络速率由引擎用相邻两次

@@ -1,4 +1,4 @@
-namespace COMTool.Connections.RemoteMonitor;
+namespace COMTool.Connections.RemoteMonitoring;
 
 /// <summary>
 /// 远程监控指标开关，与 MobaXterm 状态栏右键菜单 11 项一一对应

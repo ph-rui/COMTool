@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace COMTool.Connections.RemoteMonitor;
+namespace COMTool.Connections.RemoteMonitoring;
 
 /// <summary>
 /// 解析远程监控 dump 命令的输出。dump 脚本为单行 shell 命令（见

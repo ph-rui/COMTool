@@ -1,5 +1,5 @@
 using System.Globalization;
-using COMTool.Connections.RemoteMonitor;
+using COMTool.Connections.RemoteMonitoring;
 using Xunit;
 
 namespace COMTool.Connections.Tests;
@@ -243,6 +243,187 @@ public sealed class RemoteMonitorTests
         };
 
         Assert.Equal(string.Empty, snap.Format(o));
+    }
+
+    private static string MakeDump(string cpuLine, string netLine)
+    {
+        return "MON_HOST=testhost\n" +
+               "MON_CPU=" + cpuLine + "\n" +
+               "MON_MEM=MemTotal:       16384000 kB|MemAvailable:     8388608 kB|\n" +
+               "MON_UP=100000.00 0.00\n" +
+               "MON_CLIENTS=1\n" +
+               "MON_PROC=100\n" +
+               "MON_FD=256\n" +
+               "MON_WHO=root\n" +
+               "MON_NET=" + netLine + "\n" +
+               "MON_DF=49% /\n" +
+               "MON_END\n";
+    }
+
+    private static async Task WaitForAsync(Func<bool> condition, int timeoutMs)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (!condition() && sw.ElapsedMilliseconds < timeoutMs)
+        {
+            await Task.Delay(10);
+        }
+
+        return;
+    }
+
+    [Fact]
+    public async Task RM01_EngineEmitsSnapshotPerPoll()
+    {
+        var outputs = new Queue<string>();
+        outputs.Enqueue(MakeDump("cpu 200 0 0 800 0 0 0 0 0 0", "0 0"));
+        // dTotal=400, dIdle=300 -> 25%; dRx=2_000_000 bytes over ~0.1s -> ~160 Mb/s
+        outputs.Enqueue(MakeDump("cpu 300 0 0 1100 0 0 0 0 0 0", "2000000 0"));
+        for (var i = 0; i < 3; i++)
+        {
+            outputs.Enqueue(MakeDump("cpu 300 0 0 1100 0 0 0 0 0 0", "2000000 0"));
+        }
+
+        var monitor = new RemoteMonitor(
+            () => Task.FromResult(outputs.Count > 0 ? outputs.Dequeue() : ""),
+            TimeSpan.FromMilliseconds(100));
+        var snaps = new List<MonitorSnapshot>();
+        monitor.SnapshotUpdated += s =>
+        {
+            lock (snaps)
+            {
+                snaps.Add(s);
+            }
+        };
+
+        monitor.Start();
+        await WaitForAsync(() =>
+        {
+            lock (snaps)
+            {
+                return snaps.Count >= 2;
+            }
+        }, 5000);
+        monitor.Stop();
+
+        MonitorSnapshot first;
+        MonitorSnapshot second;
+        lock (snaps)
+        {
+            Assert.True(snaps.Count >= 2);
+            first = snaps[0];
+            second = snaps[1];
+        }
+
+        Assert.Null(first.CpuPercent);       // no baseline yet
+        Assert.Equal(0.0, first.NetDownMbps!.Value); // first net sample is 0 by definition
+        Assert.NotNull(first.Ram);
+        Assert.NotNull(first.Uptime);
+        Assert.Equal(25.0, second.CpuPercent!.Value, 1);
+        Assert.NotNull(second.NetDownMbps);
+        Assert.True(second.NetDownMbps! > 10);
+        Assert.Equal(0.0, second.NetUpMbps!.Value);
+    }
+
+    [Fact]
+    public async Task RM01_EngineStopsAfterTwoConsecutiveFailures()
+    {
+        var calls = 0;
+        string? failReason = null;
+        var monitor = new RemoteMonitor(async () =>
+        {
+            var n = System.Threading.Interlocked.Increment(ref calls);
+            if (n == 1)
+            {
+                return MakeDump("cpu 200 0 0 800 0 0 0 0 0 0", "0 0");
+            }
+
+            throw new System.IO.IOException("boom");
+        }, TimeSpan.FromMilliseconds(20));
+        monitor.Failed += reason => failReason = reason;
+
+        monitor.Start();
+        await WaitForAsync(() => !monitor.IsRunning, 5000);
+
+        Assert.False(monitor.IsRunning);
+        Assert.Equal("transport", failReason);
+    }
+
+    [Fact]
+    public async Task RM01_EngineSurvivesSingleTransientFailure()
+    {
+        var calls = 0;
+        int snapCount = 0;
+        string? failReason = null;
+        var monitor = new RemoteMonitor(() =>
+        {
+            var n = System.Threading.Interlocked.Increment(ref calls);
+            if (n == 2)
+            {
+                throw new System.IO.IOException("transient");
+            }
+
+            return Task.FromResult(MakeDump("cpu 200 0 0 800 0 0 0 0 0 0", "0 0"));
+        }, TimeSpan.FromMilliseconds(20));
+        monitor.SnapshotUpdated += _ => System.Threading.Interlocked.Increment(ref snapCount);
+        monitor.Failed += reason => failReason = reason;
+
+        monitor.Start();
+        await WaitForAsync(() => System.Threading.Volatile.Read(ref snapCount) >= 2, 5000);
+        await Task.Delay(100); // give the transient failure a chance to be processed
+
+        Assert.Null(failReason);
+        Assert.True(monitor.IsRunning);
+        monitor.Stop();
+    }
+
+    [Fact]
+    public async Task RM01_EngineStopsOnUnsupportedDump()
+    {
+        string? failReason = null;
+        var monitor = new RemoteMonitor(
+            () => Task.FromResult("hostname: win\n'echo' is not recognized as a command\n"),
+            TimeSpan.FromMilliseconds(20));
+        monitor.Failed += reason => failReason = reason;
+
+        monitor.Start();
+        await WaitForAsync(() => !monitor.IsRunning, 5000);
+
+        Assert.False(monitor.IsRunning);
+        Assert.Equal("unsupported", failReason);
+    }
+
+    [Fact]
+    public void RM01_EngineStopIsIdempotentAndCancels()
+    {
+        var monitor = new RemoteMonitor(
+            () => Task.Delay(50).ContinueWith(_ => MakeDump("cpu 200 0 0 800 0 0 0 0 0 0", "0 0")),
+            TimeSpan.FromMilliseconds(20));
+        monitor.Start();
+        monitor.Stop();
+        monitor.Stop();
+        monitor.Dispose();
+
+        Assert.False(monitor.IsRunning);
+    }
+
+    [Fact]
+    public async Task RM01_EngineDoesNotFireFailedWhenStoppedWhileBlocked()
+    {
+        string? failReason = null;
+        var monitor = new RemoteMonitor(async () =>
+        {
+            await Task.Delay(500);
+            throw new System.IO.IOException("late failure");
+        }, TimeSpan.FromMilliseconds(20));
+        monitor.Failed += reason => failReason = reason;
+
+        monitor.Start();
+        await Task.Delay(50); // first poll now in flight
+        monitor.Stop();
+        await Task.Delay(600); // the in-flight poll fails after the stop
+
+        Assert.False(monitor.IsRunning);
+        Assert.Null(failReason);
     }
 
     [Fact]
