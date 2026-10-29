@@ -87,7 +87,7 @@
         catch 改无修饰名（经隐式 using System 解析）；
      ⑤ 侧栏分组标题 Serial→串口（SSH/Telnet/TCP 协议名保留）；设置窗测试连接同套文案同步。
      SessionEditTests/SerialHotplugTests/MacroFeatureTests（错误框 OK 按钮）断言同步；
-     198/198，gate 第 12 轮全 PASS；提交 <hash>，发布部署双份。
+     198/198，gate 第 12 轮全 PASS；提交 b518e1c，发布部署双份。
 
 ## 已知偏差（已写入 spec 附录）
 
