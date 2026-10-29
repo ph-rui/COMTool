@@ -342,7 +342,7 @@
                      FontSize="13"
                      HorizontalAlignment="Center"
                      Foreground="#1a1a1a" />
-          <TextBlock Text="MobaXterm 网络服务器"
+          <TextBlock Text="COMTool 网络服务器"
                      FontSize="13"
                      HorizontalAlignment="Center"
                      Foreground="#1a1a1a" />

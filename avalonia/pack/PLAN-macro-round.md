@@ -135,6 +135,19 @@
      ④ 新增回归测试 NET05_ScanReconcilesRowsWhenCompletedReportLost（FakeScanner 加 DropCompletedReports
         模拟 completed 回调丢失，断言扫描结束后行仍被对账定格、无 … 残留）。
      201/201 App + 112/112 Connections，gate 第 15 轮全 PASS；提交 8e58b55，发布部署双份。
+   - 追加（2026-10-29，补记）：网络扫描名称解析实机修复（用户截图：192.0.2.251 无名，MobaXterm 显示 winhost1.example.com）：
+     ① 根因（ps1 诊断实测，用户 VDI 192.0.2.x 慢 DNS 网段）：反查需 ~4.7s（GetHostEntry 4680ms/raw PTR 5329ms），
+        旧 DnsTimeoutMs=500 必超时；NBSTAT 兜底亦无应答；MobaXterm 无此截短故能显示 FQDN；
+     ② DnsTimeoutMs 500→6000（名称解析仅对存活主机、与端口探测并行，存活判定速度不变）；
+        反查 “X.local” 形态（≤15 字符无点，NetBIOS 短名特征）剥 .local 对齐 MobaXterm 短名显示（NormalizeReverseName）；
+     ③ 测试：NET05_NormalizeReverseNameStripsLocalSuffixForShortNames 新增；
+        NET05_ScanDefaultsTargetTwoSecondSubnetScan 的 DNS 断言 ≤500 放宽为 ≤6000（附实测依据）；
+     201/201 App + 113/113 Connections，gate 第 16 轮全 PASS；提交 785648b，发布部署双份（0fd617e9）。
+   - 追加（2026-10-29）：网络服务器窗口欢迎页去 MobaXterm 字样（用户截图圈出“MobaXterm 网络服务器”）：
+     ServersManagementWindow.axaml 欢迎页 TextBlock 改 “COMTool 网络服务器”；
+     保留不动：宏导出默认文件名 MobaXterm Macros.mxtmacros（互操作约定）+ SSH 面板 MobaSSH 链接文案（1:1 基准），
+     代码注释/文档中的 MobaXterm 参照说明全部保留。
+     201/201 App，gate 第 17 轮全 PASS；提交 <hash>，发布部署双份。
 
 ## 已知偏差（已写入 spec 附录）
 
