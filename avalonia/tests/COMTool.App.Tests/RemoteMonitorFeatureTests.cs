@@ -699,7 +699,8 @@ public sealed class RemoteMonitorFeatureTests
             Assert.Equal(MainViewModel.CpuBarMaxWidth,
                 newestPos!.Value.X + cpuColumns[^1].Bounds.Width, 1);
 
-            // 分区：磁盘图标灰蓝；占用最高的分区是粗体橙红文字（对齐 MobaXterm）。
+            // 分区：磁盘图标灰蓝；占用最高的分区只换橙红色，字重/字形与其它分区一致
+            // （MobaXterm 22.1 实样：常规字重正体；斜体会触发 Skia 合成字形崩溃）。
             var parts = window.FindControl<ItemsControl>("MonPartitions")!;
             Assert.True(parts.IsVisible);
             var partTexts = Avalonia.VisualTree.VisualExtensions
@@ -711,8 +712,9 @@ public sealed class RemoteMonitorFeatureTests
             var diskBrush = Assert.IsAssignableFrom<ISolidColorBrush>(diskIcon.Foreground);
             Assert.Equal(ResourceColor(window, "MonIconDiskBrush"), diskBrush.Color);
             var hot = partTexts.Single(t => t.Text == "/data: 82%");
-            Assert.Equal(FontWeight.Bold, hot.FontWeight);
-            // 斜体必须保持关闭：雅黑无真斜体，Italic 会让 Skia 合成字形并崩溃。
+            // MobaXterm 只把高占用分区标成橙红，不加粗、不斜体；
+            // 斜体还会触发 Skia 合成字形并崩溃。
+            Assert.Equal(FontWeight.Normal, hot.FontWeight);
             Assert.Equal(FontStyle.Normal, hot.FontStyle);
             var hotBrush = Assert.IsAssignableFrom<ISolidColorBrush>(hot.Foreground);
             Assert.Equal(ResourceColor(window, "MonSegHotBrush"), hotBrush.Color);

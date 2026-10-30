@@ -52,10 +52,10 @@
     </Style>
     <Style Selector="TextBlock.MonSegHot">
       <Setter Property="Foreground" Value="{DynamicResource MonSegHotBrush}" />
-      <Setter Property="FontWeight" Value="Bold" />
-      <!-- 高占用分区：橙红 + 粗体，不要斜体。微软雅黑没有真斜体，设置 Italic 会让
-           Skia 现场合成字形（TryCreateSyntheticGlyphTypeface → sk_stream_read），
-           在 Windows 上触发 0xc0000005 崩溃（2026-10-30 实机 dump 定位）。 -->
+      <!-- 高占用分区只换颜色：MobaXterm 22.1 实样是橙红常规字重正体（并排对照图
+           2026-10-30 复核），不加粗、不斜体。斜体尤其危险：微软雅黑没有真斜体，
+           Italic 会让 Skia 现场合成字形（TryCreateSyntheticGlyphTypeface →
+           sk_stream_read），在 Windows 上触发 0xc0000005 崩溃（实机 dump 定位）。 -->
     </Style>
   </Window.Styles>
 
