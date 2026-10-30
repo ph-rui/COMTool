@@ -518,7 +518,7 @@
      ④ 测试：CjkTerminalFontTests.TERM22_WideCjkGlyphIsPinnedToTwoCellAdvances——headless 建终端、
         取内层 TerminalView、调 internal TryBuildGlyphRun("個",2)：断言非 null、单字形、
         GlyphAdvance==2×CharWidth（精度 4），并断言拉丁 "A" 仍 1×CharWidth（防宽度-1 路径被破坏）。
-          结果（2026-10-31）：提交 3616e5a（代码+测试+库打包，5 文件）。gate-r33.log 全 PASS：Core 89/Sftp 42/Terminal 11/Connections 150/Zmodem 32/TestGate 49/App 229（含 TERM22），E2E 15/15。发布 win-x64 单文件 R2R 95,085,875 字节（SHA256 C6C16B2F13DD18B2A699032DDA7E424BFF36CBE60E90E6F2B03632CBB36D8C50），deploy_r3.py 双份部署+SHA256 校验 OK。Windows 实机待核：SSH 中文欢迎页等中英文混排行对齐、无错位叠印（对照 MobaXterm）；注：修复在渲染层（全角固定 2 格 advance），headless(Linux) 已验证机制，Windows 字形来自 YaHei 的视觉效果需 RDP 确认。
+          结果（2026-10-31）：提交 3616e5a（代码+测试+库打包，4 文件）。gate-r33.log 全 PASS：Core 89/Sftp 42/Terminal 11/Connections 150/Zmodem 32/TestGate 49/App 229（含 TERM22），E2E 15/15。发布 win-x64 单文件 R2R 95,085,875 字节（SHA256 C6C16B2F13DD18B2A699032DDA7E424BFF36CBE60E90E6F2B03632CBB36D8C50），deploy_r3.py 双份部署+SHA256 校验 OK。Windows 实机待核：SSH 中文欢迎页等中英文混排行对齐、无错位叠印（对照 MobaXterm）；注：修复在渲染层（全角固定 2 格 advance），headless(Linux) 已验证机制，Windows 字形来自 YaHei 的视觉效果需 RDP 确认。
 
      （用户反馈 2026-10-30：附 MobaXterm/COMTool 同屏对照图“对比 mobaxterm，下面这排显示偏小了”）：
      ① 实测对照（取参考图像素）：MobaXterm CPU 条 46×22px、小格外高约 26px、图标约 16px；
