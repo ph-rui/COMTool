@@ -310,6 +310,31 @@
      发布部署双份（SHA256 99da66321dfa0137c2704331aa49569681a872681632d8c2d2801de0af2e95f3）。
      Windows 实机 WIN-01 补核：最大化后关闭应用，重开窗口自动最大化；还原后关闭则恢复普通窗口。
 
+   - 追加（2026-10-30，第 26 轮）：终端字号记忆 + 远程监控首击修复
+     （用户反馈 2026-10-30：“Ctrl+滚轮调字号，下次启动要记住”，选 A 方案＝全局生效并持久化；
+     另“刚连上 SSH 后第一次点远程监控无效，按钮还是绿色，再点一下才变灰”）：
+     ① 字号记忆（A 方案）：ComtoolConfig 新增 `terminal`/`terminal.fontSize`（默认 13.5，
+        旧配置缺键不报错）；Ctrl+滚轮 ±1（8–48）后更新 `_terminalFontSize`，
+        ApplyTerminalFontSizeToAll 同步所有已打开标签的终端，PersistTerminalFontSize 立即
+        SaveConfig 落盘（不重写会话存储）；启动时 ApplyTerminalConfig 读盘并钳制，
+        CreateTerminal 用记忆值，故重启后新开终端沿用；ClampTerminalFontSize 为纯函数
+        （0/NaN/∞ → 13.5，越界钳制 8–48）。
+     ② 首击修复：监控 ToggleButton 由默认 ClickMode.Release 改为 `ClickMode="Press"`
+        （按下即切换，不再依赖抬起时指针仍在按钮上——刚连上 SSH 时窗口激活/布局抖动会丢抬起点击）；
+        SetMonitorEnabled 对 SSH 分支始终 SyncMonitorOn 回写按钮态防漂移，非 SSH 分支记日志并回滚；
+        MainWindow 的 MonitorToggled 增加 `Remote monitor toggle:` 日志便于 run.log 定位。
+     ③ 测试：ConfigTests.SaveAndLoad_RoundTripsTerminalFontSize；
+        CjkTerminalFontTests.TERM18_ClampTerminalFontSizeFallsBackAndBounds、
+        TERM18_CtrlWheelZoomAppliesToEveryOpenTerminalAndPersists、
+        TERM18_SavedFontSizeIsUsedByTerminalsAfterRestart；
+        RemoteMonitorFeatureTests.RM04_MonitorToggleFirstRealClickTurnsOffTheRunningMonitor
+        （真实 MouseDown/MouseUp，断言 ClickMode=Press 且一次点击即关闭）。
+     App 223/223（Release）、Core 88/88；提交 03a0a55（字号）、9450440（首击）、72be086（文档）。
+     gate 第 26 轮全 PASS（build + Core 88/Sftp 42/Terminal 11/Connections 135/Zmodem 32/TestGate 49/App 223，
+     E2E 15/15，gate-r26.log）；发布 win-x64 214,961,086 字节，双份部署校验 OK
+     （SHA256 0b25eba882310e2f6ee715ab71808f536d0a4c53850e721b652eb4deb7548057）。
+     Windows 实机待核：Ctrl+滚轮 调字号 → 重启后字号保持且所有标签一致；刚连 SSH 后点一次监控即变灰。
+
    - 追加（2026-10-30，第 24 轮）：状态栏整排放大，比例对齐 MobaXterm
      （用户反馈 2026-10-30：附 MobaXterm/COMTool 同屏对照图“对比 mobaxterm，下面这排显示偏小了”）：
      ① 实测对照（取参考图像素）：MobaXterm CPU 条 46×22px、小格外高约 26px、图标约 16px；
