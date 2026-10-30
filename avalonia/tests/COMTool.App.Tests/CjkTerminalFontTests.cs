@@ -1,8 +1,11 @@
+using System.Linq;
 using Avalonia;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Media.TextFormatting;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using COMTool.App.ViewModels;
 using COMTool.App.Views;
 using COMTool.Core.Config;
@@ -46,6 +49,56 @@ public sealed class CjkTerminalFontTests
         Assert.True(map.TryGetGlyph('L', out var latin) && latin != 0, "latin glyph missing");
         Assert.True(map.TryGetGlyph('個', out var cjk) && cjk != 0, "CJK glyph missing");
         Assert.True(map.TryGetGlyph('。', out var punct) && punct != 0, "CJK punctuation missing");
+    }
+
+    [AvaloniaFact]
+    public void TERM22_WideCjkGlyphIsPinnedToTwoCellAdvances()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                window = new MainWindow { DataContext = new MainViewModel() };
+                window.Show();
+                window.StopPortTimerForTests();
+                var viewModel = (MainViewModel)window.DataContext!;
+
+                // Add the terminal to the window's visual tree so its template (the inner
+                // TerminalView) is realised, then drive a layout pass.
+                var terminal = AddTerminalTab(viewModel, "term22");
+                window.UpdateLayout();
+                Dispatcher.UIThread.RunJobs();
+
+                var view = terminal.GetVisualDescendants().OfType<TerminalView>().Single();
+
+                // Metrics must be resolvable so the fast path can pin advances to cells.
+                var cell = view.CharWidth;
+                Assert.True(cell > 0);
+
+                // A lone full-width CJK character occupies two cells. It must take the glyph fast
+                // path and be emitted as ONE glyph whose advance is exactly TWO cell widths -- not
+                // the fallback font's natural (proportional) width. The natural width is what makes
+                // mixed CJK+Latin lines drift off the grid on Windows (CJK -> Microsoft YaHei UI).
+                var run = view.TryBuildGlyphRun("個", 2, FontStyle.Normal, FontWeight.Normal);
+                Assert.NotNull(run);
+
+                var glyphs = run!.GlyphInfos.ToList();
+                Assert.Single(glyphs);
+                Assert.Equal(cell * 2, glyphs[0].GlyphAdvance, precision: 4);
+
+                // Sanity: a width-1 run of one latin char still pins to a single cell.
+                var latin = view.TryBuildGlyphRun("A", 1, FontStyle.Normal, FontWeight.Normal);
+                Assert.NotNull(latin);
+                Assert.Equal(cell, latin!.GlyphInfos.Single().GlyphAdvance, precision: 4);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
     }
 
     [AvaloniaFact]
