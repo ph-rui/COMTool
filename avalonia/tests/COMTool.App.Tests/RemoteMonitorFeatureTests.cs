@@ -453,9 +453,12 @@ public sealed class RemoteMonitorFeatureTests
             Assert.Equal("testhost", vm.SegHostText);
             Assert.True(vm.SegCpuVisible);
             Assert.Equal("40%", vm.SegCpuText);
-            Assert.Equal(MainViewModel.CpuBarMaxWidth * 0.4, vm.SegCpuBarWidth, 2);
-            // 40% 属低负载 -> 绿色填充（MobaXterm 随负载变色）。
-            Assert.Equal(Color.Parse("#2e9e4f"), ((SolidColorBrush)vm.SegCpuBarBrush).Color);
+            // CPU 条是 roll 时间序列：最右一列=最新样本，高度=40%×轨道高，低负载绿色。
+            Assert.Equal(MainViewModel.CpuBarColumnCount, vm.CpuColumns.Count);
+            var newest = vm.CpuColumns[^1];
+            Assert.Equal(40, newest.Percent, 2);
+            Assert.Equal(MainViewModel.CpuBarMaxHeight * 0.4, newest.Height, 2);
+            Assert.Equal(Color.Parse("#2e9e4f"), ((SolidColorBrush)newest.Brush).Color);
             Assert.True(vm.SegRamVisible);
             Assert.Contains(" GB / ", vm.SegRamText);
             Assert.True(vm.SegNetUpVisible);
@@ -544,14 +547,19 @@ public sealed class RemoteMonitorFeatureTests
             window.Show();
             Dispatcher.UIThread.RunJobs();
 
+            long cpuBusy = 0, cpuIdle = 0;
             var runner = new FakeExecRunner(() =>
-                Task.FromResult(Dump("cpu 100 0 0 900 0", "0 0")));
+            {
+                cpuBusy += 200;
+                cpuIdle += 300;
+                return Task.FromResult(Dump($"cpu {cpuBusy} 0 0 {cpuIdle} 0", "0 0"));
+            });
             var tab = SshTab(runner);
             vm.AddTab(tab);
             vm.SetMonitorEnabled(tab, true);
 
             var deadline = DateTime.UtcNow.AddSeconds(8);
-            while (!vm.SegPartitionsVisible && DateTime.UtcNow < deadline)
+            while (!(vm.SegPartitionsVisible && vm.SegCpuVisible) && DateTime.UtcNow < deadline)
             {
                 Dispatcher.UIThread.RunJobs();
                 Thread.Sleep(20);
@@ -560,6 +568,7 @@ public sealed class RemoteMonitorFeatureTests
             Dispatcher.UIThread.RunJobs();
 
             Assert.True(vm.SegPartitionsVisible);
+            Assert.True(vm.SegCpuVisible);
 
             // 已移除的四个指标（客户端/进程/FD/用户）不再有分段。
             Assert.Null(window.FindControl<Border>("MonSegClients"));
@@ -581,7 +590,31 @@ public sealed class RemoteMonitorFeatureTests
             AssertIcon(window, "MonSegNetDown", '\uF019', blue);
             AssertIcon(window, "MonSegUptime", '\uF017', uptime);
 
-            // 分区：磁盘图标灰蓝；占用最高的分区是粗体橙红文字（不斜体）。
+            // CPU 条是 28 列的时间序列（示波器 roll），不是单条静态填充。
+            var cpuSegment = window.FindControl<Border>("MonSegCpu")!;
+            var cpuColumns = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(cpuSegment)
+                .OfType<Border>()
+                .Where(b => b.Width == MainViewModel.CpuBarColumnWidth)
+                .ToList();
+            Assert.Equal(MainViewModel.CpuBarColumnCount, cpuColumns.Count);
+            // 最新样本在最右列（示波器 roll 从右端进入），40% -> 绿色、4.8px 高；
+            // 其余列是更早的采样（初始为 0，尚未填满窗口）。
+            Assert.All(cpuColumns, b =>
+                Assert.InRange(b.Height, 0, MainViewModel.CpuBarMaxHeight * 0.4));
+            Assert.Equal(MainViewModel.CpuBarMaxHeight * 0.4, cpuColumns[^1].Height, 2);
+            AssertColor(cpuColumns[^1].Background, "#2e9e4f");
+
+            // 28 列必须正好铺满 56px 轨道，最新样本贴右端（模板不得有内边距导致溢出/裁剪）。
+            var track = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(cpuSegment)
+                .OfType<Border>()
+                .Single(b => b.Width == MainViewModel.CpuBarMaxWidth);
+            var firstPos = cpuColumns[0].TranslatePoint(new Point(0, 0), track);
+            var newestPos = cpuColumns[^1].TranslatePoint(new Point(0, 0), track);
+            Assert.Equal(0, firstPos!.Value.X, 1);
+            Assert.Equal(MainViewModel.CpuBarMaxWidth,
+                newestPos!.Value.X + cpuColumns[^1].Bounds.Width, 1);
+
+            // 分区：磁盘图标灰蓝；占用最高的分区是粗体+斜体橙红文字（对齐 MobaXterm）。
             var parts = window.FindControl<ItemsControl>("MonPartitions")!;
             Assert.True(parts.IsVisible);
             var partTexts = Avalonia.VisualTree.VisualExtensions
@@ -594,7 +627,7 @@ public sealed class RemoteMonitorFeatureTests
             Assert.Equal(ResourceColor(window, "MonIconDiskBrush"), diskBrush.Color);
             var hot = partTexts.Single(t => t.Text == "/data: 82%");
             Assert.Equal(FontWeight.Bold, hot.FontWeight);
-            Assert.Equal(FontStyle.Normal, hot.FontStyle);
+            Assert.Equal(FontStyle.Italic, hot.FontStyle);
             var hotBrush = Assert.IsAssignableFrom<ISolidColorBrush>(hot.Foreground);
             Assert.Equal(ResourceColor(window, "MonSegHotBrush"), hotBrush.Color);
             var cool = partTexts.Single(t => t.Text == "/: 49%");
@@ -660,13 +693,49 @@ public sealed class RemoteMonitorFeatureTests
     public void RM06_CpuBarBrushTracksLoad()
     {
         // MobaXterm 的 CPU 迷你条随负载变色：低绿 / 中高橙 / ≥80% 红。
-        Assert.Equal(Color.Parse("#2e9e4f"), MainViewModel.CpuBarBrush(0).Color);
-        Assert.Equal(Color.Parse("#2e9e4f"), MainViewModel.CpuBarBrush(40).Color);
-        Assert.Equal(Color.Parse("#e8a31a"), MainViewModel.CpuBarBrush(50).Color);
-        Assert.Equal(Color.Parse("#e8a31a"), MainViewModel.CpuBarBrush(79).Color);
-        Assert.Equal(Color.Parse("#d84a2f"), MainViewModel.CpuBarBrush(80).Color);
-        Assert.Equal(Color.Parse("#d84a2f"), MainViewModel.CpuBarBrush(81).Color);
-        Assert.Equal(Color.Parse("#d84a2f"), MainViewModel.CpuBarBrush(120).Color); // clamped to 100
+        Assert.Equal(Color.Parse("#2e9e4f"), MainViewModel.CpuBarColor(0));
+        Assert.Equal(Color.Parse("#2e9e4f"), MainViewModel.CpuBarColor(40));
+        Assert.Equal(Color.Parse("#e8a31a"), MainViewModel.CpuBarColor(50));
+        Assert.Equal(Color.Parse("#e8a31a"), MainViewModel.CpuBarColor(79));
+        Assert.Equal(Color.Parse("#d84a2f"), MainViewModel.CpuBarColor(80));
+        Assert.Equal(Color.Parse("#d84a2f"), MainViewModel.CpuBarColor(81));
+        Assert.Equal(Color.Parse("#d84a2f"), MainViewModel.CpuBarColor(120)); // clamped to 100
+    }
+
+    [Fact]
+    public void RM06_CpuBarHistoryRollsLikeScope()
+    {
+        // MobaXterm 的 CPU 条是示波器 roll 模式：新样本从右端进入，旧样本左滚。
+        var vm = new MainViewModel();
+        Assert.Equal(MainViewModel.CpuBarColumnCount, vm.CpuColumns.Count);
+
+        vm.PushCpuSample(20);
+        vm.PushCpuSample(60);
+        vm.PushCpuSample(90);
+
+        var n = MainViewModel.CpuBarColumnCount;
+        var tail = vm.CpuColumns.Skip(n - 3).ToList();
+        Assert.Equal(new[] { 20d, 60d, 90d }, tail.Select(c => c.Percent).ToArray());
+        Assert.Equal(MainViewModel.CpuBarMaxHeight * 0.2, tail[0].Height, 2);
+        Assert.Equal(MainViewModel.CpuBarMaxHeight * 0.9, tail[2].Height, 2);
+        // 每列按自身负载着色：历史里的高档样本仍是红色，低档仍是绿色。
+        Assert.Equal(Color.Parse("#2e9e4f"), ((SolidColorBrush)tail[0].Brush).Color);
+        Assert.Equal(Color.Parse("#e8a31a"), ((SolidColorBrush)tail[1].Brush).Color);
+        Assert.Equal(Color.Parse("#d84a2f"), ((SolidColorBrush)tail[2].Brush).Color);
+        Assert.Equal(0, vm.CpuColumns[0].Percent);
+
+        // 灌满窗口（28 列）后左滚：最旧样本被丢掉。
+        for (var i = 0; i < n; i++)
+        {
+            vm.PushCpuSample(90);
+        }
+
+        Assert.All(vm.CpuColumns, c => Assert.Equal(90, c.Percent, 2));
+
+        // 停监控/清空后历史归零。
+        vm.PushCpuSample(10);
+        vm.ClearMonitorSegments();
+        Assert.All(vm.CpuColumns, c => Assert.Equal(0, c.Percent, 2));
     }
 
     [Fact]

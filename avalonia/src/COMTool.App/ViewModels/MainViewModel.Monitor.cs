@@ -95,13 +95,36 @@ public sealed partial class PartitionSegment : ObservableObject
     [ObservableProperty]
     private string _text = "";
 
-    /// <summary>使用率 ≥80%，橙红粗体显示。</summary>
+    /// <summary>使用率 ≥80%，橙红粗斜体显示。</summary>
     [ObservableProperty]
     private bool _isHot;
 
     /// <summary>第一个分区段显示磁盘图标（与 MobaXterm 一致）。</summary>
     [ObservableProperty]
     private bool _showIcon = true;
+}
+
+/// <summary>
+/// CPU 迷你条的一列（MobaXterm 的 CPU 条是示波器 roll 模式：
+/// 横轴时间、纵轴 0~100%，新样本从右端进入、旧样本向左滚动）。
+/// 列高按自身百分比，颜色按自身负载分档（低绿 / 中高橙 / ≥80% 红）。
+/// </summary>
+public sealed partial class CpuBarColumn : ObservableObject
+{
+    [ObservableProperty]
+    private double _percent;
+
+    [ObservableProperty]
+    private double _height;
+
+    [ObservableProperty]
+    private IBrush _brush = new SolidColorBrush(MainViewModel.CpuBarColor(0));
+
+    partial void OnPercentChanged(double value)
+    {
+        Height = MainViewModel.CpuBarMaxHeight * value / 100.0;
+        Brush = new SolidColorBrush(MainViewModel.CpuBarColor(value));
+    }
 }
 
 public partial class MainViewModel
@@ -122,11 +145,6 @@ public partial class MainViewModel
     private bool _segCpuVisible;
     [ObservableProperty]
     private string _segCpuText = "";
-    [ObservableProperty]
-    private double _segCpuBarWidth;
-    /// <summary>CPU 迷你条填充色，随负载变化（对齐 MobaXterm：低绿/中高橙/高红）。</summary>
-    [ObservableProperty]
-    private IBrush _segCpuBarBrush = new SolidColorBrush(CpuBarGreenColor);
     [ObservableProperty]
     private bool _segRamVisible;
     [ObservableProperty]
@@ -151,14 +169,20 @@ public partial class MainViewModel
     /// <summary>分段 CPU 条最大宽度（px），与 XAML 中 CPU 条轨道宽度一致。</summary>
     internal const double CpuBarMaxWidth = 56;
 
-    /// <summary>
-    /// CPU 条填充色随负载变化，对齐 MobaXterm（低绿 / 中高橙 / ≥80% 红）。
-    /// 每次返回新建画刷：Avalonia 12 的 SolidColorBrush 是线程亲和的，
-    /// 静态共享实例在跨线程（UI 线程 / 并行测试线程）访问时会抛异常。
-    /// </summary>
-    internal static SolidColorBrush CpuBarBrush(double cpuPercent) =>
-        new(CpuBarColor(cpuPercent));
+    /// <summary>CPU 条列数（横轴时间窗口：28 列 × 2s 轮询 ≈ 56 秒历史）。</summary>
+    internal const int CpuBarColumnCount = 28;
 
+    /// <summary>单列宽度（px）：56 / 28 = 2。</summary>
+    internal const double CpuBarColumnWidth = CpuBarMaxWidth / CpuBarColumnCount;
+
+    /// <summary>单列最大高度（px），与 XAML 中 CPU 条轨道高度一致。</summary>
+    internal const double CpuBarMaxHeight = 12;
+
+    /// <summary>
+    /// CPU 条每列的颜色，对齐 MobaXterm（低绿 / 中高橙 / ≥80% 红）。
+    /// 只返回线程无关的 <see cref="Color"/>；画刷由列对象在 UI 线程创建
+    /// （Avalonia 12 的 SolidColorBrush 线程亲和，跨线程访问会抛异常）。
+    /// </summary>
     internal static Color CpuBarColor(double cpuPercent)
     {
         var pct = (int)Math.Clamp(Math.Round(cpuPercent), 0, 100);
@@ -168,6 +192,46 @@ public partial class MainViewModel
     private static readonly Color CpuBarGreenColor = Color.Parse("#2e9e4f");
     private static readonly Color CpuBarOrangeColor = Color.Parse("#e8a31a");
     private static readonly Color CpuBarRedColor = Color.Parse("#d84a2f");
+
+    /// <summary>
+    /// CPU 迷你条的时间序列列（MobaXterm 的 roll 模式）：固定 28 列，
+    /// 最右一列是最新样本，每来一个采样整体左移。
+    /// </summary>
+    public ObservableCollection<CpuBarColumn> CpuColumns { get; } = CreateCpuColumns();
+
+    private static ObservableCollection<CpuBarColumn> CreateCpuColumns()
+    {
+        var columns = new ObservableCollection<CpuBarColumn>();
+        for (var i = 0; i < CpuBarColumnCount; i++)
+        {
+            columns.Add(new CpuBarColumn());
+        }
+
+        return columns;
+    }
+
+    /// <summary>
+    /// 追加一个 CPU 采样（示波器 roll：左移一列，新值进最右列）。
+    /// 只由轮询快照路径调用；菜单勾选重排版不推进历史。
+    /// </summary>
+    internal void PushCpuSample(double cpuPercent)
+    {
+        var pct = Math.Clamp(cpuPercent, 0, 100);
+        for (var i = 0; i < CpuColumns.Count - 1; i++)
+        {
+            CpuColumns[i].Percent = CpuColumns[i + 1].Percent;
+        }
+
+        CpuColumns[^1].Percent = pct;
+    }
+
+    private void ClearCpuHistory()
+    {
+        foreach (var column in CpuColumns)
+        {
+            column.Percent = 0;
+        }
+    }
 
     /// <summary>
     /// 远程监控菜单 7 项的勾选态（状态栏右键菜单的数据源）。
@@ -305,13 +369,10 @@ public partial class MainViewModel
             var pct = (int)Math.Clamp(Math.Round(cpu), 0, 100);
             SegCpuVisible = true;
             SegCpuText = pct.ToString(CultureInfo.InvariantCulture) + "%";
-            SegCpuBarWidth = CpuBarMaxWidth * pct / 100.0;
-            SegCpuBarBrush = CpuBarBrush(cpu);
         }
         else
         {
             SegCpuVisible = false;
-            SegCpuBarBrush = CpuBarBrush(0);
         }
 
         if (o.ShowRam && snap.Ram is { } ram)
@@ -376,7 +437,7 @@ public partial class MainViewModel
         }
     }
 
-    private void ClearMonitorSegments()
+    internal void ClearMonitorSegments()
     {
         SegHostVisible = false;
         SegCpuVisible = false;
@@ -386,6 +447,7 @@ public partial class MainViewModel
         SegUptimeVisible = false;
         SegPartitionsVisible = false;
         Partitions.Clear();
+        ClearCpuHistory();
     }
 
     /// <summary>
@@ -400,6 +462,11 @@ public partial class MainViewModel
         }
 
         _lastSnapshot = snapshot;
+        if (snapshot.CpuPercent is { } cpu)
+        {
+            PushCpuSample(cpu);
+        }
+
         MonitorText = snapshot.Format(MonitorMenu.ToOptions());
         IsMonitorActive = MonitorText.Length > 0;
         RefreshMonitorSegments();

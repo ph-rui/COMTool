@@ -53,6 +53,8 @@
     <Style Selector="TextBlock.MonSegHot">
       <Setter Property="Foreground" Value="{DynamicResource MonSegHotBrush}" />
       <Setter Property="FontWeight" Value="Bold" />
+      <!-- MobaXterm 的高占用分区是粗体+斜体，1:1 对齐。 -->
+      <Setter Property="FontStyle" Value="Italic" />
     </Style>
   </Window.Styles>
 
@@ -382,9 +384,25 @@
                       <Border Width="56" Height="12" CornerRadius="2" ClipToBounds="True"
                               Background="{DynamicResource MonCpuBarTrackBrush}"
                               VerticalAlignment="Center">
-                        <Border Width="{Binding SegCpuBarWidth}" CornerRadius="2"
-                                Background="{Binding SegCpuBarBrush}"
-                                HorizontalAlignment="Left" />
+                        <!-- MobaXterm 的 CPU 条是示波器 roll 模式：横轴时间（28 列，
+                             每列一个 2s 采样），纵轴 0~100%，新样本从右端进入。
+                             每列高度=该样本百分比，颜色=该样本负载分档（低绿/中高橙/高红）。 -->
+                        <ItemsControl ItemsSource="{Binding CpuColumns}"
+                                      VerticalAlignment="Bottom">
+                          <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                              <StackPanel Orientation="Horizontal" Spacing="0" />
+                            </ItemsPanelTemplate>
+                          </ItemsControl.ItemsPanel>
+                          <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                              <Border Width="2"
+                                      Height="{Binding Height}"
+                                      Background="{Binding Brush}"
+                                      VerticalAlignment="Bottom" />
+                            </DataTemplate>
+                          </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                       </Border>
                     </StackPanel>
                   </Border>
