@@ -477,6 +477,26 @@
         库的类 handler 被跳过）。
           结果（2026-10-30）：提交 562ed2c（代码+测试，2 文件 +55/-8）。gate-r31.log 全 PASS：Core 89/Sftp 42/Terminal 11/Connections 150/Zmodem 32/TestGate 49/App 228（TERM21 改真实隧道路径后仍绿），E2E 15/15。发布 win-x64 单文件 R2R 95,085,774 字节（SHA256 D9144DDE538E3579BD87C74B62F1CA8DDC9598663E2AB5FA6B02E6E636D47AD0），deploy_r3.py 双份部署+SHA256 校验 OK。Windows 实机待核：终端内 Shift+右键弹出 18 项菜单（此前 dc1ab0a2 构建实机不弹）、普通右键=复制选区/无选区时规范粘贴（行为变化：右击粘贴现也走r28 行尾规范化，多行粘贴无空行）、左键选择/双击选词不受影响。
 
+   - 追加（2026-10-30，第 32 轮）：终端编码选择从标签栏下拉框移入 Shift+右键菜单（用户指图要求）
+     ① 移除：标签栏右侧 EncodingCombo（StackPanel 整块，标签栏栅格列 *,Auto→*）、死样式
+        ComboBox.EncodingCombo（AppStyles）、ApplyEncodingConfig/OnEncodingChanged/
+        OnEncodingDropDownClosed/_applyingEncoding（RestoreTerminalFocus/FocusSelectedTerminal
+        多处使用，保留）。
+     ② 新增：OpenTerminalContextMenu「更改终端设置…」后加「编码」子菜单——
+        ASCII/UTF-8/UTF-16/GBK/GB2312/GB18030 六项，Avalonia 12 无 IsCheckable，用
+        MenuItemToggleType.Radio + GroupName=TerminalEncoding 实现单选（点击自动互斥），
+        当前值（config.json terminal.encoding，默认 UTF-8）打勾，点击 SetTerminalEncoding 落盘。
+     ③ 行为说明：编码值自引入起即仅持久化、未接入 XTerm.NET 解码路径（库 UTF-8 硬编码），
+        本轮仅移动入口、不改变该行为（接线解码属后续单独任务）。
+     ④ 测试：TERM21 18→19 项 + 编码子菜单 6 项/唯一打勾断言；TabStripHasNoSftpChip 的
+        EncodingCombo 断言 NotNull→Null（回归守卫：标签栏不得再有编码框）。
+     结果（2026-10-30）：提交 5e57b5b（代码+测试，5 文件 +60/-101）。gate-r32.log 全 PASS：
+     Core 89/Sftp 42/Terminal 11/Connections 150/Zmodem 32/TestGate 49/App 228，E2E 15/15。
+     发布 win-x64 单文件 R2R 95,085,780 字节
+     （SHA256 C4BCA40A8D9B8A5B1EF77BEB8A81224FBB1AFBCCE15E7D30535912187FA1F4BA），
+     deploy_r3.py 双份部署+SHA256 校验 OK。Windows 实机待核：Shift+右键菜单含「编码」子菜单
+     （当前值打勾、单选、落盘保留）、标签栏右侧无编码下拉框。
+
      （用户反馈 2026-10-30：附 MobaXterm/COMTool 同屏对照图“对比 mobaxterm，下面这排显示偏小了”）：
      ① 实测对照（取参考图像素）：MobaXterm CPU 条 46×22px、小格外高约 26px、图标约 16px；
         我们原先 CPU 条 56×12px、小格 22px、图标 11px、状态栏行高 30px，整排偏薄偏小。
