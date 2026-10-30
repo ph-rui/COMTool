@@ -335,6 +335,21 @@
      （SHA256 0b25eba882310e2f6ee715ab71808f536d0a4c53850e721b652eb4deb7548057）。
      Windows 实机待核：Ctrl+滚轮 调字号 → 重启后字号保持且所有标签一致；刚连 SSH 后点一次监控即变灰。
 
+   - 追加（2026-10-30，第 27 轮）：热分区去掉斜体，修复启动后偶发崩溃退出
+     （用户反馈 2026-10-30：附状态栏截图“为啥最后一个分区信息是斜体的？；有时候打开应用会卡住然后退出”）：
+     ① 定位：Windows 事件日志 Application Error 1000 + .NET Runtime 1026（14:53:43/14:31:24/10:55:49
+        三次同签名）：异常 0xc0000005，栈顶 SkiaSharp.SkiaApi.sk_stream_read →
+        Avalonia.Skia.SkiaTypeface.TryGetStream → FontCollectionBase.TryCreateSyntheticGlyphTypeface
+        → TextBlock.MeasureOverride；均在 SSH `terminal attached` 同一秒（首个监控快照渲染时）崩溃。
+        run.log 无记录，因为 AccessViolation 属 corrupted-state，CLR 直接终止、托管异常处理器不执行。
+     ② 根因：UI 字体 Microsoft YaHei UI 没有真斜体，状态栏热分区（占用 ≥80%）设了
+        FontStyle=Italic，Avalonia 让 Skia 现场合成斜体字形，读字体流时 AV；该 VDI 的
+        /mnt/sangfor/vdb 恒为 82% → 每次监控一开就命中。全应用仅此一处 Italic。
+     ③ 修复：MonSegHot 去掉 FontStyle 设置，保留橙红 MonSegHotBrush + Bold（MobaXterm 的高占用
+        分区外观），RM06 断言改为 FontStyle.Normal；避免任何 Skia 合成斜体路径。
+     ④ 排查产物：/tmp/opencode/crash-1453.dmp（dump）、crash1026.txt（事件栈）；
+        崩溃转储位于 VDI `%LOCALAPPDATA%\CrashDumps`。
+
    - 追加（2026-10-30，第 24 轮）：状态栏整排放大，比例对齐 MobaXterm
      （用户反馈 2026-10-30：附 MobaXterm/COMTool 同屏对照图“对比 mobaxterm，下面这排显示偏小了”）：
      ① 实测对照（取参考图像素）：MobaXterm CPU 条 46×22px、小格外高约 26px、图标约 16px；
