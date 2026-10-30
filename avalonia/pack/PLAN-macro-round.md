@@ -426,6 +426,38 @@
      deploy_r3.py 双份部署+SHA256 校验 OK（9731B9E7…A54EBFA）。Windows 实机待核：标题栏右键→终端设置
      对话框（默认双不勾）、勾选后对已连接终端 Live 即时生效、重启后勾选状态保留、双关时无任何行为回归。
 
+   - 追加（2026-10-30，第 30 轮）：行尾开关黑屏修复 + 终端 Shift+右键菜单 + 两处 UI 对齐
+     （用户 RDP 实机反馈：使能任一开关后 SSH 黑屏无显示；连接设置 Key file「...」不居中；About OK 位置；
+     终端设置应像 MobaXterm 一样 shift+右键弹出）：
+     ① 黑屏根因：LineEndingStream 慢路径 `while (total < count)` 坚持填满读循环的 256KB 请求
+        （TerminalView.ReadPtyOutputAsync 用 0x40000 buffer 调 ReaderStream.Read）；内层 ZmodemStream
+        语义是“≥1 字节即返回当前可用量”，数据耗尽后阻塞等下一批——远端输出不足 256KB 时 Read 永不返回，
+        读循环停摆，已到手的变换文本无法上屏（双关走快路径整块直通，故仅使能开关后复现）。单测全用
+        MemoryStream（读干即 EOF）无法暴露。修复：慢路径改“有数据即返回”——已有变换输出立即返回；
+        否则至多阻塞内层一次，变换后有输出即返回；仅 EOF 且无剩余才返回 0；整块被扣作待决 \r 时
+        继续拉下一字节判定（不提前报 EOF）。回归测试 ReadReturnsAvailable_DoesNotWaitForFullBuffer
+        （BlockingStream 第二次读挂起即证“最多阻塞一次”）与 PendingCrAtTail_ReturnsPriorTextFirst
+        （前段文本先交付、尾 \r 扣住待决）。
+     ② 终端 Shift+右键菜单（MobaXterm 22.1 同构，18 项+4 分隔线，汉化）：OnTerminalPointerPressed
+        增加 Shift 门控——普通右键保持原行为（有选区=复制/无选区=粘贴），Shift+右键调
+        OpenTerminalContextMenu 建菜单并 Open(terminal)（Avalonia 12.1.4 无 OpenAt，锚定控件）。
+        接线项：复制(按选区启用)/复制全部(SelectAll+Copy)/粘贴(规范粘贴 Shift+INSERT 标注)/执行宏
+        (Ctrl+空格→宏浮层，无宏置灰)/录制宏(启停切换，仅选中 tab)/保存到文件(Ctrl+Shift+S→
+        TerminalTranscript 全缓冲存盘)/Zmodem 接收(向远端发 sz\r)/Zmodem 发送(发 rz\r→本地选框)/
+        更改终端设置…(打开实时终端重配置对话框)；置灰占位：复制 RTF/查找/字体设置/终端显示/语法高亮/
+        录制输出到文件/打印/特殊命令/事件日志。标题栏右键菜单移除“终端设置”项（入口移入终端菜单，
+        对齐 MobaXterm）；OnTerminalSettingsClick 仅保留 ShowTerminalSettingsAsync 供菜单调用。
+        测试：TerminalPtyFeatureTests.TERM21（headless 合成 Shift+右键 PointerPressed：18 项顺序/文案、
+        分隔线 4 条、普通右键不弹菜单、复制按选区置灰、粘贴/更改终端设置…启用、Shift+INSERT 标注、
+        Zmodem 接收启用态）；LastTerminalMenuForTests 钩子供断言。
+     ③ 连接设置 Key file「...」按钮：内容 "..."→"…"（三点基线偏下致视觉不居中），补
+        HorizontalContentAlignment/VerticalContentAlignment=Center。
+     ④ About 窗：固定 Height=430 致内容下 ~120px 死区、OK 悬空（截图 549×455 实测 OK 底 y=330）；
+        改 SizeToContent=Height（保留 Width=560），OK 贴底右标准位。
+     ⑤ 文档：parity/FTM 增 TERM-21 行，FTM TERM-20 补 2 回归测试名与黑屏根因注记；
+        manual WIN-30 补黑屏补充核项与入口变更，新增 WIN-31。
+          结果（2026-10-30）：提交 30e1dbc（代码+测试，6 文件 +450/-31）。gate-r30.log 全 PASS：Core 89/Sftp 42/Terminal 11/Connections 150/Zmodem 32/TestGate 49/App 228（含 TERM21 与 2 个黑屏回归），E2E 15/15。发布 win-x64 单文件 R2R 95,085,784 字节（SHA256 DC1AB0A2E143B9EA28F0E090184AE970C57345E9B7A99177C34D10CDAC3D713B），deploy_r3.py 双份部署+SHA256 校验 OK。Windows 实机待核：使能任一开关后 SSH 正常显示（黑屏修复）、终端 Shift+右键菜单（18 项，更改终端设置…→实时终端重配置）、普通右键行为不变、Key file「…」居中、About OK 贴底、标题栏右键不再有“终端设置”。
+
      （用户反馈 2026-10-30：附 MobaXterm/COMTool 同屏对照图“对比 mobaxterm，下面这排显示偏小了”）：
      ① 实测对照（取参考图像素）：MobaXterm CPU 条 46×22px、小格外高约 26px、图标约 16px；
         我们原先 CPU 条 56×12px、小格 22px、图标 11px、状态栏行高 30px，整排偏薄偏小。
