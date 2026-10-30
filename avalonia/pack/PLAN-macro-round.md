@@ -384,9 +384,14 @@
         TERM19_SyncPtySizeMatchesViewportAfterAttach（断言 resize 回调收到与视口度量一致的
         cols/rows）。粘贴 e2e 不依赖 headless 剪贴板（剪贴板 async 在 UI 线程 GetResult 会
         死锁，实测 15 分钟挂起证实；改用 SendPasteTextAsync 直发 + env.RunAsync）。
-     App 226/226（Release，含 3 新测试；首次跑 217/226 处宿主偶发 SIGSEGV exit 139，
-     历史已知非代码问题，复跑全过）、Core 88/88；提交 0ab3aac（代码+测试）、<DOCS_SHA>（文档）。
-     <GATE_LINE>
+     App 226/226（Release，含 3 新测试；中途两次 179/217 处宿主偶发 SIGSEGV exit 139，
+     历史已知非代码问题，复跑全过）、Core 88/88；提交 0ab3aac（代码+测试）、b266099（文档）。
+     gate 第 28 轮全 PASS（Core 88/Sftp 42/Terminal 11/Connections 135/Zmodem 32/TestGate 49/
+     App 226，E2E 15/15，gate-r28b.log；gate-r28.log 因 App 宿主偶发 SIGSEGV FAIL 后重跑）；
+     发布 win-x64 214,973,374 字节，双份部署校验 OK
+     （SHA256 71fc0d68a7760dd15d4c4fa9817bbc4a1ee0ef08d4d971de920b3fc7c60ed52e，
+     与用户自行构建放入目录的 exe 完全一致）。
+     Windows 实机待核：多行粘贴无空行、top 铺满终端视口。
 
      （用户反馈 2026-10-30：附 MobaXterm/COMTool 同屏对照图“对比 mobaxterm，下面这排显示偏小了”）：
      ① 实测对照（取参考图像素）：MobaXterm CPU 条 46×22px、小格外高约 26px、图标约 16px；
