@@ -275,6 +275,22 @@
      Windows 实机 WIN-28 补核：CPU 条为自右向左滚动的历史柱状（负载升高时红柱出现在最右侧），
      热分区为橙红粗斜体。
 
+   - 追加（2026-10-30，第 24 轮）：状态栏整排放大，比例对齐 MobaXterm
+     （用户反馈 2026-10-30：附 MobaXterm/COMTool 同屏对照图“对比 mobaxterm，下面这排显示偏小了”）：
+     ① 实测对照（取参考图像素）：MobaXterm CPU 条 46×22px、小格外高约 26px、图标约 16px；
+        我们原先 CPU 条 56×12px、小格 22px、图标 11px、状态栏行高 30px，整排偏薄偏小。
+     ② 调整（MainWindow.axaml）：状态栏行高 30→34；MonSeg Padding 6,2→7,3；
+        MonSegText 12→13px；MonIcon 11→13px；CPU 轨道 56×12→56×18。
+        MainViewModel CpuBarMaxHeight 12→18（roll 列高按此换算）。
+     ③ 渲染实测（E2E RM01 截图 rm01-statusbar.png）：小格外高 24px、CPU 轨道 56×18、
+        28 列仍正好铺满（首列 x=0、末列右缘=56）；RM01 E2E 点击坐标不受影响
+        （监控按钮在侧栏 SFTP 面板底部，与状态栏行高无关）。
+     ④ 测试：RM06 既有断言随常量自适应（217 项）；run-ui-e2e.sh 的 RM01 增加
+        rm01-statusbar.png 常规截图（视觉核对证据）。
+     App 217/217、Core 86/86、Connections 135/135、TestGate 49/49；gate 第 24 轮全 PASS（E2E 15/15，
+     gate-r24.log）；提交 5e4677c，发布部署双份。
+     Windows 实机 WIN-28 补核：状态栏整排高度/CPU 条厚度/图标大小与 MobaXterm 并排一致。
+
 ## 已知偏差（已写入 spec 附录）
 
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
