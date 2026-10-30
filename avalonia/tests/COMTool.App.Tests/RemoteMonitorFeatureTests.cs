@@ -699,7 +699,7 @@ public sealed class RemoteMonitorFeatureTests
             Assert.Equal(MainViewModel.CpuBarMaxWidth,
                 newestPos!.Value.X + cpuColumns[^1].Bounds.Width, 1);
 
-            // 分区：磁盘图标灰蓝；占用最高的分区是粗体+斜体橙红文字（对齐 MobaXterm）。
+            // 分区：磁盘图标灰蓝；占用最高的分区是粗体橙红文字（对齐 MobaXterm）。
             var parts = window.FindControl<ItemsControl>("MonPartitions")!;
             Assert.True(parts.IsVisible);
             var partTexts = Avalonia.VisualTree.VisualExtensions
@@ -712,7 +712,8 @@ public sealed class RemoteMonitorFeatureTests
             Assert.Equal(ResourceColor(window, "MonIconDiskBrush"), diskBrush.Color);
             var hot = partTexts.Single(t => t.Text == "/data: 82%");
             Assert.Equal(FontWeight.Bold, hot.FontWeight);
-            Assert.Equal(FontStyle.Italic, hot.FontStyle);
+            // 斜体必须保持关闭：雅黑无真斜体，Italic 会让 Skia 合成字形并崩溃。
+            Assert.Equal(FontStyle.Normal, hot.FontStyle);
             var hotBrush = Assert.IsAssignableFrom<ISolidColorBrush>(hot.Foreground);
             Assert.Equal(ResourceColor(window, "MonSegHotBrush"), hotBrush.Color);
             var cool = partTexts.Single(t => t.Text == "/: 49%");
