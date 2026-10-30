@@ -176,7 +176,7 @@ public partial class MainViewModel
     internal const double CpuBarColumnWidth = CpuBarMaxWidth / CpuBarColumnCount;
 
     /// <summary>单列最大高度（px），与 XAML 中 CPU 条轨道高度一致。</summary>
-    internal const double CpuBarMaxHeight = 12;
+    internal const double CpuBarMaxHeight = 18;
 
     /// <summary>
     /// CPU 条每列的颜色，对齐 MobaXterm（低绿 / 中高橙 / ≥80% 红）。

@@ -30,18 +30,18 @@
       <Setter Property="BorderBrush" Value="{DynamicResource MonSegBorderBrush}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="2" />
-      <Setter Property="Padding" Value="6,2" />
+      <Setter Property="Padding" Value="7,3" />
       <Setter Property="Margin" Value="0,1" />
       <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
     <Style Selector="TextBlock.MonSegText">
-      <Setter Property="FontSize" Value="12" />
+      <Setter Property="FontSize" Value="13" />
       <Setter Property="Foreground" Value="{DynamicResource WindowTextBrush}" />
       <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
     <Style Selector="TextBlock.MonIcon">
       <Setter Property="FontFamily" Value="{DynamicResource IconFontAwesome}" />
-      <Setter Property="FontSize" Value="11" />
+      <Setter Property="FontSize" Value="13" />
       <Setter Property="Foreground" Value="{DynamicResource MonIconBrush}" />
       <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
@@ -309,7 +309,7 @@
               </StackPanel>
             </Grid>
 
-            <Grid Grid.Row="1" RowDefinitions="Auto,*,6,30">
+            <Grid Grid.Row="1" RowDefinitions="Auto,*,6,34">
               <Border Grid.Row="0"
                       Name="MacroStatusBanner"
                       Height="26"
@@ -381,7 +381,7 @@
                     <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
                       <TextBlock Text="&#xf2db;" Classes="MonIcon" Foreground="#2e9e4f" />
                       <TextBlock Text="{Binding SegCpuText}" Classes="MonSegText" />
-                      <Border Width="56" Height="12" CornerRadius="2" ClipToBounds="True"
+                      <Border Width="56" Height="18" CornerRadius="2" ClipToBounds="True"
                               Background="{DynamicResource MonCpuBarTrackBrush}"
                               VerticalAlignment="Center">
                         <!-- MobaXterm 的 CPU 条是示波器 roll 模式：横轴时间（28 列，

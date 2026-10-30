@@ -943,6 +943,7 @@ run_rm01_monitor_bar() {
         fail "$test_id" "expected at least 2 monitor polls, got $polls"
     fi
     log "$test_id: monitor polls observed: $polls"
+    capture_screenshot "$TMP_ROOT/rm01-statusbar.png" || true
 
     pass "$test_id"
 }
