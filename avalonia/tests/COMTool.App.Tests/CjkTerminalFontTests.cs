@@ -5,6 +5,7 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using COMTool.App.ViewModels;
 using COMTool.App.Views;
+using COMTool.Core.Config;
 using Iciclecreek.Terminal;
 
 namespace COMTool.App.Tests;
@@ -62,6 +63,16 @@ public sealed class CjkTerminalFontTests
     }
 
     [AvaloniaFact]
+    public void TERM18_ClampTerminalFontSizeFallsBackAndBounds()
+    {
+        Assert.Equal(13.5, MainWindow.ClampTerminalFontSize(0));
+        Assert.Equal(13.5, MainWindow.ClampTerminalFontSize(double.NaN));
+        Assert.Equal(8, MainWindow.ClampTerminalFontSize(1));
+        Assert.Equal(48, MainWindow.ClampTerminalFontSize(200));
+        Assert.Equal(18, MainWindow.ClampTerminalFontSize(18));
+    }
+
+    [AvaloniaFact]
     public void TERM18_CtrlWheelOverTerminalChangesItsFontSize()
     {
         using var env = new TestEnvironment();
@@ -114,6 +125,98 @@ public sealed class CjkTerminalFontTests
             window?.Close();
             Dispatcher.UIThread.RunJobs();
         }
+    }
+
+    [AvaloniaFact]
+    public void TERM18_CtrlWheelZoomAppliesToEveryOpenTerminalAndPersists()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                window = new MainWindow { DataContext = new MainViewModel() };
+                window.Show();
+                window.StopPortTimerForTests();
+                var viewModel = (MainViewModel)window.DataContext!;
+
+                var first = AddTerminalTab(viewModel, "zoom-a");
+                var second = AddTerminalTab(viewModel, "zoom-b");
+                Dispatcher.UIThread.RunJobs();
+
+                // MobaXterm 的终端字号是全局设置：缩放一个终端，其他终端同步。
+                // 只有选中标签的终端在可视树里，事件要打在它上面。
+                second.RaiseEvent(WheelEvent(second, window, 1));
+                Dispatcher.UIThread.RunJobs();
+
+                Assert.Equal(MainWindow.TerminalFontSize + 1, first.FontSize);
+                Assert.Equal(MainWindow.TerminalFontSize + 1, second.FontSize);
+
+                // 同时写进 config.json，重启后仍用这个字号。
+                var saved = ComtoolConfig.Load(
+                    Path.Combine(env.AvaloniaConfigDir, "config.json"));
+                Assert.Equal(MainWindow.TerminalFontSize + 1, saved.Terminal.FontSize);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public void TERM18_SavedFontSizeIsUsedByTerminalsAfterRestart()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                env.SeedConfig(new ComtoolConfig
+                {
+                    Terminal = new TerminalConfig { FontSize = 18 },
+                });
+                window = new MainWindow { DataContext = new MainViewModel() };
+                window.Show();
+                window.StopPortTimerForTests();
+                Dispatcher.UIThread.RunJobs();
+
+                // 重启后新建的终端直接用记忆的字号。
+                var terminal = window.CreateTerminal();
+                Assert.Equal(18, terminal.FontSize);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    private static TerminalControl AddTerminalTab(MainViewModel viewModel, string id)
+    {
+        var terminal = new TerminalControl
+        {
+            Width = 300,
+            Height = 100,
+            FontFamily = MainWindow.TerminalFontFamily(),
+            FontSize = MainWindow.TerminalFontSize,
+        };
+        viewModel.AddTab(new TerminalTab
+        {
+            Title = id,
+            SessionId = id,
+            Kind = SessionKind.Local,
+            Content = terminal,
+            Terminal = terminal,
+            CloseAction = () => { },
+        });
+        terminal.ApplyTemplate();
+        return terminal;
     }
 
     private static PointerWheelEventArgs WheelEvent(

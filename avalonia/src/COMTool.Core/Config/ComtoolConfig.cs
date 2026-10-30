@@ -96,6 +96,9 @@ public sealed class ComtoolConfig
     [JsonPropertyName("window")]
     public WindowConfig Window { get; set; } = new();
 
+    [JsonPropertyName("terminal")]
+    public TerminalConfig Terminal { get; set; } = new();
+
     [JsonPropertyName("items")]
     public List<JsonElement> Items { get; set; } = new();
 
@@ -191,6 +194,19 @@ public sealed class WindowConfig
     /// <summary>窗口最大化状态记忆，下次启动恢复（MobaXterm 行为）。</summary>
     [JsonPropertyName("maximized")]
     public bool Maximized { get; set; } = false;
+
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? Extra { get; set; }
+}
+
+/// <summary>
+/// 终端外观。fontSize 由 Ctrl+滚轮 缩放写入，重启后恢复
+/// （MobaXterm 行为：全局终端字号，对所有打开的终端生效）。
+/// </summary>
+public sealed class TerminalConfig
+{
+    [JsonPropertyName("fontSize")]
+    public double FontSize { get; set; } = 13.5;
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? Extra { get; set; }

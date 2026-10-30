@@ -74,6 +74,8 @@ public partial class MainWindow : Window
     private const double MinimumWindowHeight = 320;
     private double _lastNormalWidth = DefaultWindowWidth;
     private double _lastNormalHeight = DefaultWindowHeight;
+    // 全局终端字号（Ctrl+滚轮 缩放后写入 config 的 terminal.fontSize）。
+    private double _terminalFontSize = TerminalFontSize;
 
     public MainWindow()
     {
@@ -236,6 +238,7 @@ public partial class MainWindow : Window
                 ApplyEncodingConfig();
                 ApplySidebarConfig();
                 ApplyWindowSizeConfig();
+                ApplyTerminalConfig();
                 RefreshSidebar();
                 LoadSidebarData();
                 _portTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
@@ -1741,7 +1744,7 @@ public partial class MainWindow : Window
         });
     }
 
-    private TerminalControl CreateTerminal()
+    internal TerminalControl CreateTerminal()
     {
         var terminal = new TerminalControl
         {
@@ -1751,7 +1754,7 @@ public partial class MainWindow : Window
             // writing its own prompt into the terminal buffer.
             Process = string.Empty,
             FontFamily = TerminalFontFamily(),
-            FontSize = TerminalFontSize,
+            FontSize = _terminalFontSize,
             Background = new SolidColorBrush(Color.Parse(TerminalTheme.Background)),
             Foreground = new SolidColorBrush(Color.Parse(TerminalTheme.Foreground)),
             CursorColor = Color.Parse(TerminalTheme.Cursor),
@@ -3278,9 +3281,9 @@ public partial class MainWindow : Window
 
     internal ConnectionSettingsWindow? SettingsWindowForTests => _settingsWindow;
 
-    // Ctrl + mouse wheel resizes the font of the terminal under the pointer,
-    // like MobaXterm. The change is per-terminal and not persisted, so a
-    // restart returns to TerminalFontSize.
+    // Ctrl + mouse wheel resizes the terminal font like MobaXterm. The size is
+    // global: every open terminal follows, and the value is written to
+    // config.json (terminal.fontSize) so a restart keeps it.
     internal const double TerminalFontSizeMin = 8.0;
     internal const double TerminalFontSizeMax = 48.0;
 
@@ -3304,6 +3307,22 @@ public partial class MainWindow : Window
         return next;
     }
 
+    /// <summary>
+    /// 配置里读出的字号先钳制到 Ctrl+滚轮 的可用区间；
+    /// 非法值（0、NaN 等）回落到 MobaXterm 默认 13.5。
+    /// </summary>
+    internal static double ClampTerminalFontSize(double value)
+    {
+        // 0/NaN/∞ 视为无效（旧配置或手改坏），回到 MobaXterm 默认 13.5；
+        // 其余值钳制到 Ctrl+滚轮 的可用区间。
+        if (!double.IsFinite(value) || value <= 0)
+        {
+            return TerminalFontSize;
+        }
+
+        return Math.Clamp(value, TerminalFontSizeMin, TerminalFontSizeMax);
+    }
+
     private void OnWindowPointerWheelChanged(object? sender, PointerWheelEventArgs e)
     {
         if (!e.KeyModifiers.HasFlag(KeyModifiers.Control))
@@ -3317,8 +3336,45 @@ public partial class MainWindow : Window
             return;
         }
 
-        terminal.FontSize = AdjustTerminalFontSize(terminal.FontSize, e.Delta.Y);
+        var next = AdjustTerminalFontSize(terminal.FontSize, e.Delta.Y);
+        if (next != terminal.FontSize)
+        {
+            // MobaXterm 的字号是全局设置：一次缩放应用到所有已打开的终端，
+            // 并立即写入 config，重启后仍用这个字号。
+            _terminalFontSize = next;
+            ApplyTerminalFontSizeToAll(next);
+            PersistTerminalFontSize(next);
+        }
+
         e.Handled = true;
+    }
+
+    private void ApplyTerminalFontSizeToAll(double fontSize)
+    {
+        if (DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        foreach (var tab in viewModel.Tabs)
+        {
+            if ((tab.Terminal ?? tab.Content as TerminalControl) is { } terminal)
+            {
+                terminal.FontSize = fontSize;
+            }
+        }
+    }
+
+    private void PersistTerminalFontSize(double fontSize)
+    {
+        if (_config is null || _config.Config.Terminal.FontSize == fontSize)
+        {
+            return;
+        }
+
+        _config.Config.Terminal.FontSize = fontSize;
+        _config.SaveConfig();
+        AppLog.Info($"Terminal font size saved: {fontSize}");
     }
 
     private void OnWindowPointerMoved(object? sender, PointerEventArgs e)
@@ -3445,6 +3501,21 @@ public partial class MainWindow : Window
         ApplyWindowSize(config);
     }
 
+    private void ApplyTerminalConfig()
+    {
+        if (_config is null)
+        {
+            return;
+        }
+
+        _terminalFontSize = ClampTerminalFontSize(_config.Config.Terminal.FontSize);
+        ApplyTerminalFontSizeToAll(_terminalFontSize);
+    }
+
+    /// <summary>
+    /// 恢复窗口尺寸/最大化之前（Show 之前）只读窗口配置，
+    /// 终端字号在 OnOpened 的 ApplyTerminalConfig 里应用。
+    /// </summary>
     private void ApplySavedWindowSizeBeforeShow()
     {
         if (Design.IsDesignMode || Environment.GetCommandLineArgs().Contains("--demo"))

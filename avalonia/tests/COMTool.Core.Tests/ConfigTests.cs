@@ -193,6 +193,27 @@ public sealed class ConfigTests : IDisposable
     }
 
     [Fact]
+    public void SaveAndLoad_RoundTripsTerminalFontSize()
+    {
+        var path = Path.Combine(_directory, "config.json");
+        var config = new ComtoolConfig
+        {
+            Terminal = new TerminalConfig { FontSize = 18.5 },
+        };
+
+        config.Save(path);
+        var loaded = ComtoolConfig.Load(path);
+
+        Assert.Equal(18.5, loaded.Terminal.FontSize);
+
+        // 旧配置没有 terminal 键：默认 13.5（MobaXterm 字号），不报错。
+        var legacyPath = Path.Combine(_directory, "config-legacy-terminal.json");
+        File.WriteAllText(legacyPath, """{"version":3}""");
+        var loadedLegacy = ComtoolConfig.Load(legacyPath);
+        Assert.Equal(13.5, loadedLegacy.Terminal.FontSize);
+    }
+
+    [Fact]
     public void SaveAndLoad_RoundTripsNetworkScanRange()
     {
         var path = Path.Combine(_directory, "config.json");
