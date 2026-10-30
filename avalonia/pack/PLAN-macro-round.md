@@ -276,6 +276,40 @@
      热分区为橙红粗斜体。
 
    - 追加（2026-10-30，第 24 轮）：状态栏整排放大，比例对齐 MobaXterm
+     （用户反馈 2026-10-30：附 MobaXterm/COMTool 同屏对照图“下面这排显示偏小了”）：
+     ① 实测对照（取参考图像素）：MobaXterm CPU 条 46×22px、小格外高约 26px、图标约 16px；
+        我们原先 CPU 条 56×12px、小格 22px、图标 11px、状态栏行高 30px，整排偏薄偏小。
+     ② 调整（MainWindow.axaml）：状态栏行高 30→34；MonSeg Padding 6,2→7,3；
+        MonSegText 12→13px；MonIcon 11→13px；CPU 轨道 56×12→56×18。
+        MainViewModel CpuBarMaxHeight 12→18（roll 列高按此换算）。
+     ③ 渲染实测（Xvfb 单独跑 E2E RM01 截图 rm01-statusbar.png 量像素）：小格外高 24px、
+        CPU 轨道 56×18、28 列仍正好铺满轨道；RM01 点击坐标不受影响
+        （监控按钮在侧栏 SFTP 面板底部，与状态栏行高无关）。
+     ④ 测试：RM06 既有断言随常量自适应；run-ui-e2e.sh 的 RM01 增加常规截图
+        rm01-statusbar.png（视觉核对证据）。
+     App 217/217、Core 86/86、Connections 135/135、TestGate 49/49；gate 第 24 轮全 PASS
+     （E2E 15/15，gate-r24.log）；提交 5e4677c，发布部署双份
+     （SHA256 5384b6febfe886cca1fb06f5cf5bade8243302dde752c9af08fb8709589d7c1a）。
+     Windows 实机 WIN-28 补核：状态栏整排高度/CPU 条厚度/图标大小与 MobaXterm 并排一致。
+
+   - 追加（2026-10-30，第 25 轮）：窗口最大化状态记忆
+     （用户反馈 2026-10-30：“最大化之后，下次打开不是最大化”；对齐 MobaXterm 窗口状态记忆）：
+     ① 根因：原有窗口尺寸持久化（PersistWindowSize/ApplyWindowSize）只存 width/height，
+        WindowState 从不落盘、启动从不恢复，故最大化重启后必回 normal。
+     ② 实现：WindowConfig 新增 `maximized` 键（默认 false，旧配置缺键不报错）；
+        ApplyWindowSize 应用尺寸后按 config.Maximized 切 WindowState.Maximized
+        （构造期 Show 前设置与 OnOpened 的 ApplyWindowSizeConfig 路径均覆盖）；
+        PersistWindowSize 一并保存（early-return 条件加入 maximized，尺寸存 normal 态、
+        恢复后再最大化）；OnPropertyChanged 的 WindowStateProperty 分支增加
+        PersistWindowSize()——最大化/还原切换立即落盘，崩溃/强杀也不丢本次状态。
+     ③ 测试：ConfigTests.SaveAndLoad_RoundTripsWindowMaximized（往返 + 旧配置缺键默认 false）、
+        TitleBarTests.UI01_WindowMaximizedStateRestoredOnRestart（seed maximized=true →
+        新窗口 Show 后即 Maximized）、TitleBarTests.UI01_WindowMaximizedStatePersistedOnClose
+        （Normal→Maximized→Close → config 文件 maximized=true）。
+     App 219/219（Release）、Core 87/87；gate 第 25 轮 <pending>；提交 caea774，发布部署双份。
+     Windows 实机 WIN-01 补核：最大化后关闭应用，重开窗口自动最大化；还原后关闭则恢复普通窗口。
+
+   - 追加（2026-10-30，第 24 轮）：状态栏整排放大，比例对齐 MobaXterm
      （用户反馈 2026-10-30：附 MobaXterm/COMTool 同屏对照图“对比 mobaxterm，下面这排显示偏小了”）：
      ① 实测对照（取参考图像素）：MobaXterm CPU 条 46×22px、小格外高约 26px、图标约 16px；
         我们原先 CPU 条 56×12px、小格 22px、图标 11px、状态栏行高 30px，整排偏薄偏小。
