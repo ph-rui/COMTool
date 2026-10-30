@@ -1,6 +1,7 @@
 using System.IO;
 using Avalonia;
 using Avalonia.Headless.XUnit;
+using Avalonia.VisualTree;
 using Avalonia.Threading;
 using COMTool.App.ViewModels;
 using COMTool.App.Views;
@@ -283,11 +284,14 @@ public sealed class TerminalPtyFeatureTests
                 Dispatcher.UIThread.RunJobs();
 
                 // 普通右键：走原有复制/粘贴路径，不得弹菜单（Shift 门控）。
-                RaiseTerminalRightClick(terminal, window, Avalonia.Input.KeyModifiers.None);
+                // 派发目标必须是内层 TerminalView（真实命中目标），否则本测试退化为旧路径。
+                var plainTarget = RaiseTerminalRightClick(terminal, window, Avalonia.Input.KeyModifiers.None);
+                Assert.IsType<Iciclecreek.Terminal.TerminalView>(plainTarget);
                 Assert.Null(window.LastTerminalMenuForTests);
 
                 // Shift+右键：弹出 MobaXterm 22.1 式终端菜单（18 项 + 4 分隔线）。
-                RaiseTerminalRightClick(terminal, window, Avalonia.Input.KeyModifiers.Shift);
+                var shiftTarget = RaiseTerminalRightClick(terminal, window, Avalonia.Input.KeyModifiers.Shift);
+                Assert.IsType<Iciclecreek.Terminal.TerminalView>(shiftTarget);
                 var menu = window.LastTerminalMenuForTests;
                 Assert.NotNull(menu);
 
@@ -328,14 +332,25 @@ public sealed class TerminalPtyFeatureTests
         }
     }
 
-    private static void RaiseTerminalRightClick(
+    /// <summary>
+    /// 对内层 TerminalView（库的真实命中目标）RaiseEvent，覆盖真实隧道路径：
+    /// window → … → TerminalControl（我们的隧道 handler）→ TerminalView（目标，库类 handler）。
+    /// 旧版直接在 TerminalControl 上 RaiseEvent 绕过了库的抢先逻辑，掩盖了实机 bug。
+    /// 返回实际派发目标，调用方必须断言其为 TerminalView（防止视觉树未就绪时
+    /// 静默回退到旧路径、让测试失去意义）。
+    /// </summary>
+    private static Avalonia.Controls.Control RaiseTerminalRightClick(
         Iciclecreek.Terminal.TerminalControl terminal,
         Avalonia.Controls.Window window,
         Avalonia.Input.KeyModifiers modifiers)
     {
-        var position = terminal.TranslatePoint(new Point(10, 10), window) ?? new Point(10, 10);
-        terminal.RaiseEvent(new Avalonia.Input.PointerPressedEventArgs(
-            terminal,
+        var view = terminal.GetVisualDescendants()
+            .OfType<Iciclecreek.Terminal.TerminalView>()
+            .FirstOrDefault();
+        var target = view ?? (Avalonia.Controls.Control)terminal;
+        var position = target.TranslatePoint(new Point(10, 10), window) ?? new Point(10, 10);
+        target.RaiseEvent(new Avalonia.Input.PointerPressedEventArgs(
+            target,
             new Avalonia.Input.Pointer(0, Avalonia.Input.PointerType.Mouse, isPrimary: true),
             window,
             position,
@@ -345,6 +360,7 @@ public sealed class TerminalPtyFeatureTests
                 Avalonia.Input.PointerUpdateKind.RightButtonPressed),
             modifiers,
             clickCount: 1));
+        return target;
     }
 
     private static Avalonia.Controls.MenuItem LabelItem(

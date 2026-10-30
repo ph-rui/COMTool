@@ -1827,7 +1827,15 @@ public partial class MainWindow : Window
                     HideTerminalScrollBars(terminal);
                 },
                 DispatcherPriority.Loaded);
-        terminal.PointerPressed += OnTerminalPointerPressed;
+        // 终端右键被库抢先：模板内最深命中目标 TerminalView 在自己的 OnPointerPressed 里
+        // 同步置 e.Handled=true 并执行复制/粘贴，TerminalControl 上的冒泡阶段 handler
+        // 永远收不到真实右键（实机 Shift+右键菜单不弹的根因）。改在隧道阶段订阅
+        // （自根向目标传播，先于库的类 handler 到达）拦截：
+        // Shift+右键 = MobaXterm 式终端菜单；普通右键 = 复制/粘贴（规范化粘贴）。
+        terminal.AddHandler(
+            InputElement.PointerPressedEvent,
+            OnTerminalPointerPressed,
+            RoutingStrategies.Tunnel);
         terminal.KeyDown += OnTerminalKeyDown;
         // The terminal's own double-click handling may mark the event handled
         // for word selection. Observe it anyway so the whole terminal pane
@@ -4928,9 +4936,18 @@ public partial class MainWindow : Window
         RefreshSidebar();
     }
 
+    /// <summary>
+    /// 隧道阶段 handler（CreateTerminal 里 AddHandler(Tunnel) 注册）：
+    /// 在库 TerminalView 的类 handler 抢先处理右键之前拦截。
+    /// 非右键直接放行（不碰事件），左键选择/鼠标上报等库行为不受影响。
+    /// </summary>
     private async void OnTerminalPointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (sender is not TerminalControl terminal)
+        // 隧道 handler 的 sender 可能是注册目标（TerminalControl）或事件源
+        // （模板内深层元素），两种情况都解析回所属终端控件。
+        var terminal = sender as TerminalControl
+            ?? (e.Source as Visual)?.FindAncestorOfType<TerminalControl>();
+        if (terminal is null)
         {
             return;
         }
@@ -4942,6 +4959,20 @@ public partial class MainWindow : Window
         }
 
         e.Handled = true;
+
+        // 抢先后库自己的 Focus() 被跳过，这里补上焦点（库原本聚焦内层
+        // TerminalView，右击粘贴与后续键盘输入依赖它）。
+        var view = terminal.GetVisualDescendants()
+            .OfType<Iciclecreek.Terminal.TerminalView>()
+            .FirstOrDefault();
+        if (view is not null)
+        {
+            view.Focus();
+        }
+        else
+        {
+            terminal.Focus();
+        }
 
         // MobaXterm 行为：Shift+右键 打开终端菜单（含“更改终端设置…”）；
         // 普通右键保持原行为（有选区=复制，无选区=粘贴）。
