@@ -393,6 +393,39 @@
      与用户自行构建放入目录的 exe 完全一致）。
      Windows 实机待核：多行粘贴无空行、top 铺满终端视口。
 
+   - 追加（2026-10-30，第 29 轮）：终端行尾仿真选项（MobaXterm「实时终端重配置」两项）
+     （用户反馈 2026-10-30：“mobaxterm有红框这两项配置的”，附 MobaXterm「实时终端重配置 → 终端」
+     面板截图，红框 Implicit CR in every LF / Implicit LF in every CR，两项默认均不勾）：
+     ① 选项语义（接收端仿真开关）：Implicit CR in every LF——收到裸 \n 时先回行首（等效 \r\n，
+        裸 LF 当整行换行）；Implicit LF in every CR——收到裸 \r 时额外换下一行（\r\n 成对不重复处理，
+        故常规 SSH/串口回显不受影响）。用于对接按老式行尾约定输出的设备；MobaXterm 默认双关。
+     ② 实现：TerminalConfig 增 implicitCrInLf / implicitLfInCr（默认 false，旧配置缺键不报错）；
+        COMTool.Connections 新增 LineEndingOptions（共享可变开关，所有终端共用一份，对话框改动即时生效）
+        + LineEndingStream（套在 ReaderStream 外的 Stream，1 字节前瞻区分裸 \r 与 \r\n 成对；
+        双关时整块直通零开销；只处理显示字节，Zmodem 二进制不经过此层不受影响）；
+        PtyStreamConnection 加 public WrapReader（须在 AttachConnection 之前调用——库读循环每次
+        取 ReaderStream 属性且 reader 线程 attach 才启动）；MainWindow.AttachTerminal 在 attach 前
+        统一套层（SSH/串口/Telnet 均走此路径）。
+     ③ UI：标题栏右键菜单新增“终端设置”（Light/Dark 与 About 之间）→ “实时终端重配置”对话框
+        （代码生成 Window，同 About 风格）：两个复选框（中文名 + MobaXterm 英文原名）+ 说明 +
+        确定/取消；确定=共享 options 立即对所有已连接终端生效（Live）+ 写 config.json。
+     ④ 测试：LineEndingStreamTests 9 项（双开关全组合、\r\n 成对不重复、裸 \r/\n 变换、
+        EOF 尾部 \r 结算、跨 chunk 边界、双关整块直通）；
+        ConfigTests.SaveAndLoad_RoundTripsLineEndingOptions（往返 + 旧配置默认 false）；
+        TerminalPtyFeatureTests.TERM20_AttachTerminalWrapsReaderWithLineEndingStream（headless 真实
+        AttachConnection：开 ImplicitLfInCr 后远端发裸 \r 显示为换行、关闭后恢复，证明 Live 生效）。
+        对话框的剪贴板/ShowDialog 在 headless 有 async 死锁风险，e2e 不走 UI 点击路径，
+        改验证 config→options→stream 链路。
+     提交 2b1ee5b（代码+测试，8 文件 +706/-5；含 TestGate 修正：BothOn Theory(4 用例) 拆为 4 个裸名 Fact、
+     FTM ChunkBoundary 名 CrAndLF→CrAndLf 对齐）。gate-r29.log 首轮在 testgate 阶段报 2 处 FTM 测试名
+     不匹配（Theory 用例名带 (input:...) 参数无法按裸名匹配 + CrAndLF 大小写笔误），修正后复跑。
+     gate-r29b.log 全 PASS：Core 89/Sftp 42/Terminal 11/Connections 148/Zmodem 32/TestGate 49/App 227，
+     E2E 15/15。发布 win-x64 单文件 R2R 95,077,582 字节
+     （SHA256 9731B9E7130A59DB4D9681A9F57C1666F2DBD03805AE7523490C74EA1A54EBFA；本轮按 README 规范命令
+     启用 EnableCompressionInSingleFile 压缩，故小于 r28 的 214,973,374 字节，为压缩口径差异，功能完整），
+     deploy_r3.py 双份部署+SHA256 校验 OK（9731B9E7…A54EBFA）。Windows 实机待核：标题栏右键→终端设置
+     对话框（默认双不勾）、勾选后对已连接终端 Live 即时生效、重启后勾选状态保留、双关时无任何行为回归。
+
      （用户反馈 2026-10-30：附 MobaXterm/COMTool 同屏对照图“对比 mobaxterm，下面这排显示偏小了”）：
      ① 实测对照（取参考图像素）：MobaXterm CPU 条 46×22px、小格外高约 26px、图标约 16px；
         我们原先 CPU 条 56×12px、小格 22px、图标 11px、状态栏行高 30px，整排偏薄偏小。
