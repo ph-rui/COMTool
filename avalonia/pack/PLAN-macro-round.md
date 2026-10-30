@@ -458,6 +458,25 @@
         manual WIN-30 补黑屏补充核项与入口变更，新增 WIN-31。
           结果（2026-10-30）：提交 30e1dbc（代码+测试，6 文件 +450/-31）。gate-r30.log 全 PASS：Core 89/Sftp 42/Terminal 11/Connections 150/Zmodem 32/TestGate 49/App 228（含 TERM21 与 2 个黑屏回归），E2E 15/15。发布 win-x64 单文件 R2R 95,085,784 字节（SHA256 DC1AB0A2E143B9EA28F0E090184AE970C57345E9B7A99177C34D10CDAC3D713B），deploy_r3.py 双份部署+SHA256 校验 OK。Windows 实机待核：使能任一开关后 SSH 正常显示（黑屏修复）、终端 Shift+右键菜单（18 项，更改终端设置…→实时终端重配置）、普通右键行为不变、Key file「…」居中、About OK 贴底、标题栏右键不再有“终端设置”。
 
+   - 追加（2026-10-30，第 31 轮）：终端 Shift+右键菜单实机不弹（用户 RDP 反馈，针对 dc1ab0a2 构建）
+     ① 根因：库 TerminalView（TerminalControl 模板内最深命中目标）的 OnPointerPressed 对右键
+        无条件 e.Handled=true（先于 await 同步置位）并做 复制/粘贴（TerminalView.Mouse.cs L76-103），
+        因此我们挂在 TerminalControl 冒泡阶段的 PointerPressed handler 永远收不到真实右键事件。
+        TERM21 旧版直接在 TerminalControl 上 RaiseEvent（源=TerminalControl，不经过 TerminalView
+        的类 handler），故单测全绿而实机不弹——典型的“测试绕过真实路径”假阳性。
+     ② 修复（MainWindow.CreateTerminal）：订阅改为隧道阶段
+        terminal.AddHandler(InputElement.PointerPressedEvent, OnTerminalPointerPressed, RoutingStrategies.Tunnel)。
+        TerminalControl 是 TerminalView 的祖先，隧道（根→目标）先于库类 handler 到达：
+        - Shift+右键 → e.Handled=true + OpenTerminalContextMenu（18 项菜单）；
+        - 普通右键 → e.Handled=true + Focus 内层 TerminalView + 有选区 CopyAsync/无选区
+          PasteNormalizedAsync（顺带修复：普通右击粘贴此前由库处理、未走 r28 行尾规范化路径）；
+        - 非右键不触碰事件（左键选择/双击选词/鼠标上报模式不受影响）。
+        窗口级 OnWindowPointerPressed（隧道）仅处理左键边缘拖动，右键提前 return，无冲突。
+     ③ 测试：TERM21 的 RaiseTerminalRightClick 改为对内层 TerminalView（GetVisualDescendants 查找，
+        找不到则失败断言）RaiseEvent，事件路由与实机一致（隧道先到我们的 handler，置 Handled 后
+        库的类 handler 被跳过）。
+          结果（2026-10-30）：提交 562ed2c（代码+测试，2 文件 +70/-12）。gate-r31.log 全 PASS：Core 89/Sftp 42/Terminal 11/Connections 150/Zmodem 32/TestGate 49/App 228（TERM21 改真实隧道路径后仍绿），E2E 15/15。发布 win-x64 单文件 R2R 95,085,774 字节（SHA256 D9144DDE538E3579BD87C74B62F1CA8DDC9598663E2AB5FA6B02E6E636D47AD0），deploy_r3.py 双份部署+SHA256 校验 OK。Windows 实机待核：终端内 Shift+右键弹出 18 项菜单（此前 dc1ab0a2 构建实机不弹）、普通右键=复制选区/无选区时规范粘贴（行为变化：右击粘贴现也走r28 行尾规范化，多行粘贴无空行）、左键选择/双击选词不受影响。
+
      （用户反馈 2026-10-30：附 MobaXterm/COMTool 同屏对照图“对比 mobaxterm，下面这排显示偏小了”）：
      ① 实测对照（取参考图像素）：MobaXterm CPU 条 46×22px、小格外高约 26px、图标约 16px；
         我们原先 CPU 条 56×12px、小格 22px、图标 11px、状态栏行高 30px，整排偏薄偏小。
