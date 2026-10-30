@@ -296,7 +296,7 @@ public sealed class TerminalPtyFeatureTests
                 Assert.NotNull(menu);
 
                 var items = menu!.Items.OfType<Avalonia.Controls.MenuItem>().ToList();
-                Assert.Equal(18, items.Count);
+                Assert.Equal(19, items.Count);
                 Assert.Equal(4, menu.Items.OfType<Avalonia.Controls.Separator>().Count());
 
                 Assert.Equal(new[]
@@ -305,9 +305,20 @@ public sealed class TerminalPtyFeatureTests
                     "字体设置", "终端显示", "语法高亮",
                     "执行宏", "录制宏", "录制终端输出到文件", "保存到文件", "打印",
                     "使用 Zmodem 接收文件", "使用 Zmodem 发送文件",
-                    "更改终端设置…", "特殊命令", "事件日志",
+                    "更改终端设置…", "编码", "特殊命令", "事件日志",
                 },
                 items.Select(ItemLabel).ToList());
+
+                // 编码子菜单（第 32 轮从标签栏下拉框移入）：6 种编码，
+                // 当前值（默认 UTF-8）唯一打勾。
+                var encodingChildren = LabelItem(items, "编码")
+                    .Items.OfType<Avalonia.Controls.MenuItem>().ToList();
+                Assert.Equal(
+                    new[] { "ASCII", "UTF-8", "UTF-16", "GBK", "GB2312", "GB18030" },
+                    encodingChildren.Select(c => c.Header?.ToString()).ToList());
+                var checkedItems = encodingChildren.Where(c => c.IsChecked).ToList();
+                Assert.Single(checkedItems);
+                Assert.Equal("UTF-8", checkedItems[0].Header?.ToString());
 
                 // 启用态：无选区时“复制”置灰；“粘贴”/“更改终端设置…”恒可用；
                 // 未实现项（查找/打印等）置灰。

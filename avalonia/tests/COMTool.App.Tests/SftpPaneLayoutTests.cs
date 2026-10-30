@@ -577,10 +577,12 @@ public sealed class SftpPaneLayoutTests
                 window = CreateWindow();
                 AddTab(window, SessionKind.Ssh, NewPaneViewModel());
 
-                // MobaXterm has no SFTP chip next to the encoding combo:
+                // MobaXterm has no SFTP chip in the tab strip:
                 // the browser is entered from the orange globe of the rail.
+                // The encoding combo was moved out of the tab strip into the
+                // terminal Shift+right-click menu (round 32), so it must be absent here.
                 Assert.Null(window.FindControl<Button>("SftpToggleButton"));
-                Assert.NotNull(window.FindControl<ComboBox>("EncodingCombo"));
+                Assert.Null(window.FindControl<ComboBox>("EncodingCombo"));
                 Assert.True(RailGlobe(window).IsVisible);
             });
         }

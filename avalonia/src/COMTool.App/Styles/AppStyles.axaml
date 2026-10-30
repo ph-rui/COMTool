@@ -273,20 +273,6 @@
     <Setter Property="Background" Value="#cc2626" />
   </Style>
 
-  <Style Selector="ComboBox.EncodingCombo">
-    <Setter Property="Background" Value="{DynamicResource WindowBackgroundBrush}" />
-    <Setter Property="BorderBrush" Value="#dde4ec" />
-    <Setter Property="BorderThickness" Value="2" />
-    <Setter Property="CornerRadius" Value="5" />
-    <Setter Property="Foreground" Value="{DynamicResource WindowTextBrush}" />
-    <Setter Property="Padding" Value="3,1,10,1" />
-    <Setter Property="FontSize" Value="12" />
-    <Setter Property="VerticalContentAlignment" Value="Center" />
-  </Style>
-  <Style Selector="ComboBox.EncodingCombo:pointerover">
-    <Setter Property="BorderBrush" Value="#26a2ff" />
-  </Style>
-
   <Style Selector="TextBlock.EmptyTitle">
     <Setter Property="FontSize" Value="12" />
     <Setter Property="Foreground" Value="{DynamicResource WindowTextBrush}" />

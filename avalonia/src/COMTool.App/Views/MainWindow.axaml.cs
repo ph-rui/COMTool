@@ -39,7 +39,6 @@ public partial class MainWindow : Window
     // sessions list back at its own size.
     private double _browserSidebarWidth = DefaultBrowserSidebarWidth;
     private bool _loaded;
-    private bool _applyingEncoding;
     private AppConfigService? _config;
     private DispatcherTimer? _portTimer;
     private bool _windowPointerPressed;
@@ -240,7 +239,6 @@ public partial class MainWindow : Window
                 // "COMTool 启动时启动 Cron 服务器" 勾选时随主窗口自启
                 _ = CronAutoStart.EnsureAsync(_config.Config.Servers.Cron);
                 ThemeManager.Apply(_config.Config.Skin);
-                ApplyEncodingConfig();
                 ApplySidebarConfig();
                 ApplyWindowSizeConfig();
                 ApplyTerminalConfig();
@@ -3166,38 +3164,6 @@ public partial class MainWindow : Window
         _config.Save();
     }
 
-    private void ApplyEncodingConfig()
-    {
-        if (_config is null)
-        {
-            return;
-        }
-
-        var selected = 1;
-        for (var index = 0; index < EncodingCombo.Items.Count; index++)
-        {
-            if (EncodingCombo.Items[index] is ComboBoxItem item
-                && string.Equals(
-                    item.Content?.ToString(),
-                    _config.Config.Encoding,
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                selected = index;
-                break;
-            }
-        }
-
-        _applyingEncoding = true;
-        try
-        {
-            EncodingCombo.SelectedIndex = selected;
-        }
-        finally
-        {
-            _applyingEncoding = false;
-        }
-    }
-
     /// <summary>
     /// A rail icon switches to its panel. Clicking the icon of the panel
     /// that is already open collapses the panel while the rail stays on
@@ -3265,33 +3231,6 @@ public partial class MainWindow : Window
         {
             SetSidebarVisible(true);
         }
-    }
-
-    private void OnEncodingChanged(object? sender, SelectionChangedEventArgs e)
-    {
-        if (_applyingEncoding
-            || _config is null
-            || sender is not ComboBox combo
-            || combo.SelectedItem is not ComboBoxItem item)
-        {
-            return;
-        }
-
-        var encoding = item.Content?.ToString();
-        if (string.IsNullOrWhiteSpace(encoding))
-        {
-            return;
-        }
-
-        _config.Config.Encoding = encoding;
-        _config.Save();
-    }
-
-    private void OnEncodingDropDownClosed(object? sender, EventArgs e)
-    {
-        // Let the ComboBox finish closing before moving focus back. Otherwise
-        // the popup's focus restoration can immediately steal it again.
-        RestoreTerminalFocus();
     }
 
     private void RestoreTerminalFocus()
@@ -5078,6 +5017,7 @@ public partial class MainWindow : Window
                 _ = ShowTerminalSettingsAsync();
                 return Task.CompletedTask;
             }));
+        menu.Items.Add(BuildEncodingMenuItem());
         menu.Items.Add(TerminalMenuItem("特殊命令", null, false, null));
         menu.Items.Add(TerminalMenuItem("事件日志", null, false, null));
 
@@ -5144,6 +5084,47 @@ public partial class MainWindow : Window
         }
 
         return item;
+    }
+
+    /// <summary>
+    /// 终端菜单「编码」子菜单：从标签栏右侧编码下拉框移入（MobaXterm 式
+    /// Shift+右键入口）。6 种编码与移入前一致，当前值打勾；选择后落盘 config.json
+    /// （与移入前相同：仅持久化，终端解码路径尚未消费该值）。
+    /// </summary>
+    private MenuItem BuildEncodingMenuItem()
+    {
+        var current = _config?.Config.Encoding ?? "UTF-8";
+        var parent = new MenuItem { Header = "编码" };
+        foreach (var name in TerminalEncodings)
+        {
+            var child = new MenuItem
+            {
+                Header = name,
+                ToggleType = MenuItemToggleType.Radio,
+                GroupName = "TerminalEncoding",
+                IsChecked = string.Equals(name, current, StringComparison.OrdinalIgnoreCase),
+            };
+            child.Click += (_, _) => SetTerminalEncoding(name);
+            parent.Items.Add(child);
+        }
+
+        return parent;
+    }
+
+    private static readonly string[] TerminalEncodings =
+    {
+        "ASCII", "UTF-8", "UTF-16", "GBK", "GB2312", "GB18030",
+    };
+
+    private void SetTerminalEncoding(string encoding)
+    {
+        if (_config is null)
+        {
+            return;
+        }
+
+        _config.Config.Encoding = encoding;
+        _config.Save();
     }
 
     /// <summary>

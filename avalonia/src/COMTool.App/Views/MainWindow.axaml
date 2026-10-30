@@ -245,7 +245,7 @@
           <Grid Name="TabHost"
                 IsVisible="{Binding HasTabs}"
                 RowDefinitions="36,*">
-            <Grid Grid.Row="0" Height="36" ColumnDefinitions="*,Auto">
+            <Grid Grid.Row="0" Height="36" ColumnDefinitions="*">
               <ItemsControl Grid.Column="0"
                             ItemsSource="{Binding Tabs}"
                             VerticalAlignment="Top"
@@ -287,27 +287,6 @@
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
-
-              <StackPanel Grid.Column="1"
-                          Orientation="Horizontal"
-                          Spacing="0"
-                          Margin="0,3,0,0"
-                          VerticalAlignment="Top">
-                <ComboBox Name="EncodingCombo"
-                          Classes="EncodingCombo"
-                          Width="97" Height="31"
-                          MinWidth="60"
-                          VerticalAlignment="Top"
-                          SelectionChanged="OnEncodingChanged"
-                          DropDownClosed="OnEncodingDropDownClosed">
-                  <ComboBoxItem Content="ASCII" />
-                  <ComboBoxItem Content="UTF-8" />
-                  <ComboBoxItem Content="UTF-16" />
-                  <ComboBoxItem Content="GBK" />
-                  <ComboBoxItem Content="GB2312" />
-                  <ComboBoxItem Content="GB18030" />
-                </ComboBox>
-              </StackPanel>
             </Grid>
 
             <Grid Grid.Row="1" RowDefinitions="Auto,*,6,34">
