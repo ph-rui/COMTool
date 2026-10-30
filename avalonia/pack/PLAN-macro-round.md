@@ -496,6 +496,29 @@
      （SHA256 C4BCA40A8D9B8A5B1EF77BEB8A81224FBB1AFBCCE15E7D30535912187FA1F4BA），
      deploy_r3.py 双份部署+SHA256 校验 OK。Windows 实机待核：Shift+右键菜单含「编码」子菜单
      （当前值打勾、单选、落盘保留）、标签栏右侧无编码下拉框。
+   - 追加（2026-10-31，第 33 轮）：终端中英文混排错位/叠印修复（CJK 全角固定 2 格 advance）
+     （用户 RDP 反馈：Ubuntu 中文欢迎页等中英文混排行错位叠印，MobaXterm 同屏正常，问“是不是字体不一样”）：
+     ① 根因（渲染层，非字体选择）：库 TerminalView 把每个文本 run 画在绝对列位置
+        （startX = col×CharWidth，CharWidth 由主字体 Consolas 的“W”度量），但全角（CJK）字符
+        （buffer 中 width-2 单元格，单字 run：text.Length==1, cellCount==2）被 glyph 快速路径
+        TryBuildGlyphRun 以 text.Length!=cellCount 拒绝 → 走 FormattedText 路径按字体自然度量定位。
+        Windows 上 CJK 回退到比例字体 Microsoft YaHei UI，其字宽≠2×Consolas 格宽 → CJK 与后续拉丁
+        不再对齐（库 UpdateTextMetrics 注释描述的“网格是等宽、字形不是”同类失效）。MobaXterm 把每个
+        CJK 强制摆进恰好 2 格故正常。Linux/headless 上 CJK 回退到捆绑等宽 Noto Sans Mono CJK SC 故不明显。
+     ② 修复（库 Iciclecreek.Avalonia.Terminal 渲染层）：TryBuildGlyphRun 新增宽度-2 分支——对单个全角字符
+        用整个 FontFamily 的 GlyphTypeface（探针证实它带 CJK fallback，逐名字解析反而解析不到捆绑 avares
+        字体）查字形，用 TryGetGlyphMetrics 验证字形真实（非 .notdef），发射单字形且 advance 精确
+        2×CharWidth 的 GlyphRun（与宽度-1 路径同源“按格定位”设计），任一条件不满足回退 FormattedText。
+        字形仍由现有字体链解析（Windows=YaHei、Linux=捆绑 Noto），只修正其占位宽度，不改字体选择。
+     ③ 库打包基础设施（首次把库改动打进 app 构建）：库版本 4.1.0→4.1.1（GeneratePackageOnBuild 产 nupkg），
+        nupkg 提交至 avalonia/third_party/iciclecreek/（129KB，使构建自包含），新增 avalonia/NuGet.config
+        （clear + 本地 feed third_party/iciclecreek + nuget.org；*.config 被 .gitignore 忽略故 git add -f），
+        COMTool.Terminal.csproj 包引用 4.1.0→4.1.1。库另加 InternalsVisibleTo("COMTool.App.Tests")
+        供回归测试直接断言全角快速路径。
+     ④ 测试：CjkTerminalFontTests.TERM22_WideCjkGlyphIsPinnedToTwoCellAdvances——headless 建终端、
+        取内层 TerminalView、调 internal TryBuildGlyphRun("個",2)：断言非 null、单字形、
+        GlyphAdvance==2×CharWidth（精度 4），并断言拉丁 "A" 仍 1×CharWidth（防宽度-1 路径被破坏）。
+          结果（2026-10-31）：提交 3616e5a（代码+测试+库打包，5 文件）。gate-r33.log 全 PASS：Core 89/Sftp 42/Terminal 11/Connections 150/Zmodem 32/TestGate 49/App 229（含 TERM22），E2E 15/15。发布 win-x64 单文件 R2R 95,085,875 字节（SHA256 C6C16B2F13DD18B2A699032DDA7E424BFF36CBE60E90E6F2B03632CBB36D8C50），deploy_r3.py 双份部署+SHA256 校验 OK。Windows 实机待核：SSH 中文欢迎页等中英文混排行对齐、无错位叠印（对照 MobaXterm）；注：修复在渲染层（全角固定 2 格 advance），headless(Linux) 已验证机制，Windows 字形来自 YaHei 的视觉效果需 RDP 确认。
 
      （用户反馈 2026-10-30：附 MobaXterm/COMTool 同屏对照图“对比 mobaxterm，下面这排显示偏小了”）：
      ① 实测对照（取参考图像素）：MobaXterm CPU 条 46×22px、小格外高约 26px、图标约 16px；
