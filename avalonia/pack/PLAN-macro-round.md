@@ -246,6 +246,35 @@
      gate 第 22 轮全 PASS（E2E 15/15）；提交 2d3116e，发布部署双份。
      Windows 实机 WIN-28 补核：高负载时 CPU 条变红、点“远程监控”一次即生效。
 
+   - 追加（2026-10-30，第 23 轮）：CPU 条改为示波器 roll 时间序列 + 热分区恢复粗斜体
+     （用户 SSH 实机对照 MobaXterm 后指出：“mobaxterm cpu进度条是类似于示波器roll模式下的，
+     横轴是时间；关于这个分区信息，是根据不同的占用显示不同的颜色？”）：
+     ① 取色/形态核实：参考图 CPU 黑框内只有底部右侧一小段绿色笔迹（#017701 深绿，
+        x98~111 约 7 小格贴底），即 0~10% 的低载历史，不是“宽度=当前百分比”的静态填充；
+        分区段只有 82% 那个是橙红高亮、49%/1% 为正常深色 → MobaXterm 是阈值高亮（≥80%），
+        不是按占用分档渐变，且高亮样式为粗体+斜体。
+     ② CPU 条实现：MainViewModel 新增 CpuBarColumn（Percent/Height/Brush，Percent 变化时
+        自动算高与色）；固定 28 列（2px/列，56px 轨道，28×2s≈56 秒历史）的
+        CpuColumns 集合，PushCpuSample 左移一列、新样本进最右列，列高=该样本负载%×12px，
+        每列按自身负载着色（<50% 绿 #2e9e4f / 50–79% 橙 #e8a31a / ≥80% 红 #d84a2f）。
+        只有轮询快照路径推进历史，菜单勾选重排版（ReformatMonitorLine）不推进；
+        停监控/清空分段时历史归零。XAML 把内层单条 Border 换成 ItemsControl 列阵，
+        底对齐、ClipToBounds 裁圆角。
+     ③ 配色分档沿用第 22 轮，保留 CpuBarColor（线程无关 Color）；画刷在 UI 线程创建
+        （Avalonia 12 SolidColorBrush 线程亲和）。
+     ④ 热分区：TextBlock.MonSegHot 增补 FontStyle=Italic，恢复 MobaXterm 的粗体+斜体。
+     ⑤ 测试：新增 RM06_CpuBarHistoryRollsLikeScope（28 列、右端进新样本/左滚丢旧样本、
+        每列按自身负载着色与高度、清空归零）；RM06_SegmentIconsAndColorsMatchMobaXtermReference
+        改为增量 CPU dump 并断言 28 列渲染（最右列=40%、绿、4.8px）；热分区断言改回 Italic。
+     App 217/217、Core 86/86、Connections 135/135、TestGate 49/49；gate 第 23 轮全 PASS（E2E 15/15）；
+     ⑥ 渲染校验：RM06 断言 28 列正好铺满 56px 轨道（首列 x=0、末列右缘=56），
+        确认 ItemsControl 模板无内边距导致溢出/少一列。
+     提交 56d5af8，发布部署双份。
+     gate 第 23 轮首次运行 App 测试进程在 130/217 处 exit 134（历史已知偶发崩溃，
+     与 r21b 的 exit 139 同类）；独立 Release 复跑 217/217 连续两次通过后整轮 gate 全绿（gate-r23b.log）。
+     Windows 实机 WIN-28 补核：CPU 条为自右向左滚动的历史柱状（负载升高时红柱出现在最右侧），
+     热分区为橙红粗斜体。
+
 ## 已知偏差（已写入 spec 附录）
 
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
