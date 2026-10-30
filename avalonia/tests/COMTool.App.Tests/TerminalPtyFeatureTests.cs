@@ -245,4 +245,117 @@ public sealed class TerminalPtyFeatureTests
             Dispatcher.UIThread.RunJobs();
         }
     }
+
+    [AvaloniaFact]
+    public void TERM21_ShiftRightClickOpensMobaXtermStyleTerminalMenu()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                window = new MainWindow { DataContext = new MainViewModel() };
+                window.Show();
+                window.StopPortTimerForTests();
+                var viewModel = (MainViewModel)window.DataContext!;
+
+                var terminal = window.CreateTerminal();
+                var pty = new PtyStreamConnection(
+                    new MemoryStream(new byte[0]),
+                    new CapturingWriter(),
+                    ownsStreams: false,
+                    interceptZmodem: false);
+                var tab = new TerminalTab
+                {
+                    Title = "ctx",
+                    SessionId = "ctx",
+                    Kind = SessionKind.Local,
+                    Content = terminal,
+                    Terminal = terminal,
+                    IsAlive = true,
+                    CloseAction = () => { },
+                };
+                viewModel.AddTab(tab);
+                window.AttachTerminal(tab, terminal, pty);
+                window.UpdateLayout();
+                Dispatcher.UIThread.RunJobs();
+
+                // 普通右键：走原有复制/粘贴路径，不得弹菜单（Shift 门控）。
+                RaiseTerminalRightClick(terminal, window, Avalonia.Input.KeyModifiers.None);
+                Assert.Null(window.LastTerminalMenuForTests);
+
+                // Shift+右键：弹出 MobaXterm 22.1 式终端菜单（18 项 + 4 分隔线）。
+                RaiseTerminalRightClick(terminal, window, Avalonia.Input.KeyModifiers.Shift);
+                var menu = window.LastTerminalMenuForTests;
+                Assert.NotNull(menu);
+
+                var items = menu!.Items.OfType<Avalonia.Controls.MenuItem>().ToList();
+                Assert.Equal(18, items.Count);
+                Assert.Equal(4, menu.Items.OfType<Avalonia.Controls.Separator>().Count());
+
+                Assert.Equal(new[]
+                {
+                    "复制", "复制全部", "复制带格式文本（RTF）", "粘贴", "查找",
+                    "字体设置", "终端显示", "语法高亮",
+                    "执行宏", "录制宏", "录制终端输出到文件", "保存到文件", "打印",
+                    "使用 Zmodem 接收文件", "使用 Zmodem 发送文件",
+                    "更改终端设置…", "特殊命令", "事件日志",
+                },
+                items.Select(ItemLabel).ToList());
+
+                // 启用态：无选区时“复制”置灰；“粘贴”/“更改终端设置…”恒可用；
+                // 未实现项（查找/打印等）置灰。
+                Assert.False(LabelItem(items, "复制").IsEnabled);
+                Assert.True(LabelItem(items, "粘贴").IsEnabled);
+                Assert.True(LabelItem(items, "更改终端设置…").IsEnabled);
+                Assert.False(LabelItem(items, "查找").IsEnabled);
+                Assert.False(LabelItem(items, "打印").IsEnabled);
+                Assert.True(LabelItem(items, "使用 Zmodem 接收文件").IsEnabled);
+
+                // 快捷键标注（MobaXterm 样式右侧灰字）：粘贴 = Shift+INSERT。
+                var pasteGrid = (Avalonia.Controls.Grid)LabelItem(items, "粘贴").Header!;
+                Assert.Equal(
+                    "Shift+INSERT",
+                    pasteGrid.Children.OfType<Avalonia.Controls.TextBlock>().Last().Text);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    private static void RaiseTerminalRightClick(
+        Iciclecreek.Terminal.TerminalControl terminal,
+        Avalonia.Controls.Window window,
+        Avalonia.Input.KeyModifiers modifiers)
+    {
+        var position = terminal.TranslatePoint(new Point(10, 10), window) ?? new Point(10, 10);
+        terminal.RaiseEvent(new Avalonia.Input.PointerPressedEventArgs(
+            terminal,
+            new Avalonia.Input.Pointer(0, Avalonia.Input.PointerType.Mouse, isPrimary: true),
+            window,
+            position,
+            0,
+            new Avalonia.Input.PointerPointProperties(
+                Avalonia.Input.RawInputModifiers.None,
+                Avalonia.Input.PointerUpdateKind.RightButtonPressed),
+            modifiers,
+            clickCount: 1));
+    }
+
+    private static Avalonia.Controls.MenuItem LabelItem(
+        System.Collections.Generic.IReadOnlyList<Avalonia.Controls.MenuItem> items, string label) =>
+        items.Single(mi => ItemLabel(mi) == label);
+
+    private static string? ItemLabel(Avalonia.Controls.MenuItem item) => item.Header switch
+    {
+        string s => s,
+        Avalonia.Controls.Grid g =>
+            g.Children.OfType<Avalonia.Controls.TextBlock>().FirstOrDefault()?.Text,
+        _ => null,
+    };
 }

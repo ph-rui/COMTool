@@ -100,8 +100,10 @@
               <Grid Grid.Row="4" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="4"
                     Width="155" HorizontalAlignment="Left">
                 <TextBox Name="KeyFileBox" Height="28" />
-                <Button Grid.Column="1" Content="..." Width="30" Height="28"
-                        MinWidth="0" Padding="0" Click="OnBrowseKeyClick" />
+                <Button Grid.Column="1" Content="…" Width="30" Height="28"
+                        MinWidth="0" Padding="0"
+                        HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                        Click="OnBrowseKeyClick" />
               </Grid>
 
               <TextBlock Grid.Row="5" Grid.Column="0" Text="Password" VerticalAlignment="Center" />

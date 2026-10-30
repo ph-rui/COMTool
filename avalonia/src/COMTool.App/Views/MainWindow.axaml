@@ -73,8 +73,6 @@
           <MenuItem Header="Light theme" Click="OnLightThemeClick" />
           <MenuItem Header="Dark theme" Click="OnDarkThemeClick" />
           <Separator />
-          <MenuItem Header="终端设置" Click="OnTerminalSettingsClick" />
-          <Separator />
           <MenuItem Header="About COMTool" Click="OnAboutClick" />
         </ContextMenu>
       </Border.ContextMenu>

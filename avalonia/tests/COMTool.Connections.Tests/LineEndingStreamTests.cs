@@ -111,6 +111,63 @@ public sealed class LineEndingStreamTests
             throw new System.NotSupportedException();
     }
 
+    /// <summary>
+    /// 模拟生产环境内层读流（pty/ZmodemStream）：队列空时在 Read 里
+    /// 抛异常代替“阻塞等待远端下一字节”。用于回归黑屏 bug——
+    /// 若 LineEndingStream 在一次 Read 里对同一内层连续第二次拉取
+    /// （坚持填满 count 的旧实现），测试立即失败而不是挂死。
+    /// </summary>
+    private sealed class BlockingSupplyStream : Stream
+    {
+        private readonly System.Collections.Generic.Queue<byte> _q = new();
+
+        public void Supply(string s)
+        {
+            foreach (var b in Encoding.ASCII.GetBytes(s))
+            {
+                _q.Enqueue(b);
+            }
+        }
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new System.NotSupportedException();
+        public override long Position
+        {
+            get => throw new System.NotSupportedException();
+            set => throw new System.NotSupportedException();
+        }
+
+        public override void Flush()
+        {
+        }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            if (_q.Count == 0)
+            {
+                throw new System.InvalidOperationException("inner would block (no data)");
+            }
+
+            var n = Math.Min(count, _q.Count);
+            for (var i = 0; i < n; i++)
+            {
+                buffer[offset + i] = _q.Dequeue();
+            }
+
+            return n;
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) =>
+            throw new System.NotSupportedException();
+
+        public override void SetLength(long value) => throw new System.NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) =>
+            throw new System.NotSupportedException();
+    }
+
     private static LineEndingOptions Options(bool crInLf, bool lfInCr) =>
         new() { ImplicitCrInLf = crInLf, ImplicitLfInCr = lfInCr };
 
@@ -218,5 +275,43 @@ public sealed class LineEndingStreamTests
         var n3 = stream.Read(buf, 0, 3);
         Assert.Equal(3, n3);
         Assert.Equal("e\rf", Encoding.ASCII.GetString(buf, 0, n3));
+    }
+
+    [Fact]
+    public void ReadReturnsAvailable_DoesNotWaitForFullBuffer()
+    {
+        // 黑屏回归（2026-10-30 实机反馈）：库读循环 Read(buffer, 0, 0x40000)，
+        // 内层只有少量字节时，慢路径不得继续向“会阻塞的内层”拉第二次，
+        // 必须转换后立即返回可用量，否则读循环停摆、终端黑屏。
+        var options = Options(true, false);
+        using var inner = new BlockingSupplyStream();
+        var stream = new LineEndingStream(inner, options);
+
+        inner.Supply("a\nb");
+        var buf = new byte[0x40000];
+        var n = stream.Read(buf, 0, buf.Length);
+        Assert.Equal(4, n);
+        Assert.Equal("a\r\nb", Encoding.ASCII.GetString(buf, 0, n));
+    }
+
+    [Fact]
+    public void PendingCrAtTail_ReturnsPriorTextFirst()
+    {
+        // 块尾裸 \r 尚未见下一字节：先返回可确定部分 "abc"（内层非 EOF，
+        // 不得返回 0）；\r 扣住待决，下一字节到达后再结算为 \r\n。
+        var options = Options(false, true);
+        using var inner = new BlockingSupplyStream();
+        var stream = new LineEndingStream(inner, options);
+        var buf = new byte[64];
+
+        inner.Supply("abc\r");
+        var n1 = stream.Read(buf, 0, 64);
+        Assert.Equal(3, n1);
+        Assert.Equal("abc", Encoding.ASCII.GetString(buf, 0, n1));
+
+        inner.Supply("x");
+        var n2 = stream.Read(buf, 0, 64);
+        Assert.Equal(3, n2);
+        Assert.Equal("\r\nx", Encoding.ASCII.GetString(buf, 0, n2));
     }
 }

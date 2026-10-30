@@ -2956,9 +2956,10 @@ public partial class MainWindow : Window
         {
             Title = "About COMTool",
             Width = 560,
-            Height = 430,
+            // 高度随内容自适应：固定 Height=430 时内容只占约 330px，
+            // OK 按钮悬在窗体中部、下方留 ~120px 空白（实机反馈“OK 位置有问题”）。
+            SizeToContent = Avalonia.Controls.SizeToContent.Height,
             MinWidth = 420,
-            MinHeight = 320,
             CanResize = false,
             ShowInTaskbar = false,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
@@ -3027,9 +3028,6 @@ public partial class MainWindow : Window
         };
         await dialog.ShowDialog(this);
     }
-
-    private async void OnTerminalSettingsClick(object? sender, RoutedEventArgs e) =>
-        await ShowTerminalSettingsAsync();
 
     /// <summary>
     /// 终端设置对话框：复刻 MobaXterm “Live terminal reconfiguration → Terminal”，
@@ -4944,6 +4942,15 @@ public partial class MainWindow : Window
         }
 
         e.Handled = true;
+
+        // MobaXterm 行为：Shift+右键 打开终端菜单（含“更改终端设置…”）；
+        // 普通右键保持原行为（有选区=复制，无选区=粘贴）。
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+        {
+            OpenTerminalContextMenu(terminal, e.GetPosition(terminal));
+            return;
+        }
+
         if (terminal.Terminal.Selection.HasSelection)
         {
             await terminal.CopyAsync();
@@ -4952,6 +4959,198 @@ public partial class MainWindow : Window
         }
 
         await PasteNormalizedAsync(terminal);
+    }
+
+    /// <summary>
+    /// 终端 Shift+右键菜单：复刻 MobaXterm 终端右键菜单（22.1，18 项+4 分隔线，
+    /// 顺序/快捷键标注一致，已按本项目汉化要求译成中文）。“更改终端设置…”
+    /// 即 MobaXterm “Change terminal settings...”，打开“实时终端重配置”对话框。
+    /// COMTool 已实现的功能接线生效，未实现的功能置灰（与 MobaXterm 在
+    /// 不适用的会话里置灰部分菜单项的惯例一致）。
+    /// </summary>
+    private void OpenTerminalContextMenu(TerminalControl terminal, Point position)
+    {
+        if (DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        var tab = viewModel.Tabs.FirstOrDefault(t =>
+            ReferenceEquals(t.Terminal, terminal) || ReferenceEquals(t.Content, terminal));
+
+        var hasSelection = terminal.Terminal.Selection.HasSelection;
+        var live = terminal.IsLive;
+        var zmodemBusy = tab?.IsZmodemActive ?? false;
+
+        var menu = new ContextMenu();
+        menu.Items.Add(TerminalMenuItem("复制", null, hasSelection,
+            async () => { await terminal.CopyAsync(); }));
+        menu.Items.Add(TerminalMenuItem("复制全部", null, live,
+            async () =>
+            {
+                terminal.Terminal.Selection.SelectAll();
+                await terminal.CopyAsync();
+            }));
+        menu.Items.Add(TerminalMenuItem("复制带格式文本（RTF）", null, false, null));
+        menu.Items.Add(TerminalMenuItem("粘贴", "Shift+INSERT", true,
+            async () => { await PasteNormalizedAsync(terminal); }));
+        menu.Items.Add(TerminalMenuItem("查找", "Ctrl+Shift+F", false, null));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(TerminalMenuItem("字体设置", null, false, null));
+        menu.Items.Add(TerminalMenuItem("终端显示", null, false, null));
+        menu.Items.Add(TerminalMenuItem("语法高亮", null, false, null));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(TerminalMenuItem("执行宏", "Ctrl+空格", viewModel.Macros.Count > 0,
+            () =>
+            {
+                ShowMacroPopup();
+                return Task.CompletedTask;
+            }));
+        var canRecord = viewModel.CanToggleRecording
+            && tab is not null
+            && ReferenceEquals(viewModel.SelectedTab, tab);
+        menu.Items.Add(TerminalMenuItem("录制宏", null, canRecord,
+            () =>
+            {
+                if (viewModel.IsRecording)
+                {
+                    viewModel.StopRecording();
+                }
+                else
+                {
+                    viewModel.StartRecording();
+                }
+
+                return Task.CompletedTask;
+            }));
+        menu.Items.Add(TerminalMenuItem("录制终端输出到文件", null, false, null));
+        menu.Items.Add(TerminalMenuItem("保存到文件", "Ctrl+Shift+S", live,
+            async () => { await SaveTerminalOutputAsync(tab, terminal); }));
+        menu.Items.Add(TerminalMenuItem("打印", "Ctrl+Shift+P", false, null));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(TerminalMenuItem("使用 Zmodem 接收文件", null, live && !zmodemBusy,
+            async () =>
+            {
+                // 远端运行 sz 把文件发过来，ZmodemStream 自动识别并完成接收。
+                await terminal.SendInputAsync("sz\r");
+            }));
+        menu.Items.Add(TerminalMenuItem("使用 Zmodem 发送文件", null, live && !zmodemBusy,
+            async () =>
+            {
+                // 远端运行 rz，ZmodemStream 检测到后弹出本地文件选择框发送。
+                await terminal.SendInputAsync("rz\r");
+            }));
+        menu.Items.Add(new Separator());
+        menu.Items.Add(TerminalMenuItem("更改终端设置…", null, true,
+            () =>
+            {
+                _ = ShowTerminalSettingsAsync();
+                return Task.CompletedTask;
+            }));
+        menu.Items.Add(TerminalMenuItem("特殊命令", null, false, null));
+        menu.Items.Add(TerminalMenuItem("事件日志", null, false, null));
+
+        LastTerminalMenuForTests = menu;
+        try
+        {
+            menu.Open(terminal);
+        }
+        catch (Exception ex)
+        {
+            // 弹窗失败不应影响终端本身（headless 无 popup 呈现层等场景）。
+            AppLog.Warn($"Terminal context menu failed to open: {ex.Message}");
+        }
+    }
+
+    /// <summary>最近一次 Shift+右键弹出的终端菜单（headless 测试钩子）。</summary>
+    internal ContextMenu? LastTerminalMenuForTests { get; private set; }
+
+    /// <summary>
+    /// 终端菜单项：左侧标签 + 右侧灰色快捷键标注（MobaXterm 样式）。
+    /// action 为 null 表示未实现，置灰显示。
+    /// </summary>
+    private static MenuItem TerminalMenuItem(
+        string label,
+        string? shortcut,
+        bool enabled,
+        Func<Task>? action)
+    {
+        object header;
+        if (string.IsNullOrEmpty(shortcut))
+        {
+            header = label;
+        }
+        else
+        {
+            var shortcutText = new TextBlock
+            {
+                Text = shortcut,
+                Margin = new Thickness(32, 0, 0, 0),
+                Foreground = new SolidColorBrush(Color.Parse("#9e9e9e")),
+                VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            };
+            Grid.SetColumn(shortcutText, 1);
+
+            header = new Grid
+            {
+                ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+                Children =
+                {
+                    new TextBlock
+                    {
+                        Text = label,
+                        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                    },
+                    shortcutText,
+                },
+            };
+        }
+
+        var item = new MenuItem { Header = header, IsEnabled = enabled };
+        if (action is not null)
+        {
+            item.Click += async (_, _) => await action();
+        }
+
+        return item;
+    }
+
+    /// <summary>
+    /// 终端菜单“保存到文件”：把当前终端完整回滚缓冲存成文本
+    /// （与停止会话的“保存终端输出”同一捕获逻辑，活终端同样可用）。
+    /// </summary>
+    private async Task SaveTerminalOutputAsync(TerminalTab? tab, TerminalControl terminal)
+    {
+        try
+        {
+            var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = "保存终端输出",
+                SuggestedFileName = $"{SafeFileName(tab?.Title ?? "terminal")}-{DateTime.Now:yyyyMMdd-HHmmss}.txt",
+                DefaultExtension = "txt",
+            });
+            if (file is null)
+            {
+                return;
+            }
+
+            await using var stream = await file.OpenWriteAsync();
+            if (stream.CanSeek)
+            {
+                stream.SetLength(0);
+            }
+
+            await TerminalTranscript.SaveAsync(terminal, stream);
+            if (tab is not null)
+            {
+                tab.StatusMessage = $"已保存终端输出：{file.Name}";
+                tab.StatusBrush = StatusInfoBrush;
+            }
+        }
+        catch (Exception ex)
+        {
+            _ = ShowErrorAsync($"保存终端输出失败：{ex.Message}");
+        }
     }
 
     private async void OnTerminalKeyDown(object? sender, KeyEventArgs e)

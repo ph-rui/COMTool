@@ -106,29 +106,29 @@ public sealed class LineEndingStream : Stream
             return n;
         }
 
-        var total = 0;
-        while (total < count)
+        // 慢路径必须保持内层流“有数据就返回”的读语义（返回可用量，可小于 count）：
+        // 库的读循环是 Read(buffer, 0, 0x40000)，内层（如 ZmodemStream）等 ≥1 字节
+        // 后只返回当前可用字节。若此处坚持填满 count，远端一次输出不足 256KB 时
+        // Read 就会卡在内层等待，读循环停摆、已变换文本无法上屏——这是使能
+        // 任一开关后终端黑屏的根因。正确语义：一次 Read 最多阻塞内层一次，
+        // 一旦有可交付的变换输出立即返回；内层非 EOF 时绝不返回 0。
+        while (true)
         {
-            // 1) 先把已变换的输出排空。
+            // 1) 已有变换输出：直接返回可用量（不碰内层，不阻塞）。
             if (_outPos < _outLen)
             {
-                var n = Math.Min(count - total, _outLen - _outPos);
-                Buffer.BlockCopy(_out, _outPos, buffer, offset + total, n);
+                var n = Math.Min(count, _outLen - _outPos);
+                Buffer.BlockCopy(_out, _outPos, buffer, offset, n);
                 _outPos += n;
-                total += n;
                 if (_outPos >= _outLen)
                 {
                     _outPos = 0;
                     _outLen = 0;
                 }
+                return n;
             }
 
-            if (total >= count)
-            {
-                break;
-            }
-
-            // 2) 输出空了就从内层拉一块原始数据做变换。
+            // 2) 输出空了，从内层拉一块原始数据做变换（内层阻塞至 ≥1 字节，或 EOF 返回 0）。
             var read = _eof ? 0 : _inner.Read(_in, 0, _in.Length);
             if (read <= 0)
             {
@@ -139,20 +139,32 @@ public sealed class LineEndingStream : Stream
             if (read > 0)
             {
                 TransformChunk(read, crInLf, lfInCr);
-            }
-            else
-            {
-                // 内层到 EOF：把可能扣留的 \r 结算掉。
-                FlushPending(crInLf, lfInCr);
-                // 没有待排输出时退出，避免空转（_eof 已置位，后续 read 恒为 0）。
-                if (_outPos >= _outLen)
+                if (_outPos < _outLen)
                 {
-                    break;
+                    continue; // 转出了数据，回到第 1 步立即交付
                 }
+                // 本块字节全部被扣作待决 \r（等下一字节才能区分裸 \r / \r\n），
+                // 输出仍为空：继续拉下一字节判定；内层没到 EOF，不得返回 0。
+                continue;
             }
-        }
 
-        return total;
+            // 3) 内层到 EOF：结算扣留的 \r，交付剩余输出，没有剩余才返回 0。
+            FlushPending(crInLf, lfInCr);
+            if (_outPos >= _outLen)
+            {
+                return 0;
+            }
+
+            var n2 = Math.Min(count, _outLen - _outPos);
+            Buffer.BlockCopy(_out, _outPos, buffer, offset, n2);
+            _outPos += n2;
+            if (_outPos >= _outLen)
+            {
+                _outPos = 0;
+                _outLen = 0;
+            }
+            return n2;
+        }
     }
 
     // 把 _in[0..read) 的原始字节变换后写入 _out（输出与输入不同数组，无自引用）。
