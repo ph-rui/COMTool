@@ -78,6 +78,10 @@ public partial class MainWindow : Window
     // 全局终端字号（Ctrl+滚轮 缩放后写入 config 的 terminal.fontSize）。
     private double _terminalFontSize = TerminalFontSize;
 
+    // 终端行尾仿真开关（对齐 MobaXterm「实时终端重配置 → 终端」的 Implicit CR/LF 两项）。
+    // 所有终端的 LineEndingStream 共享此对象：设置对话框里改动立即对所有已连接终端生效。
+    private readonly LineEndingOptions _lineEndingOptions = new();
+
     public MainWindow()
     {
         InitializeComponent();
@@ -1672,7 +1676,7 @@ public partial class MainWindow : Window
         UpdateConnectionStates();
     }
 
-    private void AttachTerminal(
+    internal void AttachTerminal(
         TerminalTab tab,
         TerminalControl terminal,
         PtyStreamConnection pty)
@@ -1684,6 +1688,10 @@ public partial class MainWindow : Window
 
         try
         {
+            // 套上行尾仿真层（MobaXterm「Implicit CR/LF」两项）。必须在 attach 之前：
+            // 库的读循环在 attach 启动后才取 ReaderStream，此时替换立即对全部读取生效；
+            // 两个开关都关时 LineEndingStream 走整块直通，零额外开销。
+            pty.WrapReader(new LineEndingStream(pty.ReaderStream, _lineEndingOptions));
             terminal.AttachConnection(pty);
         }
         catch (Exception ex)
@@ -3020,6 +3028,105 @@ public partial class MainWindow : Window
         await dialog.ShowDialog(this);
     }
 
+    private async void OnTerminalSettingsClick(object? sender, RoutedEventArgs e) =>
+        await ShowTerminalSettingsAsync();
+
+    /// <summary>
+    /// 终端设置对话框：复刻 MobaXterm “Live terminal reconfiguration → Terminal”，
+    /// 目前只含行尾仿真的两项（Implicit CR in every LF / Implicit LF in every CR）。
+    /// 确定后立即对所有已连接终端生效（共享 LineEndingOptions），并持久化到 config.json。
+    /// </summary>
+    private async Task ShowTerminalSettingsAsync()
+    {
+        if (_config is null)
+        {
+            return;
+        }
+
+        var dialog = new Window
+        {
+            Title = "实时终端重配置",
+            Width = 560,
+            Height = 280,
+            MinWidth = 420,
+            CanResize = false,
+            ShowInTaskbar = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+        };
+
+        var implicitCrInLf = new CheckBox
+        {
+            Content = "每个 LF 隐式携带 CR（Implicit CR in every LF）",
+            IsChecked = _lineEndingOptions.ImplicitCrInLf,
+        };
+        var implicitLfInCr = new CheckBox
+        {
+            Content = "每个 CR 隐式携带 LF（Implicit LF in every CR）",
+            IsChecked = _lineEndingOptions.ImplicitLfInCr,
+        };
+
+        var ok = new Button
+        {
+            Content = "确定",
+            Width = 80,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+        };
+        ok.Click += (_, _) =>
+        {
+            _lineEndingOptions.ImplicitCrInLf = implicitCrInLf.IsChecked == true;
+            _lineEndingOptions.ImplicitLfInCr = implicitLfInCr.IsChecked == true;
+            _config!.Config.Terminal.ImplicitCrInLf = _lineEndingOptions.ImplicitCrInLf;
+            _config!.Config.Terminal.ImplicitLfInCr = _lineEndingOptions.ImplicitLfInCr;
+            _config.Save();
+            AppLog.Info($"Terminal line endings: implicitCrInLf={_lineEndingOptions.ImplicitCrInLf}, " +
+                $"implicitLfInCr={_lineEndingOptions.ImplicitLfInCr}");
+            dialog.Close();
+        };
+        var cancel = new Button
+        {
+            Content = "取消",
+            Width = 80,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+        };
+        cancel.Click += (_, _) => dialog.Close();
+
+        dialog.Content = new StackPanel
+        {
+            Margin = new Thickness(20),
+            Spacing = 12,
+            Children =
+            {
+                new TextBlock
+                {
+                    Text = "终端仿真选项",
+                    FontSize = 14,
+                    FontWeight = FontWeight.Bold,
+                },
+                implicitCrInLf,
+                implicitLfInCr,
+                new TextBlock
+                {
+                    Text = "隐式 CR：收到 LF 时先把光标移回行首再换行。\n"
+                        + "隐式 LF：收到 CR 时移到行首后再额外换一行。\n"
+                        + "默认均关闭（与 MobaXterm 一致），仅对接按老式行尾约定输出的设备时使用。",
+                    TextWrapping = TextWrapping.Wrap,
+                    Opacity = 0.7,
+                    FontSize = 12,
+                },
+                new StackPanel
+                {
+                    Orientation = Avalonia.Layout.Orientation.Horizontal,
+                    Spacing = 8,
+                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                    Children = { ok, cancel },
+                },
+            },
+        };
+        await dialog.ShowDialog(this);
+    }
+
     private Button LinkButton(string text, string url)
     {
         var button = new Button
@@ -3555,6 +3662,10 @@ public partial class MainWindow : Window
 
         _terminalFontSize = ClampTerminalFontSize(_config.Config.Terminal.FontSize);
         ApplyTerminalFontSizeToAll(_terminalFontSize);
+
+        // 从 config 恢复行尾仿真开关（旧配置缺键时反序列化为默认 false）。
+        _lineEndingOptions.ImplicitCrInLf = _config.Config.Terminal.ImplicitCrInLf;
+        _lineEndingOptions.ImplicitLfInCr = _config.Config.Terminal.ImplicitLfInCr;
     }
 
     /// <summary>
@@ -4868,8 +4979,27 @@ public partial class MainWindow : Window
     /// 换行 → 多行粘贴的每条命令之间多出一行空提示符。有选区时回退库默认粘贴
     /// （保留“粘贴替换选区”行为），无文本时同样回退。
     /// </summary>
-    internal static string NormalizePtyPasteText(string text) =>
-        text.Replace("\r\n", "\r").Replace('\n', '\r');
+    internal static string NormalizePtyPasteText(string text)
+    {
+        // 所有行尾统一为单个 \r；末尾连续的空行（多余 \r）去掉，
+        // 只保留最后一个换行符，使多行粘贴在远端逐行执行且不产生空行
+        // （与 MobaXterm 粘贴行为一致）。
+        var normalized = text.Replace("\r\n", "\r").Replace('\n', '\r');
+        var end = normalized.Length;
+        while (end > 0 && normalized[end - 1] == '\r')
+        {
+            end--;
+        }
+
+        if (end == 0)
+        {
+            return string.Empty;
+        }
+
+        return end == normalized.Length
+            ? normalized
+            : normalized[..end] + "\r";
+    }
 
     /// <summary>
     /// 把文本行尾规范成单个 \r 后写入终端（bracketed-paste 模式时加包裹）。

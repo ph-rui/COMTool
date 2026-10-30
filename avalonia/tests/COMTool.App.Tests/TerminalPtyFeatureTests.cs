@@ -65,6 +65,12 @@ public sealed class TerminalPtyFeatureTests
         // 已是 \r 的不变；无行尾的不变。
         Assert.Equal("a\rb", MainWindow.NormalizePtyPasteText("a\rb"));
         Assert.Equal("echo hi", MainWindow.NormalizePtyPasteText("echo hi"));
+        // 末尾的空行去掉，只保留最后一个命令的回车（对齐 MobaXterm 粘贴行为）。
+        Assert.Equal(
+            "echo hello\recho world\r",
+            MainWindow.NormalizePtyPasteText("echo hello\r\necho world\r\n\r\n\r\n"));
+        Assert.Equal("a\r", MainWindow.NormalizePtyPasteText("a\r\r\r"));
+        Assert.Equal("", MainWindow.NormalizePtyPasteText("\r\n"));
     }
 
     [AvaloniaFact]
@@ -112,7 +118,7 @@ public sealed class TerminalPtyFeatureTests
                 await MainWindow.SendPasteTextAsync(terminal, "l1\r\nl2\r\n");
 
                 var sent = System.Text.Encoding.ASCII.GetString(writer.Captured);
-                // 三条命令之间不得出现空行：只有单个 \r 收尾。
+                // 多行粘贴之间不得出现空行；末尾空行被剥除，只保留各命令的回车。
                 Assert.Equal("l1\rl2\r", sent);
             });
         }
@@ -178,6 +184,59 @@ public sealed class TerminalPtyFeatureTests
                 var expectedRows = (int)(terminal.Bounds.Height / terminal.CharHeight);
                 Assert.Equal(expectedCols, lastCols);
                 Assert.Equal(expectedRows, lastRows);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public void TERM20_AttachTerminalWrapsReaderWithLineEndingStream()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                window = new MainWindow { DataContext = new MainViewModel() };
+                window.Show();
+                window.StopPortTimerForTests();
+                var viewModel = (MainViewModel)window.DataContext!;
+
+                var terminal = window.CreateTerminal();
+                var pty = new PtyStreamConnection(
+                    new MemoryStream(new byte[0]),
+                    new CapturingWriter(),
+                    ownsStreams: false,
+                    interceptZmodem: false);
+                var tab = new TerminalTab
+                {
+                    Title = "le",
+                    SessionId = "le",
+                    Kind = SessionKind.Local,
+                    Content = terminal,
+                    Terminal = terminal,
+                    IsAlive = true,
+                    CloseAction = () => { },
+                };
+                viewModel.AddTab(tab);
+                Dispatcher.UIThread.RunJobs();
+                window.UpdateLayout();
+                Dispatcher.UIThread.RunJobs();
+
+                // 走真实附加路径：必须在 AttachConnection 之前套上行尾变换流，
+                // 库读循环每次取 ReaderStream 属性，替换即刻生效。
+                window.AttachTerminal(tab, terminal, pty);
+                Dispatcher.UIThread.RunJobs();
+
+                Assert.True(
+                    pty.ReaderStream is LineEndingStream,
+                    "attach 后读流应为 LineEndingStream");
             });
         }
         finally

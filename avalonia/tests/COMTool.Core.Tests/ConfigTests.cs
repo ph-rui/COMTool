@@ -214,6 +214,32 @@ public sealed class ConfigTests : IDisposable
     }
 
     [Fact]
+    public void SaveAndLoad_RoundTripsLineEndingOptions()
+    {
+        var path = Path.Combine(_directory, "config-le.json");
+        var config = new ComtoolConfig
+        {
+            Terminal = new TerminalConfig
+            {
+                ImplicitCrInLf = true,
+                ImplicitLfInCr = true,
+            },
+        };
+
+        config.Save(path);
+        var loaded = ComtoolConfig.Load(path);
+        Assert.True(loaded.Terminal.ImplicitCrInLf);
+        Assert.True(loaded.Terminal.ImplicitLfInCr);
+
+        // 旧配置缺键：默认 false（MobaXterm 默认不勾），不报错。
+        var legacyPath = Path.Combine(_directory, "config-le-legacy.json");
+        File.WriteAllText(legacyPath, """{"version":3}""");
+        var loadedLegacy = ComtoolConfig.Load(legacyPath);
+        Assert.False(loadedLegacy.Terminal.ImplicitCrInLf);
+        Assert.False(loadedLegacy.Terminal.ImplicitLfInCr);
+    }
+
+    [Fact]
     public void SaveAndLoad_RoundTripsNetworkScanRange()
     {
         var path = Path.Combine(_directory, "config.json");

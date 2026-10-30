@@ -10,7 +10,7 @@ namespace COMTool.Connections;
 /// </summary>
 public sealed class PtyStreamConnection : IPtyConnection, IDisposable
 {
-    private readonly Stream _readerStream;
+    private Stream _readerStream;
     private readonly Stream _writerStream;
     private readonly object _writeGate = new();
     private readonly Action<int, int>? _resize;
@@ -60,6 +60,13 @@ public sealed class PtyStreamConnection : IPtyConnection, IDisposable
     public Stream ReaderStream => _readerStream;
 
     public Stream WriterStream => _writerStream;
+
+    /// <summary>
+    /// 在读流外层再套一层变换流（行尾仿真用）。必须在 TerminalControl
+    /// AttachConnection 之前调用——库的读循环每次取 <c>ReaderStream</c> 属性，
+    /// 且 reader 线程在 attach 时才启动，故此处替换立即对全部后续读取生效。
+    /// </summary>
+    public void WrapReader(Stream wrapped) => _readerStream = wrapped;
 
     public bool IsInputCompleted => Zmodem?.IsInputCompleted ?? false;
 

@@ -208,6 +208,20 @@ public sealed class TerminalConfig
     [JsonPropertyName("fontSize")]
     public double FontSize { get; set; } = 13.5;
 
+    /// <summary>
+    /// MobaXterm「实时终端重配置 → 终端」同名项：Implicit CR in every LF。
+    /// 默认 false（MobaXterm 默认不勾）。
+    /// </summary>
+    [JsonPropertyName("implicitCrInLf")]
+    public bool ImplicitCrInLf { get; set; } = false;
+
+    /// <summary>
+    /// MobaXterm「实时终端重配置 → 终端」同名项：Implicit LF in every CR。
+    /// 默认 false（MobaXterm 默认不勾）。
+    /// </summary>
+    [JsonPropertyName("implicitLfInCr")]
+    public bool ImplicitLfInCr { get; set; } = false;
+
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? Extra { get; set; }
 }
