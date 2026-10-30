@@ -540,9 +540,13 @@
                     Classes="MonitorToggle"
                     ToolTip.Tip="远程监控"
                     IsChecked="{Binding IsMonitorOn, Mode=TwoWay}"
+                    ClickMode="Press"
                     HorizontalAlignment="Stretch"
                     HorizontalContentAlignment="Center"
                     VerticalAlignment="Stretch">
+        <!-- ClickMode=Press：按下即切换。默认 Release 要等抬起时指针仍在按钮上，
+             窗口激活/布局抖动/按下缩放都会让首击丢失（用户反馈 2026-10-30：
+             刚连上 SSH 后第一下无效，第二下才变灰）。 -->
         <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
           <TextBlock Text="&#xe163;"
                      FontFamily="{DynamicResource IconFontAwesome}"

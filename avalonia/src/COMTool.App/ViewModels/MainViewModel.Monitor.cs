@@ -263,10 +263,16 @@ public partial class MainViewModel
     {
         if (tab.Kind != SessionKind.Ssh)
         {
+            AppLog.Info(
+                $"Remote monitor toggle ignored: tab {tab.SessionId} is {tab.Kind}, not SSH");
+            tab.SftpPane?.SyncMonitorOn(tab.MonitorEnabled);
             return;
         }
 
         tab.MonitorEnabled = enabled;
+        // 按钮态始终以标签开关为准，避免程序路径改动后按钮与轮询状态漂移。
+        tab.SftpPane?.SyncMonitorOn(enabled);
+
         if (enabled && ReferenceEquals(tab, SelectedTab))
         {
             StartMonitorPolling(tab);

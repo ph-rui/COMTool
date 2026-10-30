@@ -1,13 +1,18 @@
 using System.Collections.Generic;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using COMTool.App.ViewModels;
 using COMTool.App.Views;
 using COMTool.Connections.RemoteMonitoring;
+using COMTool.Core.Config;
 using COMTool.Sftp.Testing;
 using Xunit;
 
@@ -287,6 +292,86 @@ public sealed class RemoteMonitorFeatureTests
         pane.IsMonitorOn = true; // user toggles again
         Assert.Equal(2, events.Count);
         Assert.True(events[1]);
+    }
+
+    [AvaloniaFact]
+    public void RM04_MonitorToggleFirstRealClickTurnsOffTheRunningMonitor()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                window = new MainWindow { DataContext = new MainViewModel() };
+                window.Show();
+                window.StopPortTimerForTests();
+                var viewModel = (MainViewModel)window.DataContext!;
+
+                // 监控已开启的 SSH 标签（MobaXterm 记忆：重开会话自动恢复），
+                // 模拟用户刚连上 SSH 后打开 SFTP 面板，第一下真实鼠标点击。
+                var runner = new FakeExecRunner(() => Task.FromResult(
+                    Dump("cpu 100 0 0 900 0", "1000 2000")));
+                var pane = new SftpPaneViewModel(() => new InMemoryFileSystem("/remote"));
+                var terminal = window.CreateTerminal();
+                var tab = new TerminalTab
+                {
+                    Title = "first-click",
+                    SessionId = "first-click",
+                    Kind = SessionKind.Ssh,
+                    Content = terminal,
+                    Terminal = terminal,
+                    SftpPane = pane,
+                    Connection = runner,
+                    MonitorEnabled = true,
+                    CloseAction = () => { },
+                };
+                viewModel.AddTab(tab);
+                viewModel.SidebarTab = SidebarTab.SshBrowser;
+                Dispatcher.UIThread.RunJobs();
+                window.UpdateLayout();
+                Dispatcher.UIThread.RunJobs();
+
+                Assert.True(pane.IsMonitorOn);
+                var button = window.GetVisualDescendants()
+                    .OfType<ToggleButton>()
+                    .FirstOrDefault(b => b.Name == "MonitorToggleButton");
+                Assert.NotNull(button);
+                Assert.True(button!.IsChecked);
+                // 首击必须按下即生效（Release 模式在窗口激活/布局抖动时会丢失）。
+                Assert.Equal(ClickMode.Press, button.ClickMode);
+
+                var toggles = new List<bool>();
+                pane.MonitorToggled = v =>
+                {
+                    toggles.Add(v);
+                    viewModel.SetMonitorEnabled(tab, v);
+                };
+
+                // 第一下点击必须立即关掉（按钮变灰、轮询停止），
+                // 不能出现"第一下无效、第二下才生效"。
+                var center = button.TranslatePoint(
+                    new Point(button.Bounds.Width / 2, button.Bounds.Height / 2),
+                    window);
+                Assert.NotNull(center);
+                window.MouseDown(center!.Value, MouseButton.Left);
+                window.MouseUp(center.Value, MouseButton.Left);
+                Dispatcher.UIThread.RunJobs();
+
+                Assert.False(button.IsChecked);
+                Assert.Same(pane, button.DataContext);
+                Assert.Single(toggles);
+                Assert.False(toggles[0]);
+                Assert.False(pane.IsMonitorOn);
+                Assert.False(tab.MonitorEnabled);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
     }
 
     [Fact]

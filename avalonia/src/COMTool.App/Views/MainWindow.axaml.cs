@@ -893,6 +893,9 @@ public partial class MainWindow : Window
         // launch of this session restores it automatically.
         pane.MonitorToggled = v =>
         {
+            AppLog.Info(
+                $"Remote monitor toggle: {session.Key} -> {(v ? "on" : "off")} " +
+                $"(selected={ReferenceEquals(viewModel.SelectedTab, tab)})");
             viewModel.SetMonitorEnabled(tab, v);
             _config.SshSessions.SetMonitor(session.Key, v);
             _config.Save();
