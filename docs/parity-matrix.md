@@ -47,6 +47,7 @@
 | TERM-14 | 交互输入即时回显 | P0 | 完成 | Moba 关键字高亮不再无限期扣留可能是关键字前缀的尾字符；`i` 等单字符在 SSH 输入后立即显示，15ms 内无后续分片时释放，跨分片关键字仍可高亮；见 `terminal-single-char-echo-1000x650.png` |
 | TERM-15 | 双击终端面板最大化/还原 | P0 | 完成 | 双击黑色终端面板与标题栏最大化按钮行为一致；使用 `DoubleTapped` 并监听已处理事件，不干扰终端词选择；最大化到 1280x800 后输入 `echo FINAL_PACKAGE_OK` 无需重新聚焦，再次双击恢复 1000x650；见 `terminal-double-click-maximize-1280x800.png`、`terminal-double-click-restore-1000x650.png` |
 | TERM-18 | Ctrl+滚轮调节终端字号 | P1 | 完成（Avalonia 增强） | 2026-10-26 按用户要求（MobaXterm 行为）：Ctrl+滚轮 ±1 调整字号，范围 8–48；2026-10-30 按用户反馈改为记忆字号：字号为全局设置（一次缩放应用到所有已打开终端），并立即写入 config.json 的 `terminal.fontSize`，重启后新建终端沿用；旧配置缺键默认 13.5，非法值（0/NaN）回落 13.5、越界钳制到 8–48；clamp/步进为纯函数，全局生效、落盘与重启恢复由 headless 覆盖 |
+| TERM-19 | 终端粘贴行尾规范 + pty 尺寸同步 | P1 | 完成（Avalonia 增强） | 2026-10-30 用户反馈（多行粘贴命令间多空行；top 只显示半截）：① 粘贴行尾统一规范为单个 \r（MobaXterm 行为；Windows 剪贴板 CRLF 原样写入时远端 tty ICRNL 把 \r 转提交、多余 \n 再打一空行），有选区时回退库默认路径（保留粘贴替换选区）；② 终端附加后把 pty 尺寸同步到当前视口（根因：CreateShellStream 固定 100x30 初始值，库仅在尺寸变化时发 resize，而附加发生在首次布局之后，首个真实尺寸永不推给远端 → top 等全屏程序只画 30 行；窗口后续变化仍由库自身 resize 路径跟进） |
 
 ## 3. 串口
 

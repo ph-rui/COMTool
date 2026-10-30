@@ -361,7 +361,33 @@
      Windows 实机待核：82% 分区为橙红常规正体；开着监控反复重启应用不再崩溃退出
      （若再出现，查 `%LOCALAPPDATA%\CrashDumps` 是否新增 dump 及事件日志 1000/1026）。
 
-   - 追加（2026-10-30，第 24 轮）：状态栏整排放大，比例对齐 MobaXterm
+   - 追加（2026-10-30，第 28 轮）：多行粘贴空行修复 + pty 尺寸同步（top 只显示半截）
+     （用户反馈 2026-10-30：截图“复制粘贴多行命令时，mobaxterm 命令行之间没有空行，
+     COMTool 有；top 命令 MobaXterm 可以显示全屏，COMTool 只显示半截”）：
+     ① 粘贴空行根因：库 PasteAsync 把剪贴板文本原样写入 pty；Windows 剪贴板行尾 CRLF，
+        远端 tty line discipline 的 ICRNL 把 \r 转成换行提交、随后的 \n 再多打一个换行
+        → 每条命令之间一行空提示符。修：粘贴入口（右键 + Ctrl+V）改走
+        MainWindow.PasteNormalizedAsync——行尾统一规范为单个 \r（CRLF/LF→\r，
+        NormalizePtyPasteText 纯函数；bracketed-paste 模式加 \u001b[200~ 包裹；有选区时回退
+        库默认 PasteAsync 保留“粘贴替换选区”），经 SendPasteTextAsync→SendInputAsync 发送。
+        不改 pty 流本身，避免污染 Zmodem 二进制通道。
+     ② top 半截根因：SSH 建连固定 CreateShellStream(100x30)；库 TerminalView.ArrangeOverride
+        只在网格尺寸“变化”时调 pty.Resize，而 AttachConnection 发生在终端首次布局之后
+        → 首个真实视口尺寸永不推给远端，pty 停在 100x30（用户截图 top 恰画 30 行证实）。
+        修：AttachTerminal 在 AttachConnection 后以 DispatcherPriority.Background 追加
+        SyncPtySizeToViewport（按 CharWidth/CharHeight/GutterWidth 算 cols/rows，算法与库
+        ArrangeOverride 一致，pty.Resize 推给远端并记 AppLog；窗口后续变化仍由库自身
+        ArrangeOverride→ChangeWindowSize 路径跟进，无重复逻辑）。
+     ③ 测试：TerminalPtyFeatureTests 3 项——TERM19_PasteLineEndingsNormalizeToSingleCarriageReturn
+        （纯函数：CRLF/LF/CR/无行尾 四例）、TERM19_PasteNormalizedSendsSingleCrPerLineToPty
+        （headless 真实 AttachConnection 捕获 pty 写入，断言只收到 `l1\rl2\r` 无空行）、
+        TERM19_SyncPtySizeMatchesViewportAfterAttach（断言 resize 回调收到与视口度量一致的
+        cols/rows）。粘贴 e2e 不依赖 headless 剪贴板（剪贴板 async 在 UI 线程 GetResult 会
+        死锁，实测 15 分钟挂起证实；改用 SendPasteTextAsync 直发 + env.RunAsync）。
+     App 226/226（Release，含 3 新测试；首次跑 217/226 处宿主偶发 SIGSEGV exit 139，
+     历史已知非代码问题，复跑全过）、Core 88/88；提交 0ab3aac（代码+测试）、<DOCS_SHA>（文档）。
+     <GATE_LINE>
+
      （用户反馈 2026-10-30：附 MobaXterm/COMTool 同屏对照图“对比 mobaxterm，下面这排显示偏小了”）：
      ① 实测对照（取参考图像素）：MobaXterm CPU 条 46×22px、小格外高约 26px、图标约 16px；
         我们原先 CPU 条 56×12px、小格 22px、图标 11px、状态栏行高 30px，整排偏薄偏小。
