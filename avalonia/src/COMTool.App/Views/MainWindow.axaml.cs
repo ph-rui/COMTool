@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
@@ -1689,7 +1690,48 @@ public partial class MainWindow : Window
         {
             tab.IsAlive = false;
             _ = ShowErrorAsync($"终端附加失败：{ex.Message}");
+            return;
         }
+
+        // 把 pty 同步到当前视口尺寸（MobaXterm 行为）：附加时终端网格已按最终窗口
+        // 布局完毕，而库的 resize 只在“尺寸变化”时发送——这个首个真实尺寸永远不会
+        // 推给远端，pty 停在建连时的 100x30，top 等全屏程序只能画 30 行。
+        // Background 优先级让本任务在当前布局完成后再执行（度量已就绪）。
+        Dispatcher.UIThread.Post(
+            () => SyncPtySizeToViewport(tab, terminal, pty),
+            DispatcherPriority.Background);
+    }
+
+    /// <summary>
+    /// 把终端当前视口的 cols/rows 推给远端 pty（算法与库 ArrangeOverride 一致）。
+    /// 只用于附加时的首个尺寸；之后窗口再变化由库自身的 resize 路径跟进。
+    /// </summary>
+    internal static void SyncPtySizeToViewport(
+        TerminalTab tab, TerminalControl terminal, PtyStreamConnection pty)
+    {
+        if (!tab.IsAlive
+            || terminal.Bounds.Width <= 0
+            || terminal.Bounds.Height <= 0)
+        {
+            return;
+        }
+
+        var charWidth = terminal.CharWidth;
+        var charHeight = terminal.CharHeight;
+        if (charWidth <= 0 || charHeight <= 0)
+        {
+            return;
+        }
+
+        var cols = (int)((terminal.Bounds.Width - Math.Max(0, terminal.GutterWidth)) / charWidth);
+        var rows = (int)(terminal.Bounds.Height / charHeight);
+        if (cols <= 0 || rows <= 0)
+        {
+            return;
+        }
+
+        pty.Resize(cols, rows);
+        AppLog.Info($"Pty size synced to viewport: {cols}x{rows}");
     }
 
     // MobaXterm's terminal font is Consolas 10pt. Chinese has no Consolas
@@ -4798,7 +4840,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        await terminal.PasteAsync();
+        await PasteNormalizedAsync(terminal);
     }
 
     private async void OnTerminalKeyDown(object? sender, KeyEventArgs e)
@@ -4817,7 +4859,52 @@ public partial class MainWindow : Window
         }
 
         e.Handled = true;
-        await terminal.PasteAsync();
+        await PasteNormalizedAsync(terminal);
+    }
+
+    /// <summary>
+    /// 把剪贴板行尾规范成单个 \r 再写入 pty（MobaXterm 行为）：Windows 剪贴板文本
+    /// 是 CRLF，原样写入时远端 tty 的 ICRNL 把 \r 转成提交、随后的 \n 再多打一个
+    /// 换行 → 多行粘贴的每条命令之间多出一行空提示符。有选区时回退库默认粘贴
+    /// （保留“粘贴替换选区”行为），无文本时同样回退。
+    /// </summary>
+    internal static string NormalizePtyPasteText(string text) =>
+        text.Replace("\r\n", "\r").Replace('\n', '\r');
+
+    /// <summary>
+    /// 把文本行尾规范成单个 \r 后写入终端（bracketed-paste 模式时加包裹）。
+    /// 拆成独立方法便于测试（不依赖剪贴板）。
+    /// </summary>
+    internal static Task SendPasteTextAsync(TerminalControl terminal, string text)
+    {
+        text = NormalizePtyPasteText(text);
+        if (terminal.Terminal.BracketedPasteMode)
+        {
+            text = "\u001b[200~" + text + "\u001b[201~";
+        }
+
+        return terminal.SendInputAsync(text);
+    }
+
+    internal static async Task PasteNormalizedAsync(TerminalControl terminal)
+    {
+        if (terminal.Terminal.Selection.HasSelection)
+        {
+            // 粘贴替换选区：走库默认路径（保留其删除选区序列的行为）。
+            await terminal.PasteAsync();
+            return;
+        }
+
+        string? text = TopLevel.GetTopLevel(terminal)?.Clipboard is { } clip
+            ? await clip.TryGetTextAsync()
+            : null;
+
+        if (string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+
+        await SendPasteTextAsync(terminal, text);
     }
 
     private static string FormatRate(double bytesPerSecond)
