@@ -345,8 +345,11 @@
      ② 根因：UI 字体 Microsoft YaHei UI 没有真斜体，状态栏热分区（占用 ≥80%）设了
         FontStyle=Italic，Avalonia 让 Skia 现场合成斜体字形，读字体流时 AV；该 VDI 的
         /mnt/sangfor/vdb 恒为 82% → 每次监控一开就命中。全应用仅此一处 Italic。
-     ③ 修复：MonSegHot 去掉 FontStyle 设置，保留橙红 MonSegHotBrush + Bold（MobaXterm 的高占用
-        分区外观），RM06 断言改为 FontStyle.Normal；避免任何 Skia 合成斜体路径。
+     ③ 修复：MonSegHot 只保留橙红 MonSegHotBrush，去掉 FontStyle=Italic 与 FontWeight=Bold。
+        用户追问“为啥要粗体，跟 mobaxterm 一样吗”后，用 2026-10-30 的并排对照图（上 MobaXterm/
+        下 COMTool）4 倍放大复核：MobaXterm 的热分区是橙红、常规字重、正体，粗体与斜体都是我们
+        早期误读，遂一并去掉；RM06 断言 FontWeight.Normal + FontStyle.Normal，既对齐实样也避免
+        任何 Skia 合成字形路径。
      ④ 排查产物：/tmp/opencode/crash-1453.dmp（dump）、crash1026.txt（事件栈）；
         崩溃转储位于 VDI `%LOCALAPPDATA%\CrashDumps`。
 
