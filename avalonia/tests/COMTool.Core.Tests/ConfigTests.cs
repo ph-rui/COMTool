@@ -157,6 +157,42 @@ public sealed class ConfigTests : IDisposable
     }
 
     [Fact]
+    public void SaveAndLoad_RoundTripsWindowMaximized()
+    {
+        var path = Path.Combine(_directory, "config.json");
+        var config = new ComtoolConfig
+        {
+            Window = new WindowConfig
+            {
+                Width = 1000,
+                Height = 650,
+                Maximized = true,
+            },
+        };
+
+        config.Save(path);
+        var loaded = ComtoolConfig.Load(path);
+
+        Assert.Equal(1000, loaded.Window.Width);
+        Assert.Equal(650, loaded.Window.Height);
+        Assert.True(loaded.Window.Maximized);
+
+        // 默认值：旧配置无 maximized 键时反序列化为 false（不报错）。
+        var legacy = new ComtoolConfig
+        {
+            Window = new WindowConfig
+            {
+                Width = 850,
+                Height = 500,
+            },
+        };
+        var legacyPath = Path.Combine(_directory, "config-legacy.json");
+        legacy.Save(legacyPath);
+        var loadedLegacy = ComtoolConfig.Load(legacyPath);
+        Assert.False(loadedLegacy.Window.Maximized);
+    }
+
+    [Fact]
     public void SaveAndLoad_RoundTripsNetworkScanRange()
     {
         var path = Path.Combine(_directory, "config.json");

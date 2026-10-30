@@ -134,6 +134,8 @@ public partial class MainWindow : Window
         {
             UpdateMaximizeIcon();
             EnsureWindowsSnapFrame();
+            // 最大化/还原立即落盘，崩溃或强杀也不丢本次窗口状态。
+            PersistWindowSize();
         }
     }
 
@@ -3471,6 +3473,12 @@ public partial class MainWindow : Window
         Height = height;
         _lastNormalWidth = width;
         _lastNormalHeight = height;
+        // 窗口状态记忆（MobaXterm 行为）：最大化状态随下次启动恢复，
+        // 尺寸存的是 normal 态大小，恢复后再切最大化。
+        if (config.Maximized)
+        {
+            WindowState = WindowState.Maximized;
+        }
     }
 
     private static double NormalizeWindowSize(int value, double fallback, double minimum) =>
@@ -3504,6 +3512,7 @@ public partial class MainWindow : Window
                 Math.Clamp(_lastNormalWidth, MinimumWindowWidth, 10000));
             var height = (int)Math.Round(
                 Math.Clamp(_lastNormalHeight, MinimumWindowHeight, 10000));
+            var maximized = WindowState == WindowState.Maximized;
             var config = _config.Config.Window;
             if (config is null)
             {
@@ -3511,15 +3520,16 @@ public partial class MainWindow : Window
                 _config.Config.Window = config;
             }
 
-            if (config.Width == width && config.Height == height)
+            if (config.Width == width && config.Height == height && config.Maximized == maximized)
             {
                 return;
             }
 
             config.Width = width;
             config.Height = height;
+            config.Maximized = maximized;
             _config.Save();
-            AppLog.Info($"Window size saved: {width}x{height}");
+            AppLog.Info($"Window size saved: {width}x{height} maximized={maximized}");
         }
         catch (Exception ex)
         {

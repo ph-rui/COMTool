@@ -60,6 +60,76 @@ public sealed class TitleBarTests
         }
     }
 
+    [AvaloniaFact]
+    public void UI01_WindowMaximizedStateRestoredOnRestart()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                // 模拟"上次退出时是最大化"：config 里 window.maximized=true，
+                // 新启动的窗口应直接以最大化状态出现（MobaXterm 行为）。
+                env.SeedConfig(new ComtoolConfig
+                {
+                    Window = new WindowConfig
+                    {
+                        Width = 900,
+                        Height = 600,
+                        Maximized = true,
+                    },
+                });
+                window = new MainWindow { DataContext = new MainViewModel() };
+                window.Show();
+                RunJobs(window);
+                Assert.Equal(WindowState.Maximized, window.WindowState);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public void UI01_WindowMaximizedStatePersistedOnClose()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                window = new MainWindow { DataContext = new MainViewModel() };
+                window.Show();
+                RunJobs(window);
+                Assert.Equal(WindowState.Normal, window.WindowState);
+
+                // 用户点最大化后关闭：状态必须落盘（normal 尺寸也保留，
+                // 下次启动按 normal 尺寸恢复后再最大化）。
+                window.WindowState = WindowState.Maximized;
+                RunJobs(window);
+                Assert.Equal(WindowState.Maximized, window.WindowState);
+                window.Close();
+                RunJobs(window);
+                window = null; // 已关闭，避免 finally 二次 Close
+            });
+
+            var loaded = ComtoolConfig.Load(
+                Path.Combine(env.AvaloniaConfigDir, "config.json"));
+            Assert.NotNull(loaded.Window);
+            Assert.True(loaded.Window.Maximized);
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
     private static PointerPressedEventArgs CreatePress(
         Border titleBar,
         Window window,

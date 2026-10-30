@@ -188,6 +188,10 @@ public sealed class WindowConfig
     [JsonPropertyName("height")]
     public int Height { get; set; } = 500;
 
+    /// <summary>窗口最大化状态记忆，下次启动恢复（MobaXterm 行为）。</summary>
+    [JsonPropertyName("maximized")]
+    public bool Maximized { get; set; } = false;
+
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? Extra { get; set; }
 }
