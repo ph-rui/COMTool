@@ -306,7 +306,7 @@
         TitleBarTests.UI01_WindowMaximizedStateRestoredOnRestart（seed maximized=true →
         新窗口 Show 后即 Maximized）、TitleBarTests.UI01_WindowMaximizedStatePersistedOnClose
         （Normal→Maximized→Close → config 文件 maximized=true）。
-     App 219/219（Release）、Core 87/87；gate 第 25 轮 <pending>；提交 caea774，发布部署双份。
+     App 219/219（Release）、Core 87/87；gate 第 25 轮全 PASS（E2E 15/15，gate-r25.log）；提交 caea774，发布部署双份。
      Windows 实机 WIN-01 补核：最大化后关闭应用，重开窗口自动最大化；还原后关闭则恢复普通窗口。
 
    - 追加（2026-10-30，第 24 轮）：状态栏整排放大，比例对齐 MobaXterm
