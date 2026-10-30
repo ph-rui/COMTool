@@ -351,7 +351,15 @@
         早期误读，遂一并去掉；RM06 断言 FontWeight.Normal + FontStyle.Normal，既对齐实样也避免
         任何 Skia 合成字形路径。
      ④ 排查产物：/tmp/opencode/crash-1453.dmp（dump）、crash1026.txt（事件栈）；
-        崩溃转储位于 VDI `%LOCALAPPDATA%\CrashDumps`。
+        崩溃转储位于 VDI `%LOCALAPPDATA%\CrashDumps`；并排对照放大图为
+        /tmp/opencode/cmp-hot-4x.png（上 MobaXterm / 下 COMTool）。
+     App 223/223（Release）、Core 88/88；提交 6e99ebb（去斜体）、7fd756d（去粗体，只留橙红）、
+     f43a608（文档）。gate 第 27 轮全 PASS（含 Core/Sftp/Terminal/Connections/Zmodem/TestGate/
+     App 223，E2E 15/15，gate-r27b.log；首次 gate 因样式再调整主动中止并重跑）；
+     发布 win-x64 214,961,086 字节，双份部署校验 OK
+     （SHA256 fa46129b94f7efe9ebbed16905d11483a80df2259383ffa57f636e03ab62edef）。
+     Windows 实机待核：82% 分区为橙红常规正体；开着监控反复重启应用不再崩溃退出
+     （若再出现，查 `%LOCALAPPDATA%\CrashDumps` 是否新增 dump 及事件日志 1000/1026）。
 
    - 追加（2026-10-30，第 24 轮）：状态栏整排放大，比例对齐 MobaXterm
      （用户反馈 2026-10-30：附 MobaXterm/COMTool 同屏对照图“对比 mobaxterm，下面这排显示偏小了”）：
