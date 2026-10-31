@@ -581,6 +581,26 @@
         （SHA256 543912EB5CC9148819C3456DE9083D28CCDBF0833E711418E6D33DDE3B5AE260），deploy_r3.py 双份部署+SHA256 校验 OK。
         测试后已把用户 config 窗口尺寸恢复为原值 1443×916（侧栏 visible=true、monitor=true 亦保持原状）。
 
+   - 追加（2026-10-31，第 36 轮）：SSH 浏览器地球图标跟随当前选中标签（对齐 MobaXterm）
+     （用户 2026-10-31 反馈：附 COM99 标签激活但左栏仍显示地球的截图，“切换到COM的标签，SSH浏览器不会消失，这点需要对齐mobaxterm”）：
+     ① 根因：IsSshBrowserVisible 由 connectedSsh.Count > 0 驱动（MainViewModel.UpdateConnectionStates/LoadSessions），
+        只统计在线 SSH 会话、与当前选中标签无关；切到 COM 标签时 SelectedTab setter 已把 SidebarTab 从
+        SshBrowser 退回 Sessions，但第四格图标条件仍为真，于是残留在左栏。
+     ② 修复（MainViewModel.cs）：新增 _connectedSshSessions 保存最近一次连接状态集合；新方法
+        RefreshSshBrowserVisibility() 计算 IsSshBrowserVisible = 选中标签有 SftpPane（即 SSH 标签）且该标签的
+        SessionId 在在线集合中；SelectedTab setter、UpdateConnectionStates、LoadSessions 都调用它。
+        语义保持：断线仍隐藏（在线集合不再包含该会话）、快速连接（无保存会话）仍有图标（按 tab.SessionId 判断）；
+        切回仍在线的 SSH 标签图标自动恢复，无需重新登录。
+     ③ 测试：SidebarRailTests.UI16_SshBrowserIconHidesWhenASerialTabIsSelected（新增 AddSerialTab 辅助）——
+        SSH 连上图标出现 → 切 COM 标签图标消失且 SshBrowserPane 为空 → 切回 SSH 标签图标重现 → 断线后切回不出现。
+     ④ 结果（2026-10-31）：提交 b091e5b。gate-r36.log 全 PASS：Core 89/Sftp 42/Terminal 11/Connections 150/Zmodem 32/TestGate 49/App 238（含新增 1 项），E2E 15/15；RESULT PASS×2
+     ⑤ 实机 RDP 复验：1920×1080 会话（窗口最大化，config 预置 1443×916 maximized=true）实机操作：连 SSH（17:58:23）后第四格橙色地球出现；
+        点 COM99 串口标签（“Connected COM99”）→ 地球立即消失、左栏回 User sessions，只剩三格；切回 SSH 标签 → 地球重新出现、
+        点击仍能展开 SFTP 面板；SFTP 展开状态下再切 COM99 → 面板退回会话列表且地球消失；正常关闭后 config 仍为
+        1443×916/maximized=true（与测试前一致，无需恢复）。发布 win-x64 单文件 R2R 95,085,894 字节
+        （SHA256 5FD6D7B54ACF979F806E1E09A639A2962268E7521C577983FC4FEB5CD357E53），deploy_r3.py 双份部署+SHA256 校验 OK。
+        证据截图 rdp-r36-rail-compare.png：左=SSH 选中（有地球）、中=COM99 选中（无地球）、右=切回 SSH（地球恢复）。
+
      （用户反馈 2026-10-30：附 MobaXterm/COMTool 同屏对照图“对比 mobaxterm，下面这排显示偏小了”）：
      ① 实测对照（取参考图像素）：MobaXterm CPU 条 46×22px、小格外高约 26px、图标约 16px；
         我们原先 CPU 条 56×12px、小格 22px、图标 11px、状态栏行高 30px，整排偏薄偏小。
