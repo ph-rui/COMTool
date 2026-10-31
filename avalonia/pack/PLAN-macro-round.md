@@ -559,6 +559,28 @@
         取小，在 1280×800 的 RDP 会话里底栏被任务栏遮住（点不到）；已把用户 config 的窗口尺寸
         恢复为原值 1443×916，未改其它配置。
 
+   - 追加（2026-10-31，第 35 轮）：启动恢复窗口尺寸时钳制到主屏工作区（小屏底栏不再被任务栏遮住）
+     （用户 2026-10-31 确认：“修，直接钳制并正常保存”）：
+     ① 现象与根因：第 34 轮 RDP 实测时在 1280×800 会话里发现——config 保存的窗口尺寸 1443×916 来自更大
+        显示器，启动时原样还原、从不与当前屏幕工作区比较，窗口底部（SFTP 底栏“远程监控”）落到任务栏后面，
+        按钮完全点不到（点在该位置只会激活后面的窗口）。
+     ② 修复（MainWindow.axaml.cs）：ApplyWindowSize() 算出保存宽高后走 FitWindowToPrimaryScreen()——
+        取 Screens.Primary，用 WorkingArea/Scaling 换算成 DIP 工作区（已排除任务栏），再交给纯函数
+        ClampWindowSizeToWorkArea(desired, workArea, minimum) 取较小值，且不低于现有 500×320；
+        窗口是 WindowDecorations=None 无边框模式（自绘标题栏，Width/Height 即外框尺寸），不额外扣边框；
+        取不到屏幕信息（headless/平台未就绪）时行为不变；钳制值即 _lastNormalWidth/Height，随正常退出落盘
+        覆盖旧值（用户选定语义）；WindowStartupLocation=CenterScreen 会按新尺寸重新居中。
+     ③ 测试：新增 WindowSizingTests（7 项）——纯函数 5 项（放得下不改、超大缩到工作区、单轴溢出只缩该轴、
+        工作区小于最小值时保底最小值、工作区未知不改）+ headless 真窗 2 项（seed 4000×3000 启动后
+        window.Width/Height 不超过 Screens.Primary 工作区；seed 900×600 仍按 900×600 打开）。
+     ④ 结果（2026-10-31）：提交 f78871d。gate-r35.log 全 PASS：Core 89/Sftp 42/Terminal 11/Connections 150/Zmodem 32/TestGate 49/App 237（含 7 项 WindowSizingTests），E2E 15/15；RESULT PASS×2。
+     ⑤ 实机 RDP 复验：1280×800 会话（任务栏 40px、工作区 1280×760）+ config 预置 1443×916 启动 → 窗口启动即钳到 1280×760，
+        底栏完整可见；连 SSH（17:30:41）→ 开 SFTP（底栏绿色=开）→ 首击“远程监控”立即变灰，run.log 17:31:29
+        `Remote monitor toggle: devuser@192.0.2.48:22 -> off`，再点回开 17:31:48 `-> on`；正常关闭后 config 记录
+        `window.width/height = 1280×760`（钳制值落盘，符合选定语义）。发布 win-x64 单文件 R2R 95,085,865 字节
+        （SHA256 543912EB5CC9148819C3456DE9083D28CCDBF0833E711418E6D33DDE3B5AE260），deploy_r3.py 双份部署+SHA256 校验 OK。
+        测试后已把用户 config 窗口尺寸恢复为原值 1443×916（侧栏 visible=true、monitor=true 亦保持原状）。
+
      （用户反馈 2026-10-30：附 MobaXterm/COMTool 同屏对照图“对比 mobaxterm，下面这排显示偏小了”）：
      ① 实测对照（取参考图像素）：MobaXterm CPU 条 46×22px、小格外高约 26px、图标约 16px；
         我们原先 CPU 条 56×12px、小格 22px、图标 11px、状态栏行高 30px，整排偏薄偏小。
