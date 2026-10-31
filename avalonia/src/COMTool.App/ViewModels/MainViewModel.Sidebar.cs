@@ -86,8 +86,9 @@ public partial class MainViewModel
     private SidebarTab _sidebarTab = SidebarTab.Sessions;
 
     /// <summary>
-    /// True while at least one SSH session is connected. The MobaXterm rail
-    /// shows its SSH-browser icon only while an SSH login exists.
+    /// True while the selected tab is a live SSH session. The MobaXterm rail
+    /// shows its SSH-browser icon only for the current SSH login, so a COM tab
+    /// hides it even when other SSH tabs stay connected.
     /// </summary>
     [ObservableProperty]
     private bool _isSshBrowserVisible;

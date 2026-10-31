@@ -145,6 +145,59 @@ public sealed class SidebarRailTests
     }
 
     [AvaloniaFact]
+    public void UI16_SshBrowserIconHidesWhenASerialTabIsSelected()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        InMemoryPty? pty = null;
+        try
+        {
+            env.Run(() =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                window = CreateWindow(env);
+                var vm = Vm(window);
+                var sidebar = Sidebar(window);
+                var browser = sidebar.FindControl<Button>("RailSshBrowserButton")!;
+
+                var (sshTab, _, connection) = AddConnectedSshTab(window);
+                pty = connection;
+                window.UpdateConnectionStatesForTests();
+                RunJobs(window);
+                Assert.True(browser.IsVisible);
+
+                // 切到 COM（串口）标签：MobaXterm 把 SSH 浏览器图标收起。
+                var serialTab = AddSerialTab(window);
+                window.UpdateConnectionStatesForTests();
+                RunJobs(window);
+                Assert.Same(serialTab, vm.SelectedTab);
+                Assert.False(browser.IsVisible);
+                Assert.Null(vm.SshBrowserPane);
+
+                // 切回仍在线的 SSH 标签：橙色地球重新出现。
+                vm.SelectedTab = sshTab;
+                RunJobs(window);
+                Assert.True(browser.IsVisible);
+                Assert.Same(sshTab, vm.SelectedTab);
+
+                // 断线后即使切回该 SSH 标签，图标也不再出现。
+                sshTab.IsAlive = false;
+                window.UpdateConnectionStatesForTests();
+                vm.SelectedTab = serialTab;
+                vm.SelectedTab = sshTab;
+                RunJobs(window);
+                Assert.False(browser.IsVisible);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+            pty?.Dispose();
+        }
+    }
+
+    [AvaloniaFact]
     public void UI16_RailStaysVisibleWhenTheDockCollapses()
     {
         using var env = new TestEnvironment();
@@ -1915,6 +1968,30 @@ public sealed class SidebarRailTests
         terminal.AttachConnection(pty);
         RunJobs(window);
         return (tab, pane, pty);
+    }
+
+    /// <summary>
+    /// Adds a connected serial tab without touching a real port; the tab has
+    /// no SFTP pane and reports its transport as open.
+    /// </summary>
+    private static TerminalTab AddSerialTab(MainWindow window)
+    {
+        var viewModel = Vm(window);
+        var terminal = new TerminalControl { Process = string.Empty };
+        var tab = new TerminalTab
+        {
+            Title = "COM99",
+            SessionId = "COM99",
+            Kind = SessionKind.Serial,
+            Content = terminal,
+            Terminal = terminal,
+            StatusMessage = "Connected COM99",
+            IsTransportOpen = () => true,
+            CloseAction = () => { },
+        };
+        viewModel.AddTab(tab);
+        RunJobs(window);
+        return tab;
     }
 
     private static MainWindow CreateWindow(TestEnvironment env)

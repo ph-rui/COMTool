@@ -212,6 +212,12 @@ public partial class MainViewModel : ViewModelBase
 {
     private TerminalTab? _selectedTab;
 
+    // Session ids of the live SSH logins from the last UpdateConnectionStates
+    // call. The rail globe is shown only while the selected tab belongs to one
+    // of them (MobaXterm hides the SSH browser on serial/telnet/TCP tabs).
+    private IReadOnlySet<string> _connectedSshSessions =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
     public ObservableCollection<SidebarSection> Sections { get; } = new();
 
     public ObservableCollection<TerminalTab> Tabs { get; } = new();
@@ -280,6 +286,10 @@ public partial class MainViewModel : ViewModelBase
             OnPropertyChanged(nameof(SshBrowserPane));
             OnPropertyChanged(nameof(CanExecuteMacro));
             OnPropertyChanged(nameof(CanToggleRecording));
+
+            // The SSH-browser rail icon belongs to the selected tab, so a
+            // switch to a serial/telnet/TCP tab hides it (MobaXterm behavior).
+            RefreshSshBrowserVisibility();
 
             if (previousPane is not null && !ReferenceEquals(previousPane, _selectedTab?.SftpPane))
             {
@@ -376,8 +386,23 @@ public partial class MainViewModel : ViewModelBase
         }
 
         // The rail browser icon follows live connections, including quick
-        // connections that have no saved session behind them.
-        IsSshBrowserVisible = connectedSsh.Count > 0;
+        // connections that have no saved session behind them, and only shows
+        // while the selected tab is one of those SSH sessions.
+        _connectedSshSessions = connectedSsh;
+        RefreshSshBrowserVisibility();
+    }
+
+    /// <summary>
+    /// Shows the SSH-browser rail icon only while the selected tab is a live
+    /// SSH session that owns an SFTP pane. MobaXterm ties the browser to the
+    /// current session, so switching to a COM tab hides the globe even though
+    /// the SSH login itself stays connected; switching back brings it up.
+    /// </summary>
+    private void RefreshSshBrowserVisibility()
+    {
+        var selected = _selectedTab;
+        IsSshBrowserVisible = selected?.SftpPane is not null
+            && _connectedSshSessions.Contains(selected.SessionId);
         LeaveBrowserWhenNoSshIsLeft();
     }
 
@@ -400,8 +425,8 @@ public partial class MainViewModel : ViewModelBase
         IReadOnlySet<string>? connectedTelnet = null)
     {
         Sections.Clear();
-        IsSshBrowserVisible = connectedSsh.Count > 0;
-        LeaveBrowserWhenNoSshIsLeft();
+        _connectedSshSessions = connectedSsh;
+        RefreshSshBrowserVisibility();
 
         var serial = new SidebarSection { Title = "串口", ShowHeader = true };
         var availableSerial = config.PortScanSucceeded

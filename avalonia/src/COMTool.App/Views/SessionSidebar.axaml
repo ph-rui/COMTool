@@ -46,7 +46,7 @@
                      FontSize="16"
                      Foreground="#2f7ed8" />
         </Button>
-        <!-- MobaXterm shows this globe only while an SSH login is live. -->
+        <!-- MobaXterm shows this globe only while the selected tab is a live SSH login. -->
         <Button Name="RailSshBrowserButton"
                 Classes="RailButton"
                 Classes.active="{Binding RailSshBrowserActive}"
