@@ -117,6 +117,17 @@ public sealed partial class SftpPaneViewModel : ObservableObject
     }
 
     /// <summary>
+    /// 由视图在隧道阶段指针按下时调用：翻转监控开关。与
+    /// <see cref="SyncMonitorOn"/>（程序同步、不触发回调）不同，这是用户动作，
+    /// 所以会触发 <see cref="MonitorToggled"/>。视图随后把该次按下标记为已处理，
+    /// 抑制按钮自身的点击（及其 hover 守卫），保证状态恰好翻转一次。
+    /// </summary>
+    internal void ToggleMonitorFromPress()
+    {
+        IsMonitorOn = !IsMonitorOn;
+    }
+
+    /// <summary>
     /// Creates the view model of one panel. The factory is asked for the
     /// remote side when the panel loads, so that creating the view model
     /// touches no network.

@@ -35,6 +35,38 @@ public sealed partial class SftpPane : UserControl
         InitializeComponent();
 
         UpdateCommandState();
+
+        // 远程监控开关必须在第一次物理按下时就生效（用户 2026-10-31：刚连上 SSH 后
+        // 按钮绿色，点第一下没反应、第二下才变灰）。按钮自身的点击依赖 hover/
+        // pointer-over 状态，而首按下该状态可能尚未建立，ClickMode=Press 仍会吞掉
+        // 第一击。因此在隧道阶段（早于按钮自身逻辑）直接翻转视图模型，并把这次按下
+        // 标记为已处理，顺带抑制按钮内部点击，保证状态恰好翻转一次。
+        MonitorToggleButton.AddHandler(
+            InputElement.PointerPressedEvent,
+            OnMonitorTogglePressed,
+            RoutingStrategies.Tunnel);
+    }
+
+    /// <summary>
+    /// 隧道阶段处理远程监控按钮的左键按下：直接翻转视图模型并标记已处理，
+    /// 使按钮自身的点击（含 hover 守卫）不再触发，首击不丢、也不双切换。
+    /// 非左键不处理，交回按钮正常逻辑。
+    /// </summary>
+    private void OnMonitorTogglePressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            return;
+        }
+
+        var viewModel = ViewModel;
+        if (viewModel is null)
+        {
+            return;
+        }
+
+        viewModel.ToggleMonitorFromPress();
+        e.Handled = true;
     }
 
     /// <summary>

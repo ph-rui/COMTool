@@ -374,6 +374,95 @@ public sealed class RemoteMonitorFeatureTests
         }
     }
 
+    [AvaloniaFact]
+    public void RM04_MonitorToggleFirstPressAfterConnectTogglesOnceNoDoubleFire()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                window = new MainWindow { DataContext = new MainViewModel() };
+                window.Show();
+                window.StopPortTimerForTests();
+                var viewModel = (MainViewModel)window.DataContext!;
+
+                // 刚连上 SSH：监控开启（按钮绿色）。用户第一下真实鼠标点击。
+                // 第 34 轮：按钮自身点击依赖 hover 状态，首按下可能尚未建立而吞掉
+                // 第一击（用户反馈：第一下无效、第二下才变灰）。改为隧道阶段按下即翻转。
+                var runner = new FakeExecRunner(() => Task.FromResult(
+                    Dump("cpu 100 0 0 900 0", "1000 2000")));
+                var pane = new SftpPaneViewModel(() => new InMemoryFileSystem("/remote"));
+                var terminal = window.CreateTerminal();
+                var tab = new TerminalTab
+                {
+                    Title = "first-press",
+                    SessionId = "first-press",
+                    Kind = SessionKind.Ssh,
+                    Content = terminal,
+                    Terminal = terminal,
+                    SftpPane = pane,
+                    Connection = runner,
+                    MonitorEnabled = true,
+                    CloseAction = () => { },
+                };
+                viewModel.AddTab(tab);
+                viewModel.SidebarTab = SidebarTab.SshBrowser;
+                Dispatcher.UIThread.RunJobs();
+                window.UpdateLayout();
+                Dispatcher.UIThread.RunJobs();
+
+                Assert.True(pane.IsMonitorOn);
+                var button = window.GetVisualDescendants()
+                    .OfType<ToggleButton>()
+                    .FirstOrDefault(b => b.Name == "MonitorToggleButton");
+                Assert.NotNull(button);
+                Assert.True(button!.IsChecked);
+
+                var toggles = new List<bool>();
+                pane.MonitorToggled = v =>
+                {
+                    toggles.Add(v);
+                    viewModel.SetMonitorEnabled(tab, v);
+                };
+
+                var center = button.TranslatePoint(
+                    new Point(button.Bounds.Width / 2, button.Bounds.Height / 2),
+                    window);
+                Assert.NotNull(center);
+
+                // 第一下：必须立即翻转（关），恰好一次 —— 不丢首击、也不双触发。
+                window.MouseDown(center!.Value, MouseButton.Left);
+                window.MouseUp(center.Value, MouseButton.Left);
+                Dispatcher.UIThread.RunJobs();
+
+                Assert.False(button.IsChecked);
+                Assert.False(pane.IsMonitorOn);
+                Assert.False(tab.MonitorEnabled);
+                Assert.Single(toggles);
+                Assert.False(toggles[0]);
+
+                // 第二下：再翻回（开），累计恰好两次。
+                window.MouseDown(center.Value, MouseButton.Left);
+                window.MouseUp(center.Value, MouseButton.Left);
+                Dispatcher.UIThread.RunJobs();
+
+                Assert.True(button.IsChecked);
+                Assert.True(pane.IsMonitorOn);
+                Assert.True(tab.MonitorEnabled);
+                Assert.Equal(2, toggles.Count);
+                Assert.True(toggles[1]);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
     [Fact]
     public void RM04_MenuStateMapsToConfigRoundTrip()
     {
