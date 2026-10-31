@@ -3641,6 +3641,11 @@ public partial class MainWindow : Window
             config.Height,
             DefaultWindowHeight,
             MinimumWindowHeight);
+        // 保存的尺寸可能来自更大的显示器：直接还原会让窗口底部（SFTP 底栏
+        // “远程监控”）落到任务栏后面/屏幕外，按钮点不到。这里先按当前屏幕
+        // 工作区（已排除任务栏）钳制；窗口是无边框模式（WindowDecorations=None），
+        // Width/Height 就是窗口外框尺寸，所以不需要额外扣边框。
+        (width, height) = FitWindowToPrimaryScreen(width, height);
         Width = width;
         Height = height;
         _lastNormalWidth = width;
@@ -3655,6 +3660,51 @@ public partial class MainWindow : Window
 
     private static double NormalizeWindowSize(int value, double fallback, double minimum) =>
         value >= minimum && value <= 10000 ? value : fallback;
+
+    /// <summary>
+    /// 把保存的窗口宽高钳制到主屏工作区（DIP）。取不到屏幕信息（headless、
+    /// 平台未就绪）时原样返回，保持旧行为。
+    /// </summary>
+    private (double Width, double Height) FitWindowToPrimaryScreen(double width, double height)
+    {
+        // Avalonia 12 的 Screens 在平台未提供 IScreenImpl 时可能为 null（静态类型却是非空）。
+        var screens = Screens;
+        var screen = screens?.Primary;
+        if (screen is null || screen.Scaling <= 0)
+        {
+            return (width, height);
+        }
+
+        var area = new Size(
+            screen.WorkingArea.Width / screen.Scaling,
+            screen.WorkingArea.Height / screen.Scaling);
+        var clamped = ClampWindowSizeToWorkArea(
+            new Size(width, height),
+            area,
+            new Size(MinimumWindowWidth, MinimumWindowHeight));
+        return (clamped.Width, clamped.Height);
+    }
+
+    /// <summary>
+    /// 纯函数版本，便于单测：窗口不允许超过工作区，但不小于 <paramref name="minimum"/>；
+    /// 工作区比最小值还小的极端情况下保底为最小值（窗口仍可能超出，属不可避免）。
+    /// </summary>
+    internal static Size ClampWindowSizeToWorkArea(Size desired, Size workArea, Size minimum)
+    {
+        if (!double.IsFinite(workArea.Width)
+            || !double.IsFinite(workArea.Height)
+            || workArea.Width <= 0
+            || workArea.Height <= 0)
+        {
+            return desired;
+        }
+
+        var maxWidth = Math.Max(minimum.Width, workArea.Width);
+        var maxHeight = Math.Max(minimum.Height, workArea.Height);
+        return new Size(
+            Math.Min(desired.Width, maxWidth),
+            Math.Min(desired.Height, maxHeight));
+    }
 
     private void OnWindowSizeChanged(object? sender, SizeChangedEventArgs e)
     {
