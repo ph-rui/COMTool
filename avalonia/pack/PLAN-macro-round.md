@@ -520,6 +520,33 @@
         GlyphAdvance==2×CharWidth（精度 4），并断言拉丁 "A" 仍 1×CharWidth（防宽度-1 路径被破坏）。
           结果（2026-10-31）：提交 3616e5a（代码+测试+库打包，4 文件）。gate-r33.log 全 PASS：Core 89/Sftp 42/Terminal 11/Connections 150/Zmodem 32/TestGate 49/App 229（含 TERM22），E2E 15/15。发布 win-x64 单文件 R2R 95,085,875 字节（SHA256 C6C16B2F13DD18B2A699032DDA7E424BFF36CBE60E90E6F2B03632CBB36D8C50），deploy_r3.py 双份部署+SHA256 校验 OK。Windows 实机待核：SSH 中文欢迎页等中英文混排行对齐、无错位叠印（对照 MobaXterm）；注：修复在渲染层（全角固定 2 格 advance），headless(Linux) 已验证机制，Windows 字形来自 YaHei 的视觉效果需 RDP 确认。
 
+   - 追加（2026-10-31，第 34 轮）：SFTP 抽屉底栏“远程监控”按钮首击丢失修复（隧道阶段按下即翻转）
+     （用户 RDP 反馈：第一次连接 SSH，远程监控是开着的（按钮绿色），鼠标点第一下没反应还是绿色，
+     得点第二下才生效）：
+     ① 取证：VDI run.log 当天会话（10-31 11:47–11:49）零 "Remote monitor toggle" 日志——
+        该日志由 pane.MonitorToggled 回调写入（MainWindow 接线处），零日志证明第一按下
+        IsMonitorOn 从未翻转，即首击确实被吞（非“翻转了但没显示”）。
+     ② 根因：r31 已把按钮改为 ClickMode=Press（按下即切换），但按钮自身的 Click 仍依赖
+        hover/pointer-over 状态；刚连上 SSH 后的第一次按下该状态可能尚未建立，
+        首击被按钮内部逻辑吞掉，ClickMode=Press 不足以根治。
+     ③ 修复：SftpPane code-behind 给 MonitorToggleButton 挂隧道阶段
+        PointerPressed（AddHandler(..., RoutingStrategies.Tunnel)）——左键按下时直接调用
+        ViewModel.ToggleMonitorFromPress()（翻转 IsMonitorOn，非 suppress 即触发 MonitorToggled，
+        上层照常记日志/启停轮询/落盘），并 e.Handled=true 抑制按钮内部 Click（防双切换）；
+        保留 IsChecked 的 TwoWay 绑定（状态开关失去 :pressed 视觉/鼠标取焦，可接受）。
+        非左键不处理，交回按钮正常逻辑。
+     ④ 测试：RemoteMonitorFeatureTests.RM04_MonitorToggleFirstPressAfterConnectTogglesOnceNoDoubleFire——
+        headless 建监控开启的 SSH 标签，模拟刚连上后的第一下真实点击（Headless MouseDown/MouseUp）：
+        断言首按即切换（按钮变灰、IsMonitorOn=false、tab.MonitorEnabled=false）且恰好一次
+        （Assert.Single(toggles)，证明 e.Handled 抑制了按钮自身 Click、无双切换）；第二下再翻回
+        （累计恰好两次）。既有 RM04_MonitorToggleFirstRealClickTurnsOffTheRunningMonitor 保持通过。
+     结果（2026-10-31）：提交 f9fba2b（代码+测试，3 文件）。gate-r34.log 全 PASS：
+     Core 89/Sftp 42/Terminal 11/Connections 150/Zmodem 32/TestGate 49/App 230（含新回归），E2E 15/15。
+     发布 win-x64 单文件 R2R 95,085,866 字节
+     （SHA256 13E91960A06C1201AD708BCE80F99CF3A40EFA1DCE583C28C0D46BBE53336E3A），
+     deploy_r3.py 双份部署+SHA256 校验 OK。Windows 实机待核：刚连上 SSH 后第一次点“远程监控”
+     立即变灰/关（第一下就生效，不再需要点第二下）。
+
      （用户反馈 2026-10-30：附 MobaXterm/COMTool 同屏对照图“对比 mobaxterm，下面这排显示偏小了”）：
      ① 实测对照（取参考图像素）：MobaXterm CPU 条 46×22px、小格外高约 26px、图标约 16px；
         我们原先 CPU 条 56×12px、小格 22px、图标 11px、状态栏行高 30px，整排偏薄偏小。
