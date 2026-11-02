@@ -581,7 +581,7 @@
         （SHA256 543912EB5CC9148819C3456DE9083D28CCDBF0833E711418E6D33DDE3B5AE260），deploy_r3.py 双份部署+SHA256 校验 OK。
         测试后已把用户 config 窗口尺寸恢复为原值 1443×916（侧栏 visible=true、monitor=true 亦保持原状）。
 
-   - 追加（2026-10-31，第 37 轮）：终端右键菜单三落地——查找 / 字体设置 / 录制终端输出到文件
+   - 追加（2026-11-02，第 37 轮）：终端右键菜单三落地——查找 / 字体设置 / 录制终端输出到文件
      （用户 2026-10-31 反馈：附终端 Shift+右键菜单截图“有些是没实现的吧？”→ 确认 9 个置灰占位项，
      用户拍板“全部 9 项都实现”，本轮先落前三项；剩余 6 项 RTF/终端显示/语法高亮/打印/特殊命令/事件日志 后续轮次）：
      ① 查找（TERM-23）：Ctrl+Shift+F 或终端菜单「查找」在终端区底部弹出内联查找条（输入框+n/m 计数+上一个/下一个/关闭，
@@ -604,8 +604,23 @@
         Ctrl+Shift+F 隧道路由；TERM24：字体族构造 3 项含空值回落与 CJK 回退链、config 往返与缺键默认、应用到全部终端；
         TERM25：录制捕获 InMemoryPty 输出字节、关 tab 自动停录）；TERM21 菜单断言更新（查找/字体设置/录制输出
         由置灰改可用）。
-     ⑤ 结果（2026-10-31）：提交 {COMMIT}。gate-r37.log 全 PASS：{GATE}
-     ⑥ 实机 RDP 复验：{RDP}
+     ⑤ 结果（2026-11-02）：提交 6df0c88。gate-r37.log 全 PASS：Core 89/Sftp 42/Terminal 11/Connections 150/Zmodem 32/TestGate 49/App 249（含新增 10 项），E2E 15/15；RESULT PASS×2
+     ⑥ 实机验证（1920×1080，2026-11-02；中途用户改为直接操作电脑，RDP 停用，后续走 SSH）：连 SSH（run.log 10:01:52 terminal attached，pty 210x56）→
+        Ctrl+Shift+F 弹出底部查找条，搜 R37_SEARCH_TEST_12345 命中 1/2 且首命中橙色高亮 ✓；
+        Shift+右键菜单「查找/字体设置/录制终端输出到文件」三项均黑色可用 ✓（截图核对）；
+        Shift+右键→字体设置 对话框弹出、字体族 Consolas 正确。
+        【发现缺陷】字号框实机显示残缺 "1"（用户坐席确认）。排查：headless 探针 Value=13.5/Text="13.5" 均正常、
+        点"确定"后 config.json 正确落盘 fontSize:13.5（内部值无错），定性为纯显示/渲染时序问题；
+        录制输出的实机落盘未做端到端（单测已覆盖写文件/关 tab 停录，菜单接线已实机核对）。
+     ⑦ 字号显示修复（同轮收尾）：根因线索——Fluent 主题模板内 TextBox.Text 是 TemplateBinding 到 NumericUpDown 的
+        Text 字符串属性（构造期只设 Value 时首帧文本未同步，headless 同步 RunJobs 不可复现）。修复：构造期显式
+        Text=InvariantCulture("13.5") + dialog.Opened 后强制重同步 Value/Text 双保险 + [FontDlg] 诊断日志
+        （实机首次打开可经 run.log 读真实 Value/Text/FontSize/Bounds）；新增测试接缝 LastFontDialogForTests/
+        ShowFontDialogForTestsAsync 与回归测试 TERM24_FontDialogShowsConfiguredFontSizeAndOkKeepsDefault
+        （对话框打开→Value=13.5/Text="13.5"→点"确定"→config 无副作用）。提交 062f1ae。
+        gate-r37fix2.log 全 PASS：Core 89/Sftp 42/Terminal 11/Connections 150/Zmodem 32/TestGate 49/App 250（含新增 11 项），E2E 15/15；RESULT PASS×2
+     ⑧ 实机复验（待用户坐席操作）：新包打开「字体设置」，字号框应显示 13.5；如仍异常，经 SSH 读 run.log 的
+        [FontDlg] 行定位（诊断日志一次即可判定 Value/Text/FontSize/Bounds 实际值）。
 
    - 追加（2026-10-31，第 36 轮）：SSH 浏览器地球图标跟随当前选中标签（对齐 MobaXterm）
      （用户 2026-10-31 反馈：附 COM99 标签激活但左栏仍显示地球的截图，“切换到COM的标签，SSH浏览器不会消失，这点需要对齐mobaxterm”）：
