@@ -653,6 +653,41 @@
         解耦，任意平台/DPI 恒定 2 行。gate-r37fix8.log 全 PASS（App 250，E2E 15/15）；发布 888878F8… 双份部署+校验 OK。
      ⑯ 实机复验（五，待用户坐席操作）：新包打开「字体设置」，窗口应紧凑（约 230px 高），13.5 显示、
         按钮贴底部 20px 边距；打开对话框后可经 SSH run.log 的 [FontDlg] dlgBounds 行核对实际窗口高度。
+      ⑰ 免 RDP 实机自检通道（提交 99525f0）：本机无 xfreerdp 且非 root 装不了，改在应用内加
+         `--selftest-fontdlg` 启动参数——启动 1.5s 后自动打开字体对话框，等校正链执行完，把
+         clientSize/dlgBounds/确定/取消按钮底边与间隙逐行写 run.log 后自退出（exit 0）。经 SSH 读
+         run.log 即得实机真实几何，比截图目检更精确。同轮改显式 ClientSize(420×230) 初始 +
+         Opened 后按钮底边校正（目标=底边+20，ContextIdle 复验≤3 防乒乓）。实机自测 20:11
+         （构建 9097C284）：初始 420×230（720 巨幅窗已消失 ✓）、buttonBottom=180、target=200，
+         但 4 次校正全部被弹回 230，最终 gap=50 → 显示后校正在实机同样输给回环。
+      ⑱ 根因坐实（诊断构建 CE483EC8，实机自测 20:24）：ClientSize 观察者 + Resized 事件 trace
+         拿到完整乒乓序列：set 200(Application) → Resized 230(Layout) → set 200 → Resized 230…
+         调用栈：陈旧布局趟 ArrangeSetBounds(旧值230) → ResizePlatformImpl(Layout) →
+         WindowImpl.Resize → SetWindowPlacement → WM_SIZE → HandleResized → ClientSize 属性被写回
+         230。即：布局根（TopLevelHost，internal 不可达）自初始显示缓存了旧测量约束，显示后
+         任何 ClientSize 校正都会触发一轮按旧约束的布局趟并把旧尺寸推回平台——校正永远输给
+         反馈环，窗口停在创建时的 ClientSize。headless 复现同样序列（230/195 交替，
+         headless 平台 Resize 经 Send 优先级异步 Post）。
+      ⑲ 终版方案：显示前预测量定高（提交 9d78505 + 69b9498，构建 E911378A）：
+         ShowDialog 之前把内容面板临时挂入主窗根（主题/字体已生效的真实排版上下文）里一个
+         420 宽（与对话框客户区同宽，换行一致）、不可见的 Grid，先 UpdateLayout 让样式生效，
+         再显式 content.Measure(420×∞) 量出精确内容高 probeH，以 ceil(probeH)+2 一次性创建窗口
+         （SetClientSize 经 FontSettingsWindow 子类——12 里 TopLevel.ClientSize setter 是
+         protected，CS1540）；打开后无显示后 resize → 无回弹源。显示后按钮底边校正
+         （CorrectFontDialogHeight，ContextIdle 复验≤3）保留为兜底。
+         两个实现坑（headless scratch 复现修复）：(a) Avalonia 12 视觉子树不自动迁移父级，
+         探针摘下后必须先 probeHost.Children.Remove(content) 再挂 dialog，否则抛
+         "already has a visual parent Grid"（异常被 async 吞进 Task → 对话框永不打开、测试超时）；
+         (b) 布局趟会把探针 DesiredSize 钳到所在行高（探针落入 RootGrid 固定 35px 标题栏行，
+         实测 probeH=35 走 230 fallback），故必须显式 Measure 取确定性值。
+         TERM24 改收敛泵（≤10 次 RunJobs+UpdateLayout 至稳定）+ 不变量断言：按钮不裁切、
+         客户区高 <400（拦 720 回归）、底部间隙 ≤75（拦 134px 悬空；headless 平台回环最坏
+         停在初始值，实机像素级贴合由 selftest 核验）。
+         **实机自测 21:18（E911378A）：pre-measure probeH=200 dlgH=202，clientSize=420×202，
+         按钮底边 180，gap=22（20px 边距 + 2px 预测量余量）——五轮实机复验收敛：
+         裁切(240)/悬空(320)/巨幅窗(720×2)/gap50(230) 全部消失。gate-r37fix11 全 PASS：
+         Core 89/Sftp 42/Terminal 11/Connections 150/Zmodem 32/TestGate 49/App 250，
+         E2E 15/15；RESULT PASS×2。构建 E911378A 双份部署+SHA 校验 OK。**
 
    - 追加（2026-10-31，第 36 轮）：SSH 浏览器地球图标跟随当前选中标签（对齐 MobaXterm）
      （用户 2026-10-31 反馈：附 COM99 标签激活但左栏仍显示地球的截图，“切换到COM的标签，SSH浏览器不会消失，这点需要对齐mobaxterm”）：
