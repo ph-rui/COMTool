@@ -5186,6 +5186,35 @@ public partial class MainWindow : Window
         public void SetClientSize(Size size) => ClientSize = size;
     }
 
+    /// <summary>临时诊断（定位 Win32 下校正尺寸被重置的来源，确认后删除）。</summary>
+    private sealed class FontDlgDiag
+    {
+        private static void Log(string line)
+        {
+            try
+            {
+                AppLog.Info("[FontDlg-DIAG] " + line);
+            }
+            catch { }
+        }
+
+        public static void Instrument(FontSettingsWindow dialog)
+        {
+            dialog.GetObservable(Avalonia.Controls.TopLevel.ClientSizeProperty).Subscribe(
+                new SizeObserver());
+            dialog.Resized += (_, e) =>
+                Log($"ResizedEvt client={e.ClientSize} reason={e.Reason}");
+        }
+
+        private sealed class SizeObserver : System.IObserver<Size>
+        {
+            public void OnNext(Size value)
+                => Log($"ClientSize -> {value}\n  at: {Environment.StackTrace}");
+            public void OnError(Exception error) { }
+            public void OnCompleted() { }
+        }
+    }
+
     private async Task ShowTerminalFontDialogAsync()
     {
         if (_config is null)
@@ -5303,10 +5332,26 @@ public partial class MainWindow : Window
                 },
             },
         };
+        // 显示前预测量：把内容面板临时挂到主窗根（主题已生效的真实排版上下文）量出
+        // 精确内容高度，再以该高度创建对话框客户区。这是 Win32 下唯一稳定的定点——
+        // 显示后改尺寸会被陈旧布局趟推回初始值（实机复验证实：校正 200 四次全部
+        // 被弹回 230；SizeToContent.Height 在 Win32 两次量出 720）。
+        double probeH = 0;
+        if (this.Content is Panel rootPanel)
+        {
+            rootPanel.Children.Add(content);
+            content.Opacity = 0;
+            content.IsHitTestVisible = false;
+            UpdateLayout();
+            probeH = content.DesiredSize.Height;
+            rootPanel.Children.Remove(content);
+            content.Opacity = 1;
+            content.IsHitTestVisible = true;
+            UpdateLayout();
+        }
+        double dlgH = probeH > 40 ? Math.Ceiling(probeH) + 2 : 230;
         dialog.Content = content;
-        // 初始客户区：宽 420（内容列 = 420-20*2 = 380），高 230 为接近真实内容的估计值，
-        // Opened 后按实机字体重测内容高度再精确校正（见下方 Post 逻辑）。
-        dialog.SetClientSize(new Size(420, 230));
+        dialog.SetClientSize(new Size(420, dlgH));
 
         // 实机（RDP/Windows 渲染）下 NumericUpDown 对象初始化器里设置的 Value
         // 可能来不及把文本刷进模板内部 TextBox（headless 同步 RunJobs 时不可复现），
@@ -5334,6 +5379,7 @@ public partial class MainWindow : Window
         };
 
         LastFontDialogForTests = dialog;
+        FontDlgDiag.Instrument(dialog); // 临时诊断，定位后删除
         try
         {
             await dialog.ShowDialog(this);
@@ -5394,6 +5440,11 @@ public partial class MainWindow : Window
         }
 
         dialog.SetClientSize(new Size(dialog.ClientSize.Width, target));
+        // 再失效一次窗口自身测量/排布并同步布局，尽量让后续布局趟使用最新尺寸
+        // （平台级陈旧约束由"显示前预测量"从源头消除，此处为兜底）。
+        dialog.InvalidateMeasure();
+        dialog.InvalidateArrange();
+        dialog.UpdateLayout();
         AppLog.Info($"[FontDlg] post-layout: set {dialog.ClientSize} target={target:0.#} " +
             $"buttonBottom={buttonBottom:0.#} attempt={attempt}");
 
