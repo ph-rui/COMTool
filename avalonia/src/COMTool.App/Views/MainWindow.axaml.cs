@@ -6079,12 +6079,12 @@ public partial class MainWindow : Window
                     "$ProgressPreference='SilentlyContinue';$ErrorActionPreference='Stop'" +
                     ";Add-Type -AssemblyName System.Windows.Forms" +
                     ";$do=[System.Windows.Forms.Clipboard]::GetDataObject()" +
-                    "';FORMATS='+($do.GetFormats() -join '|')" +
+                    ";'FORMATS='+($do.GetFormats() -join '|')" +
                     ";if($do.GetDataPresent([System.Windows.Forms.DataFormats]::Rtf)){" +
                     "$r=[string]$do.GetData([System.Windows.Forms.DataFormats]::Rtf)" +
-                    "';RTF-LEN='+$r.Length" +
-                    "';RTF-HEAD='+$r.Substring(0,[Math]::Min(160,$r.Length))" +
-                    "};else{'RTF-ABSENT'}";
+                    ";'RTF-LEN='+$r.Length" +
+                    ";'RTF-HEAD='+$r.Substring(0,[Math]::Min(160,$r.Length))" +
+                    "}else{'RTF-ABSENT'}";
                 var (code, outp, err) = await TerminalPrint.RunPowershellAsync(readback);
                 AppLog.Info($"[SelfTest] r38: rtf-clip write={writeOk} code={code} hasMarker={(outp ?? "").Contains(rtfMarker)} " +
                     $"out=[{TerminalPrint.TrimNoise(outp)}] err=[{TerminalPrint.TrimNoise(err)}]");
