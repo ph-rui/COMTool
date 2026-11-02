@@ -309,15 +309,24 @@ public sealed class TerminalMenuFeatureTests
                     .OfType<Button>().FirstOrDefault(b => Equals(b.Content, "确定"));
                 Assert.NotNull(ok);
 
-                // 回归（实机"取消/确定显示不全"）：对话框为固定高度且不可缩放，
-                // 内容超限时底部按钮被窗口边缘裁切。确定/取消必须完整落在客户区内。
+                // 回归（实机"取消/确定显示不全"，两次）：对话框高度自适应内容
+                // （SizeToContent.Height）。按钮必须完整落在客户区内（固定 240 时
+                // 被裁切），且按钮底边到客户区底部不能留有 45px 以上大空白
+                // （固定 320 时按钮悬空、底部大片空白）。
                 var cancel = dialog.GetVisualDescendants()
                     .OfType<Button>().FirstOrDefault(b => Equals(b.Content, "取消"));
                 Assert.NotNull(cancel);
-                Assert.True(ok!.Bounds.Bottom <= dialog.ClientSize.Height,
-                    $"OK button bottom {ok.Bounds.Bottom:0.#} exceeds client height {dialog.ClientSize.Height:0.#}");
-                Assert.True(cancel!.Bounds.Bottom <= dialog.ClientSize.Height,
-                    $"Cancel button bottom {cancel.Bounds.Bottom:0.#} exceeds client height {dialog.ClientSize.Height:0.#}");
+                Point? okBottom = ok.TranslatePoint(new Point(0, ok.Bounds.Height), dialog);
+                Point? cancelBottom = cancel.TranslatePoint(new Point(0, cancel.Bounds.Height), dialog);
+                Assert.NotNull(okBottom);
+                Assert.NotNull(cancelBottom);
+                double clientH = dialog.ClientSize.Height;
+                Assert.True(okBottom!.Value.Y <= clientH,
+                    $"OK button bottom {okBottom.Value.Y:0.#} exceeds client height {clientH:0.#} (dialog too short, button clipped)");
+                Assert.True(clientH - okBottom.Value.Y <= 45,
+                    $"bottom gap {clientH - okBottom.Value.Y:0.#} too large (dialog should size to content)");
+                Assert.True(cancelBottom!.Value.Y <= clientH,
+                    $"Cancel button bottom {cancelBottom.Value.Y:0.#} exceeds client height {clientH:0.#} (dialog too short, button clipped)");
 
                 ok.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
                 RunJobs(window);
