@@ -281,6 +281,12 @@ public partial class MainWindow : Window
         {
             _ = RunFontDialogSelfTestAsync();
         }
+        // --selftest-r38：实机自检 r38 三项（RTF 剪贴板/事件日志/打印），
+        // 结果写 run.log 后退出，见 RunR38SelfTestAsync。
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r38"))
+        {
+            _ = RunR38SelfTestAsync();
+        }
     }
 
     private void RefreshPorts()
@@ -5178,10 +5184,11 @@ public partial class MainWindow : Window
         "Consolas", "Cascadia Mono", "Courier New", "Microsoft YaHei UI", "Noto Sans Mono CJK SC",
     };
 
-    /// <summary>字体对话框窗口：Avalonia 12 中 <c>TopLevel.ClientSize</c> 的 setter 是 protected，
+    /// <summary>精确客户区窗口：Avalonia 12 中 <c>TopLevel.ClientSize</c> 的 setter 是 protected，
     /// 外部代码（MainWindow）无法直接给客户区赋值（CS1540）。经此子类暴露，
-    /// 保证窗口以精确客户区尺寸创建（Width/Height 含边框与标题栏，DPI 相关，不可用）。</summary>
-    private sealed class FontSettingsWindow : Window
+    /// 保证窗口以精确客户区尺寸创建（Width/Height 含边框与标题栏，DPI 相关，不可用）。
+    /// 字体设置/事件日志等需要精确客户区尺寸的对话框共用。</summary>
+    private sealed class ClientSizedWindow : Window
     {
         public void SetClientSize(Size size) => ClientSize = size;
     }
@@ -5196,7 +5203,7 @@ public partial class MainWindow : Window
         var currentFamily = TerminalFontPrimary;
         var currentSize = ClampTerminalFontSize(_config.Config.Terminal.FontSize);
 
-        var dialog = new FontSettingsWindow
+        var dialog = new ClientSizedWindow
         {
             Title = "字体设置",
             MinWidth = 380,
@@ -5385,7 +5392,7 @@ public partial class MainWindow : Window
     /// 平台 resize 回环是异步的（headless 经 Send 优先级 Post，Win32 经窗口消息），
     /// 陈旧布局趟可能把旧尺寸重新发回平台、覆盖本次校正（headless 实测复现），
     /// 故每次设置后再调度一次低优先级（ContextIdle）复验，最多 3 次，防乒乓死循环。</summary>
-    private void CorrectFontDialogHeight(FontSettingsWindow dialog, StackPanel content, int attempt)
+    private void CorrectFontDialogHeight(ClientSizedWindow dialog, StackPanel content, int attempt)
     {
         if (!dialog.IsVisible)
         {
@@ -5665,7 +5672,8 @@ public partial class MainWindow : Window
                 terminal.Terminal.Selection.SelectAll();
                 await terminal.CopyAsync();
             }));
-        menu.Items.Add(TerminalMenuItem("复制带格式文本（RTF）", null, false, null));
+        menu.Items.Add(TerminalMenuItem("复制带格式文本（RTF）", null, hasSelection,
+            async () => { await CopyTerminalRtfAsync(terminal, tab); }));
         menu.Items.Add(TerminalMenuItem("粘贴", "Shift+INSERT", true,
             async () => { await PasteNormalizedAsync(terminal); }));
         menu.Items.Add(TerminalMenuItem("查找", "Ctrl+Shift+F", true,
@@ -5717,7 +5725,8 @@ public partial class MainWindow : Window
             }));
         menu.Items.Add(TerminalMenuItem("保存到文件", "Ctrl+Shift+S", live,
             async () => { await SaveTerminalOutputAsync(tab, terminal); }));
-        menu.Items.Add(TerminalMenuItem("打印", "Ctrl+Shift+P", false, null));
+        menu.Items.Add(TerminalMenuItem("打印", "Ctrl+Shift+P", live,
+            async () => { await PrintTerminalAsync(terminal, tab); }));
         menu.Items.Add(new Separator());
         menu.Items.Add(TerminalMenuItem("使用 Zmodem 接收文件", null, live && !zmodemBusy,
             async () =>
@@ -5740,7 +5749,12 @@ public partial class MainWindow : Window
             }));
         menu.Items.Add(BuildEncodingMenuItem());
         menu.Items.Add(TerminalMenuItem("特殊命令", null, false, null));
-        menu.Items.Add(TerminalMenuItem("事件日志", null, false, null));
+        menu.Items.Add(TerminalMenuItem("事件日志", null, true,
+            () =>
+            {
+                _ = ShowEventLogDialogAsync();
+                return Task.CompletedTask;
+            }));
 
         LastTerminalMenuForTests = menu;
         try
@@ -5883,6 +5897,271 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             _ = ShowErrorAsync($"保存终端输出失败：{ex.Message}");
+        }
+    }
+
+    // ==================== r38：RTF 复制 / 事件日志 / 打印 ====================
+
+    /// <summary>
+    /// 复制带格式文本（RTF）：选区 → RTF（保留逐格颜色）+ 纯文本，三格式写剪贴板。
+    /// "Rich Text Format" 平台格式名与 Windows 预注册 CF_RTF(0x0305) 精确匹配，
+    /// Word/WordPad 可还原（Win32 剪贴板对平台名走 RegisterClipboardFormat，源码坐实）；
+    /// "text/rtf" 供 X11/Wayland MIME 兼容；纯文本兜底保证任何应用可粘贴。
+    /// </summary>
+    internal async Task CopyTerminalRtfAsync(TerminalControl terminal, TerminalTab? tab)
+    {
+        try
+        {
+            var fontSize = _config is null
+                ? (TerminalFontSizeMin + TerminalFontSizeMax) / 2
+                : ClampTerminalFontSize(_config.Config.Terminal.FontSize);
+            var rtf = TerminalRtf.BuildRtf(terminal.Terminal, fontSize, TerminalFontPrimary);
+            if (rtf is null)
+            {
+                if (tab is not null)
+                {
+                    tab.StatusMessage = "无选区可复制";
+                    tab.StatusBrush = StatusInfoBrush;
+                }
+                return;
+            }
+
+            var plain = terminal.Terminal.Selection.GetSelectionText();
+            var transfer = new DataTransfer();
+            transfer.Add(DataTransferItem.Create(
+                DataFormat.CreateStringPlatformFormat("Rich Text Format"), rtf));
+            transfer.Add(DataTransferItem.Create(
+                DataFormat.CreateStringPlatformFormat("text/rtf"), rtf));  // platform：原样传平台（X11 即 MIME atom；Win32 多注册一格式无副作用）
+            transfer.Add(DataTransferItem.CreateText(plain));
+            var clip = TopLevel.GetTopLevel(terminal)?.Clipboard;
+            if (clip is not null)
+            {
+                await clip.SetDataAsync(transfer);
+            }
+
+            if (tab is not null)
+            {
+                tab.StatusMessage = "已复制带格式文本（RTF）";
+                tab.StatusBrush = StatusInfoBrush;
+            }
+        }
+        catch (Exception ex)
+        {
+            if (tab is not null)
+            {
+                tab.StatusMessage = $"复制 RTF 失败：{ex.Message}";
+                tab.StatusBrush = StatusErrorBrush;
+            }
+        }
+    }
+
+    internal Window? LastEventLogDialogForTests { get; private set; }
+    internal Task ShowEventLogForTestsAsync() => ShowEventLogDialogAsync();
+
+    /// <summary>事件日志对话框：显示 run.log 尾部 200 行（只读）+「刷新」按钮重读。</summary>
+    private async Task ShowEventLogDialogAsync()
+    {
+        var dialog = new ClientSizedWindow
+        {
+            Title = "事件日志",
+            CanResize = true,
+            ShowInTaskbar = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+        };
+        var box = new TextBox
+        {
+            Name = "EventLogBox",
+            IsReadOnly = true,
+            AcceptsReturn = true,
+            TextWrapping = TextWrapping.Wrap,
+            FontFamily = new FontFamily("Consolas, Cascadia Mono, Courier New"),
+            FontSize = 12,
+            Margin = new Thickness(10, 10, 10, 4),
+        };
+        var refresh = new Button { Content = "刷新", MinWidth = 88, Margin = new Thickness(0, 0, 8, 0) };
+        var close = new Button { Content = "关闭", MinWidth = 88 };
+        refresh.Click += (_, _) => box.Text = ReadEventLogTail();
+        close.Click += (_, _) => dialog.Close();
+        var buttonRow = new StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+            Margin = new Thickness(10, 0, 10, 10),
+            Children = { refresh, close },
+        };
+        var root = new DockPanel { LastChildFill = true };
+        DockPanel.SetDock(buttonRow, Dock.Bottom);
+        root.Children.Add(buttonRow);
+        root.Children.Add(box);
+        dialog.Content = root;
+        dialog.SetClientSize(new Size(780, 480));
+        box.Text = ReadEventLogTail();
+        LastEventLogDialogForTests = dialog;
+        try
+        {
+            await dialog.ShowDialog(this);
+        }
+        finally
+        {
+            if (ReferenceEquals(LastEventLogDialogForTests, dialog))
+            {
+                LastEventLogDialogForTests = null;
+            }
+        }
+    }
+
+    private static string ReadEventLogTail(int maxLines = 200)
+    {
+        var path = AppLog.Path;
+        try
+        {
+            if (!File.Exists(path))
+            {
+                return "（日志文件尚不存在）" + path;
+            }
+            var lines = File.ReadLines(path)
+                .Where(l => !string.IsNullOrEmpty(l))
+                .TakeLast(maxLines)
+                .ToArray();
+            return lines.Length == 0 ? "（日志为空）" : string.Join(Environment.NewLine, lines);
+        }
+        catch (Exception ex)
+        {
+            return "（读取日志失败：" + ex.Message + "）";
+        }
+    }
+
+    /// <summary>
+    /// 打印终端内容（选区优先，无选区取整屏转录）。Avalonia 12 无打印 API，
+    /// Windows 下走 PowerShell + WinForms 系统打印对话框（见 TerminalPrint）。
+    /// </summary>
+    internal async Task PrintTerminalAsync(TerminalControl terminal, TerminalTab? tab)
+    {
+        var term = terminal.Terminal;
+        var text = term.Selection.HasSelection
+            ? term.Selection.GetSelectionText()
+            : TerminalTranscript.Capture(terminal);
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            if (tab is not null)
+            {
+                tab.StatusMessage = "无内容可打印";
+                tab.StatusBrush = StatusInfoBrush;
+            }
+            return;
+        }
+        var (ok, message) = await TerminalPrint.PrintTextAsync(text);
+        if (tab is not null)
+        {
+            tab.StatusMessage = message;
+            tab.StatusBrush = ok ? StatusInfoBrush : StatusErrorBrush;
+        }
+    }
+
+    /// <summary>
+    /// <c>--selftest-r38</c>：实机自检 r38 三项，结果写 run.log 后退出：
+    /// (1) RTF 剪贴板 CF_RTF 回读——经系统 PowerShell Get-Clipboard -Format RTF
+    ///     （绕过 Avalonia）验证 Windows 上 CF_RTF 真实注册成功；
+    /// (2) 事件日志对话框——打开、核验标记行、关闭；
+    /// (3) 打印——IsSupported 与 PowerShell 脚本可解析性（不实际弹系统打印对话框，
+    ///     避免干扰用户桌面）。
+    /// </summary>
+    private async Task RunR38SelfTestAsync()
+    {
+        try
+        {
+            AppLog.Info("[SelfTest] r38: 等主窗稳定 1.5s 后自检 RTF/事件日志/打印");
+            await Task.Delay(1500);
+
+            // 1) RTF 剪贴板 CF_RTF 回读
+            if (OperatingSystem.IsWindows())
+            {
+                var rtfMarker = "R38-RTF-" + DateTime.Now.ToString("HHmmss");
+                var rtf = "{\\rtf1\\ansi{\\colortbl ;\\red255\\green0\\blue0;}" + rtfMarker + "\\par}";
+                var transfer = new DataTransfer();
+                transfer.Add(DataTransferItem.Create(
+                    DataFormat.CreateStringPlatformFormat("Rich Text Format"), rtf));
+                transfer.Add(DataTransferItem.Create(
+                    DataFormat.CreateStringPlatformFormat("text/rtf"), rtf));  // platform：原样传平台（X11 即 MIME atom；Win32 多注册一格式无副作用）
+                transfer.Add(DataTransferItem.CreateText(rtfMarker));
+                var clip = TopLevel.GetTopLevel(this)?.Clipboard;
+                if (clip is null)
+                {
+                    AppLog.Warn("[SelfTest] r38: 剪贴板不可用，跳过 RTF 回读");
+                }
+                else
+                {
+                    await clip.SetDataAsync(transfer);
+                    var (code, outp, err) = await TerminalPrint.RunPowershellAsync("Get-Clipboard -Format RTF");
+                    var head = (outp ?? "").Trim();
+                    AppLog.Info($"[SelfTest] r38: rtf-clip code={code} len={head.Length} " +
+                        $"hasMarker={head.Contains(rtfMarker)} " +
+                        $"head=[{head.Substring(0, Math.Min(120, head.Length))}] err=[{err.Trim()}]");
+                }
+            }
+            else
+            {
+                AppLog.Warn("[SelfTest] r38: 非 Windows，跳过 RTF 剪贴板回读");
+            }
+
+            // 2) 事件日志对话框
+            var marker = "R38-EVENTLOG-" + DateTime.Now.ToString("HHmmss");
+            AppLog.Info(marker);
+            var logTask = ShowEventLogDialogAsync();
+            var waited = 0;
+            while (LastEventLogDialogForTests is null && waited < 10_000)
+            {
+                await Task.Delay(100);
+                waited += 100;
+            }
+            if (LastEventLogDialogForTests is { } dlg)
+            {
+                var box = dlg.GetVisualDescendants().OfType<TextBox>().FirstOrDefault();
+                AppLog.Info($"[SelfTest] r38: eventlog hasMarker={box?.Text.Contains(marker)} " +
+                    $"textLen={(box?.Text?.Length) ?? 0}");
+                var closeBtn = dlg.GetVisualDescendants().OfType<Button>()
+                    .FirstOrDefault(b => string.Equals(b.Content, "关闭"));
+                closeBtn?.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            }
+            else
+            {
+                AppLog.Warn("[SelfTest] r38: FAILED: 事件日志对话框 10s 未打开");
+            }
+            await logTask;
+
+            // 3) 打印脚本可解析性（不实际弹打印对话框）
+            var script = TerminalPrint.BuildScript(Path.Combine(Path.GetTempPath(), "comtool-selftest-print.txt"));
+            var scriptFile = Path.Combine(Path.GetTempPath(), "comtool-selftest-print.ps1");
+            File.WriteAllText(scriptFile, script);
+            try
+            {
+                var parseScript =
+                    $"$sb=[scriptblock]::Create((Get-Content -Raw '{scriptFile.Replace("'", "''")}')); 'PARSE-OK'";
+                var (code, outp, err) = await TerminalPrint.RunPowershellAsync(parseScript);
+                AppLog.Info($"[SelfTest] r38: print supported={TerminalPrint.IsSupported} " +
+                    $"scriptParse code={code} out=[{outp.Trim()}] err=[{err.Trim()}]");
+            }
+            finally
+            {
+                try
+                {
+                    File.Delete(scriptFile);
+                }
+                catch
+                {
+                    // best-effort
+                }
+            }
+
+            AppLog.Info("[SelfTest] r38: 自检完成，退出");
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(0);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("[SelfTest] r38: 自检异常", ex);
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
         }
     }
 

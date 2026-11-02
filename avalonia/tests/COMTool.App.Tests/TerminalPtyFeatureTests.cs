@@ -320,15 +320,17 @@ public sealed class TerminalPtyFeatureTests
                 Assert.Single(checkedItems);
                 Assert.Equal("UTF-8", checkedItems[0].Header?.ToString());
 
-                // 启用态：无选区时"复制"置灰；"粘贴"/"更改终端设置…"恒可用；
-                // 查找/字体设置/录制输出 已实现（第 37 轮）；打印等未实现项置灰。
+                // 启用态：无选区时"复制"/"复制带格式文本（RTF）"置灰；"粘贴"/"更改终端设置…"恒可用；
+                // 查找/字体设置/录制输出 已实现（第 37 轮）；RTF/打印/事件日志 已实现（第 38 轮）。
                 Assert.False(LabelItem(items, "复制").IsEnabled);
+                Assert.False(LabelItem(items, "复制带格式文本（RTF）").IsEnabled);
                 Assert.True(LabelItem(items, "粘贴").IsEnabled);
                 Assert.True(LabelItem(items, "更改终端设置…").IsEnabled);
                 Assert.True(LabelItem(items, "查找").IsEnabled);
                 Assert.True(LabelItem(items, "字体设置").IsEnabled);
                 Assert.True(LabelItem(items, "录制终端输出到文件").IsEnabled);
-                Assert.False(LabelItem(items, "打印").IsEnabled);
+                Assert.True(LabelItem(items, "打印").IsEnabled);
+                Assert.True(LabelItem(items, "事件日志").IsEnabled);
                 Assert.True(LabelItem(items, "使用 Zmodem 接收文件").IsEnabled);
 
                 // 快捷键标注（MobaXterm 样式右侧灰字）：粘贴 = Shift+INSERT。

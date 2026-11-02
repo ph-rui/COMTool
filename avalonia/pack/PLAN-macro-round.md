@@ -581,6 +581,39 @@
         （SHA256 543912EB5CC9148819C3456DE9083D28CCDBF0833E711418E6D33DDE3B5AE260），deploy_r3.py 双份部署+SHA256 校验 OK。
         测试后已把用户 config 窗口尺寸恢复为原值 1443×916（侧栏 visible=true、monitor=true 亦保持原状）。
 
+    - 追加（2026-11-02，第 38 轮）：终端菜单实用批三落地——复制带格式文本（RTF）/ 事件日志 / 打印
+      （剩余 6 项中的前 3 项实用类；终端显示/语法高亮/特殊命令 3 项参考类待用户 MobaXterm 子菜单截图后定语义）：
+      ① 复制带格式文本（RTF）（TERM-26）：选中后菜单项启用（此前置灰）。新服务 TerminalRtf.BuildRtf(term, 字号px, 字体族)：
+         SelectionManager.TryGetSelection 取选区（X=列/Y=绝对 buffer 行，源码注释坐实）→ 逐行
+         TryGetRowSpan 取列跨度 → 逐格 BufferCellExtensions.GetForegroundColor/GetBackgroundColor
+         （null=默认色，回退 ColorSnapshot 的 Foreground/Background）→ 相邻同色格合并 run → 生成
+         纯 ASCII RTF（{\rtf1\ansi，\uNNNN 转义非 ASCII，颜色表去重，\fs=px×1.5 半点）。
+         剪贴板：DataTransfer 三格式——"Rich Text Format"（Platform 名精确匹配 Windows 预注册
+         CF_RTF=0x0305，Word/WordPad 可还原；Avalonia Win32 剪贴板对平台名走 RegisterClipboardFormat，
+         源码坐实）+ "text/rtf"（同为 Platform 格式——X11 上即 MIME atom；见④(a) 为何不用 Application
+         格式）+ 纯文本兜底。实机核验经 --selftest-r38：PowerShell Get-Clipboard -Format RTF 回读。
+      ② 事件日志（TERM-27）：菜单「事件日志」启用，弹对话框显示 run.log 尾部 200 行
+         （AppLog.Path，只读 TextBox 等宽字体）+「刷新」按钮重读。复用 ClientSizedWindow 定客户区。
+      ③ 打印（TERM-28）：菜单「打印」（Ctrl+Shift+P 仅标签，与既有 Ctrl+Shift+S 惯例一致）。
+         Avalonia 12 无打印 API → Windows 专用 PowerShell 辅助（WinForms PrintDialog+PrintDocument，
+         文本先落临时文件避免命令行长度限制；OperatingSystem.IsWindows() 门控，非 Windows 返回
+         "打印仅支持 Windows 系统"）。打印内容=选区优先，无选区取整屏转录（复用 TerminalTranscript）。
+      ④ 实机自检扩展 --selftest-r38：RTF 剪贴板 CF_RTF 回读（系统 PowerShell Get-Clipboard -Format RTF，
+         绕过 Avalonia 核验 CF_RTF 真实注册）/ 事件日志对话框标记行核验 / 打印脚本可解析性核验
+         （不实际弹系统打印对话框，避免干扰用户桌面）。
+         结果（2026-11-02）：新增 5 测试全过——TERM26_RtfBuilder（builder 纯函数：颜色 run/CJK \uNNNN/
+         字面 \ { } 转义/无选区 null）、TERM26_RtfCopy_MenuItem（无选区置灰→SelectAll 启用→点击后
+         headless 剪贴板内存 stub 完整 round-trip 回读 RTF+纯文本）、TERM27_EventLog（尾部 200 行/
+         刷新/关闭）、TERM28_Print_Script（脚本内容+单引号转义+token 替换/非 Windows 门控）、
+         TERM28_Print_MenuClick（菜单点击→状态栏“打印仅支持 Windows 系统”）；TERM21 启用态断言
+         同步更新（RTF 无选区置灰、打印/事件日志转启用）。两个坑（headless 复现修复）：
+         (a) Avalonia 12 application 格式标识符只允许字母/数字/点/连字符，“text/rtf” 带斜杠抛
+         ArgumentException（DataFormat 源码+失败消息双坐实）→ 改 CreateStringPlatformFormat("text/rtf")
+         （platform 格式不校验原样传平台：X11 即 MIME atom，Win32 仅多注册一格式无副作用）；
+         (b) 测试源里字面反斜杠断言被写成了 4 个反斜杠字符（转义翻倍），RTF 中一个字面 \ 实为 2 个
+         反斜杠字符，od -c 逐字节核对后修正。
+         gate-r38.log 全 PASS：Core 89/Sftp 42/Terminal 11/Connections 150/Zmodem 32/TestGate 49/
+         App 255（含新增 5 项），E2E 15/15；RESULT PASS×2。实机 --selftest-r38 验证结果待回填。
    - 追加（2026-11-02，第 37 轮）：终端右键菜单三落地——查找 / 字体设置 / 录制终端输出到文件
      （用户 2026-10-31 反馈：附终端 Shift+右键菜单截图“有些是没实现的吧？”→ 确认 9 个置灰占位项，
      用户拍板“全部 9 项都实现”，本轮先落前三项；剩余 6 项 RTF/终端显示/语法高亮/打印/特殊命令/事件日志 后续轮次）：

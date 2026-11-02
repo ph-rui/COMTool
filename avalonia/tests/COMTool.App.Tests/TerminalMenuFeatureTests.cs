@@ -5,6 +5,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using COMTool.App.ViewModels;
@@ -455,7 +456,250 @@ public sealed class TerminalMenuFeatureTests
         }
     }
 
+    // ═══════════════════════ r38：RTF 复制 / 事件日志 / 打印 ═══════════════════════
+
+    [Fact]
+    public void TERM26_RtfBuilder_PreservesTextColorsAndStructure()
+    {
+        using var emu = new COMTool.Terminal.TerminalEmulator(20, 3);
+        var term = emu.Terminal;
+        term.Colors.SetForeground(0x112233);
+        term.Colors.SetBackground(0xAABBCC);
+        term.Colors.SetColor(1, 0xCC0000); // ANSI 31（红）
+
+        emu.Write("\u001b[31mRED\u001b[0m plain\n");
+        emu.Select(0, 0, 19, 0);
+
+        var rtf = COMTool.App.Services.TerminalRtf.BuildRtf(term, 13.5, "Consolas");
+        Assert.NotNull(rtf);
+        Assert.StartsWith("{\\rtf1\\ansi", rtf);
+        Assert.Contains("RED", rtf);
+        Assert.Contains(" plain", rtf);
+        Assert.Contains(@"\par", rtf);
+        Assert.Contains(@"\fs20", rtf);                       // 13.5px → 20 半点
+        Assert.Contains(@"\red204\green0\blue0", rtf);        // ANSI 31 → 0xCC0000
+        Assert.Contains(@"\red17\green34\blue51", rtf);       // 默认前景 0x112233
+        Assert.Contains(@"\red170\green187\blue204", rtf);    // 默认背景 0xAABBCC
+
+        // CJK 与特殊字符：你=\u20320、好=\u22909，\ { } 必须转义
+        emu.Write("你好\\{}x");
+        emu.Select(0, 1, 19, 1);
+        var rtf2 = COMTool.App.Services.TerminalRtf.BuildRtf(term, 13.5, "Consolas");
+        Assert.NotNull(rtf2);
+        Assert.Contains(@"\u20320 ", rtf2);
+        Assert.Contains(@"\u22909 ", rtf2);
+        Assert.Contains(@"\\", rtf2);  // RTF 中字面反斜杠 = 2 个反斜杠字符
+        Assert.Contains(@"\{", rtf2);
+        Assert.Contains(@"\}", rtf2);
+
+        // 无选区 → null
+        term.Selection.ClearSelection();
+        Assert.Null(COMTool.App.Services.TerminalRtf.BuildRtf(term, 13.5, "Consolas"));
+    }
+
+    [AvaloniaFact]
+    public async Task TERM26_RtfCopy_MenuItemWritesRtfAndPlainToClipboard()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            await env.RunAsync(async () =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                window = new MainWindow { DataContext = new MainViewModel() };
+                window.Show();
+                window.StopPortTimerForTests();
+                RunJobs(window);
+
+                var (terminal, _, tab) = CreateTestTerminal(window, "rtf-menu");
+                terminal.Terminal.Write("\u001b[31mRED\u001b[0m tail");
+                RunJobs(window);
+
+                // 无选区 → 菜单项置灰
+                RaiseShiftRightClick(terminal, window);
+                Assert.False(MenuLabelItem(window.LastTerminalMenuForTests!, "复制带格式文本（RTF）").IsEnabled);
+
+                // 有选区 → 可用；点击后剪贴板同时含 RTF 与纯文本（headless 剪贴板为内存 stub，可回读）
+                terminal.Terminal.Selection.SelectAll();
+                RaiseShiftRightClick(terminal, window);
+                var rtfItem = MenuLabelItem(window.LastTerminalMenuForTests!, "复制带格式文本（RTF）");
+                Assert.True(rtfItem.IsEnabled);
+                rtfItem.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.MenuItem.ClickEvent));
+                RunJobs(window);
+                RunJobs(window);
+                Assert.Equal("已复制带格式文本（RTF）", tab.StatusMessage);
+
+                var clip = TopLevel.GetTopLevel(terminal)?.Clipboard;
+                Assert.NotNull(clip);
+                var data = await clip!.TryGetDataAsync();
+                Assert.NotNull(data);
+                var rtf = await data!.TryGetValueAsync(DataFormat.CreateStringPlatformFormat("Rich Text Format"));
+                Assert.NotNull(rtf);
+                Assert.StartsWith("{\\rtf1\\ansi", rtf);
+                Assert.Contains("RED", rtf);
+                var plain = await clip.TryGetTextAsync();
+                Assert.Contains("RED", plain);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task TERM27_EventLog_DialogShowsTailAndRefreshes()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            await env.RunAsync(async () =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                window = new MainWindow { DataContext = new MainViewModel() };
+                window.Show();
+                window.StopPortTimerForTests();
+                RunJobs(window);
+
+                var (terminal, _, _) = CreateTestTerminal(window, "evlog");
+
+                // 菜单接线：事件日志恒可用
+                RaiseShiftRightClick(terminal, window);
+                Assert.True(MenuLabelItem(window.LastTerminalMenuForTests!, "事件日志").IsEnabled);
+
+                var marker1 = "TERM27-M1-" + Guid.NewGuid().ToString("N");
+                COMTool.App.Services.AppLog.Info(marker1);
+
+                var task = window.ShowEventLogForTestsAsync();
+                WaitUntil(() => window.LastEventLogDialogForTests is not null, "事件日志对话框");
+                var dialog = window.LastEventLogDialogForTests!;
+                RunJobs(window);
+                var box = dialog.GetVisualDescendants().OfType<TextBox>().First();
+                Assert.Contains(marker1, box.Text);
+
+                // 新日志行 → 刷新按钮
+                var marker2 = "TERM27-M2-" + Guid.NewGuid().ToString("N");
+                COMTool.App.Services.AppLog.Info(marker2);
+                var refresh = dialog.GetVisualDescendants().OfType<Button>()
+                    .First(b => string.Equals(b.Content, "刷新"));
+                refresh.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
+                RunJobs(window);
+                Assert.Contains(marker2, box.Text);
+                Assert.Contains(marker1, box.Text);
+
+                // 关闭
+                var closeBtn = dialog.GetVisualDescendants().OfType<Button>()
+                    .First(b => string.Equals(b.Content, "关闭"));
+                closeBtn.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
+                await task;
+                Assert.Null(window.LastEventLogDialogForTests);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [Fact]
+    public async Task TERM28_Print_ScriptContentAndNonWindowsGate()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return; // 非 Windows 门控断言只在非 Windows 环境有意义
+        }
+        Assert.False(COMTool.App.Services.TerminalPrint.IsSupported);
+        var (ok, msg) = await COMTool.App.Services.TerminalPrint.PrintTextAsync("hello");
+        Assert.False(ok);
+        Assert.Contains("Windows", msg);
+
+        var script = COMTool.App.Services.TerminalPrint.BuildScript(@"C:\temp\my'print.txt");
+        Assert.Contains("PrintDocument", script);
+        Assert.Contains("PrintDialog", script);
+        Assert.Contains("C:\\temp\\my''print.txt", script);
+        Assert.DoesNotContain("__COMTOOL_PRINT_FILE__", script);
+    }
+
+    [AvaloniaFact]
+    public async Task TERM28_Print_MenuClickNonWindowsShowsUnsupported()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            await env.RunAsync(async () =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                window = new MainWindow { DataContext = new MainViewModel() };
+                window.Show();
+                window.StopPortTimerForTests();
+                RunJobs(window);
+
+                var (terminal, _, tab) = CreateTestTerminal(window, "print1");
+                terminal.Terminal.Write("printable text");
+                RunJobs(window);
+
+                RaiseShiftRightClick(terminal, window);
+                var printItem = MenuLabelItem(window.LastTerminalMenuForTests!, "打印");
+                Assert.True(printItem.IsEnabled);
+                printItem.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.MenuItem.ClickEvent));
+                RunJobs(window);
+                RunJobs(window);
+                Assert.Contains("Windows", tab.StatusMessage);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
     // ═══════════════════════ 辅助方法 ═══════════════════════
+
+    private static Avalonia.Controls.Control RaiseShiftRightClick(
+        Iciclecreek.Terminal.TerminalControl terminal, MainWindow window)
+    {
+        var view = terminal.GetVisualDescendants()
+            .OfType<Iciclecreek.Terminal.TerminalView>().FirstOrDefault();
+        var target = view ?? (Avalonia.Controls.Control)terminal;
+        var position = target.TranslatePoint(new Point(10, 10), window) ?? new Point(10, 10);
+        target.RaiseEvent(new Avalonia.Input.PointerPressedEventArgs(
+            target,
+            new Avalonia.Input.Pointer(0, Avalonia.Input.PointerType.Mouse, isPrimary: true),
+            window,
+            position,
+            0,
+            new Avalonia.Input.PointerPointProperties(
+                Avalonia.Input.RawInputModifiers.None,
+                Avalonia.Input.PointerUpdateKind.RightButtonPressed),
+            Avalonia.Input.KeyModifiers.Shift,
+            clickCount: 1));
+        return target;
+    }
+
+    private static Avalonia.Controls.MenuItem MenuLabelItem(
+        Avalonia.Controls.ContextMenu menu, string label)
+    {
+        var items = menu.Items.OfType<Avalonia.Controls.MenuItem>().ToList();
+        return items.Single(mi => MenuLabel(mi) == label);
+    }
+
+    private static string? MenuLabel(Avalonia.Controls.MenuItem item) => item.Header switch
+    {
+        string s => s,
+        Avalonia.Controls.Grid g =>
+            g.Children.OfType<Avalonia.Controls.TextBlock>().FirstOrDefault()?.Text,
+        _ => item.Header?.ToString(),
+    };
 
     private static (Iciclecreek.Terminal.TerminalControl Terminal, InMemoryPty Pty, TerminalTab Tab)
         CreateTestTerminal(MainWindow window, string id)
