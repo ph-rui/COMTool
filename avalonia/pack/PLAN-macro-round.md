@@ -612,15 +612,25 @@
         【发现缺陷】字号框实机显示残缺 "1"（用户坐席确认）。排查：headless 探针 Value=13.5/Text="13.5" 均正常、
         点"确定"后 config.json 正确落盘 fontSize:13.5（内部值无错），定性为纯显示/渲染时序问题；
         录制输出的实机落盘未做端到端（单测已覆盖写文件/关 tab 停录，菜单接线已实机核对）。
-     ⑦ 字号显示修复（同轮收尾）：根因线索——Fluent 主题模板内 TextBox.Text 是 TemplateBinding 到 NumericUpDown 的
-        Text 字符串属性（构造期只设 Value 时首帧文本未同步，headless 同步 RunJobs 不可复现）。修复：构造期显式
+     ⑦ 字号显示修复第一轮（提交 062f1ae）：初判根因——Fluent 主题模板内 TextBox.Text 是 TemplateBinding 到
+        NumericUpDown 的 Text 字符串属性（构造期只设 Value 时首帧文本未同步，headless 同步 RunJobs 不可复现）。修复：构造期显式
         Text=InvariantCulture("13.5") + dialog.Opened 后强制重同步 Value/Text 双保险 + [FontDlg] 诊断日志
-        （实机首次打开可经 run.log 读真实 Value/Text/FontSize/Bounds）；新增测试接缝 LastFontDialogForTests/
+        （实机打开可经 run.log 读真实 Value/Text/FontSize/Bounds）；新增测试接缝 LastFontDialogForTests/
         ShowFontDialogForTestsAsync 与回归测试 TERM24_FontDialogShowsConfiguredFontSizeAndOkKeepsDefault
-        （对话框打开→Value=13.5/Text="13.5"→点"确定"→config 无副作用）。提交 062f1ae。
+        （对话框打开→Value=13.5/Text="13.5"→点"确定"→config 无副作用）。
         gate-r37fix2.log 全 PASS：Core 89/Sftp 42/Terminal 11/Connections 150/Zmodem 32/TestGate 49/App 250（含新增 11 项），E2E 15/15；RESULT PASS×2
-     ⑧ 实机复验（待用户坐席操作）：新包打开「字体设置」，字号框应显示 13.5；如仍异常，经 SSH 读 run.log 的
-        [FontDlg] 行定位（诊断日志一次即可判定 Value/Text/FontSize/Bounds 实际值）。
+        发布 SHA256 D2BAE2E2…7F8C（95,098,192 字节）双份部署+校验 OK。
+     ⑧ 实机复验（一）（2026-11-02 15:10，用户坐席操作）：字号框仍显示 "1"，第一轮修复未生效。[FontDlg] 诊断日志证明
+        数据面完全正常：value=13.5 text=[13.5] tbText=[13.5] spinFontSize=14 tbFontSize=14；而
+        spinBounds=(50,0,90,32)、tbBounds=(-1,-1,22,32)——模板内 TextBox 实际排布仅 22px 宽。
+        【真根因】12.1.4 Fluent 主题的 ButtonSpinner 模板为 DockPanel 横排两个 MinWidth=34 的按钮（共 68px），
+        NumericUpDown Width=90 减去边框 2px 与按钮 68px 后内部 TextBox 仅剩 20px（+Margin=-1 即 22px），
+        "13.5" 被裁切只剩 "1"。属几何布局问题，非数据/时序问题；headless 测试只断言属性值未断言渲染宽度，故未拦截。
+     ⑨ 字号显示修复第二轮（根因修复）：NumericUpDown Width 90→120（120-2-68=50px 内容区，内部 TextBox 约 52px，
+        足够显示 "13.5"）；回归测试新增断言：对话框内 TextBox 的 Bounds.Width >= 45。gate-r37fix3.log 全 PASS。
+        发布 SHA256 0EF0F3A4…E53A00（95,098,221 字节） 双份部署+校验 OK。
+     ⑩ 实机复验（二，待用户坐席操作）：新包打开「字体设置」，字号框应完整显示 13.5；如仍异常，经 SSH 读 run.log 的
+        [FontDlg] 行（含 tbBounds）判定布局几何。
 
    - 追加（2026-10-31，第 36 轮）：SSH 浏览器地球图标跟随当前选中标签（对齐 MobaXterm）
      （用户 2026-10-31 反馈：附 COM99 标签激活但左栏仍显示地球的截图，“切换到COM的标签，SSH浏览器不会消失，这点需要对齐mobaxterm”）：
