@@ -629,11 +629,19 @@
      ⑨ 字号显示修复第二轮（根因修复，提交 f3a3623）：NumericUpDown Width 90→120（120-2-68=50px 内容区，内部
         TextBox 约 52px，足够显示 "13.5"）；回归测试新增断言：对话框内 TextBox 的 Bounds.Width >= 45。
         gate-r37fix3.log 曾出现一次 test host SIGSEGV（exit 139，TERM02 调色板测试未出结果、249/250、app-tests FAIL）——
-        该测试单独跑与连续 3 次全量重跑均过，判定为环境性偶发（xunit 并行跑 headless UI 的竞态）；
+        该测试单独跑与连续 3 次全量重跑均过；项目已设 DisableTestParallelization=true 排除并行竞态，判定为环境性偶发；
         gate-r37fix4.log 重跑全 PASS：Core 89/Sftp 42/Terminal 11/Connections 150/Zmodem 32/TestGate 49/App 250，E2E 15/15；RESULT PASS×2。
         发布 SHA256 0EF0F3A4…E53A00（95,098,221 字节）双份部署+校验 OK。
-     ⑩ 实机复验（二，待用户坐席操作）：新包打开「字体设置」，字号框应完整显示 13.5；如仍异常，经 SSH 读 run.log 的
-        [FontDlg] 行（含 tbBounds）判定布局几何。
+     ⑩ 实机复验（二）（2026-11-02 16:30，用户坐席操作）：字号框完整显示 13.5 ✓（第二轮修复生效）；
+        但用户反馈「取消与确定显示不全，底部一些内容没显示」——对话框固定 Height=240 小于实际内容高度
+        （边距 20+行 32+12+32+12+说明 2~3 行+12+按钮 28+边距 20 ≈ 202~220，加标题栏后溢出），
+        按钮行被窗口底缘裁切。此问题自 r37 首版对话框即存在，此前被字号 "1" 问题掩盖。
+     ⑪ 字号对话框底部裁切修复（提交 6b92cd0）：dialog Height 240→320（留 ~55px 余量，CanResize=false
+        固定尺寸不变）；回归测试新增断言：确定/取消按钮 Bounds.Bottom <= dialog.ClientSize.Height
+        （headless 布局即可拦截同类"固定高度不足裁切内容"问题）。gate-r37fix5.log 全 PASS：
+        Core 89/Sftp 42/Terminal 11/Connections 150/Zmodem 32/TestGate 49/App 250，E2E 15/15；RESULT PASS×2。
+        发布 SHA256 1BC51A5E…0C5302DC（95,098,177 字节）双份部署+校验 OK。
+     ⑫ 实机复验（三，待用户坐席操作）：新包打开「字体设置」，字号框显示 13.5 且底部 取消/确定 按钮完整可见。
 
    - 追加（2026-10-31，第 36 轮）：SSH 浏览器地球图标跟随当前选中标签（对齐 MobaXterm）
      （用户 2026-10-31 反馈：附 COM99 标签激活但左栏仍显示地球的截图，“切换到COM的标签，SSH浏览器不会消失，这点需要对齐mobaxterm”）：
