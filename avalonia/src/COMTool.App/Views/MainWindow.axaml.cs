@@ -5297,7 +5297,8 @@ public partial class MainWindow : Window
             var tb = sizeSpin.GetVisualDescendants().OfType<TextBox>().FirstOrDefault();
             AppLog.Info($"[FontDlg] opened: currentSize={currentSize} value={sizeSpin.Value} " +
                 $"text=[{sizeSpin.Text}] spinFontSize={sizeSpin.FontSize} tbFontSize={tb?.FontSize} " +
-                $"tbText=[{tb?.Text}] spinBounds={sizeSpin.Bounds} tbBounds={tb?.Bounds}");
+                $"tbText=[{tb?.Text}] spinBounds={sizeSpin.Bounds} tbBounds={tb?.Bounds} " +
+                $"dlgBounds={dialog.Bounds}");
         };
 
         LastFontDialogForTests = dialog;
