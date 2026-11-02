@@ -275,6 +275,12 @@ public partial class MainWindow : Window
         {
             AddLocalTerminal();
         }
+        // --selftest-fontdlg：自动打开字体对话框并打印真实几何后退出（免 RDP 实机复验，
+        // 见 RunFontDialogSelfTestAsync）。
+        if (Environment.GetCommandLineArgs().Contains("--selftest-fontdlg"))
+        {
+            _ = RunFontDialogSelfTestAsync();
+        }
     }
 
     private void RefreshPorts()
@@ -5172,6 +5178,14 @@ public partial class MainWindow : Window
         "Consolas", "Cascadia Mono", "Courier New", "Microsoft YaHei UI", "Noto Sans Mono CJK SC",
     };
 
+    /// <summary>字体对话框窗口：Avalonia 12 中 <c>TopLevel.ClientSize</c> 的 setter 是 protected，
+    /// 外部代码（MainWindow）无法直接给客户区赋值（CS1540）。经此子类暴露，
+    /// 保证窗口以精确客户区尺寸创建（Width/Height 含边框与标题栏，DPI 相关，不可用）。</summary>
+    private sealed class FontSettingsWindow : Window
+    {
+        public void SetClientSize(Size size) => ClientSize = size;
+    }
+
     private async Task ShowTerminalFontDialogAsync()
     {
         if (_config is null)
@@ -5182,19 +5196,20 @@ public partial class MainWindow : Window
         var currentFamily = TerminalFontPrimary;
         var currentSize = ClampTerminalFontSize(_config.Config.Terminal.FontSize);
 
-        var dialog = new Window
+        var dialog = new FontSettingsWindow
         {
             Title = "字体设置",
-            Width = 420,
-            // 高度自适应内容（按当前机器字体/DPI 实测排版后取窗高）：固定 240 会裁切
-            // 底部按钮、固定 320 又留出大片空白（均经实机反馈确认）。自适应后两种
-            // 问题都不会再出现。宽度保持 420 不变。
-            SizeToContent = Avalonia.Controls.SizeToContent.Height,
             MinWidth = 380,
-            MinHeight = 200,
             CanResize = false,
             ShowInTaskbar = false,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            // 教训（实机四轮复验）：
+            // - 固定 Height=240：客户区不够，底部按钮被裁切；
+            // - 固定 Height=320：按钮完整但底部留 ~134px 空白，观感"不完整"；
+            // - SizeToContent.Height：Win32 下 Height 未定时平台按系统默认尺寸建窗
+            //   （实机两次量出 420×720），自适应失效。
+            // 故改为显式 ClientSize（客户区 420 宽 × 初始估计高 230），Opened 首帧布局
+            // 完成后按当前机器字体重测内容高度再精确校正——任何 DPI/字体下都贴合。
         };
 
         var familyCombo = new ComboBox
@@ -5241,7 +5256,7 @@ public partial class MainWindow : Window
         };
         cancel.Click += (_, _) => dialog.Close();
 
-        dialog.Content = new StackPanel
+        var content = new StackPanel
         {
             Margin = new Thickness(20),
             Spacing = 12,
@@ -5288,6 +5303,10 @@ public partial class MainWindow : Window
                 },
             },
         };
+        dialog.Content = content;
+        // 初始客户区：宽 420（内容列 = 420-20*2 = 380），高 230 为接近真实内容的估计值，
+        // Opened 后按实机字体重测内容高度再精确校正（见下方 Post 逻辑）。
+        dialog.SetClientSize(new Size(420, 230));
 
         // 实机（RDP/Windows 渲染）下 NumericUpDown 对象初始化器里设置的 Value
         // 可能来不及把文本刷进模板内部 TextBox（headless 同步 RunJobs 时不可复现），
@@ -5304,6 +5323,14 @@ public partial class MainWindow : Window
                 $"text=[{sizeSpin.Text}] spinFontSize={sizeSpin.FontSize} tbFontSize={tb?.FontSize} " +
                 $"tbText=[{tb?.Text}] spinBounds={sizeSpin.Bounds} tbBounds={tb?.Bounds} " +
                 $"dlgBounds={dialog.Bounds}");
+
+            // 首帧布局（含主题样式应用）完成后精确校正客户区高度——这是 SizeToContent 在
+            // Win32 失效（实机两次 420×720）后的确定性替代：
+            // 目标高 = 确定/取消按钮底边 + 20px 下边距（与内容面板 margin 一致）。
+            // 平台 resize 回环是异步的（headless/Win32 均如此），陈旧布局趟可能把旧尺寸
+            // 重新发回平台覆盖校正，故用"设置→低优先级复验"收敛，最多 3 次防乒乓。
+            Dispatcher.UIThread.Post(() => CorrectFontDialogHeight(dialog, content, 0),
+                DispatcherPriority.Background);
         };
 
         LastFontDialogForTests = dialog;
@@ -5317,6 +5344,123 @@ public partial class MainWindow : Window
             {
                 LastFontDialogForTests = null;
             }
+        }
+    }
+
+    /// <summary>校正字体对话框客户区高度 = 确定/取消按钮底边 + 20px 下边距（与内容面板 margin 一致）。
+    /// 先 UpdateLayout 确保主题/字体已生效再读真实排布几何。
+    /// 平台 resize 回环是异步的（headless 经 Send 优先级 Post，Win32 经窗口消息），
+    /// 陈旧布局趟可能把旧尺寸重新发回平台、覆盖本次校正（headless 实测复现），
+    /// 故每次设置后再调度一次低优先级（ContextIdle）复验，最多 3 次，防乒乓死循环。</summary>
+    private void CorrectFontDialogHeight(FontSettingsWindow dialog, StackPanel content, int attempt)
+    {
+        if (!dialog.IsVisible)
+        {
+            return;
+        }
+
+        dialog.UpdateLayout();
+        var buttonBottom = 0.0;
+        foreach (var b in dialog.GetVisualDescendants().OfType<Button>())
+        {
+            if (b.Content is not string label || label is not ("确定" or "取消"))
+            {
+                continue;
+            }
+            var p = b.TranslatePoint(new Point(0, b.Bounds.Height), dialog);
+            if (p is { } q)
+            {
+                buttonBottom = Math.Max(buttonBottom, q.Y);
+            }
+        }
+        double target;
+        if (buttonBottom > 0)
+        {
+            target = buttonBottom + 20;
+        }
+        else
+        {
+            // 兜底：按内容 DesiredSize（含上下 margin）估计
+            var measureW = Math.Max(100.0, dialog.ClientSize.Width - 40);
+            content.Measure(new Size(measureW, double.PositiveInfinity));
+            target = content.DesiredSize.Height;
+        }
+
+        if (Math.Abs(dialog.ClientSize.Height - target) < 2)
+        {
+            AppLog.Info($"[FontDlg] post-layout: stable clientSize={dialog.ClientSize} dlgBounds={dialog.Bounds} " +
+                $"(buttonBottom={buttonBottom:0.#}, attempt={attempt})");
+            return;
+        }
+
+        dialog.SetClientSize(new Size(dialog.ClientSize.Width, target));
+        AppLog.Info($"[FontDlg] post-layout: set {dialog.ClientSize} target={target:0.#} " +
+            $"buttonBottom={buttonBottom:0.#} attempt={attempt}");
+
+        if (attempt < 3)
+        {
+            Dispatcher.UIThread.Post(() => CorrectFontDialogHeight(dialog, content, attempt + 1),
+                DispatcherPriority.ContextIdle);
+        }
+    }
+
+    /// <summary>
+    /// <c>--selftest-fontdlg</c>：启动后自动打开「字体设置」对话框，等首帧布局校正完成后
+    /// 把真实几何（clientSize / dlgBounds / 确定与取消按钮底边及间隙）打进 run.log，然后退出。
+    /// 用途：免 RDP、免用户操作的实机复验——SSH 读 run.log 的 <c>[SelfTest]</c> 与
+    /// <c>[FontDlg] post-layout</c> 行，核对窗口高是紧凑值（约 230–250px）而非平台默认 720px。
+    /// </summary>
+    private async Task RunFontDialogSelfTestAsync()
+    {
+        try
+        {
+            AppLog.Info("[SelfTest] fontdlg: 等主窗稳定 1.5s 后自动打开字体对话框");
+            await Task.Delay(1500);
+
+            var showTask = ShowFontDialogForTestsAsync();
+            var waited = 0;
+            while (LastFontDialogForTests is null && waited < 10_000)
+            {
+                await Task.Delay(100);
+                waited += 100;
+            }
+
+            var dialog = LastFontDialogForTests;
+            if (dialog is null)
+            {
+                AppLog.Error("[SelfTest] FAILED: 字体对话框 10s 内未打开");
+                (Application.Current?.ApplicationLifetime
+                    as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(1);
+                return;
+            }
+
+            // 等 Opened 里的 Post(Background) 校正执行并稳定
+            await Task.Delay(1500);
+
+            AppLog.Info($"[SelfTest] clientSize={dialog.ClientSize} dlgBounds={dialog.Bounds}");
+            foreach (var button in dialog.GetVisualDescendants().OfType<Button>())
+            {
+                if (button.Content is not string label || label is not ("确定" or "取消"))
+                {
+                    continue;
+                }
+                var bottomLeft = button.TranslatePoint(new Point(0, button.Bounds.Height), dialog);
+                if (bottomLeft is { } p)
+                {
+                    AppLog.Info($"[SelfTest] button[{label}] bounds={button.Bounds} bottomY={p.Y:0.#} " +
+                        $"clientH={dialog.ClientSize.Height:0.#} gap={dialog.ClientSize.Height - p.Y:0.#}");
+                }
+            }
+
+            AppLog.Info("[SelfTest] fontdlg 自检完成，退出");
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(0);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("[SelfTest] fontdlg 自检异常", ex);
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
         }
     }
 
