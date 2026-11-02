@@ -1,4 +1,5 @@
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
@@ -5158,6 +5159,10 @@ public partial class MainWindow : Window
     internal long RecordingBytesForTests { get { lock (_recordingGate) return _recordingBytes; } }
     internal void StopOutputRecordingForTests() => StopTerminalOutputRecording();
 
+    // 字体设置对话框测试接缝（与 LastRestartDialogForTests 同模式）。
+    internal Window? LastFontDialogForTests { get; private set; }
+    internal Task ShowFontDialogForTestsAsync() => ShowTerminalFontDialogAsync();
+
     // ==================== 字体设置（TERM-24） ====================
     // MobaXterm 式：终端菜单「字体设置」对话框，选字体族+字号；全局生效
     // （与 Ctrl+滚轮 一致）并落盘 config（terminal.fontFamily / terminal.fontSize）。
@@ -5202,11 +5207,16 @@ public partial class MainWindow : Window
         var idx = Array.IndexOf(TerminalFontFamilies, currentFamily);
         familyCombo.SelectedIndex = idx >= 0 ? idx : 0;
 
+        var sizeDec = (decimal)currentSize;
+        var sizeText = sizeDec.ToString(System.Globalization.CultureInfo.InvariantCulture);
         var sizeSpin = new NumericUpDown
         {
             Minimum = (decimal)TerminalFontSizeMin,
             Maximum = (decimal)TerminalFontSizeMax,
-            Value = (decimal)currentSize,
+            Value = sizeDec,
+            // 同时显式设置 Text：库 OnApplyTemplate 时是 TextBox.Text = Text（读字符串属性），
+            // 仅设 Value 在实机渲染首帧可能没刷出文本（RDP 实机显示为空/"1"，headless 正常）。
+            Text = sizeText,
             Width = 90,
             HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
         };
@@ -5268,7 +5278,35 @@ public partial class MainWindow : Window
                 },
             },
         };
-        await dialog.ShowDialog(this);
+
+        // 实机（RDP/Windows 渲染）下 NumericUpDown 对象初始化器里设置的 Value
+        // 可能来不及把文本刷进模板内部 TextBox（headless 同步 RunJobs 时不可复现），
+        // 表现为字号框显示残缺（如 "1"）。构造期已显式设置 Text，Opened 后再强制
+        // 同步一次 Value→Text，双保险。
+        dialog.Opened += (_, _) =>
+        {
+            sizeSpin.Value = sizeDec;
+            sizeSpin.Text = sizeText;
+            // 诊断日志：实机打开后记录真实状态。若字号框仍显示异常，经 SSH 读
+            // run.log 的 [FontDlg] 行即可判定 Value/Text/FontSize/Bounds 实际值。
+            var tb = sizeSpin.GetVisualDescendants().OfType<TextBox>().FirstOrDefault();
+            AppLog.Info($"[FontDlg] opened: currentSize={currentSize} value={sizeSpin.Value} " +
+                $"text=[{sizeSpin.Text}] spinFontSize={sizeSpin.FontSize} tbFontSize={tb?.FontSize} " +
+                $"tbText=[{tb?.Text}] spinBounds={sizeSpin.Bounds} tbBounds={tb?.Bounds}");
+        };
+
+        LastFontDialogForTests = dialog;
+        try
+        {
+            await dialog.ShowDialog(this);
+        }
+        finally
+        {
+            if (ReferenceEquals(LastFontDialogForTests, dialog))
+            {
+                LastFontDialogForTests = null;
+            }
+        }
     }
 
     /// <summary>字体族+字号同时应用到所有已打开终端（「字体设置」对话框入口）。</summary>

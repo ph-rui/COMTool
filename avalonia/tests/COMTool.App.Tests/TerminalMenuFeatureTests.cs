@@ -1,4 +1,6 @@
 using System.IO;
+using System.Linq;
+using System.Threading;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
@@ -264,6 +266,55 @@ public sealed class TerminalMenuFeatureTests
         }
     }
 
+    [AvaloniaFact]
+    public async Task TERM24_FontDialogShowsConfiguredFontSizeAndOkKeepsDefault()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        var prevFamily = MainWindow.TerminalFontPrimary;
+        MainWindow.TerminalFontPrimary = "Consolas";
+        try
+        {
+            await env.RunAsync(async () =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                window = new MainWindow { DataContext = new MainViewModel() };
+                window.Show();
+                window.StopPortTimerForTests();
+                RunJobs(window);
+
+                // 打开字体对话框（模态，异步返回 Task）
+                var task = window.ShowFontDialogForTestsAsync();
+                WaitUntil(() => window.LastFontDialogForTests is not null, "font dialog opened");
+                var dialog = window.LastFontDialogForTests!;
+                RunJobs(window);
+
+                // 回归（实机 RDP 曾显示残缺文本 "1"）：模板应用后 Value 与显示
+                // Text 都必须是 config 的 13.5，而不是截断/残留的默认值。
+                var spin = dialog.GetVisualDescendants().OfType<NumericUpDown>().FirstOrDefault();
+                Assert.NotNull(spin);
+                Assert.Equal(13.5m, (decimal)spin!.Value);
+                Assert.Equal("13.5", spin.Text);
+
+                // 点"确定"（不改值）：对话框关闭、config 字号保持 13.5 无副作用。
+                var ok = dialog.GetVisualDescendants()
+                    .OfType<Button>().FirstOrDefault(b => Equals(b.Content, "确定"));
+                Assert.NotNull(ok);
+                ok!.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+                RunJobs(window);
+                await task;
+                Assert.Null(window.LastFontDialogForTests);
+                Assert.Equal(13.5, window.ConfigService!.Config.Terminal.FontSize, 3);
+            });
+        }
+        finally
+        {
+            MainWindow.TerminalFontPrimary = prevFamily;
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
     // ═══════════════════════ TERM-25：录制终端输出到文件 ═══════════════════════
 
     [AvaloniaFact]
@@ -389,5 +440,20 @@ public sealed class TerminalMenuFeatureTests
         Dispatcher.UIThread.RunJobs();
         window.UpdateLayout();
         Dispatcher.UIThread.RunJobs();
+    }
+
+    private static void WaitUntil(Func<bool> condition, string what)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(15);
+        while (!condition())
+        {
+            if (DateTime.UtcNow > deadline)
+            {
+                throw new TimeoutException($"Timed out waiting for {what}");
+            }
+
+            Dispatcher.UIThread.RunJobs();
+            Thread.Sleep(10);
+        }
     }
 }
