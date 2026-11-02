@@ -209,6 +209,14 @@ public sealed class TerminalConfig
     public double FontSize { get; set; } = 13.5;
 
     /// <summary>
+    /// 终端首选字体族（MobaXterm「字体设置」）。旧配置缺键时默认 "Consolas"。
+    /// 实际渲染的 FontFamily = 首选族 + Microsoft YaHei UI + 内置 Noto CJK 回退，
+    /// 保证中英文混排对齐（r33）。
+    /// </summary>
+    [JsonPropertyName("fontFamily")]
+    public string FontFamily { get; set; } = "Consolas";
+
+    /// <summary>
     /// MobaXterm「实时终端重配置 → 终端」同名项：Implicit CR in every LF。
     /// 默认 false（MobaXterm 默认不勾）。
     /// </summary>

@@ -314,17 +314,61 @@
                           Click="OnMacroBannerActionClick" />
                 </Grid>
               </Border>
-              <Border Grid.Row="1"
-                      Background="White"
-                      BorderBrush="{DynamicResource SidebarBorderBrush}"
-                      BorderThickness="1"
-                      CornerRadius="3"
-                      Padding="9">
-                <ContentControl Name="TabContentHost"
-                                Content="{Binding SelectedTab.Content}"
-                                HorizontalContentAlignment="Stretch"
-                                VerticalContentAlignment="Stretch" />
-              </Border>
+              <Grid Grid.Row="1">
+                <Border Background="White"
+                        BorderBrush="{DynamicResource SidebarBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="3"
+                        Padding="9">
+                  <ContentControl Name="TabContentHost"
+                                  Content="{Binding SelectedTab.Content}"
+                                  HorizontalContentAlignment="Stretch"
+                                  VerticalContentAlignment="Stretch" />
+                </Border>
+                <!-- 终端查找条（TERM-23）：Ctrl+Shift+F 或终端菜单“查找”打开，
+                     内联叠加在终端区底部；默认隐藏，不改变任何既有布局。 -->
+                <Border Name="SearchBar"
+                        IsVisible="False"
+                        ZIndex="10"
+                        Background="#ffffff"
+                        BorderBrush="{DynamicResource SidebarBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="3"
+                        Padding="8,4"
+                        Height="38"
+                        VerticalAlignment="Bottom"
+                        Margin="9,0,9,9">
+                  <StackPanel Orientation="Horizontal"
+                              Spacing="8"
+                              VerticalAlignment="Center">
+                    <TextBlock Text="查找"
+                               FontSize="13"
+                               VerticalAlignment="Center" />
+                    <TextBox Name="SearchBox"
+                             Width="220"
+                             Watermark="输入查找文本，Enter 下一个"
+                             FontSize="13"
+                             TextChanged="OnSearchBoxTextChanged" />
+                    <TextBlock Name="SearchCount"
+                               Text=""
+                               FontSize="12"
+                               Foreground="#e65100"
+                               VerticalAlignment="Center" />
+                    <Button Name="SearchPrevButton"
+                            Content="上一个"
+                            Width="60" Height="26"
+                            Click="OnSearchPrevClick" />
+                    <Button Name="SearchNextButton"
+                            Content="下一个"
+                            Width="60" Height="26"
+                            Click="OnSearchNextClick" />
+                    <Button Name="SearchCloseButton"
+                            Content="关闭"
+                            Width="56" Height="26"
+                            Click="OnSearchCloseClick" />
+                  </StackPanel>
+                </Border>
+              </Grid>
               <Grid Grid.Row="3"
                     Background="Transparent"
                     ColumnDefinitions="Auto,*,Auto">

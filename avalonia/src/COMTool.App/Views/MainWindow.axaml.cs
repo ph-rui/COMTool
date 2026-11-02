@@ -1,3 +1,4 @@
+using System.IO;
 using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
@@ -80,6 +81,20 @@ public partial class MainWindow : Window
     // 终端行尾仿真开关（对齐 MobaXterm「实时终端重配置 → 终端」的 Implicit CR/LF 两项）。
     // 所有终端的 LineEndingStream 共享此对象：设置对话框里改动立即对所有已连接终端生效。
     private readonly LineEndingOptions _lineEndingOptions = new();
+
+    // 终端查找（TERM-23）：_searchTerminal 为当前查找条绑定的终端；_searchHasQuery
+    // 标记是否已有生效的查找词（决定 Enter 走 FindInBuffer 还是 FindNext）。
+    private TerminalControl? _searchTerminal;
+    private bool _searchHasQuery;
+
+    // 终端输出录制（TERM-25）：订阅所选终端的 OutputReceived，把原始字节追加写文件。
+    // OutputReceived 可能在读线程触发，写入前加 _recordingGate 锁。
+    private TerminalControl? _recordingTerminal;
+    private Stream? _recordingStream;
+    private long _recordingBytes;
+    private string _recordingPath = "";
+    private readonly object _recordingGate = new();
+    private EventHandler<Iciclecreek.Terminal.OutputReceivedEventArgs>? _recordingHandler;
 
     public MainWindow()
     {
@@ -1744,11 +1759,21 @@ public partial class MainWindow : Window
     // glyphs, so the family list falls back to Microsoft YaHei UI (present on
     // every Windows install) and finally to the bundled Noto Sans Mono CJK SC,
     // which guarantees CJK coverage on Linux and in headless tests.
-    internal static FontFamily TerminalFontFamily() => new FontFamily(
-        "Consolas," +
+    // 「字体设置」菜单项可改写首选族（写 config terminal.fontFamily）；回退链
+    // 恒保留，保证中英混排 2 格对齐（r33）不被单族字体破坏。
+    internal static string TerminalFontPrimary = "Consolas";
+    internal const string TerminalFontFallback =
         "Microsoft YaHei UI," +
         "avares://COMTool.App/Assets/Fonts/NotoSansMonoCJKsc-Regular.otf#Noto Sans Mono CJK SC," +
-        "avares://COMTool.App/Assets/Fonts/NotoSansMonoCJKsc-Bold.otf#Noto Sans Mono CJK SC");
+        "avares://COMTool.App/Assets/Fonts/NotoSansMonoCJKsc-Bold.otf#Noto Sans Mono CJK SC";
+
+    internal static FontFamily BuildTerminalFontFamily(string primary)
+    {
+        var head = string.IsNullOrWhiteSpace(primary) ? "Consolas" : primary;
+        return new FontFamily(head + "," + TerminalFontFallback);
+    }
+
+    internal static FontFamily TerminalFontFamily() => BuildTerminalFontFamily(TerminalFontPrimary);
 
     // MobaXterm's 10pt Consolas is ~13.3px at 96 DPI.
     internal const double TerminalFontSize = 13.5;
@@ -2284,6 +2309,7 @@ public partial class MainWindow : Window
             // The transport may already be gone with its detached window.
         }
 
+        StopRecordingForTabIfAny(tab);
         _sshRestarts.Remove(tab);
         tab.IsAlive = false;
         tab.IsZmodemActive = false;
@@ -2435,6 +2461,8 @@ public partial class MainWindow : Window
         // A macro executing on this terminal is cancelled; the runner's
         // finally-block resets IsExecutingMacro and the banner follows.
         viewModel.CancelIfExecutingOn(tab.Terminal);
+
+        StopRecordingForTabIfAny(tab);
 
         viewModel.CloseTab(tab);
         UpdateConnectionStates();
@@ -2786,6 +2814,37 @@ public partial class MainWindow : Window
             }
             else if (!viewModel.IsExecutingMacro)
             {
+                // 0) 查找条打开且焦点在其内：Enter=下一个、Shift+Enter=上一个、Esc 关闭；
+                //    其余按键直接交给输入框，且不得误触发宏热键。
+                if (SearchBar.IsVisible
+                    && e.Source is Visual searchSource
+                    && IsInSubtree(searchSource, SearchBar))
+                {
+                    if (e.Key == Key.Escape)
+                    {
+                        HideSearchBar();
+                        e.Handled = true;
+                        return;
+                    }
+
+                    if (e.Key == Key.Enter)
+                    {
+                        MoveSearch(!e.KeyModifiers.HasFlag(KeyModifiers.Shift));
+                        e.Handled = true;
+                        return;
+                    }
+
+                    return;
+                }
+
+                // 5) Ctrl+Shift+F：打开/聚焦终端查找条（MobaXterm 同快捷键）。
+                if (e.Key == Key.F && e.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift))
+                {
+                    ShowTerminalSearchBar();
+                    e.Handled = true;
+                    return;
+                }
+
                 // 3) Ctrl+Space toggles the macro popup (MobaXterm behavior).
                 if (e.Key == Key.Space && e.KeyModifiers == KeyModifiers.Control)
                 {
@@ -3458,6 +3517,7 @@ public partial class MainWindow : Window
             if ((tab.Terminal ?? tab.Content as TerminalControl) is { } terminal)
             {
                 terminal.FontSize = fontSize;
+                terminal.FontFamily = TerminalFontFamily();
             }
         }
     }
@@ -3606,6 +3666,9 @@ public partial class MainWindow : Window
         }
 
         _terminalFontSize = ClampTerminalFontSize(_config.Config.Terminal.FontSize);
+        TerminalFontPrimary = string.IsNullOrWhiteSpace(_config.Config.Terminal.FontFamily)
+            ? "Consolas"
+            : _config.Config.Terminal.FontFamily;
         ApplyTerminalFontSizeToAll(_terminalFontSize);
 
         // 从 config 恢复行尾仿真开关（旧配置缺键时反序列化为默认 false）。
@@ -4981,6 +5044,365 @@ public partial class MainWindow : Window
         await PasteNormalizedAsync(terminal);
     }
 
+    // ==================== 终端查找（TERM-23） ====================
+    // MobaXterm 式：Ctrl+Shift+F 或终端菜单「查找」在终端区底部弹出内联查找条，
+    // 底层用库的 BufferSearch（FindInBuffer/FindNext/FindPrevious/ClearSearch）。
+
+    private void ShowTerminalSearchBar()
+    {
+        if (DataContext is not MainViewModel viewModel
+            || viewModel.SelectedTab is not { } tab
+            || (tab.Terminal ?? tab.Content as TerminalControl) is not { } terminal)
+        {
+            return;
+        }
+
+        _searchTerminal = terminal;
+        _searchHasQuery = false;
+        SearchBar.IsVisible = true;
+        SearchBox.Text = "";
+        SearchCount.Text = "";
+        SearchBox.Focus();
+    }
+
+    private void HideSearchBar()
+    {
+        if (_searchTerminal is { } terminal)
+        {
+            terminal.ClearSearch();
+            _searchTerminal = null;
+        }
+
+        _searchHasQuery = false;
+        if (SearchBar.IsVisible)
+        {
+            SearchBar.IsVisible = false;
+        }
+    }
+
+    private void OnSearchBoxTextChanged(object? sender, TextChangedEventArgs e)
+    {
+        if (_searchTerminal is not { } terminal)
+        {
+            return;
+        }
+
+        var text = SearchBox.Text ?? "";
+        if (string.IsNullOrEmpty(text))
+        {
+            terminal.ClearSearch();
+            _searchHasQuery = false;
+            SearchCount.Text = "";
+            return;
+        }
+
+        terminal.FindInBuffer(text, new XTerm.Search.SearchOptions());
+        _searchHasQuery = true;
+        // FindInBuffer 只登记命中、不定位首个命中（CurrentIndex 仍为 -1），
+        // 手动前进一步使首个命中高亮，对齐 MobaXterm 首次搜索即定位的行为。
+        if (terminal.SearchHitCount > 0 && terminal.SearchCurrentIndex < 0)
+        {
+            terminal.FindNext();
+        }
+        UpdateSearchCount(terminal);
+    }
+
+    private void OnSearchPrevClick(object? sender, RoutedEventArgs e) => MoveSearch(false);
+
+    private void OnSearchNextClick(object? sender, RoutedEventArgs e) => MoveSearch(true);
+
+    private void OnSearchCloseClick(object? sender, RoutedEventArgs e) => HideSearchBar();
+
+    private void MoveSearch(bool next)
+    {
+        if (_searchTerminal is not { } terminal || !_searchHasQuery)
+        {
+            return;
+        }
+
+        if (next)
+        {
+            terminal.FindNext();
+        }
+        else
+        {
+            terminal.FindPrevious();
+        }
+
+        UpdateSearchCount(terminal);
+    }
+
+    private void UpdateSearchCount(TerminalControl terminal)
+    {
+        var hits = terminal.SearchHitCount;
+        if (hits <= 0)
+        {
+            SearchCount.Text = "0/0";
+            return;
+        }
+
+        var current = terminal.SearchCurrentIndex;
+        if (current < 0)
+        {
+            current = 0;
+        }
+
+        SearchCount.Text = $"{current + 1}/{hits}{(terminal.SearchTruncated ? "+" : "")}";
+    }
+
+    // ---- 测试接缝（headless 驱动查找条 / 读取录制态）----
+    internal void ShowSearchBarForTests() => ShowTerminalSearchBar();
+    internal bool IsSearchBarVisibleForTests => SearchBar.IsVisible;
+    internal string SearchCountTextForTests => SearchCount.Text;
+    internal bool IsOutputRecordingForTests { get { lock (_recordingGate) return _recordingTerminal is not null; } }
+    internal long RecordingBytesForTests { get { lock (_recordingGate) return _recordingBytes; } }
+    internal void StopOutputRecordingForTests() => StopTerminalOutputRecording();
+
+    // ==================== 字体设置（TERM-24） ====================
+    // MobaXterm 式：终端菜单「字体设置」对话框，选字体族+字号；全局生效
+    // （与 Ctrl+滚轮 一致）并落盘 config（terminal.fontFamily / terminal.fontSize）。
+
+    internal static readonly string[] TerminalFontFamilies =
+    {
+        "Consolas", "Cascadia Mono", "Courier New", "Microsoft YaHei UI", "Noto Sans Mono CJK SC",
+    };
+
+    private async Task ShowTerminalFontDialogAsync()
+    {
+        if (_config is null)
+        {
+            return;
+        }
+
+        var currentFamily = TerminalFontPrimary;
+        var currentSize = ClampTerminalFontSize(_config.Config.Terminal.FontSize);
+
+        var dialog = new Window
+        {
+            Title = "字体设置",
+            Width = 420,
+            Height = 240,
+            MinWidth = 380,
+            MinHeight = 200,
+            CanResize = false,
+            ShowInTaskbar = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+        };
+
+        var familyCombo = new ComboBox
+        {
+            Width = 220,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
+        };
+        foreach (var name in TerminalFontFamilies)
+        {
+            familyCombo.Items.Add(new ComboBoxItem { Content = name, Tag = name });
+        }
+
+        var idx = Array.IndexOf(TerminalFontFamilies, currentFamily);
+        familyCombo.SelectedIndex = idx >= 0 ? idx : 0;
+
+        var sizeSpin = new NumericUpDown
+        {
+            Minimum = (decimal)TerminalFontSizeMin,
+            Maximum = (decimal)TerminalFontSizeMax,
+            Value = (decimal)currentSize,
+            Width = 90,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
+        };
+
+        var ok = new Button { Content = "确定", Width = 80, Height = 28 };
+        var cancel = new Button { Content = "取消", Width = 80, Height = 28 };
+        ok.Click += (_, _) =>
+        {
+            var family = (familyCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? "Consolas";
+            var size = ClampTerminalFontSize((double)sizeSpin.Value);
+            ApplyTerminalFont(family, size);
+            _config!.Config.Terminal.FontFamily = family;
+            _config.Config.Terminal.FontSize = size;
+            _config.SaveConfig();
+            AppLog.Info($"Terminal font saved: family={family}, size={size}");
+            dialog.Close();
+        };
+        cancel.Click += (_, _) => dialog.Close();
+
+        dialog.Content = new StackPanel
+        {
+            Margin = new Thickness(20),
+            Spacing = 12,
+            Children =
+            {
+                new StackPanel
+                {
+                    Orientation = Avalonia.Layout.Orientation.Horizontal,
+                    Spacing = 8,
+                    Children =
+                    {
+                        new TextBlock { Text = "字体：", VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center },
+                        familyCombo,
+                    },
+                },
+                new StackPanel
+                {
+                    Orientation = Avalonia.Layout.Orientation.Horizontal,
+                    Spacing = 8,
+                    Children =
+                    {
+                        new TextBlock { Text = "字号：", VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center },
+                        sizeSpin,
+                    },
+                },
+                new TextBlock
+                {
+                    Text = "对全部终端即时生效，并保存后重启保持。字号范围 8–48（与 Ctrl+滚轮 一致）。",
+                    FontSize = 12,
+                    Opacity = 0.7,
+                    TextWrapping = TextWrapping.Wrap,
+                },
+                new StackPanel
+                {
+                    Orientation = Avalonia.Layout.Orientation.Horizontal,
+                    Spacing = 8,
+                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                    Children = { cancel, ok },
+                },
+            },
+        };
+        await dialog.ShowDialog(this);
+    }
+
+    /// <summary>字体族+字号同时应用到所有已打开终端（「字体设置」对话框入口）。</summary>
+    internal void ApplyTerminalFont(string family, double fontSize)
+    {
+        TerminalFontPrimary = string.IsNullOrWhiteSpace(family) ? "Consolas" : family;
+        _terminalFontSize = fontSize;
+        if (DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        var ff = TerminalFontFamily();
+        foreach (var tab in viewModel.Tabs)
+        {
+            if ((tab.Terminal ?? tab.Content as TerminalControl) is { } terminal)
+            {
+                terminal.FontFamily = ff;
+                terminal.FontSize = fontSize;
+            }
+        }
+    }
+
+    // ==================== 录制终端输出到文件（TERM-25） ====================
+    // MobaXterm 式：菜单项切换；首次点击弹保存框选文件后开始把该终端的原始
+    // 输出字节追加写盘，再次点击（或该 tab 关闭）停止。
+
+    private async Task ToggleTerminalOutputRecordingAsync(TerminalTab? tab, TerminalControl terminal)
+    {
+        if (ReferenceEquals(_recordingTerminal, terminal))
+        {
+            StopTerminalOutputRecording();
+            return;
+        }
+
+        if (_recordingTerminal is not null)
+        {
+            StopTerminalOutputRecording();
+        }
+
+        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "录制终端输出到文件",
+            SuggestedFileName = $"{SafeFileName(tab?.Title ?? "terminal")}-{DateTime.Now:yyyyMMdd-HHmmss}.log",
+            DefaultExtension = "log",
+        });
+        if (file is null)
+        {
+            return;
+        }
+
+        try
+        {
+            StartTerminalOutputRecording(terminal, file.Path.LocalPath, tab?.Title ?? "terminal");
+        }
+        catch (Exception ex)
+        {
+            _ = ShowErrorAsync($"启动终端输出录制失败：{ex.Message}");
+        }
+    }
+
+    internal void StartTerminalOutputRecording(TerminalControl terminal, string path, string tabTitle)
+    {
+        lock (_recordingGate)
+        {
+            _recordingStream?.Dispose();
+            _recordingStream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read);
+            _recordingPath = path;
+            _recordingTerminal = terminal;
+            _recordingBytes = 0;
+            _recordingHandler = OnTerminalOutputForRecording;
+            terminal.OutputReceived += _recordingHandler;
+        }
+
+        AppLog.Info($"Terminal output recording started: {path} (tab: {tabTitle})");
+    }
+
+    private void StopTerminalOutputRecording()
+    {
+        TerminalControl? terminal = null;
+        long bytes = 0;
+        string path = "";
+        lock (_recordingGate)
+        {
+            terminal = _recordingTerminal;
+            bytes = _recordingBytes;
+            path = _recordingPath;
+            _recordingTerminal = null;
+            _recordingPath = "";
+            _recordingStream?.Dispose();
+            _recordingStream = null;
+        }
+
+        if (terminal is not null)
+        {
+            if (_recordingHandler is not null)
+            {
+                terminal.OutputReceived -= _recordingHandler;
+            }
+
+            AppLog.Info($"Terminal output recording stopped: {path} ({bytes} bytes)");
+        }
+    }
+
+    private void OnTerminalOutputForRecording(object? sender, Iciclecreek.Terminal.OutputReceivedEventArgs e)
+    {
+        var len = e.Bytes.Length;
+        if (len == 0)
+        {
+            return;
+        }
+
+        var bytes = e.Bytes.ToArray();
+        lock (_recordingGate)
+        {
+            if (_recordingStream is { } stream)
+            {
+                stream.Write(bytes, 0, bytes.Length);
+                stream.Flush();
+                _recordingBytes += bytes.Length;
+            }
+        }
+    }
+
+    /// <summary>tab 关闭/分离窗口销毁时若正在录它，自动停止（防悬挂句柄）。</summary>
+    private void StopRecordingForTabIfAny(TerminalTab? tab)
+    {
+        if (tab is not null
+            && ReferenceEquals(_recordingTerminal, tab.Terminal ?? tab.Content as TerminalControl))
+        {
+            StopTerminalOutputRecording();
+        }
+    }
+
     /// <summary>
     /// 终端 Shift+右键菜单：复刻 MobaXterm 终端右键菜单（22.1，18 项+4 分隔线，
     /// 顺序/快捷键标注一致，已按本项目汉化要求译成中文）。“更改终端设置…”
@@ -5001,6 +5423,7 @@ public partial class MainWindow : Window
         var hasSelection = terminal.Terminal.Selection.HasSelection;
         var live = terminal.IsLive;
         var zmodemBusy = tab?.IsZmodemActive ?? false;
+        var recordingThisTerminal = ReferenceEquals(_recordingTerminal, terminal);
 
         var menu = new ContextMenu();
         menu.Items.Add(TerminalMenuItem("复制", null, hasSelection,
@@ -5014,9 +5437,19 @@ public partial class MainWindow : Window
         menu.Items.Add(TerminalMenuItem("复制带格式文本（RTF）", null, false, null));
         menu.Items.Add(TerminalMenuItem("粘贴", "Shift+INSERT", true,
             async () => { await PasteNormalizedAsync(terminal); }));
-        menu.Items.Add(TerminalMenuItem("查找", "Ctrl+Shift+F", false, null));
+        menu.Items.Add(TerminalMenuItem("查找", "Ctrl+Shift+F", true,
+            () =>
+            {
+                ShowTerminalSearchBar();
+                return Task.CompletedTask;
+            }));
         menu.Items.Add(new Separator());
-        menu.Items.Add(TerminalMenuItem("字体设置", null, false, null));
+        menu.Items.Add(TerminalMenuItem("字体设置", null, true,
+            () =>
+            {
+                _ = ShowTerminalFontDialogAsync();
+                return Task.CompletedTask;
+            }));
         menu.Items.Add(TerminalMenuItem("终端显示", null, false, null));
         menu.Items.Add(TerminalMenuItem("语法高亮", null, false, null));
         menu.Items.Add(new Separator());
@@ -5043,7 +5476,14 @@ public partial class MainWindow : Window
 
                 return Task.CompletedTask;
             }));
-        menu.Items.Add(TerminalMenuItem("录制终端输出到文件", null, false, null));
+        menu.Items.Add(TerminalMenuItem(
+            ReferenceEquals(_recordingTerminal, terminal) ? "停止录制终端输出" : "录制终端输出到文件",
+            null,
+            tab is not null,
+            async () =>
+            {
+                await ToggleTerminalOutputRecordingAsync(tab, terminal);
+            }));
         menu.Items.Add(TerminalMenuItem("保存到文件", "Ctrl+Shift+S", live,
             async () => { await SaveTerminalOutputAsync(tab, terminal); }));
         menu.Items.Add(TerminalMenuItem("打印", "Ctrl+Shift+P", false, null));

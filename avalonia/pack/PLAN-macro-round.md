@@ -581,6 +581,32 @@
         （SHA256 543912EB5CC9148819C3456DE9083D28CCDBF0833E711418E6D33DDE3B5AE260），deploy_r3.py 双份部署+SHA256 校验 OK。
         测试后已把用户 config 窗口尺寸恢复为原值 1443×916（侧栏 visible=true、monitor=true 亦保持原状）。
 
+   - 追加（2026-10-31，第 37 轮）：终端右键菜单三落地——查找 / 字体设置 / 录制终端输出到文件
+     （用户 2026-10-31 反馈：附终端 Shift+右键菜单截图“有些是没实现的吧？”→ 确认 9 个置灰占位项，
+     用户拍板“全部 9 项都实现”，本轮先落前三项；剩余 6 项 RTF/终端显示/语法高亮/打印/特殊命令/事件日志 后续轮次）：
+     ① 查找（TERM-23）：Ctrl+Shift+F 或终端菜单「查找」在终端区底部弹出内联查找条（输入框+n/m 计数+上一个/下一个/关闭，
+        默认隐藏，ZIndex 叠加不改变既有布局/E2E 像素探针）。引擎层直接复用库自带 BufferSearch
+        （FindInBuffer/FindNext/FindPrevious/ClearSearch，XTerm.NET 3.0.0 原生）；实测发现 FindInBuffer 只登记命中
+        不定位（SearchCurrentIndex 保持 -1），首次搜索后补一次 FindNext 定位首个命中（对齐 MobaXterm）；
+        默认大小写不敏感；Enter=下一个、Shift+Enter=上一个、Esc/关闭按钮清高亮收起；切标签自动收起并 ClearSearch
+        （SelectedTabChanging 钩子）。OnWindowKeyDown 隧道阶段置顶拦截：查找条可见且焦点在其内时 Enter/Esc 归查找条、
+        其余键直接放行给输入框（不误触宏热键/Ctrl+空格）；无命中显示 0/0，截断命中显示 n/m+。
+     ② 字体设置（TERM-24）：菜单「字体设置」弹对话框（字体族 ComboBox 5 候选：Consolas/Cascadia Mono/Courier New/
+        Microsoft YaHei UI/Noto Sans Mono CJK SC + 字号 NumericUpDown 8–48，与 Ctrl+滚轮 同边界同 config 键），
+        确定后 BuildTerminalFontFamily 对全部已打开终端即时生效（首选族 + YaHei + 内置 Noto CJK 回退链恒保留，
+        保证 r33 中英混排 2 格对齐不被单族字体破坏）并落盘 config.json（terminal.fontFamily 新增键，旧配置缺键默认
+        Consolas）；Ctrl+滚轮调字号同样同步字体族（ApplyTerminalFontSizeToAll 补设 FontFamily）。
+     ③ 录制终端输出到文件（TERM-25）：菜单项首次点击弹保存框选文件→订阅库 OutputReceived 事件（原始输出字节含 ANSI
+        序列）实时追加写盘（_recordingGate 锁保护，事件可能在读线程触发）；录制中菜单项文案动态变「停止录制终端输出」；
+        再点停止关文件；关闭对应 tab（CloseTab/DisposeDetachedTab 双路径钩子）自动停止落盘防悬挂句柄；
+        开始/停止+字节数写 run.log。
+     ④ 测试：新增 TerminalMenuFeatureTests 10 项（TERM23：查找条打开/命中 2/2/下一上一定位与回绕/0/0/清空关条/
+        Ctrl+Shift+F 隧道路由；TERM24：字体族构造 3 项含空值回落与 CJK 回退链、config 往返与缺键默认、应用到全部终端；
+        TERM25：录制捕获 InMemoryPty 输出字节、关 tab 自动停录）；TERM21 菜单断言更新（查找/字体设置/录制输出
+        由置灰改可用）。
+     ⑤ 结果（2026-10-31）：提交 {COMMIT}。gate-r37.log 全 PASS：{GATE}
+     ⑥ 实机 RDP 复验：{RDP}
+
    - 追加（2026-10-31，第 36 轮）：SSH 浏览器地球图标跟随当前选中标签（对齐 MobaXterm）
      （用户 2026-10-31 反馈：附 COM99 标签激活但左栏仍显示地球的截图，“切换到COM的标签，SSH浏览器不会消失，这点需要对齐mobaxterm”）：
      ① 根因：IsSshBrowserVisible 由 connectedSsh.Count > 0 驱动（MainViewModel.UpdateConnectionStates/LoadSessions），
