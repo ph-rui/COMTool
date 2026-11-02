@@ -308,7 +308,18 @@ public sealed class TerminalMenuFeatureTests
                 var ok = dialog.GetVisualDescendants()
                     .OfType<Button>().FirstOrDefault(b => Equals(b.Content, "确定"));
                 Assert.NotNull(ok);
-                ok!.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+
+                // 回归（实机"取消/确定显示不全"）：对话框为固定高度且不可缩放，
+                // 内容超限时底部按钮被窗口边缘裁切。确定/取消必须完整落在客户区内。
+                var cancel = dialog.GetVisualDescendants()
+                    .OfType<Button>().FirstOrDefault(b => Equals(b.Content, "取消"));
+                Assert.NotNull(cancel);
+                Assert.True(ok!.Bounds.Bottom <= dialog.ClientSize.Height,
+                    $"OK button bottom {ok.Bounds.Bottom:0.#} exceeds client height {dialog.ClientSize.Height:0.#}");
+                Assert.True(cancel!.Bounds.Bottom <= dialog.ClientSize.Height,
+                    $"Cancel button bottom {cancel.Bounds.Bottom:0.#} exceeds client height {dialog.ClientSize.Height:0.#}");
+
+                ok.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
                 RunJobs(window);
                 await task;
                 Assert.Null(window.LastFontDialogForTests);

@@ -5186,7 +5186,10 @@ public partial class MainWindow : Window
         {
             Title = "字体设置",
             Width = 420,
-            Height = 240,
+            // 内容实际高度 ≈ 20(边距)+32(字体行)+12+32(字号行)+12+34~51(说明文字 2~3 行)
+            // +12+28(按钮)+20(边距) ≈ 200~217，再加标题栏 ~32 与非客户边框，240 会裁掉
+            // 底部按钮（实机反馈"取消/确定显示不全"）。320 留足余量且不显空。
+            Height = 320,
             MinWidth = 380,
             MinHeight = 200,
             CanResize = false,
