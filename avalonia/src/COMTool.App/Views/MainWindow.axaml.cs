@@ -5214,10 +5214,12 @@ public partial class MainWindow : Window
             Minimum = (decimal)TerminalFontSizeMin,
             Maximum = (decimal)TerminalFontSizeMax,
             Value = sizeDec,
-            // 同时显式设置 Text：库 OnApplyTemplate 时是 TextBox.Text = Text（读字符串属性），
-            // 仅设 Value 在实机渲染首帧可能没刷出文本（RDP 实机显示为空/"1"，headless 正常）。
+            // 同时显式设置 Text：库 OnApplyTemplate 时是 TextBox.Text = Text（读字符串属性）。
             Text = sizeText,
-            Width = 90,
+            // 根因（实机 [FontDlg] 日志坐实）：12.1.4 Fluent 模板的 ButtonSpinner 是
+            // Dock=Right 横排两个 MinWidth=34 的按钮（共 68px），控件宽 90px 时内部
+            // TextBox 只剩 ~20px，"13.5" 被裁成 "1"。加宽到 120px 保证文本完整可见。
+            Width = 120,
             HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
         };
 
