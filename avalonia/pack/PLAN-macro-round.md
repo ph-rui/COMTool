@@ -625,8 +625,30 @@
          修复：Windows 上 RTF 写入改 Win32 P/Invoke 直写（Win32RtfClipboard：CF_RTF ANSI +
          CF_UNICODETEXT UTF-16，内存先备齐再 EmptyClipboard，失败不毁原剪贴板）；X11 仍走
          Avalonia DataTransfer（X11 字符串 UTF-8、MIME 正常）。分发逻辑 TerminalRtfClipboard。
-         **实机自测 23:50（116BDAC5）前已复验：print PARSE-OK ✓ / eventlog hasMarker=True ✓ /
-         RTF 格式已注册但内容截断 → (d) 修复后终验待回填。**
+         实机迭代（3160EDA0→116BDAC5）依次坐实 (c)(d) 并修复。
+      ⑤ selftest 回读脚本三连坑与 VM user32 异常（00:25/01:04 实机 + VM 诊断）：
+         (e) C# 拼接笔误——三行把 PowerShell 语句起始 ;'FORMATS=' 写成 ';FORMATS='（引号分号
+         颠倒）→ ParserError，且错误被 TrimNoise 连同 CLIXML 吞掉；};else{ 分号断开 if/else
+         绑定（运行时 else 未识别为命令，走 if 分支时潜伏不爆）。
+         (f) 本 VM user32.dll(x64) 导出表被剥离 IsClipboardFormatPresent/GetClipboardFormatName/
+         RegisterClipboardFormat（GetProcAddress 枚举=0 坐实；OpenClipboard/SetClipboardData/
+         GetClipboardData/Global* 均存在）→ WinForms 名称基查找全灭：GetFormats 回退显示
+         Format773、GetDataPresent("Rich Text Format")=false（名称未注册→动态注册出 ≥0xC000
+         新 id）。Word 等按 CF_RTF 常量 id(0x0305) 读取不受影响。
+         (g) WinForms OLE 读（GetDataObject().GetData）对**裸** SetClipboardData 写入的格式
+         不可见（实测 RTF=ABSENT，而 WinForms 自写的 OLE 数据可读）——回读必须走与 Word 相同
+         的 API 链：OpenClipboard→GetClipboardData(0x0305)→GlobalLock→ANSI 解码（id 基）。
+         修复（c99d890）：selftest 回读改 id 基 P/Invoke 直读；WinForms GetFormats 仅留作信息行。
+         VM 先用与 Win32RtfClipboard 完全相同的裸写 P/Invoke 模拟端到端验证
+         （WRITE=True / RTF=LEN=65 HEAD 完整）后再发布。
+      ⑥ **实机终验（02:06，CFD2DDF1）三项全过**：
+         rtf-clip write=True code=0 hasMarker=True，RTF=LEN=64（完整 RTF 含标记，
+         HEAD={\rtf1\ansi{\colortbl ;\red255\green0\blue0;}R38-RTF-020610\par}），
+         UTF16=LEN=14（纯文本标记完整）——CF_RTF 以完整 ANSI 落在剪贴板，Word/WordPad 可还原；
+         eventlog hasMarker=True textLen=19375（对话框尾部 200 行+刷新可用）；
+         print supported=True scriptParse code=0 out=[PARSE-OK]（打印脚本可解析）。
+         gate-r38e.log 全 PASS（App 255，E2E 15/15）；提交链 f59fa7e→56e9131→bb29b9f→
+         4dfc151→c99d890；部署 CFD2DDF1 双份 SHA 校验 OK、无残留进程。**
    - 追加（2026-11-02，第 37 轮）：终端右键菜单三落地——查找 / 字体设置 / 录制终端输出到文件
      （用户 2026-10-31 反馈：附终端 Shift+右键菜单截图“有些是没实现的吧？”→ 确认 9 个置灰占位项，
      用户拍板“全部 9 项都实现”，本轮先落前三项；剩余 6 项 RTF/终端显示/语法高亮/打印/特殊命令/事件日志 后续轮次）：
