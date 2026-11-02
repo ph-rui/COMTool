@@ -5927,22 +5927,13 @@ public partial class MainWindow : Window
             }
 
             var plain = terminal.Terminal.Selection.GetSelectionText();
-            var transfer = new DataTransfer();
-            transfer.Add(DataTransferItem.Create(
-                DataFormat.CreateStringPlatformFormat("Rich Text Format"), rtf));
-            transfer.Add(DataTransferItem.Create(
-                DataFormat.CreateStringPlatformFormat("text/rtf"), rtf));  // platform：原样传平台（X11 即 MIME atom；Win32 多注册一格式无副作用）
-            transfer.Add(DataTransferItem.CreateText(plain));
-            var clip = TopLevel.GetTopLevel(terminal)?.Clipboard;
-            if (clip is not null)
-            {
-                await clip.SetDataAsync(transfer);
-            }
-
+            // Windows 直写 CF_RTF(ANSI)+CF_UNICODETEXT（Avalonia 剪贴板按 UTF-16 写
+            // CF_RTF 会被标准读取方截断，见 Win32RtfClipboard）；其他平台走 DataTransfer。
+            var writeOk = await TerminalRtfClipboard.SetAsync(TopLevel.GetTopLevel(terminal), rtf, plain);
             if (tab is not null)
             {
-                tab.StatusMessage = "已复制带格式文本（RTF）";
-                tab.StatusBrush = StatusInfoBrush;
+                tab.StatusMessage = writeOk ? "已复制带格式文本（RTF）" : "复制 RTF 失败：无法写入系统剪贴板";
+                tab.StatusBrush = writeOk ? StatusInfoBrush : StatusErrorBrush;
             }
         }
         catch (Exception ex)
@@ -6060,8 +6051,8 @@ public partial class MainWindow : Window
 
     /// <summary>
     /// <c>--selftest-r38</c>：实机自检 r38 三项，结果写 run.log 后退出：
-    /// (1) RTF 剪贴板 CF_RTF 回读——经系统 PowerShell Get-Clipboard -Format RTF
-    ///     （绕过 Avalonia）验证 Windows 上 CF_RTF 真实注册成功；
+    /// (1) RTF 剪贴板 CF_RTF 回读——经与生产同路径（Win32 直写 CF_RTF ANSI）写入，
+    ///     再由 WinForms Clipboard（绕过 Avalonia）回读完整内容验证可还原性；
     /// (2) 事件日志对话框——打开、核验标记行、关闭；
     /// (3) 打印——IsSupported 与 PowerShell 脚本可解析性（不实际弹系统打印对话框，
     ///     避免干扰用户桌面）。
@@ -6073,46 +6064,39 @@ public partial class MainWindow : Window
             AppLog.Info("[SelfTest] r38: 等主窗稳定 1.5s 后自检 RTF/事件日志/打印");
             await Task.Delay(1500);
 
-            // 1) RTF 剪贴板 CF_RTF 回读
+            // 1) RTF 剪贴板 CF_RTF 回读（经 WinForms 直读 CF_RTF 字节内容，绕过 Avalonia，
+            //    验证生产写入路径产出的 CF_RTF 可被标准读取方完整还原）
             if (OperatingSystem.IsWindows())
             {
                 var rtfMarker = "R38-RTF-" + DateTime.Now.ToString("HHmmss");
                 var rtf = "{\\rtf1\\ansi{\\colortbl ;\\red255\\green0\\blue0;}" + rtfMarker + "\\par}";
-                var transfer = new DataTransfer();
-                transfer.Add(DataTransferItem.Create(
-                    DataFormat.CreateStringPlatformFormat("Rich Text Format"), rtf));
-                transfer.Add(DataTransferItem.Create(
-                    DataFormat.CreateStringPlatformFormat("text/rtf"), rtf));  // platform：原样传平台（X11 即 MIME atom；Win32 多注册一格式无副作用）
-                transfer.Add(DataTransferItem.CreateText(rtfMarker));
-                var clip = TopLevel.GetTopLevel(this)?.Clipboard;
-                if (clip is null)
-                {
-                    AppLog.Warn("[SelfTest] r38: 剪贴板不可用，跳过 RTF 回读");
-                }
-                else
-                {
-                    await clip.SetDataAsync(transfer);
-                    // PS 5.1 的 Get-Clipboard -Format 仅支持 Text/FileDropList/Image/Audio（无 RTF，
-                    // 实机报错坐实）→ CF_RTF 回读走 WinForms Clipboard（PS 5.1 控制台宿主本身 STA，
-                    // 读 API 直接可用）。
-                    const string readback =
-                        "$ProgressPreference='SilentlyContinue';$ErrorActionPreference='Stop'" +
-                        ";Add-Type -AssemblyName System.Windows.Forms" +
-                        ";$do=[System.Windows.Forms.Clipboard]::GetDataObject()" +
-                        ";'FORMATS='+($do.GetFormats() -join '|')" +
-                        ";if($do.GetDataPresent([System.Windows.Forms.DataFormats]::Rtf)){" +
-                        "$r=[string]$do.GetData([System.Windows.Forms.DataFormats]::Rtf)" +
-                        ";'RTF-LEN='+$r.Length" +
-                        ";'RTF-HEAD='+$r.Substring(0,[Math]::Min(160,$r.Length))" +
-                        "};else{'RTF-ABSENT'}";
-                    var (code, outp, err) = await TerminalPrint.RunPowershellAsync(readback);
-                    AppLog.Info($"[SelfTest] r38: rtf-clip code={code} hasMarker={(outp ?? "").Contains(rtfMarker)} " +
-                        $"out=[{TerminalPrint.TrimNoise(outp)}] err=[{TerminalPrint.TrimNoise(err)}]");
-                }
+                // 与菜单动作同一路径：Win32 P/Invoke 直写（CF_RTF ANSI + CF_UNICODETEXT）。
+                var writeOk = Win32RtfClipboard.SetRtfAndText(rtf, rtfMarker);
+                // PS 5.1 的 Get-Clipboard -Format 仅支持 Text/FileDropList/Image/Audio（无 RTF，
+                // 实机报错坐实）→ 回读走 WinForms Clipboard（PS 5.1 控制台宿主本身 STA，
+                // 读 API 直接可用）。
+                const string readback =
+                    "$ProgressPreference='SilentlyContinue';$ErrorActionPreference='Stop'" +
+                    ";Add-Type -AssemblyName System.Windows.Forms" +
+                    ";$do=[System.Windows.Forms.Clipboard]::GetDataObject()" +
+                    "';FORMATS='+($do.GetFormats() -join '|')" +
+                    ";if($do.GetDataPresent([System.Windows.Forms.DataFormats]::Rtf)){" +
+                    "$r=[string]$do.GetData([System.Windows.Forms.DataFormats]::Rtf)" +
+                    "';RTF-LEN='+$r.Length" +
+                    "';RTF-HEAD='+$r.Substring(0,[Math]::Min(160,$r.Length))" +
+                    "};else{'RTF-ABSENT'}";
+                var (code, outp, err) = await TerminalPrint.RunPowershellAsync(readback);
+                AppLog.Info($"[SelfTest] r38: rtf-clip write={writeOk} code={code} hasMarker={(outp ?? "").Contains(rtfMarker)} " +
+                    $"out=[{TerminalPrint.TrimNoise(outp)}] err=[{TerminalPrint.TrimNoise(err)}]");
             }
             else
             {
-                AppLog.Warn("[SelfTest] r38: 非 Windows，跳过 RTF 剪贴板回读");
+                // 非 Windows：生产路径为 Avalonia DataTransfer（X11 UTF-8/MIME），
+                // 无 WinForms 可回读，只核验写入不抛。
+                var rtfMarker = "R38-RTF-" + DateTime.Now.ToString("HHmmss");
+                var rtf = "{\\rtf1\\ansi{\\colortbl ;\\red255\\green0\\blue0;}" + rtfMarker + "\\par}";
+                var writeOk = await TerminalRtfClipboard.SetAsync(TopLevel.GetTopLevel(this), rtf, rtfMarker);
+                AppLog.Info($"[SelfTest] r38: rtf-clip(non-win) write={writeOk} (Avalonia DataTransfer 路径)");
             }
 
             // 2) 事件日志对话框

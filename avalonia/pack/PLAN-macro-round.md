@@ -613,7 +613,20 @@
          (b) 测试源里字面反斜杠断言被写成了 4 个反斜杠字符（转义翻倍），RTF 中一个字面 \ 实为 2 个
          反斜杠字符，od -c 逐字节核对后修正。
          gate-r38.log 全 PASS：Core 89/Sftp 42/Terminal 11/Connections 150/Zmodem 32/TestGate 49/
-         App 255（含新增 5 项），E2E 15/15；RESULT PASS×2。实机 --selftest-r38 验证结果待回填。
+         App 255（含新增 5 项），E2E 15/15；RESULT PASS×2。
+         实机首跑（3160EDA0）暴露两个实机级问题并修复（gate-r38b/c 均全 PASS）：
+         (c) PS 5.1 的 Get-Clipboard -Format 仅支持 Text/FileDropList/Image/Audio（无 RTF，实机
+         报错坐实）→ 回读改 WinForms Clipboard.GetDataObject()+DataFormats.Rtf 直读 CF_RTF；
+         顺带 TerminalPrint.TrimNoise 剔除 PowerShell CLIXML 进度包裹再写日志。
+         (d) **CF_RTF 编码截断**（关键）：首跑回读 FORMAT 列表含 "Rich Text Format"（CF_RTF 已
+         注册）但 GetData 只回 1 字节 "{"（RTF-LEN=1）——Avalonia Win32 剪贴板把**所有**字符串
+         格式一律按 UTF-16 写 HGlobal（OleDataObjectHelper.WriteStringToHGlobal 源码坐实），而
+         CF_RTF 规范要求 ANSI(CP_A)，标准读取方（Word/WinForms）按 ANSI 解码遇 NUL 即截断。
+         修复：Windows 上 RTF 写入改 Win32 P/Invoke 直写（Win32RtfClipboard：CF_RTF ANSI +
+         CF_UNICODETEXT UTF-16，内存先备齐再 EmptyClipboard，失败不毁原剪贴板）；X11 仍走
+         Avalonia DataTransfer（X11 字符串 UTF-8、MIME 正常）。分发逻辑 TerminalRtfClipboard。
+         **实机自测 23:50（116BDAC5）前已复验：print PARSE-OK ✓ / eventlog hasMarker=True ✓ /
+         RTF 格式已注册但内容截断 → (d) 修复后终验待回填。**
    - 追加（2026-11-02，第 37 轮）：终端右键菜单三落地——查找 / 字体设置 / 录制终端输出到文件
      （用户 2026-10-31 反馈：附终端 Shift+右键菜单截图“有些是没实现的吧？”→ 确认 9 个置灰占位项，
      用户拍板“全部 9 项都实现”，本轮先落前三项；剩余 6 项 RTF/终端显示/语法高亮/打印/特殊命令/事件日志 后续轮次）：
