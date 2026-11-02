@@ -5273,6 +5273,11 @@ public partial class MainWindow : Window
                     FontSize = 12,
                     Opacity = 0.7,
                     TextWrapping = TextWrapping.Wrap,
+                    // SizeToContent.Height 下必须固定换行元素的宽度：Windows 首次布局时
+                    // 客户区宽度可能尚为 0，本行折成 ~44 行导致窗口被量成 720px 高
+                    // （实机 dlgBounds=420,720）。固定 380=420-20*2 后高度测量与
+                    // 窗口宽度解耦，任意平台/DPI 下恒定 2 行。
+                    Width = 380,
                 },
                 new StackPanel
                 {
