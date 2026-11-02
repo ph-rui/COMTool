@@ -6072,19 +6072,41 @@ public partial class MainWindow : Window
                 var rtf = "{\\rtf1\\ansi{\\colortbl ;\\red255\\green0\\blue0;}" + rtfMarker + "\\par}";
                 // 与菜单动作同一路径：Win32 P/Invoke 直写（CF_RTF ANSI + CF_UNICODETEXT）。
                 var writeOk = Win32RtfClipboard.SetRtfAndText(rtf, rtfMarker);
-                // PS 5.1 的 Get-Clipboard -Format 仅支持 Text/FileDropList/Image/Audio（无 RTF，
-                // 实机报错坐实）→ 回读走 WinForms Clipboard（PS 5.1 控制台宿主本身 STA，
-                // 读 API 直接可用）。
-                const string readback =
-                    "$ProgressPreference='SilentlyContinue';$ErrorActionPreference='Stop'" +
-                    ";Add-Type -AssemblyName System.Windows.Forms" +
-                    ";$do=[System.Windows.Forms.Clipboard]::GetDataObject()" +
-                    ";'FORMATS='+($do.GetFormats() -join '|')" +
-                    ";if($do.GetDataPresent([System.Windows.Forms.DataFormats]::Rtf)){" +
-                    "$r=[string]$do.GetData([System.Windows.Forms.DataFormats]::Rtf)" +
-                    ";'RTF-LEN='+$r.Length" +
-                    ";'RTF-HEAD='+$r.Substring(0,[Math]::Min(160,$r.Length))" +
-                    "}else{'RTF-ABSENT'}";
+                // 回读必须 id 基直读（与 Word 读 CF_RTF 同 API：GetClipboardData(0x0305)+ANSI 解码）：
+                // PS 5.1 Get-Clipboard -Format 无 RTF（实机报错坐实）；本 VM user32 被剥离
+                // IsClipboardFormatPresent/GetClipboardFormatName/RegisterClipboardFormat
+                // （GetProcAddress 枚举坐实）→ 名称基查找不可用；WinForms OLE 读对裸
+                // SetClipboardData 写的格式不可见（实机 RTF=ABSENT 坐实）。
+                const string readback = @"
+$ProgressPreference='SilentlyContinue'
+$ErrorActionPreference='Stop'
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -TypeDefinition '
+using System;
+using System.Runtime.InteropServices;
+public static class ClipCheck {
+    [DllImport(""user32.dll"")] public static extern bool OpenClipboard(IntPtr h);
+    [DllImport(""user32.dll"")] public static extern bool CloseClipboard();
+    [DllImport(""user32.dll"")] public static extern IntPtr GetClipboardData(uint f);
+    [DllImport(""kernel32.dll"")] public static extern IntPtr GlobalLock(IntPtr h);
+    [DllImport(""kernel32.dll"")] public static extern bool GlobalUnlock(IntPtr h);
+    public static string ReadFormat(uint fmt, bool asAnsi) {
+        if (!OpenClipboard(IntPtr.Zero)) { return ""OPEN-FAIL""; }
+        try {
+            IntPtr h = GetClipboardData(fmt);
+            if (h == IntPtr.Zero) { return ""ABSENT""; }
+            IntPtr p = GlobalLock(h);
+            if (p == IntPtr.Zero) { GlobalUnlock(h); return ""LOCK-FAIL""; }
+            string s = asAnsi ? Marshal.PtrToStringAnsi(p) : Marshal.PtrToStringUni(p);
+            GlobalUnlock(h);
+            return ""LEN="" + s.Length + "" | HEAD="" + s.Substring(0, Math.Min(160, s.Length));
+        } finally { CloseClipboard(); }
+    }
+}'
+'FORMATS=' + ([System.Windows.Forms.Clipboard]::GetDataObject().GetFormats() -join '|')
+'RTF=' + [ClipCheck]::ReadFormat(0x0305, $true)
+'UTF16=' + [ClipCheck]::ReadFormat(13, $false)
+";
                 var (code, outp, err) = await TerminalPrint.RunPowershellAsync(readback);
                 AppLog.Info($"[SelfTest] r38: rtf-clip write={writeOk} code={code} hasMarker={(outp ?? "").Contains(rtfMarker)} " +
                     $"out=[{TerminalPrint.TrimNoise(outp)}] err=[{TerminalPrint.TrimNoise(err)}]");
