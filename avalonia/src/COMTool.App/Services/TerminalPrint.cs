@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Linq;
 using System.Text;
 
 namespace COMTool.App.Services;
@@ -20,6 +21,7 @@ public static class TerminalPrint
     {
         var safe = textFilePath.Replace("'", "''");
         const string template = """
+            $ProgressPreference = 'SilentlyContinue'
             $ErrorActionPreference = 'Stop'
             Add-Type -AssemblyName System.Windows.Forms
             Add-Type -AssemblyName System.Drawing
@@ -112,6 +114,25 @@ public static class TerminalPrint
                 }
             }
         }
+    }
+
+    /// <summary>剔除 PowerShell 的 CLIXML 进度/报错包裹与空行，只留脚本真实输出，供日志使用。</summary>
+    public static string TrimNoise(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return string.Empty;
+        }
+        var idx = text.IndexOf("#< CLIXML", StringComparison.Ordinal);
+        if (idx >= 0)
+        {
+            text = text.Substring(0, idx);
+        }
+        return string.Join(" | ",
+            text.Split('\n')
+                .Select(l => l.Trim())
+                .Where(l => l.Length > 0 && !l.StartsWith("<Obj", StringComparison.Ordinal)
+                    && !l.Contains("RefId", StringComparison.Ordinal)));
     }
 
     private static string FirstNonEmptyLine(string first, string second)

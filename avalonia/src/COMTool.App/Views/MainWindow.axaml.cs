@@ -6092,11 +6092,22 @@ public partial class MainWindow : Window
                 else
                 {
                     await clip.SetDataAsync(transfer);
-                    var (code, outp, err) = await TerminalPrint.RunPowershellAsync("Get-Clipboard -Format RTF");
-                    var head = (outp ?? "").Trim();
-                    AppLog.Info($"[SelfTest] r38: rtf-clip code={code} len={head.Length} " +
-                        $"hasMarker={head.Contains(rtfMarker)} " +
-                        $"head=[{head.Substring(0, Math.Min(120, head.Length))}] err=[{err.Trim()}]");
+                    // PS 5.1 的 Get-Clipboard -Format 仅支持 Text/FileDropList/Image/Audio（无 RTF，
+                    // 实机报错坐实）→ CF_RTF 回读走 WinForms Clipboard（PS 5.1 控制台宿主本身 STA，
+                    // 读 API 直接可用）。
+                    const string readback =
+                        "$ProgressPreference='SilentlyContinue';$ErrorActionPreference='Stop'" +
+                        ";Add-Type -AssemblyName System.Windows.Forms" +
+                        ";$do=[System.Windows.Forms.Clipboard]::GetDataObject()" +
+                        ";'FORMATS='+($do.GetFormats() -join '|')" +
+                        ";if($do.GetDataPresent([System.Windows.Forms.DataFormats]::Rtf)){" +
+                        "$r=[string]$do.GetData([System.Windows.Forms.DataFormats]::Rtf)" +
+                        ";'RTF-LEN='+$r.Length" +
+                        ";'RTF-HEAD='+$r.Substring(0,[Math]::Min(160,$r.Length))" +
+                        "};else{'RTF-ABSENT'}";
+                    var (code, outp, err) = await TerminalPrint.RunPowershellAsync(readback);
+                    AppLog.Info($"[SelfTest] r38: rtf-clip code={code} hasMarker={(outp ?? "").Contains(rtfMarker)} " +
+                        $"out=[{TerminalPrint.TrimNoise(outp)}] err=[{TerminalPrint.TrimNoise(err)}]");
                 }
             }
             else
@@ -6139,7 +6150,7 @@ public partial class MainWindow : Window
                     $"$sb=[scriptblock]::Create((Get-Content -Raw '{scriptFile.Replace("'", "''")}')); 'PARSE-OK'";
                 var (code, outp, err) = await TerminalPrint.RunPowershellAsync(parseScript);
                 AppLog.Info($"[SelfTest] r38: print supported={TerminalPrint.IsSupported} " +
-                    $"scriptParse code={code} out=[{outp.Trim()}] err=[{err.Trim()}]");
+                    $"scriptParse code={code} out=[{TerminalPrint.TrimNoise(outp)}] err=[{TerminalPrint.TrimNoise(err)}]");
             }
             finally
             {
