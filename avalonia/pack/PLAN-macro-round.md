@@ -626,9 +626,12 @@
         【真根因】12.1.4 Fluent 主题的 ButtonSpinner 模板为 DockPanel 横排两个 MinWidth=34 的按钮（共 68px），
         NumericUpDown Width=90 减去边框 2px 与按钮 68px 后内部 TextBox 仅剩 20px（+Margin=-1 即 22px），
         "13.5" 被裁切只剩 "1"。属几何布局问题，非数据/时序问题；headless 测试只断言属性值未断言渲染宽度，故未拦截。
-     ⑨ 字号显示修复第二轮（根因修复）：NumericUpDown Width 90→120（120-2-68=50px 内容区，内部 TextBox 约 52px，
-        足够显示 "13.5"）；回归测试新增断言：对话框内 TextBox 的 Bounds.Width >= 45。gate-r37fix3.log 全 PASS。
-        发布 SHA256 0EF0F3A4…E53A00（95,098,221 字节） 双份部署+校验 OK。
+     ⑨ 字号显示修复第二轮（根因修复，提交 f3a3623）：NumericUpDown Width 90→120（120-2-68=50px 内容区，内部
+        TextBox 约 52px，足够显示 "13.5"）；回归测试新增断言：对话框内 TextBox 的 Bounds.Width >= 45。
+        gate-r37fix3.log 曾出现一次 test host SIGSEGV（exit 139，TERM02 调色板测试未出结果、249/250、app-tests FAIL）——
+        该测试单独跑与连续 3 次全量重跑均过，判定为环境性偶发（xunit 并行跑 headless UI 的竞态）；
+        gate-r37fix4.log 重跑全 PASS：Core 89/Sftp 42/Terminal 11/Connections 150/Zmodem 32/TestGate 49/App 250，E2E 15/15；RESULT PASS×2。
+        发布 SHA256 0EF0F3A4…E53A00（95,098,221 字节）双份部署+校验 OK。
      ⑩ 实机复验（二，待用户坐席操作）：新包打开「字体设置」，字号框应完整显示 13.5；如仍异常，经 SSH 读 run.log 的
         [FontDlg] 行（含 tbBounds）判定布局几何。
 
