@@ -930,6 +930,39 @@ Connections 150 / Zmodem 32 / TestGate 49 / App 266 / E2E 15/15，RESULT PASS×2
 - special-cmd 矩阵不变（Local 0/5+0/14、Serial 2/5+2/14、Tcp/Telnet 1/5+2/14、Ssh 5/5+14/14）
 - 本地 SIGINT → unsupported/failed（错误框自动确认），退出前方案恢复 default
 
+### 40.2 移除「逐行」与「忽略消息」（2026-11-03，用户决定）
+
+用户指示：忽略消息不用实现（去掉）；逐行「去掉，或者看看 MobaXterm 是什么效果再去实现」。
+调研结论：MobaXterm「Per line」无任何公开权威描述——官方文档 3.2.13 只讲自定义语法定义；
+官方 blog/changelog（8.5/9.0/9.3/9.4）只列 keywords/Unix shell/Cisco/Perl/SQL/network 规则集；
+wezterm #4348 的 MobaXterm.ini 导出（CustomSyntax 原文）也无「Per line」规则集；
+ini 里仅有 SyntaxType= 数值，无该选项文档。语义无法确认 → 按用户第一选项直接移除（不再置灰占位）。
+
+改动：
+- 语法高亮子菜单 6→5 项（移除「逐行」；HighlightScheme.PerLine 枚举保留，仅供旧 config.json
+  "per_line" 兼容，映射后无规则=行为同 default）
+- 特殊命令子菜单 7→6 项（移除「忽略消息」；SpecialCommands 表/矩阵不变）
+- 顶层 19 项 + 4 分隔线结构不变；测试 TERM29_DisplayMenu_StructureAndLabels 同步改为 5/6 项断言
+- 若日后用户给出 MobaXterm「Per line」实机效果描述，可再加回（枚举/配置键已留好）
+- feature-test-matrix 补 TERM-26~31 六行（TestGate 49 项断言硬约束：parity-matrix「完成」行必须同步登记）
+
+验证（2026-11-03）：
+- gate-r40b EXIT=1：单元全绿，E2E UI01 标题栏双击抖动（14:23 FAIL，14:29 复跑 PASS，窗口状态代码未动）；
+  另暴露 feature-test-matrix 缺 TERM-26~31 行（已补）
+- gate-r40b2 EXIT=1：E2E TELNET02_RestartStoppedSession fixture 抖动（DROP 后 15s 未收到
+  TELNET_DROPPED 标记，非代码路径问题）；TestGate 49/49、App 266/266、UI01 PASS
+- gate-r40c **EXIT=0 全绿**：单元 Core 90 / Sftp 42 / Terminal 26 / Connections 150 / Zmodem 32 /
+  TestGate 49 / App 266 + E2E 全 PASS
+- publish win-x64 单文件：COMTool.App.exe **155,063,809 B**，
+  SHA256=**15256332205970DD73D124ED625AEA4BCED241F0C4B065F21E26AACF41E5B4C2**
+- deploy_r3.py 双份部署（C:\Users\devuser\COMTool-Avalonia.exe + 桌面副本），远端 SHA 均校验 OK
+- VM 实机自检（run.log 14:40:22）全部 ok=True：
+  高亮六色 1红/3黄/2绿/5品红/256默认；clear-scrollback YBase 22→0 screenBlank；
+  scrollbar toggle；fullscreen Maximized→FullScreen→Maximized（r40.1 修复生效）；
+  set-title 340×142；readonly blocked；特殊命令矩阵 Local 0/5·0/14、Serial 2/5·2/14、
+  Tcp 1/5·2/14、Telnet 1/5·2/14、Ssh 5/5·14/14（分母已是 5 顶层，无「忽略消息」）；
+  local-SIGINT→unsupported/failed 自动确认；退出前方案恢复 default
+
 ## 已知偏差（已写入 spec 附录）
 
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
