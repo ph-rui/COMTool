@@ -202,19 +202,20 @@ public sealed class TerminalR39FeatureTests
                 RunJobs(window);
                 Assert.True(buf.YBase > 0);
 
-                // 清除终端回滚：历史丢弃（YBase=0），当前屏内容保留
+                // 清除终端回滚：MobaXterm 语义=同时清空当前屏+回滚（官方 changelog：
+                // "clear the screen AND the scrollback buffer"）——历史丢弃且屏幕全白
                 window.ClearTerminalScrollback(terminal);
                 Assert.Equal(0, buf.YBase);
-                var screenHasLastLine = false;
+                var screenBlankAfterClear = true;
                 for (var y = 0; y < buf.Rows; y++)
                 {
                     var t = buf.GetLine(y)?.TranslateToString(true, 0, buf.Cols) ?? "";
-                    if (t.Contains("line59"))
+                    if (t.Trim().Length > 0)
                     {
-                        screenHasLastLine = true;
+                        screenBlankAfterClear = false;
                     }
                 }
-                Assert.True(screenHasLastLine);
+                Assert.True(screenBlankAfterClear);
 
                 // 重置终端输出：RIS 全复位——全空 + 光标回原点
                 window.ResetTerminalOutput(terminal);
@@ -339,11 +340,19 @@ public sealed class TerminalR39FeatureTests
                 window.StopPortTimerForTests();
                 RunJobs(window);
 
-                var before = window.WindowState;
+                // MobaXterm 行为（用户 r40 反馈）：退出全屏必须恢复到进入前的窗口态
+                // （最大化进全屏 → 退出后仍最大化，而不是退回 Normal）
+                window.WindowState = Avalonia.Controls.WindowState.Maximized;
                 window.ToggleFullScreen();
                 Assert.Equal(Avalonia.Controls.WindowState.FullScreen, window.WindowState);
                 window.ToggleFullScreen();
-                Assert.Equal(before, window.WindowState);
+                Assert.Equal(Avalonia.Controls.WindowState.Maximized, window.WindowState);
+
+                window.WindowState = Avalonia.Controls.WindowState.Normal;
+                window.ToggleFullScreen();
+                Assert.Equal(Avalonia.Controls.WindowState.FullScreen, window.WindowState);
+                window.ToggleFullScreen();
+                Assert.Equal(Avalonia.Controls.WindowState.Normal, window.WindowState);
             });
         }
         finally

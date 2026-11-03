@@ -13,6 +13,7 @@ namespace COMTool.Terminal.Highlight;
 /// - 只染默认前景色（fg==256/mode0）的格子，程序自带颜色不被覆盖；
 /// - 宽字符（CJK）按 cell 宽度映射，匹配按字符偏移、落色按格子覆盖；
 /// - 水标记（watermark）只处理新增行；方案切换调 ApplyToAll 全量重染；
+///   缓冲区收缩（Reset/ClearScrollback）后水印归零，新写入的行重新参与着色；
 /// - 备用屏（vim/less 等 alt screen）不着色。
 /// </summary>
 public sealed class TerminalHighlighter : IDisposable
@@ -91,8 +92,9 @@ public sealed class TerminalHighlighter : IDisposable
         }
         if (lastRow < _nextRow)
         {
-            _nextRow = lastRow + 1;
-            return;
+            // 缓冲区被 Reset/ClearScrollback 收缩：旧水印失效，从头重染
+            // （复位后写入的新行必须能被着色，不能错过）。
+            _nextRow = 0;
         }
         for (var row = _nextRow; row <= lastRow; row++)
         {

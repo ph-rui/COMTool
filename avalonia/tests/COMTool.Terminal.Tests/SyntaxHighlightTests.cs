@@ -181,6 +181,23 @@ public sealed class SyntaxHighlightTests
     }
 
     [Fact]
+    public void TERM30_HlighterRecolorsAfterReset()
+    {
+        var emu = new TerminalEmulator(40, 10, 200);
+        using var hl = new TerminalHighlighter(emu.Terminal, HighlightScheme.ErrorWarningSuccess);
+        emu.Write("first error line\r\n");
+        // "error" 从第 6 列开始（"first " 6 字符）
+        Assert.Equal(1, emu.Terminal.Buffer.GetLine(0)![6].Attributes.GetFgColor());
+        // RIS 全复位后缓冲区收缩、水印失效——复位后写入的新行仍必须被着色
+        emu.Terminal.Reset();
+        emu.Write("second warning line\r\n");
+        var line = emu.Terminal.Buffer.GetLine(0)!;
+        Assert.Contains("warning", line.TranslateToString(true, 0, emu.Terminal.Cols));
+        // "warning" 从第 7 列开始（"second " 7 字符）
+        Assert.Equal(3, line[7].Attributes.GetFgColor());
+    }
+
+    [Fact]
     public void TERM30_DefaultFgProbe()
     {
         // 锁定 XTerm 默认前景色编码（256/mode0），防止库升级破坏着色判定

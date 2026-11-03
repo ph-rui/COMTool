@@ -53,6 +53,9 @@ public partial class MainWindow : Window
     private readonly Dictionary<TerminalTab, ZmodemStream> _zmodemStreams = new();
     // r39：per-终端语法高亮着色器（LineFed 驱动，方案来自 config，见 AttachTerminalHighlighter）
     private readonly Dictionary<TerminalControl, TerminalHighlighter> _highlighters = new();
+    // r40：进入全屏前的窗口态（退出全屏时恢复；MobaXterm 行为，用户实机反馈：
+    // 最大化窗口 F11 进全屏、再 F11 应回到最大化，而不是 Normal）
+    private WindowState _preFullScreenState = WindowState.Normal;
     private readonly Dictionary<TerminalTab, DetachedTabState> _detachedTabs = new();
     private readonly Dictionary<TerminalTab, SerialTabState> _serialTabs = new();
     private readonly HashSet<TerminalTab> _sshRestarts = new();
@@ -5990,6 +5993,7 @@ public partial class MainWindow : Window
         try
         {
             terminal.Terminal.Reset();
+            terminal.Refresh(); // RIS 不经过输出流，显式通知控件重绘（否则界面看似无变化）
             AppLog.Info("Terminal output reset (RIS)");
         }
         catch (Exception ex)
@@ -5998,13 +6002,17 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>「清除终端回滚」（MobaXterm）：只丢弃回滚历史，当前屏与光标行保留。</summary>
+    /// <summary>「清除终端回滚」（MobaXterm）：丢弃回滚历史 + 清空当前屏（MobaXterm
+    /// 官方 changelog："clear the screen AND the scrollback buffer"，r40 用户实机对齐）；
+    /// 终端状态（颜色/模式/光标）不动——那是「重置终端输出」(RIS) 的职责。</summary>
     internal void ClearTerminalScrollback(TerminalControl terminal)
     {
         try
         {
             terminal.Terminal.Buffer.ClearScrollback();
-            AppLog.Info("Terminal scrollback cleared");
+            terminal.Terminal.Clear();
+            terminal.Refresh(); // 直接改缓冲区不经过输出流，显式通知控件重绘
+            AppLog.Info("Terminal scrollback + screen cleared");
         }
         catch (Exception ex)
         {
@@ -6124,11 +6132,22 @@ public partial class MainWindow : Window
     /// 与 F11 键共用同一逻辑。</summary>
     internal void ToggleFullScreen()
     {
-        var fullScreen = WindowState == WindowState.FullScreen;
-        WindowState = fullScreen ? WindowState.Normal : WindowState.FullScreen;
-        TitleBar.IsVisible = fullScreen;
-        RootGrid.RowDefinitions[0].Height = new GridLength(fullScreen ? 35 : 0);
-        AppLog.Info($"Terminal fullscreen: {(fullScreen ? "off" : "on")}");
+        if (WindowState == WindowState.FullScreen)
+        {
+            // 退出：恢复到进入全屏前的窗口态（MobaXterm 行为）
+            WindowState = _preFullScreenState;
+            TitleBar.IsVisible = true;
+            RootGrid.RowDefinitions[0].Height = new GridLength(35);
+            AppLog.Info($"Terminal fullscreen: off (restore {_preFullScreenState})");
+        }
+        else
+        {
+            _preFullScreenState = WindowState;
+            WindowState = WindowState.FullScreen;
+            TitleBar.IsVisible = false;
+            RootGrid.RowDefinitions[0].Height = new GridLength(0);
+            AppLog.Info($"Terminal fullscreen: on (from {_preFullScreenState})");
+        }
     }
 
     /// <summary>「语法高亮」子菜单（MobaXterm）：6 选项单选，当前方案打勾；
@@ -6799,17 +6818,17 @@ public static class ClipCheck {
             await Task.Delay(100);
             var ybaseBefore = buf.YBase;
             ClearTerminalScrollback(terminal);
-            var screenHasFill = false;
+            var screenBlank = true;
             for (var y = 0; y < buf.Rows; y++)
             {
                 var t = buf.GetLine(y)?.TranslateToString(true, 0, buf.Cols) ?? "";
-                if (t.Contains("R39FILL"))
+                if (t.Trim().Length > 0)
                 {
-                    screenHasFill = true;
+                    screenBlank = false;
                 }
             }
             AppLog.Info($"[SelfTest] r39: clear-scrollback YBase {ybaseBefore} -> {buf.YBase} " +
-                $"ok={ybaseBefore > 0 && buf.YBase == 0} screenRetained={screenHasFill}");
+                $"ok={ybaseBefore > 0 && buf.YBase == 0 && screenBlank} screenBlank={screenBlank}");
 
             var sbToggled = ToggleTerminalScrollBar(terminal);
             var bars = terminal.GetVisualDescendants().OfType<Avalonia.Controls.Primitives.ScrollBar>().ToList();
@@ -6818,15 +6837,16 @@ public static class ClipCheck {
             AppLog.Info($"[SelfTest] r39: scrollbar toggle ok={sbToggled} bars={bars.Count} " +
                 $"visibleAfterShow={sbShown}");
 
-            var stateBefore = WindowState;
+            // 全屏 F11（r40 用户场景：最大化窗口 F11 进全屏，再 F11 必须回最大化）
+            var stateOrig = WindowState;
+            WindowState = WindowState.Maximized;
             ToggleFullScreen();
             var stateFs = WindowState;
             ToggleFullScreen();
             var stateRestored = WindowState;
-            // 进入全屏必须 FullScreen；退出后回 Normal（与 F11 既有行为一致，
-            // 不要求恢复到进入前的 Maximized 态）。
-            var fsOk = stateFs == WindowState.FullScreen && stateRestored == WindowState.Normal;
-            AppLog.Info($"[SelfTest] r39: fullscreen {stateBefore} -> {stateFs} -> {stateRestored} " +
+            var fsOk = stateFs == WindowState.FullScreen && stateRestored == WindowState.Maximized;
+            WindowState = stateOrig; // 还原用户原窗口态
+            AppLog.Info($"[SelfTest] r39: fullscreen Maximized -> {stateFs} -> {stateRestored} " +
                 $"ok={fsOk}{(OperatingSystem.IsWindows() ? "" : "（X11 无 WM 环境可能不支持，以 Win32 实机为准）")}");
 
             // 设置标题：自动确认对话框
