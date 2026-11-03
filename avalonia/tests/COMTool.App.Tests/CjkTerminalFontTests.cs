@@ -15,11 +15,13 @@ namespace COMTool.App.Tests;
 
 /// <summary>
 /// The terminal face must match MobaXterm's default (Consolas 10pt). Consolas
-/// carries no CJK glyphs, so the family list falls back to the bundled Noto
-/// Sans Mono CJK SC first (r41: terminal-grade CJK face, lighter strokes like
-/// MobaXterm, 0.5em/1em metrics keep the r33 two-cell alignment), with
-/// Microsoft YaHei UI as last-resort system fallback. Ctrl+wheel resizes the
-/// terminal font like MobaXterm (TERM-18).
+/// carries no CJK glyphs, so the family list falls back to Microsoft YaHei UI
+/// first — that is exactly how MobaXterm renders Chinese on Windows (system
+/// CJK fallback), confirmed by same-machine side-by-side screenshots in r41.1.
+/// The bundled Noto Sans Mono CJK SC stays in the chain as the cross-platform
+/// guarantee (Linux / headless, where YaHei does not exist); the 0.5em/1em
+/// metrics keep the r33 two-cell alignment. Ctrl+wheel resizes the terminal
+/// font like MobaXterm (TERM-18).
 /// </summary>
 public sealed class CjkTerminalFontTests
 {
@@ -32,10 +34,11 @@ public sealed class CjkTerminalFontTests
         Assert.Contains("Microsoft YaHei UI", family);
         Assert.Contains("Noto Sans Mono CJK SC", family);
         Assert.Equal(13.5, MainWindow.TerminalFontSize);
-        // r41：CJK 必须先落到内置 Noto（笔画细、跨平台一致），雅黑只做最后兜底
+        // r41.1：Windows 上 CJK 必须先落到系统雅黑（= MobaXterm 的回退结果，
+        // 同机截图比对确认），内置 Noto 只做跨平台兜底
         Assert.True(
-            family.IndexOf("Noto Sans Mono CJK SC", StringComparison.Ordinal)
-            < family.IndexOf("Microsoft YaHei UI", StringComparison.Ordinal));
+            family.IndexOf("Microsoft YaHei UI", StringComparison.Ordinal)
+            < family.IndexOf("Noto Sans Mono CJK SC", StringComparison.Ordinal));
     }
 
     [AvaloniaFact]

@@ -1784,20 +1784,20 @@ public partial class MainWindow : Window
     }
 
     // MobaXterm's terminal font is Consolas 10pt. Consolas carries no CJK
-    // glyphs; the bundled Noto Sans Mono CJK SC answers for them first
-    // (r41: it is a terminal-grade CJK face with 0.5em latin / 1em CJK metrics
-    // — the CJK strokes match MobaXterm's lighter look and the metrics keep
-    // the r33 two-cell alignment exactly; Microsoft YaHei UI rendered heavier
-    // and was demoted to last-resort system fallback). The avares face ships
-    // inside the single-file publish, so CJK rendering is identical on
-    // Windows / Linux / headless.
+    // glyphs; on Windows the system CJK fallback (Microsoft YaHei UI) answers
+    // for them — that is exactly what MobaXterm shows (r41.1: user side-by-side
+    // screenshots from the same machine proved MobaXterm's CJK glyphs are
+    // YaHei-style, NOT the lighter/bundled Noto face that r41 briefly made
+    // primary). YaHei UI first, bundled Noto Sans Mono CJK SC (Regular+Bold)
+    // second: it keeps the r33 two-cell alignment and guarantees CJK coverage
+    // on Linux / headless where YaHei does not exist.
     // 「字体设置」菜单项可改写首选族（写 config terminal.fontFamily）；回退链
     // 恒保留，保证中英混排 2 格对齐（r33）不被单族字体破坏。
     internal static string TerminalFontPrimary = "Consolas";
     internal const string TerminalFontFallback =
+        "Microsoft YaHei UI," +
         "avares://COMTool.App/Assets/Fonts/NotoSansMonoCJKsc-Regular.otf#Noto Sans Mono CJK SC," +
-        "avares://COMTool.App/Assets/Fonts/NotoSansMonoCJKsc-Bold.otf#Noto Sans Mono CJK SC," +
-        "Microsoft YaHei UI";
+        "avares://COMTool.App/Assets/Fonts/NotoSansMonoCJKsc-Bold.otf#Noto Sans Mono CJK SC";
 
     internal static FontFamily BuildTerminalFontFamily(string primary)
     {
