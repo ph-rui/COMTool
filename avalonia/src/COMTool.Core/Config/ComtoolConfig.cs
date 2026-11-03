@@ -121,6 +121,19 @@ public sealed class ComtoolConfig
             return new ComtoolConfig();
         }
 
+        // r42：默认字号 13.5 → 14.5（对齐 MobaXterm 实测字距）。旧配置里的 13.5 只
+        // 可能是旧默认值，一次性迁移并落盘；迁移过的配置不再覆盖用户选择。
+        if (config.Terminal.FontSizeRevision < 2)
+        {
+            if (config.Terminal.FontSize == TerminalConfig.LegacyDefaultFontSize)
+            {
+                config.Terminal.FontSize = TerminalConfig.DefaultFontSize;
+            }
+
+            config.Terminal.FontSizeRevision = 2;
+            config.Save(path);
+        }
+
         return config;
     }
 
@@ -205,8 +218,29 @@ public sealed class WindowConfig
 /// </summary>
 public sealed class TerminalConfig
 {
+    /// <summary>
+    /// 默认字号：14.5px 的 Consolas 一格约 7.97px，与用户同机实测的 MobaXterm
+    /// 字距 7.94px（11pt MobaFont）对齐；13.5px 只有 7.44px，整屏（中文含在内）
+    /// 小 7%，中文尤其显小（r42 同机截图比对结论）。
+    /// </summary>
+    public const double DefaultFontSize = 14.5;
+
+    /// <summary>
+    /// r42 之前的默认字号。旧配置里出现这个值只可能来自旧默认值——Ctrl+滚轮步进
+    /// 为 1，旧默认 13.5 起也只能到 12.5/14.5——所以加载时按「未被改过」一次性
+    /// 迁移到 <see cref="DefaultFontSize"/>。
+    /// </summary>
+    public const double LegacyDefaultFontSize = 13.5;
+
+    /// <summary>
+    /// 默认字号的迁移版本。旧配置缺键（=1）时执行一次 13.5 → 14.5 迁移并置 2；
+    /// 已迁移的配置不再覆盖用户的选择（用户可以把字号调回 13.5）。
+    /// </summary>
+    [JsonPropertyName("fontSizeRevision")]
+    public int FontSizeRevision { get; set; } = 1;
+
     [JsonPropertyName("fontSize")]
-    public double FontSize { get; set; } = 13.5;
+    public double FontSize { get; set; } = DefaultFontSize;
 
     /// <summary>
     /// 终端首选字体族（MobaXterm「字体设置」）。旧配置缺键时默认 "Consolas"。

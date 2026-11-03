@@ -360,21 +360,21 @@ public sealed class TerminalMenuFeatureTests
                 }
 
                 // 回归（实机 RDP 曾显示残缺文本 "1"）：模板应用后 Value 与显示
-                // Text 都必须是 config 的 13.5，而不是截断/残留的默认值。
+                // Text 都必须是 config 的默认 14.5（r42 起），而不是截断/残留的默认值。
                 var spin = dialog.GetVisualDescendants().OfType<NumericUpDown>().FirstOrDefault();
                 Assert.NotNull(spin);
-                Assert.Equal(13.5m, (decimal)spin!.Value);
-                Assert.Equal("13.5", spin.Text);
+                Assert.Equal(14.5m, (decimal)spin!.Value);
+                Assert.Equal("14.5", spin.Text);
 
                 // 回归（实机显示 "1" 的真正根因）：12.1.4 Fluent 模板内 TextBox 仅 22px
                 // 宽导致 "13.5" 被裁切。控件必须足够宽，使内部 TextBox 实际排布宽度
-                // 足以容纳完整文本（14px 字号下 "13.5" 约需 32px+，留余量取 45px）。
+                // 足以容纳完整文本（14px 字号下 "14.5" 约需 32px+，留余量取 45px）。
                 var tb = spin.GetVisualDescendants().OfType<TextBox>().FirstOrDefault();
                 Assert.NotNull(tb);
                 Assert.True(tb!.Bounds.Width >= 45.0,
-                    $"inner TextBox width {tb.Bounds.Width} too narrow to render '13.5'");
+                    $"inner TextBox width {tb.Bounds.Width} too narrow to render '14.5'");
 
-                // 点"确定"（不改值）：对话框关闭、config 字号保持 13.5 无副作用。
+                // 点"确定"（不改值）：对话框关闭、config 字号保持 14.5 无副作用。
                 var ok = dialog.GetVisualDescendants()
                     .OfType<Button>().FirstOrDefault(b => Equals(b.Content, "确定"));
                 Assert.NotNull(ok);
@@ -406,7 +406,7 @@ public sealed class TerminalMenuFeatureTests
                 RunJobs(window);
                 await task;
                 Assert.Null(window.LastFontDialogForTests);
-                Assert.Equal(13.5, window.ConfigService!.Config.Terminal.FontSize, 3);
+                Assert.Equal(14.5, window.ConfigService!.Config.Terminal.FontSize, 3);
             });
         }
         finally

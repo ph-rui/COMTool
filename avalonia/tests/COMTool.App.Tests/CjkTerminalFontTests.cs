@@ -33,7 +33,10 @@ public sealed class CjkTerminalFontTests
         Assert.Contains("Consolas", family);
         Assert.Contains("Microsoft YaHei UI", family);
         Assert.Contains("Noto Sans Mono CJK SC", family);
-        Assert.Equal(13.5, MainWindow.TerminalFontSize);
+        // r42：实测用户同机 MobaXterm 截图，拉丁字距 7.94px（11pt MobaFont）；
+        // 13.5px Consolas 只有 7.44px，整屏（中文含在内）小 7%，中文尤其显小。
+        // 14.5px Consolas 的 advance 约 7.97px，与 MobaXterm 对齐。
+        Assert.Equal(14.5, MainWindow.TerminalFontSize);
         // r41.1：Windows 上 CJK 必须先落到系统雅黑（= MobaXterm 的回退结果，
         // 同机截图比对确认），内置 Noto 只做跨平台兜底
         Assert.True(
@@ -123,10 +126,50 @@ public sealed class CjkTerminalFontTests
     }
 
     [AvaloniaFact]
+    public void TERM17_ConfigDefaultFontSizeMatchesTerminalDefault()
+    {
+        // 单一事实来源：config 的默认字号必须与视图默认一致，否则重启后
+        // 每个会话会按旧默认值（13.5）回落到「小一号」的中文。
+        Assert.Equal(MainWindow.TerminalFontSize, new TerminalConfig().FontSize);
+
+        // 旧默认 13.5 的配置要在加载时一次性迁移到 14.5；迁移过的配置不再被覆盖，
+        // 用户主动调到 13.5 时也能保留。
+        var dir = Path.Combine(Path.GetTempPath(), "comtool-fontsize-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var path = Path.Combine(dir, "config.json");
+
+            File.WriteAllText(path, """{"version":3,"terminal":{"fontSize":13.5}}""");
+            var migrated = ComtoolConfig.Load(path);
+            Assert.Equal(14.5, migrated.Terminal.FontSize);
+            Assert.Equal(2, migrated.Terminal.FontSizeRevision);
+
+            // 已落盘：再读一次仍是新默认，且版本标记保留。
+            var reloaded = ComtoolConfig.Load(path);
+            Assert.Equal(14.5, reloaded.Terminal.FontSize);
+            Assert.Equal(2, reloaded.Terminal.FontSizeRevision);
+
+            // 迁移后用户改回 13.5，重启必须保留，不能被再次迁移。
+            reloaded.Terminal.FontSize = 13.5;
+            reloaded.Save(path);
+            Assert.Equal(13.5, ComtoolConfig.Load(path).Terminal.FontSize);
+
+            // 用户自选的非默认字号同样不被迁移。
+            File.WriteAllText(path, """{"version":3,"terminal":{"fontSize":18}}""");
+            Assert.Equal(18, ComtoolConfig.Load(path).Terminal.FontSize);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [AvaloniaFact]
     public void TERM18_ClampTerminalFontSizeFallsBackAndBounds()
     {
-        Assert.Equal(13.5, MainWindow.ClampTerminalFontSize(0));
-        Assert.Equal(13.5, MainWindow.ClampTerminalFontSize(double.NaN));
+        Assert.Equal(14.5, MainWindow.ClampTerminalFontSize(0));
+        Assert.Equal(14.5, MainWindow.ClampTerminalFontSize(double.NaN));
         Assert.Equal(8, MainWindow.ClampTerminalFontSize(1));
         Assert.Equal(48, MainWindow.ClampTerminalFontSize(200));
         Assert.Equal(18, MainWindow.ClampTerminalFontSize(18));

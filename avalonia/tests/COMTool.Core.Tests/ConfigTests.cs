@@ -206,11 +206,11 @@ public sealed class ConfigTests : IDisposable
 
         Assert.Equal(18.5, loaded.Terminal.FontSize);
 
-        // 旧配置没有 terminal 键：默认 13.5（MobaXterm 字号），不报错。
+        // 旧配置没有 terminal 键：默认 14.5（r42 对齐 MobaXterm 实测字距），不报错。
         var legacyPath = Path.Combine(_directory, "config-legacy-terminal.json");
         File.WriteAllText(legacyPath, """{"version":3}""");
         var loadedLegacy = ComtoolConfig.Load(legacyPath);
-        Assert.Equal(13.5, loadedLegacy.Terminal.FontSize);
+        Assert.Equal(14.5, loadedLegacy.Terminal.FontSize);
     }
 
     [Fact]

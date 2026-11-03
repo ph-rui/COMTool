@@ -1807,8 +1807,12 @@ public partial class MainWindow : Window
 
     internal static FontFamily TerminalFontFamily() => BuildTerminalFontFamily(TerminalFontPrimary);
 
-    // MobaXterm's 10pt Consolas is ~13.3px at 96 DPI.
-    internal const double TerminalFontSize = 13.5;
+    // MobaXterm's terminal cell measures 7.94px across on the user's machine
+    // (MobaFont 11pt). Consolas 14.5px advances 7.97px per cell, so the whole
+    // screen — the CJK glyphs included — is the same physical size as
+    // MobaXterm's. 13.5px (the pre-r42 default) advanced only 7.44px, which is
+    // what made our Chinese look a size smaller in the side-by-side shots.
+    internal const double TerminalFontSize = TerminalConfig.DefaultFontSize;
 
     // Aero Snap (drag to a screen edge) only works when the window carries
     // the native resize style. The window itself stays frameless on every
@@ -3485,11 +3489,11 @@ public partial class MainWindow : Window
 
     /// <summary>
     /// 配置里读出的字号先钳制到 Ctrl+滚轮 的可用区间；
-    /// 非法值（0、NaN 等）回落到 MobaXterm 默认 13.5。
+    /// 非法值（0、NaN 等）回落到对齐 MobaXterm 的默认 14.5。
     /// </summary>
     internal static double ClampTerminalFontSize(double value)
     {
-        // 0/NaN/∞ 视为无效（旧配置或手改坏），回到 MobaXterm 默认 13.5；
+        // 0/NaN/∞ 视为无效（旧配置或手改坏），回到默认 14.5；
         // 其余值钳制到 Ctrl+滚轮 的可用区间。
         if (!double.IsFinite(value) || value <= 0)
         {
