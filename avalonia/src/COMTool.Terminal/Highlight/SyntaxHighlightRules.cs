@@ -4,7 +4,8 @@ namespace COMTool.Terminal.Highlight;
 
 /// <summary>
 /// 语法高亮方案（对齐 MobaXterm「语法高亮」子菜单 6 选项）。
-/// PerLine 在 COMTool 中暂未实现（菜单置灰），保留枚举值以便日后接入。
+/// PerLine 已从菜单移除（r40.2：MobaXterm 公开资料无确切语义，用户决定去掉）；
+/// 保留枚举值仅为 config.json 兼容（"per_line" 映射后无规则，行为同 default）。
 /// </summary>
 public enum HighlightScheme
 {

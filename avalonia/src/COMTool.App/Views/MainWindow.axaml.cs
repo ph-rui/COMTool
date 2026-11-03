@@ -6185,8 +6185,9 @@ public partial class MainWindow : Window
         ("error_warning", "错误/警告/成功关键字", true),
         ("unix_shell", "Unix shell 脚本", true),
         ("cisco", "Cisco（网络配置）", true),
-        ("per_line", "逐行", false),    // 语义待用户确认，先置灰（r39 用户已确认）
         ("sql", "SQL 语法", true),
+        // r40.2：「逐行」已移除——MobaXterm 公开资料（文档/changelog/ini 导出/论坛）
+        // 均无该项的确切语义（用户决定去掉；日后语义明确可再加回）
     ];
 
     internal void SetSyntaxHighlightScheme(string key)
@@ -6237,8 +6238,8 @@ public partial class MainWindow : Window
         return parent;
     }
 
-    /// <summary>「特殊命令」子菜单（MobaXterm Special Command）：顶层 5 项 +
-    /// 更多信号 + 忽略消息（置灰，语义待定）。</summary>
+    /// <summary>「特殊命令」子菜单（MobaXterm Special Command）：顶层 5 项 + 更多信号。
+    /// r40.2：「忽略消息」已移除（用户决定不实现）。</summary>
     internal MenuItem BuildSpecialCommandMenuItem(TerminalTab? tab, TerminalControl terminal)
     {
         var kind = tab?.Kind ?? SessionKind.Local;
@@ -6254,7 +6255,6 @@ public partial class MainWindow : Window
             AddSpecialCommandChild(more, tab, terminal, kind, def);
         }
         parent.Items.Add(more);
-        parent.Items.Add(TerminalMenuItem("忽略消息", null, false, null));
         return parent;
     }
 

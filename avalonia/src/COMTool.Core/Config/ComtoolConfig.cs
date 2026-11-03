@@ -234,7 +234,8 @@ public sealed class TerminalConfig
     /// 终端语法高亮方案（MobaXterm「语法高亮」子菜单，全局单值）。
     /// 取值见 COMTool.Terminal.Highlight.HighlightSchemes：
     /// "default"（默认，关闭）/ "error_warning" / "unix_shell" / "cisco" / "sql"；
-    /// "per_line" 已预留但当前置灰未实现。旧配置缺键时默认 "default"。
+    /// "per_line" 仅保留兼容（菜单 r40.2 已移除该选项；若配置中存在则行为同 default）。
+    /// 旧配置缺键时默认 "default"。
     /// </summary>
     [JsonPropertyName("syntaxHighlight")]
     public string SyntaxHighlight { get; set; } = "default";

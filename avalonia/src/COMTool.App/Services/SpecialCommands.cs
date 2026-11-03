@@ -20,7 +20,7 @@ public sealed record SpecialCommandDef(
 /// - 串口：硬件 Break + 有控制字节等价物者（^C/^\/^Z）；
 /// - TCP/Telnet：仅控制字节等价物；
 /// - Local：无可靠信号通道，全置灰。
-/// 「忽略消息」（MobaXterm IGNORE message）语义未定，本轮置灰占位。
+/// 「忽略消息」（MobaXterm IGNORE message）公开资料无确切语义，r40.2 用户决定不实现，已从菜单移除。
 /// </summary>
 public static class SpecialCommands
 {

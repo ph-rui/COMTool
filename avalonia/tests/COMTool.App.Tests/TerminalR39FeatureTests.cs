@@ -140,33 +140,33 @@ public sealed class TerminalR39FeatureTests
                 var fullGrid = Assert.IsType<Grid>(displayKids[4].Header);
                 Assert.Equal("F11", fullGrid.Children.OfType<TextBlock>().Last().Text);
 
-                // 语法高亮：6 项单选，当前方案（默认）打勾，「逐行」置灰
+                // 语法高亮：5 项单选（r40.2 用户决定移除「逐行」——MobaXterm 语义无公开资料），
+                // 当前方案（默认）打勾
                 var hl = ItemByLabel(items, "语法高亮");
                 var hlKids = hl.Items.OfType<MenuItem>().ToList();
                 Assert.Equal(new[]
                 {
                     "默认", "错误/警告/成功关键字", "Unix shell 脚本",
-                    "Cisco（网络配置）", "逐行", "SQL 语法",
+                    "Cisco（网络配置）", "SQL 语法",
                 },
                 hlKids.Select(k => ItemLabel(k)).ToList());
                 Assert.All(hlKids, k => Assert.Equal(MenuItemToggleType.Radio, k.ToggleType));
                 Assert.Equal("TerminalSyntaxHighlight", hlKids[0].GroupName);
                 Assert.All(hlKids, k => Assert.Equal("TerminalSyntaxHighlight", k.GroupName));
-                Assert.False(hlKids.Single(k => ItemLabel(k) == "逐行").IsEnabled);
+                Assert.All(hlKids, k => Assert.True(k.IsEnabled));
                 Assert.True(hlKids.Single(k => ItemLabel(k) == "默认").IsChecked);
                 Assert.Single(hlKids, k => k.IsChecked);
 
-                // 特殊命令：5 顶层 + 更多信号(14) + 忽略消息(置灰)
+                // 特殊命令：5 顶层 + 更多信号(14)（r40.2 用户决定移除「忽略消息」）
                 var sp = ItemByLabel(items, "特殊命令");
                 var spKids = sp.Items.OfType<MenuItem>().ToList();
                 Assert.Equal(new[]
                 {
                     "Break", "SIGINT（中断）", "SIGTERM（终止）",
-                    "SIGKILL（强制结束）", "SIGHUP（挂断）", "更多信号", "忽略消息",
+                    "SIGKILL（强制结束）", "SIGHUP（挂断）", "更多信号",
                 },
                 spKids.Select(k => ItemLabel(k)).ToList());
                 Assert.Equal(14, spKids[5].Items.OfType<MenuItem>().Count());
-                Assert.False(spKids[6].IsEnabled);
                 // SSH 会话：协议信号全可用
                 Assert.All(spKids.Take(5), k => Assert.True(k.IsEnabled));
             });
