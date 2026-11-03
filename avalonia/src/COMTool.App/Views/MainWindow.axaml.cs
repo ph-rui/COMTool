@@ -1783,17 +1783,21 @@ public partial class MainWindow : Window
         AppLog.Info($"Pty size synced to viewport: {cols}x{rows}");
     }
 
-    // MobaXterm's terminal font is Consolas 10pt. Chinese has no Consolas
-    // glyphs, so the family list falls back to Microsoft YaHei UI (present on
-    // every Windows install) and finally to the bundled Noto Sans Mono CJK SC,
-    // which guarantees CJK coverage on Linux and in headless tests.
+    // MobaXterm's terminal font is Consolas 10pt. Consolas carries no CJK
+    // glyphs; the bundled Noto Sans Mono CJK SC answers for them first
+    // (r41: it is a terminal-grade CJK face with 0.5em latin / 1em CJK metrics
+    // — the CJK strokes match MobaXterm's lighter look and the metrics keep
+    // the r33 two-cell alignment exactly; Microsoft YaHei UI rendered heavier
+    // and was demoted to last-resort system fallback). The avares face ships
+    // inside the single-file publish, so CJK rendering is identical on
+    // Windows / Linux / headless.
     // 「字体设置」菜单项可改写首选族（写 config terminal.fontFamily）；回退链
     // 恒保留，保证中英混排 2 格对齐（r33）不被单族字体破坏。
     internal static string TerminalFontPrimary = "Consolas";
     internal const string TerminalFontFallback =
-        "Microsoft YaHei UI," +
         "avares://COMTool.App/Assets/Fonts/NotoSansMonoCJKsc-Regular.otf#Noto Sans Mono CJK SC," +
-        "avares://COMTool.App/Assets/Fonts/NotoSansMonoCJKsc-Bold.otf#Noto Sans Mono CJK SC";
+        "avares://COMTool.App/Assets/Fonts/NotoSansMonoCJKsc-Bold.otf#Noto Sans Mono CJK SC," +
+        "Microsoft YaHei UI";
 
     internal static FontFamily BuildTerminalFontFamily(string primary)
     {
@@ -6719,6 +6723,8 @@ public static class ClipCheck {
 
     /// <summary>
     /// <c>--selftest-r39</c>：实机自检 r39 三子菜单，结果写 run.log 后退出：
+    /// (0) 几何诊断（r41）——窗口/终端尺寸、库网格度量（CharWidth/CharHeight/
+    ///     GutterWidth/grid CxR）、实测字形步进与 DPI 缩放，核对 pty 列数一致性；
     /// (1) 语法高亮——独立终端（不接 pty）+ error_warning 方案，写探测行后回读
     ///     单元格前景色码，验证 LineFed 着色链路（红/黄/绿/品红）；
     /// (2) 终端显示——清回滚（YBase 归零且当前屏保留）、RIS 复位（全屏空白）、
@@ -6754,6 +6760,40 @@ public static class ClipCheck {
             };
             viewModel.AddTab(tab);
             await Task.Delay(400); // 等布局（滚动条模板实例化）
+
+            // ── 0) 几何诊断（r41）──
+            // 记录窗口/终端尺寸、库网格度量（= pty 协商依据）与实际字形步进，
+            // 用于核对 pty 列数是否与视口实际可见列一致（右缘裁切排查）。
+            var dpiScale = TopLevel.GetTopLevel(this)?.RenderScaling ?? 1.0;
+            var charW = terminal.CharWidth;
+            var charH = terminal.CharHeight;
+            var gutter = terminal.GutterWidth;
+            var gridCols = terminal.Terminal?.Cols ?? 0;
+            var gridRows = terminal.Terminal?.Rows ?? 0;
+            var calcCols = (charW > 0)
+                ? (int)((terminal.Bounds.Width - Math.Max(0, gutter)) / charW) : 0;
+            var measAdvance = 0.0;
+            try
+            {
+                var measTypeface = new Typeface(TerminalFontFamily(), FontStyle.Normal, FontWeight.Normal);
+                measAdvance = new FormattedText(
+                    "MMMMMMMMMM",
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    FlowDirection.LeftToRight,
+                    measTypeface,
+                    terminal.FontSize,
+                    Brushes.White).Width / 10.0;
+            }
+            catch
+            {
+                // 度量失败不影响自检主流程
+            }
+            AppLog.Info(
+                $"[SelfTest] r41: geometry win={Bounds.Width:0.#}x{Bounds.Height:0.#} " +
+                $"term={terminal.Bounds.Width:0.#}x{terminal.Bounds.Height:0.#} " +
+                $"charW={charW:0.###} charH={charH:0.###} gutter={gutter:0.###} " +
+                $"grid={gridCols}x{gridRows} calcCols={calcCols} " +
+                $"glyphAdvance={measAdvance:0.###} dpi={dpiScale:0.###}");
 
             // ── 1) 语法高亮 ──
             // 先设方案再挂着色器：core 未实现时着色器走 Loaded 延迟路径，
