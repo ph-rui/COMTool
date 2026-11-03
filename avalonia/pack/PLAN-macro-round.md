@@ -1055,6 +1055,50 @@ MobaXterm 机制：终端是严格网格（拉丁 1 格、CJK 全角恰 2 格）
   vs 截图可见 ~151-157 列的失配未在 96dpi VM 复现，待用户在本机跑
   --selftest-r39 回传 geometry 行定位（疑似高 DPI 缩放相关）
 
+### 41.1 中文字体回退改回雅黑优先（2026-11-03，用户同机截图对比）
+
+用户发来同机两张截图（COMTool vs MobaXterm，同一路 ls 输出，文件时间戳同为 18:45），
+说「还需要优化一下」。逐像素比对结论：
+
+- 图 1（COMTool）= 旧构建：CJK 字形粗圆（雅黑系）；与 Noto 渲染模板相关系数仅
+  0.24，确证用户机器还在跑 C505B77F 或更早（未更新到 r41 Noto 构建）
+- 图 2（MobaXterm）的 CJK 与图 1 同风格（粗圆）→ MobaXterm 的中文 = Windows 系统
+  雅黑回退（不是 Noto）。r41 把 Noto 提为第一回退方向反了——若更新后中文会比
+  MobaXterm 更细更方，与用户期望相反
+- 拉丁字距：CT 7.44px（= Consolas 13.5px 默认）vs MX 7.95px（≈ 10pt MobaFont，
+  MobaXterm 自带默认字体，advance≈0.6em，比 Consolas 0.55em 宽）
+- MobaXterm 粗体按颜色渲染（BoldAsFont=no），COMTool 按笔画加粗；提示符颜色
+  （绿粗体 vs 纯白）是两会话 PS1/终端环境差异，非渲染 bug
+- 结论：中文显示差异 = CJK 字体族（YaHei vs Noto）+ 字距（MobaFont 使 CJK 格
+  绝对宽 ~7%），不是对齐/换行问题
+
+改动：
+- 字体回退链改回 Consolas → Microsoft YaHei UI → 内置 Noto（Regular+Bold），
+  恢复 r33-r40 设计：YaHei = MobaXterm 在 Windows 的系统回退（1:1 同源），
+  Noto 保留为 Linux/headless 的 CJK 覆盖保证
+- `TERM17` 顺序断言改为 YaHei 先于 Noto；类注释同步
+- 矩阵 5 处 r41 字体描述改回雅黑优先并注 r41.1 依据
+  （parity TERM-09/22/24、feature TERM-09/24）
+- r41 其余交付（TERM-01 引号/CJK 保真探针、r39 自检几何诊断）全部保留
+
+留给用户：
+- 若想字距/中文绝对大小与 MobaXterm 完全一致，需把字号调大（MobaFont 10pt
+  字宽 ≈ Consolas 14.5px）：字体设置对话框或 Ctrl+滚轮即可；默认 13.5px
+  （= MobaXterm 10pt 名义尺寸）不变
+- stty=181 列 vs 可见 ~151 列疑云待解：请在本机跑 --selftest-r39 回传 geometry 行
+
+验证（2026-11-03）：
+- 过滤测试 CjkTerminalFont + MenuFeature 27/27 绿
+- gate（results 20261103T124244Z，EXIT=0 全绿）：单元 390 项
+  （Core 90/Sftp 42/Terminal 27/Connections 150/Zmodem 32/TestGate 49）
+  + App 268 + E2E 15/15 PASS + TestGate PASS，共 658 项
+- publish win-x64 单文件：COMTool.App.exe 155,063,809 B，
+  SHA256=6A78128A7C01AB0B5935A44CC8E05882B1420497BFEDD8FEA0EECE721CC52AE5
+- deploy_r3.py 双份部署 SHA256 均校验 OK
+- VM 自检（--selftest-r39，run.log 21:00）全部 ok=True；geometry 行
+  `win=1024x768 term=946x627 charW=7.422 charH=15.807 gutter=0 grid=127x39
+  calcCols=127 glyphAdvance=7.422 dpi=1`（与 r41 一致：VM 上 pty 列数=可见列）
+
 ## 已知偏差（已写入 spec 附录）
 
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
