@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Reflection;
 using COMTool.Connections.RemoteMonitoring;
 using COMTool.Sftp;
 using Renci.SshNet;
@@ -252,6 +253,117 @@ public sealed class SshConnection : IDisposable, IExecRunner
                     // The transport is already gone.
                 }
             });
+    }
+
+    // SSH.NET 的 ShellStream 不公开底层会话通道，而 RFC 4254 §6.5（信号）/§6.7（break）
+    // 只能在承载 shell 的会话通道上发。取 ShellStream 私有字段 _channel
+    // （运行时类型 Renci.SshNet.Channels.ChannelSession，internal 接口 IChannelSession 的
+    // 实现）再调 SendSignalRequest/SendBreakRequest。SSH.NET 版本 pin 2026.0.0；若未来
+    // 字段名变化，两个方法都静默返回 false，由调用方日志/提示，不影响其它功能。
+    private static readonly object _sshProbeLock = new();
+    private static FieldInfo? _sshChannelField;
+    private static MethodInfo? _sshSignalMethod;
+    private static MethodInfo? _sshBreakMethod;
+    private static bool _sshProbeDone;
+
+    private static void ProbeSshChannelOnce()
+    {
+        lock (_sshProbeLock)
+        {
+            if (_sshProbeDone)
+            {
+                return;
+            }
+            _sshProbeDone = true;
+            try
+            {
+                _sshChannelField = typeof(ShellStream).GetField(
+                    "_channel", BindingFlags.NonPublic | BindingFlags.Instance);
+            }
+            catch
+            {
+                _sshChannelField = null;
+            }
+        }
+    }
+
+    private static object? GetChannelObject(ShellStream shell)
+    {
+        ProbeSshChannelOnce();
+        if (_sshChannelField is null)
+        {
+            return null;
+        }
+        try
+        {
+            return _sshChannelField.GetValue(shell);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// 发 SSH 会话信号请求（MobaXterm「特殊命令 → SIGxx」，RFC 4254 §6.5）。
+    /// signalName 用协议名（"INT"/"TERM"/"KILL"/"HUP"…）。失败返回 false。
+    /// </summary>
+    public bool TrySendSignal(string signalName)
+    {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        var channel = GetChannelObject(_shell);
+        if (channel is null)
+        {
+            return false;
+        }
+        if (_sshSignalMethod is null)
+        {
+            _sshSignalMethod = channel.GetType().GetMethod(
+                "SendSignalRequest", BindingFlags.Public | BindingFlags.Instance);
+        }
+        if (_sshSignalMethod is null)
+        {
+            return false;
+        }
+        try
+        {
+            return (bool)(_sshSignalMethod.Invoke(channel, new object[] { signalName }) ?? false);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 发 SSH break 请求（MobaXterm「特殊命令 → Break」，RFC 4254 §6.7）。
+    /// 失败返回 false。
+    /// </summary>
+    public bool TrySendBreak(uint durationMs = 250)
+    {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        var channel = GetChannelObject(_shell);
+        if (channel is null)
+        {
+            return false;
+        }
+        if (_sshBreakMethod is null)
+        {
+            _sshBreakMethod = channel.GetType().GetMethod(
+                "SendBreakRequest", BindingFlags.Public | BindingFlags.Instance);
+        }
+        if (_sshBreakMethod is null)
+        {
+            return false;
+        }
+        try
+        {
+            return (bool)(_sshBreakMethod.Invoke(channel, new object[] { durationMs }) ?? false);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     public void Dispose()

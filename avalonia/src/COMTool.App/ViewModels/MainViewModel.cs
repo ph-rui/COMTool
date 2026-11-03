@@ -80,7 +80,22 @@ public sealed class SidebarSection
 
 public sealed partial class TerminalTab : ObservableObject
 {
-    public required string Title { get; init; }
+    private string _title = "";
+
+    /// <summary>标签标题。r39「设置终端标题」可运行时改写（头部 {Binding Title} 自动跟随）。</summary>
+    public required string Title
+    {
+        get => _title;
+        set
+        {
+            if (_title != value)
+            {
+                _title = value;
+                OnPropertyChanged(nameof(Title));
+            }
+        }
+    }
+
     public required string SessionId { get; init; }
     public required SessionKind Kind { get; init; }
     public required Control Content { get; init; }
@@ -105,6 +120,13 @@ public sealed partial class TerminalTab : ObservableObject
     /// True for a tab of an SSH session.
     /// </summary>
     public bool IsSshTab => Kind == SessionKind.Ssh;
+
+    /// <summary>
+    /// 只读终端（MobaXterm「只读终端」）：运行时开关，不持久化。
+    /// 拦截键盘输入（tunnel KeyDown）与粘贴（PasteNormalizedAsync 守卫）。
+    /// 宏执行/Zmodem 等显式用户操作不受限。
+    /// </summary>
+    public bool IsReadOnlyTerminal { get; set; }
 
     [ObservableProperty]
     private bool _isSelected;

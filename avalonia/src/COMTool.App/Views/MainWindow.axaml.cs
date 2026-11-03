@@ -20,6 +20,7 @@ using COMTool.Core.Config;
 using COMTool.Core.Macros;
 using COMTool.Sftp;
 using COMTool.Terminal;
+using COMTool.Terminal.Highlight;
 using COMTool.Zmodem;
 using Iciclecreek.Terminal;
 
@@ -50,6 +51,8 @@ public partial class MainWindow : Window
     private ConnectionSettingsWindow? _settingsWindow;
     private readonly Dictionary<TerminalTab, ZmodemTiming> _zmodemTimings = new();
     private readonly Dictionary<TerminalTab, ZmodemStream> _zmodemStreams = new();
+    // r39：per-终端语法高亮着色器（LineFed 驱动，方案来自 config，见 AttachTerminalHighlighter）
+    private readonly Dictionary<TerminalControl, TerminalHighlighter> _highlighters = new();
     private readonly Dictionary<TerminalTab, DetachedTabState> _detachedTabs = new();
     private readonly Dictionary<TerminalTab, SerialTabState> _serialTabs = new();
     private readonly HashSet<TerminalTab> _sshRestarts = new();
@@ -286,6 +289,12 @@ public partial class MainWindow : Window
         if (Environment.GetCommandLineArgs().Contains("--selftest-r38"))
         {
             _ = RunR38SelfTestAsync();
+        }
+        // --selftest-r39：实机自检 r39 三子菜单（终端显示/语法高亮/特殊命令），
+        // 结果写 run.log 后退出，见 RunR39SelfTestAsync。
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r39"))
+        {
+            _ = RunR39SelfTestAsync();
         }
     }
 
@@ -1727,6 +1736,9 @@ public partial class MainWindow : Window
             return;
         }
 
+        // r39：挂语法高亮着色器（re-attach 时先卸旧实例，防重复着色）
+        AttachTerminalHighlighter(terminal);
+
         // 把 pty 同步到当前视口尺寸（MobaXterm 行为）：附加时终端网格已按最终窗口
         // 布局完毕，而库的 resize 只在“尺寸变化”时发送——这个首个真实尺寸永远不会
         // 推给远端，pty 停在建连时的 100x30，top 等全屏程序只能画 30 行。
@@ -1873,6 +1885,12 @@ public partial class MainWindow : Window
             OnTerminalPointerPressed,
             RoutingStrategies.Tunnel);
         terminal.KeyDown += OnTerminalKeyDown;
+        // r39「只读终端」：隧道阶段拦 KeyDown（先于库内部键输入→pty 路径触发）。
+        // 窗口级 handler（F11/宏热键/Ctrl+Shift+F）在更上层隧道先跑，不受影响。
+        terminal.AddHandler(
+            InputElement.KeyDownEvent,
+            OnTerminalReadOnlyGuard,
+            RoutingStrategies.Tunnel);
         // The terminal's own double-click handling may mark the event handled
         // for word selection. Observe it anyway so the whole terminal pane
         // mirrors the title bar and maximize button.
@@ -2323,6 +2341,7 @@ public partial class MainWindow : Window
         }
 
         StopRecordingForTabIfAny(tab);
+        ReleaseHighlighterForTab(tab);
         _sshRestarts.Remove(tab);
         tab.IsAlive = false;
         tab.IsZmodemActive = false;
@@ -2476,6 +2495,7 @@ public partial class MainWindow : Window
         viewModel.CancelIfExecutingOn(tab.Terminal);
 
         StopRecordingForTabIfAny(tab);
+        ReleaseHighlighterForTab(tab);
 
         viewModel.CloseTab(tab);
         UpdateConnectionStates();
@@ -2891,10 +2911,7 @@ public partial class MainWindow : Window
 
         // Python's title-bar mixin treats F11 as a full-screen toggle and
         // hides the title bar while full screen is active.
-        var fullScreen = WindowState == WindowState.FullScreen;
-        WindowState = fullScreen ? WindowState.Normal : WindowState.FullScreen;
-        TitleBar.IsVisible = fullScreen;
-        RootGrid.RowDefinitions[0].Height = new GridLength(fullScreen ? 35 : 0);
+        ToggleFullScreen();
         e.Handled = true;
     }
 
@@ -5736,11 +5753,12 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// 终端 Shift+右键菜单：复刻 MobaXterm 终端右键菜单（22.1，18 项+4 分隔线，
+    /// 终端 Shift+右键菜单：复刻 MobaXterm 终端右键菜单（22.1，19 项+4 分隔线，
     /// 顺序/快捷键标注一致，已按本项目汉化要求译成中文）。“更改终端设置…”
     /// 即 MobaXterm “Change terminal settings...”，打开“实时终端重配置”对话框。
     /// COMTool 已实现的功能接线生效，未实现的功能置灰（与 MobaXterm 在
     /// 不适用的会话里置灰部分菜单项的惯例一致）。
+    /// r39：终端显示/语法高亮/特殊命令 三项由置灰占位升级为子菜单。
     /// </summary>
     private void OpenTerminalContextMenu(TerminalControl terminal, Point position)
     {
@@ -5756,6 +5774,7 @@ public partial class MainWindow : Window
         var live = terminal.IsLive;
         var zmodemBusy = tab?.IsZmodemActive ?? false;
         var recordingThisTerminal = ReferenceEquals(_recordingTerminal, terminal);
+        var readOnly = tab?.IsReadOnlyTerminal == true;
 
         var menu = new ContextMenu();
         menu.Items.Add(TerminalMenuItem("复制", null, hasSelection,
@@ -5768,7 +5787,7 @@ public partial class MainWindow : Window
             }));
         menu.Items.Add(TerminalMenuItem("复制带格式文本（RTF）", null, hasSelection,
             async () => { await CopyTerminalRtfAsync(terminal, tab); }));
-        menu.Items.Add(TerminalMenuItem("粘贴", "Shift+INSERT", true,
+        menu.Items.Add(TerminalMenuItem("粘贴", "Shift+INSERT", live && !readOnly,
             async () => { await PasteNormalizedAsync(terminal); }));
         menu.Items.Add(TerminalMenuItem("查找", "Ctrl+Shift+F", true,
             () =>
@@ -5783,8 +5802,8 @@ public partial class MainWindow : Window
                 _ = ShowTerminalFontDialogAsync();
                 return Task.CompletedTask;
             }));
-        menu.Items.Add(TerminalMenuItem("终端显示", null, false, null));
-        menu.Items.Add(TerminalMenuItem("语法高亮", null, false, null));
+        menu.Items.Add(BuildDisplayMenuItem(tab, terminal));
+        menu.Items.Add(BuildSyntaxHighlightMenuItem());
         menu.Items.Add(new Separator());
         menu.Items.Add(TerminalMenuItem("执行宏", "Ctrl+空格", viewModel.Macros.Count > 0,
             () =>
@@ -5842,7 +5861,7 @@ public partial class MainWindow : Window
                 return Task.CompletedTask;
             }));
         menu.Items.Add(BuildEncodingMenuItem());
-        menu.Items.Add(TerminalMenuItem("特殊命令", null, false, null));
+        menu.Items.Add(BuildSpecialCommandMenuItem(tab, terminal));
         menu.Items.Add(TerminalMenuItem("事件日志", null, true,
             () =>
             {
@@ -5864,6 +5883,425 @@ public partial class MainWindow : Window
 
     /// <summary>最近一次 Shift+右键弹出的终端菜单（headless 测试钩子）。</summary>
     internal ContextMenu? LastTerminalMenuForTests { get; private set; }
+
+// ==================== r39：终端显示 / 语法高亮 / 特殊命令 ====================
+
+    /// <summary>查找指定终端所属的 tab（主窗 Tabs 或已分离窗）。</summary>
+    internal TerminalTab? FindTabForTerminal(TerminalControl terminal)
+    {
+        if (terminal is null)
+        {
+            return null;
+        }
+
+        if (DataContext is MainViewModel viewModel)
+        {
+            var tab = viewModel.Tabs.FirstOrDefault(t =>
+                ReferenceEquals(t.Terminal, terminal) || ReferenceEquals(t.Content, terminal));
+            if (tab is not null)
+            {
+                return tab;
+            }
+        }
+
+        foreach (var detached in _detachedTabs.Keys)
+        {
+            if (ReferenceEquals(detached.Terminal, terminal)
+                || ReferenceEquals(detached.Content, terminal))
+            {
+                return detached;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// 只读终端守卫（r39）：隧道阶段 KeyDown。终端处于只读态时拦截按键，
+    /// 阻断库内部“键输入→pty”路径；窗口级功能键（F11/宏热键/查找）在更上层
+    /// 隧道先处理，不受影响。粘贴路径由 PasteNormalizedAsync 内守卫兜底。
+    /// </summary>
+    private void OnTerminalReadOnlyGuard(object? sender, KeyEventArgs e)
+    {
+        var terminal = sender as TerminalControl
+            ?? (e.Source as Visual)?.FindAncestorOfType<TerminalControl>();
+        if (terminal is null)
+        {
+            return;
+        }
+
+        if (FindTabForTerminal(terminal)?.IsReadOnlyTerminal == true)
+        {
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>
+    /// 挂语法高亮着色器（r39）：订阅核心 XTerm 的 LineFed，按 config 方案
+    /// （全局单值，terminal.syntaxHighlight）对新输出行着色。同一终端 re-attach
+    /// （重启等）时先卸旧实例。
+    /// </summary>
+    internal void AttachTerminalHighlighter(TerminalControl terminal)
+    {
+        if (_highlighters.TryGetValue(terminal, out var oldHl))
+        {
+            oldHl.Dispose();
+        }
+
+        if (terminal.Terminal is { } core)
+        {
+            var scheme = HighlightSchemes.FromName(_config?.Config.Terminal.SyntaxHighlight);
+            _highlighters[terminal] = new TerminalHighlighter(core, scheme);
+            return;
+        }
+
+        // XTerm 核心在终端完成首次布局后才创建（单测中 AttachTerminal 可能先于布局；
+        // 生产里异步连接附加发生在已实现之后，正常不会走到此分支）。用与
+        // CreateTerminal 相同的 Loaded 优先级延迟重试一次；届时仍未实现则放弃
+        // （着色器不挂，绝不影响终端本身）。
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (terminal.Terminal is { } c && !_highlighters.ContainsKey(terminal))
+            {
+                var s = HighlightSchemes.FromName(_config?.Config.Terminal.SyntaxHighlight);
+                _highlighters[terminal] = new TerminalHighlighter(c, s);
+            }
+        }, DispatcherPriority.Loaded);
+    }
+
+    private void ReleaseHighlighterForTab(TerminalTab? tab)
+    {
+        if (tab is null)
+        {
+            return;
+        }
+
+        var terminal = tab.Terminal ?? tab.Content as TerminalControl;
+        if (terminal is { } t && _highlighters.Remove(t, out var hl))
+        {
+            hl.Dispose();
+        }
+    }
+
+    /// <summary>「重置终端输出」（MobaXterm）：RIS 全复位——清屏+清回滚+复位
+    /// 终端全部状态（颜色/模式/tab stops），与向远端发 reset 命令无关，纯本地。</summary>
+    internal void ResetTerminalOutput(TerminalControl terminal)
+    {
+        try
+        {
+            terminal.Terminal.Reset();
+            AppLog.Info("Terminal output reset (RIS)");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"Terminal reset failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>「清除终端回滚」（MobaXterm）：只丢弃回滚历史，当前屏与光标行保留。</summary>
+    internal void ClearTerminalScrollback(TerminalControl terminal)
+    {
+        try
+        {
+            terminal.Terminal.Buffer.ClearScrollback();
+            AppLog.Info("Terminal scrollback cleared");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"Clear scrollback failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>「设置终端标题」（MobaXterm）：输入对话框改本 tab 标题（会话级，不持久化）。
+    /// 高度用显示前预测量定值（同字体对话框：Win32 下固定 Height/SizeToContent 均不可靠）。</summary>
+    internal async Task SetTerminalTitleAsync(TerminalTab tab)
+    {
+        var input = new TextBox
+        {
+            Width = 280,
+            Text = tab.Title,
+        };
+        var ok = CreateDialogTextButton("确定", 80);
+        var cancel = CreateDialogTextButton("取消", 80);
+        string? result = null;
+        var dialog = new ClientSizedWindow
+        {
+            Title = "设置终端标题",
+            MinWidth = 320,
+            CanResize = false,
+            ShowInTaskbar = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+        };
+        ok.Click += (_, _) =>
+        {
+            var t = input.Text?.Trim();
+            if (!string.IsNullOrEmpty(t))
+            {
+                result = t;
+            }
+            dialog.Close();
+        };
+        cancel.Click += (_, _) => dialog.Close();
+        var content = new StackPanel
+        {
+            Margin = new Thickness(20),
+            Spacing = 12,
+            Children =
+            {
+                new TextBlock { Text = "终端标题：", Width = 280 },
+                input,
+                new StackPanel
+                {
+                    Orientation = Avalonia.Layout.Orientation.Horizontal,
+                    Spacing = 8,
+                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                    Children = { cancel, ok },
+                },
+            },
+        };
+        // 显示前预测量（同字体对话框方案）：Win32 固定 Height/SizeToContent 均不可靠，
+        // 把内容挂进主窗真实排版上下文显式 Measure 取高，一次性 SetClientSize 定窗。
+        double probeH = 0;
+        if (this.Content is Panel rootPanel)
+        {
+            var probeHost = new Grid { Width = 340, Opacity = 0, IsHitTestVisible = false };
+            probeHost.Children.Add(content);
+            rootPanel.Children.Add(probeHost);
+            UpdateLayout();
+            content.Measure(new Size(340, double.PositiveInfinity));
+            probeH = content.DesiredSize.Height;
+            probeHost.Children.Remove(content);
+            rootPanel.Children.Remove(probeHost);
+            UpdateLayout();
+        }
+        double dlgH = probeH > 40 ? Math.Ceiling(probeH) + 2 : 120;
+        dialog.Content = content;
+        dialog.SetClientSize(new Size(340, dlgH));
+
+        LastTitleDialogForTests = dialog;
+        try
+        {
+            await dialog.ShowDialog(this);
+        }
+        finally
+        {
+            if (ReferenceEquals(LastTitleDialogForTests, dialog))
+            {
+                LastTitleDialogForTests = null;
+            }
+        }
+
+        if (result is not null)
+        {
+            tab.Title = result;
+            AppLog.Info($"Terminal title set: {result}");
+        }
+    }
+
+    /// <summary>「切换终端滚动条」（MobaXterm）：toggle 终端模板内 ScrollBar 可见性
+    /// （附加时默认隐藏；显示宽度 14px）。</summary>
+    internal bool ToggleTerminalScrollBar(TerminalControl terminal)
+    {
+        var bars = terminal.GetVisualDescendants().OfType<ScrollBar>().ToList();
+        if (bars.Count == 0)
+        {
+            AppLog.Warn("Toggle scrollbar: no ScrollBar in terminal template");
+            return false;
+        }
+
+        var currentlyHidden = !bars[0].IsVisible || bars[0].Width == 0;
+        foreach (var bar in bars)
+        {
+            bar.IsVisible = currentlyHidden;
+            bar.Width = currentlyHidden ? 14 : 0;
+        }
+
+        AppLog.Info($"Terminal scrollbar toggled: visible={currentlyHidden}");
+        return true;
+    }
+
+    /// <summary>「全屏终端」（MobaXterm F11）：FullScreen 切换 + 标题栏显隐，
+    /// 与 F11 键共用同一逻辑。</summary>
+    internal void ToggleFullScreen()
+    {
+        var fullScreen = WindowState == WindowState.FullScreen;
+        WindowState = fullScreen ? WindowState.Normal : WindowState.FullScreen;
+        TitleBar.IsVisible = fullScreen;
+        RootGrid.RowDefinitions[0].Height = new GridLength(fullScreen ? 35 : 0);
+        AppLog.Info($"Terminal fullscreen: {(fullScreen ? "off" : "on")}");
+    }
+
+    /// <summary>「语法高亮」子菜单（MobaXterm）：6 选项单选，当前方案打勾；
+    /// 全局单值，落盘 config.json，对全部终端立即生效（含回滚历史重染）。</summary>
+    internal MenuItem BuildSyntaxHighlightMenuItem()
+    {
+        var current = _config?.Config.Terminal.SyntaxHighlight ?? "default";
+        var parent = new MenuItem { Header = "语法高亮" };
+        foreach (var entry in SyntaxHighlightMenuItems())
+        {
+            var (key, label, enabled) = entry;
+            var child = new MenuItem
+            {
+                Header = label,
+                IsEnabled = enabled,
+                ToggleType = MenuItemToggleType.Radio,
+                GroupName = "TerminalSyntaxHighlight",
+                IsChecked = enabled && string.Equals(key, current, StringComparison.OrdinalIgnoreCase),
+            };
+            if (enabled)
+            {
+                var k = key;
+                child.Click += (_, _) => SetSyntaxHighlightScheme(k);
+            }
+
+            parent.Items.Add(child);
+        }
+
+        return parent;
+    }
+
+    private static (string Key, string Label, bool Enabled)[] SyntaxHighlightMenuItems() =>
+    [
+        ("default", "默认", true),
+        ("error_warning", "错误/警告/成功关键字", true),
+        ("unix_shell", "Unix shell 脚本", true),
+        ("cisco", "Cisco（网络配置）", true),
+        ("per_line", "逐行", false),    // 语义待用户确认，先置灰（r39 用户已确认）
+        ("sql", "SQL 语法", true),
+    ];
+
+    internal void SetSyntaxHighlightScheme(string key)
+    {
+        if (_config is null)
+        {
+            return;
+        }
+
+        _config.Config.Terminal.SyntaxHighlight = key;
+        _config.SaveConfig();
+        var scheme = HighlightSchemes.FromName(key);
+        foreach (var pair in _highlighters)
+        {
+            pair.Value.Scheme = scheme;
+            pair.Value.ApplyToAll();   // 全量重染（含回滚历史）
+        }
+
+        AppLog.Info($"Syntax highlight scheme: {key} (terminals={_highlighters.Count})");
+    }
+
+    /// <summary>「终端显示」子菜单（MobaXterm）：6 项，MobaXterm 顺序。</summary>
+    internal MenuItem BuildDisplayMenuItem(TerminalTab? tab, TerminalControl terminal)
+    {
+        var parent = new MenuItem { Header = "终端显示" };
+        parent.Items.Add(TerminalMenuItem("重置终端输出", null, true,
+            () => { ResetTerminalOutput(terminal); return Task.CompletedTask; }));
+        parent.Items.Add(TerminalMenuItem("清除终端回滚", null, true,
+            () => { ClearTerminalScrollback(terminal); return Task.CompletedTask; }));
+        parent.Items.Add(TerminalMenuItem("设置终端标题", null, tab is not null,
+            async () => await SetTerminalTitleAsync(tab!)));
+        parent.Items.Add(TerminalMenuItem("切换终端滚动条", null, true,
+            () => { ToggleTerminalScrollBar(terminal); return Task.CompletedTask; }));
+        parent.Items.Add(TerminalMenuItem("全屏终端", "F11", true,
+            () => { ToggleFullScreen(); return Task.CompletedTask; }));
+        var roItem = TerminalMenuItem("只读终端", null, tab is not null,
+            () =>
+            {
+                if (tab is not null)
+                {
+                    tab.IsReadOnlyTerminal = !tab.IsReadOnlyTerminal;
+                    AppLog.Info($"Terminal read-only: {tab.IsReadOnlyTerminal}");
+                }
+                return Task.CompletedTask;
+            });
+        roItem.IsChecked = tab?.IsReadOnlyTerminal == true;
+        parent.Items.Add(roItem);
+        return parent;
+    }
+
+    /// <summary>「特殊命令」子菜单（MobaXterm Special Command）：顶层 5 项 +
+    /// 更多信号 + 忽略消息（置灰，语义待定）。</summary>
+    internal MenuItem BuildSpecialCommandMenuItem(TerminalTab? tab, TerminalControl terminal)
+    {
+        var kind = tab?.Kind ?? SessionKind.Local;
+        var parent = new MenuItem { Header = "特殊命令" };
+        foreach (var def in SpecialCommands.TopLevel)
+        {
+            AddSpecialCommandChild(parent, tab, terminal, kind, def);
+        }
+
+        var more = new MenuItem { Header = "更多信号" };
+        foreach (var def in SpecialCommands.More)
+        {
+            AddSpecialCommandChild(more, tab, terminal, kind, def);
+        }
+        parent.Items.Add(more);
+        parent.Items.Add(TerminalMenuItem("忽略消息", null, false, null));
+        return parent;
+    }
+
+    private void AddSpecialCommandChild(
+        MenuItem parent, TerminalTab? tab, TerminalControl terminal, SessionKind kind, SpecialCommandDef def)
+    {
+        var avail = SpecialCommands.IsAvailable(def, kind);
+        var d = def;
+        Func<Task>? action = null;
+        if (avail)
+        {
+            action = async () => await DispatchSpecialCommandAsync(tab, terminal, d);
+        }
+
+        parent.Items.Add(TerminalMenuItem(d.Label, null, avail, action));
+    }
+
+    /// <summary>
+    /// 特殊命令派发（r39 定稿矩阵）：
+    /// - SSH：协议信号/break（RFC 4254 §6.5/§6.7，直达远端会话 leader）；
+    /// - 串口：硬件 Break；有控制字节等价物者（^C/^\/^Z）走 pty 发送路径；
+    /// - TCP/Telnet：仅控制字节等价物；Local：无可用通道。
+    /// </summary>
+    internal async Task DispatchSpecialCommandAsync(TerminalTab? tab, TerminalControl terminal, SpecialCommandDef def)
+    {
+        var kind = tab?.Kind ?? SessionKind.Local;
+        var ok = false;
+        try
+        {
+            if (kind == SessionKind.Ssh && tab is not null && tab.Connection is SshConnection ssh)
+            {
+                ok = def.IsBreak ? ssh.TrySendBreak() : ssh.TrySendSignal(def.SshSignal!);
+            }
+            else if (kind == SessionKind.Serial && def.IsBreak
+                     && tab is not null && tab.Connection is SerialConnection serial)
+            {
+                await serial.SendBreakAsync();
+                ok = true;
+            }
+            else if (def.CtrlByte is { } b && kind is SessionKind.Serial or SessionKind.Tcp or SessionKind.Telnet)
+            {
+                await terminal.SendInputAsync(new string((char)b, 1));
+                ok = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"Special command {def.Label} failed: {ex.Message}");
+        }
+
+        AppLog.Info($"[SpecialCmd] {def.Label} (tab={tab?.SessionId}, kind={kind}) -> {(ok ? "sent" : "unsupported/failed")}");
+        if (!ok)
+        {
+            _ = ShowErrorAsync($"无法发送「{def.Label}」（当前会话类型不支持或连接已断开）");
+        }
+    }
+
+    /// <summary>测试接缝：最近一次「设置终端标题」对话框（同 LastFontDialogForTests 模式）。</summary>
+    internal Window? LastTitleDialogForTests { get; private set; }
+    internal Task ShowTitleDialogForTestsAsync(TerminalTab tab) => SetTerminalTitleAsync(tab);
+    internal TerminalHighlighter? GetHighlighterForTests(TerminalControl terminal)
+        => _highlighters.TryGetValue(terminal, out var hl) ? hl : null;
+    internal bool IsTerminalInputBlockedForTests(TerminalControl terminal)
+        => FindTabForTerminal(terminal)?.IsReadOnlyTerminal == true;
+
+    /// <summary>
 
     /// <summary>
     /// 终端菜单项：左侧标签 + 右侧灰色快捷键标注（MobaXterm 样式）。
@@ -6277,6 +6715,203 @@ public static class ClipCheck {
         }
     }
 
+    /// <summary>
+    /// <c>--selftest-r39</c>：实机自检 r39 三子菜单，结果写 run.log 后退出：
+    /// (1) 语法高亮——独立终端（不接 pty）+ error_warning 方案，写探测行后回读
+    ///     单元格前景色码，验证 LineFed 着色链路（红/黄/绿/品红）；
+    /// (2) 终端显示——清回滚（YBase 归零且当前屏保留）、RIS 复位（全屏空白）、
+    ///     滚动条 toggle、全屏 toggle、设置标题对话框自动确认、只读标志；
+    /// (3) 特殊命令——打印 5 类会话可用性矩阵，本地派发 SIGINT 走「不支持」
+    ///     提示路径（错误对话框自动确认）。
+    /// 退出前把高亮方案恢复为原值，避免污染用户配置。
+    /// </summary>
+    private async Task RunR39SelfTestAsync()
+    {
+        var originalScheme = _config?.Config.Terminal.SyntaxHighlight ?? "default";
+        try
+        {
+            AppLog.Info("[SelfTest] r39: 等主窗稳定 1.5s 后自检三子菜单");
+            await Task.Delay(1500);
+
+            if (DataContext is not MainViewModel viewModel)
+            {
+                throw new InvalidOperationException("MainViewModel 未就绪");
+            }
+
+            // 独立自检终端：不附加任何 pty，直接写 XTerm 核心缓冲区（确定性）
+            var terminal = CreateTerminal();
+            var tab = new TerminalTab
+            {
+                Title = "r39-selftest",
+                SessionId = "terminal:r39selftest",
+                Kind = SessionKind.Local,
+                Content = terminal,
+                Terminal = terminal,
+                IsAlive = true,
+                CloseAction = () => { },
+            };
+            viewModel.AddTab(tab);
+            await Task.Delay(400); // 等布局（滚动条模板实例化）
+
+            // ── 1) 语法高亮 ──
+            // 先设方案再挂着色器：core 未实现时着色器走 Loaded 延迟路径，
+            // 延迟创建会读 config 当前方案；且必须等着色器就位后再写探测行
+            // （水印在创建时定格，之后的行才染）。
+            SetSyntaxHighlightScheme("error_warning");
+            AttachTerminalHighlighter(terminal);
+            var waitedHl = 0;
+            while (GetHighlighterForTests(terminal) is null && waitedHl < 10_000)
+            {
+                await Task.Delay(100);
+                waitedHl += 100;
+            }
+            var buf = terminal.Terminal.Buffer;
+            var probe = "R39PROBE Error: fatal crash warning success 192.168.1.1 localhost";
+            terminal.Terminal.Write(probe + "\r\n");
+            await Task.Delay(100);
+            var probeLine = buf.GetLine(0);
+            var probeText = probeLine?.TranslateToString(true, 0, buf.Cols) ?? "";
+            if (probeLine is null || !probeText.Contains("R39PROBE"))
+            {
+                AppLog.Warn($"[SelfTest] r39: highlight FAILED: 探测行缺失 line0=[{probeText}]");
+            }
+            else
+            {
+                int cErr = probeLine[probeText.IndexOf("Error", StringComparison.Ordinal)].Attributes.GetFgColor();
+                int cCrash = probeLine[probeText.IndexOf("crash", StringComparison.Ordinal)].Attributes.GetFgColor();
+                int cWarn = probeLine[probeText.IndexOf("warning", StringComparison.Ordinal)].Attributes.GetFgColor();
+                int cOk = probeLine[probeText.IndexOf("success", StringComparison.Ordinal)].Attributes.GetFgColor();
+                int cIp = probeLine[probeText.IndexOf("192.168.1.1", StringComparison.Ordinal)].Attributes.GetFgColor();
+                int cLoc = probeLine[probeText.IndexOf("localhost", StringComparison.Ordinal)].Attributes.GetFgColor();
+                int cPlain = probeLine[0].Attributes.GetFgColor(); // 'R' of R39PROBE（非关键字）
+                AppLog.Info($"[SelfTest] r39: highlight line=[{probeText.TrimEnd()}] " +
+                    $"Error_fg={cErr}(1红) crash_fg={cCrash}(1红) warning_fg={cWarn}(3黄) " +
+                    $"success_fg={cOk}(2绿) ip_fg={cIp}(5品红) localhost_fg={cLoc}(5品红) " +
+                    $"plain_fg={cPlain}(256默认) " +
+                    $"ok={cErr == 1 && cCrash == 1 && cWarn == 3 && cOk == 2 && cIp == 5 && cLoc == 5 && cPlain == 256}");
+            }
+
+            // ── 2) 终端显示 ──
+            for (var i = 0; i < 60; i++)
+            {
+                terminal.Terminal.Write($"R39FILL {i:00}\r\n");
+            }
+            await Task.Delay(100);
+            var ybaseBefore = buf.YBase;
+            ClearTerminalScrollback(terminal);
+            var screenHasFill = false;
+            for (var y = 0; y < buf.Rows; y++)
+            {
+                var t = buf.GetLine(y)?.TranslateToString(true, 0, buf.Cols) ?? "";
+                if (t.Contains("R39FILL"))
+                {
+                    screenHasFill = true;
+                }
+            }
+            AppLog.Info($"[SelfTest] r39: clear-scrollback YBase {ybaseBefore} -> {buf.YBase} " +
+                $"ok={ybaseBefore > 0 && buf.YBase == 0} screenRetained={screenHasFill}");
+
+            var sbToggled = ToggleTerminalScrollBar(terminal);
+            var bars = terminal.GetVisualDescendants().OfType<Avalonia.Controls.Primitives.ScrollBar>().ToList();
+            var sbShown = bars.Count > 0 ? bars[0].IsVisible : (bool?)null; // 第一次 toggle 后（显示态）
+            ToggleTerminalScrollBar(terminal); // 还原
+            AppLog.Info($"[SelfTest] r39: scrollbar toggle ok={sbToggled} bars={bars.Count} " +
+                $"visibleAfterShow={sbShown}");
+
+            var stateBefore = WindowState;
+            ToggleFullScreen();
+            var stateFs = WindowState;
+            ToggleFullScreen();
+            var stateRestored = WindowState;
+            // 进入全屏必须 FullScreen；退出后回 Normal（与 F11 既有行为一致，
+            // 不要求恢复到进入前的 Maximized 态）。
+            var fsOk = stateFs == WindowState.FullScreen && stateRestored == WindowState.Normal;
+            AppLog.Info($"[SelfTest] r39: fullscreen {stateBefore} -> {stateFs} -> {stateRestored} " +
+                $"ok={fsOk}{(OperatingSystem.IsWindows() ? "" : "（X11 无 WM 环境可能不支持，以 Win32 实机为准）")}");
+
+            // 设置标题：自动确认对话框
+            var titleTask = SetTerminalTitleAsync(tab);
+            var waited = 0;
+            while (LastTitleDialogForTests is null && waited < 10_000)
+            {
+                await Task.Delay(100);
+                waited += 100;
+            }
+            var titleDlgSize = new Size(0, 0);
+            if (LastTitleDialogForTests is { } tdlg)
+            {
+                var input = tdlg.GetVisualDescendants().OfType<TextBox>().FirstOrDefault();
+                if (input is not null)
+                {
+                    input.Text = "R39-标题自检";
+                }
+                titleDlgSize = tdlg.ClientSize;
+                var okBtn = tdlg.GetVisualDescendants().OfType<Button>().FirstOrDefault(b =>
+                    string.Equals(b.Content, "确定")
+                    || b.GetVisualDescendants().OfType<TextBlock>().Any(tb => tb.Text == "确定"));
+                okBtn?.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            }
+            await titleTask;
+            AppLog.Info($"[SelfTest] r39: set-title result=[{tab.Title}] ok={tab.Title == "R39-标题自检"} " +
+                $"dlgClientSize={titleDlgSize}");
+
+            tab.IsReadOnlyTerminal = true;
+            var roBlocked = IsTerminalInputBlockedForTests(terminal);
+            tab.IsReadOnlyTerminal = false;
+            AppLog.Info($"[SelfTest] r39: readonly flag -> blocked={roBlocked} ok={roBlocked}");
+
+            // ── 3) 特殊命令 ──
+            foreach (var kind in new[] { SessionKind.Local, SessionKind.Serial, SessionKind.Tcp, SessionKind.Telnet, SessionKind.Ssh })
+            {
+                var top = SpecialCommands.TopLevel.Count(d => SpecialCommands.IsAvailable(d, kind));
+                var more = SpecialCommands.More.Count(d => SpecialCommands.IsAvailable(d, kind));
+                AppLog.Info($"[SelfTest] r39: special-cmd availability {kind}: top {top}/5 more {more}/14");
+            }
+
+            // 本地会话派发 SIGINT：应判定「不支持」并弹错误对话框（自动确认）
+            var dispatchTask = DispatchSpecialCommandAsync(tab, terminal, SpecialCommands.TopLevel[1]);
+            var waited2 = 0;
+            while (LastErrorDialogForTests is null && waited2 < 10_000)
+            {
+                await Task.Delay(100);
+                waited2 += 100;
+            }
+            if (LastErrorDialogForTests is { } edlg)
+            {
+                var closeBtn = edlg.GetVisualDescendants().OfType<Button>().FirstOrDefault(b =>
+                    string.Equals(b.Content, "确定")
+                    || b.GetVisualDescendants().OfType<TextBlock>().Any(tb => tb.Text == "确定"));
+                closeBtn?.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            }
+            await dispatchTask;
+            AppLog.Info("[SelfTest] r39: special-cmd dispatch local-SIGINT done (期望 unsupported/failed，错误框已自动确认)");
+
+            // ── 清理：恢复方案、关闭自检终端 ──
+            SetSyntaxHighlightScheme(originalScheme);
+            AppLog.Info($"[SelfTest] r39: 高亮方案已恢复为 {originalScheme}");
+            ReleaseHighlighterForTab(tab);
+            viewModel.CloseTab(tab);
+
+            AppLog.Info("[SelfTest] r39: 自检完成，退出");
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(0);
+        }
+        catch (Exception ex)
+        {
+            try
+            {
+                SetSyntaxHighlightScheme(originalScheme);
+            }
+            catch
+            {
+                // 恢复失败不影响退出
+            }
+            AppLog.Error("[SelfTest] r39: 自检异常", ex);
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
+        }
+    }
+
     private async void OnTerminalKeyDown(object? sender, KeyEventArgs e)
     {
         if (sender is not TerminalControl terminal || e.Key != Key.V)
@@ -6339,8 +6974,14 @@ public static class ClipCheck {
         return terminal.SendInputAsync(text);
     }
 
-    internal static async Task PasteNormalizedAsync(TerminalControl terminal)
+    internal async Task PasteNormalizedAsync(TerminalControl terminal)
     {
+        // r39 只读终端：所有粘贴入口（菜单/右键/Ctrl+V）都汇聚到这里
+        if (FindTabForTerminal(terminal)?.IsReadOnlyTerminal == true)
+        {
+            return;
+        }
+
         if (terminal.Terminal.Selection.HasSelection)
         {
             // 粘贴替换选区：走库默认路径（保留其删除选区序列的行为）。

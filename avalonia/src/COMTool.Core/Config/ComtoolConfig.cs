@@ -230,6 +230,15 @@ public sealed class TerminalConfig
     [JsonPropertyName("implicitLfInCr")]
     public bool ImplicitLfInCr { get; set; } = false;
 
+    /// <summary>
+    /// 终端语法高亮方案（MobaXterm「语法高亮」子菜单，全局单值）。
+    /// 取值见 COMTool.Terminal.Highlight.HighlightSchemes：
+    /// "default"（默认，关闭）/ "error_warning" / "unix_shell" / "cisco" / "sql"；
+    /// "per_line" 已预留但当前置灰未实现。旧配置缺键时默认 "default"。
+    /// </summary>
+    [JsonPropertyName("syntaxHighlight")]
+    public string SyntaxHighlight { get; set; } = "default";
+
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? Extra { get; set; }
 }

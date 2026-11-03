@@ -466,4 +466,24 @@ public sealed class ConfigTests : IDisposable
         store.Save(outConfig2);
         Assert.False(outConfig2.SshSessions[0].Monitor);
     }
+
+    [Fact]
+    public void SaveAndLoad_RoundTripsSyntaxHighlight()
+    {
+        var path = Path.Combine(_directory, "config-hl.json");
+        var config = new ComtoolConfig
+        {
+            Terminal = new TerminalConfig { SyntaxHighlight = "cisco" },
+        };
+
+        config.Save(path);
+        var loaded = ComtoolConfig.Load(path);
+        Assert.Equal("cisco", loaded.Terminal.SyntaxHighlight);
+
+        // 旧配置缺 terminal 键：默认 "default"（高亮关闭），不报错。
+        var legacyPath = Path.Combine(_directory, "config-hl-legacy.json");
+        File.WriteAllText(legacyPath, """{"version":3}""");
+        var loadedLegacy = ComtoolConfig.Load(legacyPath);
+        Assert.Equal("default", loadedLegacy.Terminal.SyntaxHighlight);
+    }
 }

@@ -110,6 +110,31 @@ public sealed class SerialConnection : ISerialConnection
             _ => Handshake.None,
         };
 
+    /// <summary>
+    /// 发送硬件断流（MobaXterm「特殊命令 → Break」）：拉低数据线 durationMs 毫秒后
+    /// 释放。后台线程执行（阻塞等待时长），端口已关/并发拔除时静默忽略。
+    /// </summary>
+    public Task SendBreakAsync(int durationMs = 250) => Task.Run(() =>
+    {
+        try
+        {
+            if (!_port.IsOpen)
+            {
+                return;
+            }
+
+            // .NET 10 SerialPort 用 BreakState 布尔属性（旧版 Break(bool)/BreakDuration 已移除）：
+            // 拉高 break 保持 durationMs 后拉低，形成一次硬件断流脉冲。
+            _port.BreakState = true;
+            Thread.Sleep(durationMs);
+            _port.BreakState = false;
+        }
+        catch
+        {
+            // 端口热拔/已关：视为本次 break 失败，不向 UI 抛异常。
+        }
+    });
+
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
