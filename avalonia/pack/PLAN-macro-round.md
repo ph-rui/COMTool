@@ -1181,6 +1181,7 @@ r42 把字号对齐后，用户仍指出一个观感差：**MobaXterm 里中英�
     latin ... base=12.008 | cjk ... base=16.582`（FormattedText 度量，证明雅黑 ascent 比 Consolas
     高 4.574px，即原下沉量）；`cjk-content.png` 逐像素：英文 cap 基线≈11、中文基线≈12（差≤1px），
     中文 ink 由修复前 9px（被行框裁）恢复 13px 全高，中英文共用基线——与 MobaXterm 平行
+  - 2026-11-04 用户同屏截图确认中英文基线平行，r43 验收通过
 
 ## 已知偏差（已写入 spec 附录）
 
