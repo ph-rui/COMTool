@@ -828,6 +828,81 @@
          发布 A36BF41446D596A6960ADCBB3B7D4AFD287877617709CC51D021CE6DA3947E0F
          （95,130,988 字节）双份部署+SHA 校验 OK、无残留进程。
       ⑧ 用户实机确认（2026-11-03）：「取消/确定」字底完整、文字居中，问题关闭。
+
+## 第 40 轮：r39 三子菜单（终端显示 / 语法高亮 / 特殊命令）
+
+目标：终端 Shift+右键菜单原 3 个置灰叶子（终端显示 / 语法高亮 / 特殊命令）升级为
+可操作子菜单，1:1 对齐 MobaXterm 22.1（顶层 19 项 + 4 分隔线顺序/文案不变，仅三叶子变子菜单）。
+
+### 语义定稿（用户截图确认）
+- 终端显示 6 项全做：重置终端输出=XTerm RIS 全复位；清除终端回滚=Buffer.ClearScrollback()
+  （保留当前屏）；设置终端标题=对话框改 tab.Title（会话级不持久化，Title 改可写 ObservableProperty）；
+  切换终端滚动条=toggle 模板 ScrollBar（显 14px/隐 0）；全屏终端(F11)=F11 逻辑提取为 ToggleFullScreen()；
+  只读终端=per-tab 标志 + tunnel 阶段 KeyDown 守卫(e.Handled) + PasteNormalizedAsync 实例化加守卫
+  （粘贴菜单项同步加 !readOnly）。
+- 语法高亮 6 项 Radio 单选（GroupName=TerminalSyntaxHighlight）：默认 / 错误·警告·成功关键字 /
+  Unix shell 脚本 / Cisco(网络配置) / 逐行（置灰留后，语义待定）/ SQL 语法。全局单值，
+  落 config.json 的 terminal.syntaxHighlight，切换即对所有终端 ApplyToAll（含回滚历史重染）。
+- 特殊命令按会话类型矩阵：SSH→RFC4254 协议信号 SendSignalRequest("INT"/"TERM"/"KILL"/"HUP"…)+
+  SendBreakRequest（ShellStream 不公开通道，反射私有字段 _channel，运行时类型
+  Renci.SshNet.Channels.ChannelSession，pin 2026.0.0，失败静默 false）；串口→硬件 Break
+  （.NET10 SerialPort.BreakState 布尔脉冲，无 Break()/BreakDuration）+控制字节(SIGINT 0x03/
+  SIGTSTP 0x1A/SIGQUIT 0x1C)；TCP/Telnet→仅控制字节；Local→全置灰。顶层 5(Break/SIGINT/SIGTERM/
+  SIGKILL/SIGHUP)+更多信号(14，RFC4254 其余)+IGNORE message（置灰留后）。
+
+### 高亮实现路径
+- 弃流过滤器（pty 阻塞读下无换行提示符会滞留），改缓冲区后处理 + 订阅 XTerm.Terminal.LineFed
+  事件（与解析器同线程同步触发、零延迟、不碰字节流）。只染默认前景色格子(fg==256/mode0)，
+  程序自带颜色不覆盖；watermark 只处理新增行；方案切换 ApplyToAll() 全量重染(含回滚)；
+  alt 屏(vim/less)跳过；Resize 重置水印；CJK 宽字符按 cell 宽度映射，按物理行着色
+  （跨折行不匹配，接受局限）。
+- 规则集照抄 MobaXterm 默认 CustomSyntax 原文（wezterm issue #4348 导出的 MobaXterm.ini）：
+  EWS(红 error 族/黄 warn 族/绿 success 族/品红 IP·localhost/青 info 族)、Unix shell(注释绿/
+  命令替换红/变量黄/控制词品红/内建青)、Cisco(!注释蓝/行首 no+shutdown 红/up·enabled 绿/
+  IP·MAC·接口号黄/配置词品红/show 系青)、SQL(五色关键字表)。抢占式着色：先声明者独占字符区间，
+  短语规则须排在单词规则前（否则 "permission denied" 的 "denied" 被单词规则先占）。
+  .NET 正则无 \K，Cisco 行首 no 用 ^\s*no\b（测试侧 Trim 比较）。
+- 接线踩坑：XTerm 核心在终端入树/布局后才创建，单测中 attach 可能先于布局使 terminal.Terminal
+  为 null → AttachTerminalHighlighter 加空守卫+Loaded 优先级延迟重试一次（修 TERM21 回归）。
+
+### 关键文件
+- COMTool.Terminal/Highlight/SyntaxHighlightRules.cs（纯规则引擎 FindSpans）+ TerminalHighlighter.cs（LineFed 着色器）
+- COMTool.App/Services/SpecialCommands.cs（SpecialCommandDef + TopLevel(5)/More(14) 表 + IsAvailable 矩阵）
+- COMTool.Connections/SshConnection.cs（TrySendSignal/TrySendBreak 反射段）+ SerialConnection.cs（SendBreakAsync）
+- COMTool.App/Views/MainWindow.axaml.cs（14 处接线：_highlighters 字典、隧道只读守卫、AttachTerminal 挂着色器、
+  两处 tab 关闭释放、F11 提取、粘贴实例化+守卫、三子菜单 builder、RunR39SelfTestAsync + --selftest-r39 入口）
+- COMTool.App/ViewModels/MainViewModel.cs（TerminalTab.Title 可写 + IsReadOnlyTerminal）
+- COMTool.Core/Config/ComtoolConfig.cs（TerminalConfig.SyntaxHighlight 字段）
+
+### 测试（TDD 先红后绿）
+- COMTool.Terminal.Tests：SyntaxHighlightTests 14 项（规则引擎 8 + LineFed 着色器 6，含默认色编码探针）
+- COMTool.App.Tests：TerminalR39FeatureTests 9 项（TERM29×6 显示子菜单结构/复位/回滚/标题框/滚动条/全屏/只读，
+  TERM30×1 高亮接线，TERM31×2 可用性矩阵+控制字节派发）
+- COMTool.Core.Tests：ConfigTests +1（syntaxHighlight 往返 + 旧配置缺键默认 default）
+- 回归：TERM21 等既有菜单顺序/文案断言全绿
+
+### gate（gate-r39b.log，2026-11-03）
+- 全 PASS：Core 90 / Sftp 42 / Terminal 25 / Connections 150 / Zmodem 32 / TestGate 49 / App 266（含 9 新）/ E2E 15/15
+- RESULT PASS×2，GATE EXIT=0
+
+### 实机自测（VM 192.0.2.163，--selftest-r39，构建 1E4E76D9）
+- 高亮 probe：Error/crash fg=1(红)、warning fg=3(黄)、success fg=2(绿)、192.168.1.1/localhost fg=5(品红)、
+  非关键字 fg=256(默认) → ok=True
+- clear-scrollback：YBase 22→0，screenRetained=True
+- scrollbar toggle：ok=True bars=1 visibleAfterShow=True
+- fullscreen：Normal→FullScreen→Normal ok=True
+- set-title：result=R39-标题自检，dlgClientSize=340×142（Win32 字体度量，无裁切）
+- readonly：blocked=True
+- special-cmd 矩阵：Local 0/5+0/14、Serial 2/5+2/14、Tcp 1/5+2/14、Telnet 1/5+2/14、Ssh 5/5+14/14
+- 本地 SIGINT 派发 → unsupported/failed（错误框自动确认，符合 Local 全置灰语义）
+- 退出前高亮方案自动恢复 default
+
+### 部署
+- publish win-x64 单文件（self-contained，无 R2R/无压缩，对齐 pack.ps1 去掉 R2R）：
+  155,059,201 B，SHA256=1E4E76D99CF68C136223889E47151AEDB0FB055B4C174CD98334E5C31853F6B5
+  （体积大于上轮 95MB，源于 SDK 10.0.402 runtime pack，功能实机已验）
+- deploy_r3.py 双份部署（C:\Users\devuser + D:\Users\devuser\Desktop）SHA256 均 OK
+
 ## 已知偏差（已写入 spec 附录）
 
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
