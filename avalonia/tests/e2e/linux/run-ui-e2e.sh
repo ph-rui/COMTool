@@ -26,7 +26,7 @@ E2E_TESTS=(
     SSH11_RestartStoppedSessionE2E
     SSH06_MultipleConnectionsE2E
     UI05_TabSwitchTypingBothDirections
-    TERM15_DoubleClickMaximizeE2E
+    TERM15_TerminalDoubleTapNoResizeE2E
     TELNET01_AutoLoginE2E
     TELNET02_RestartStoppedSessionE2E
     SFTP01_BrowserTransferE2E
@@ -42,7 +42,7 @@ SSH_TEST_IDS=(
     SSH11_RestartStoppedSessionE2E
     SSH06_MultipleConnectionsE2E
     UI05_TabSwitchTypingBothDirections
-    TERM15_DoubleClickMaximizeE2E
+    TERM15_TerminalDoubleTapNoResizeE2E
     SFTP01_BrowserTransferE2E
     SFTP02_FileManagementE2E
     RM01_MonitorBarShowsMetricsE2E
@@ -1083,18 +1083,14 @@ PYEOF
     pass "$test_id"
 }
 
-run_term15_double_click_maximize() {
-    local test_id="TERM15_DoubleClickMaximizeE2E"
+run_term15_terminal_double_tap_no_resize() {
+    local test_id="TERM15_TerminalDoubleTapNoResizeE2E"
     local before
     local before_w
     local before_h
-    local maximized
-    local max_w
-    local max_h
-    local restored
-    local restored_w
-    local restored_h
-    local actual
+    local after
+    local after_w
+    local after_h
 
     log "Running $test_id"
     # Reuse the SSH fixture session. ensure_first_shell types into the current
@@ -1103,33 +1099,29 @@ run_term15_double_click_maximize() {
     ensure_first_shell "$test_id"
 
     wait_for_shell_focus "$SHELL_A_PID" "term15-focus-a" 15 \
-        || fail "$test_id" "first tab did not receive keyboard focus before maximize"
+        || fail "$test_id" "first tab did not receive keyboard focus before double tap"
 
     if ! before="$(read_window_dimensions "$WINDOW_ID")"; then
-        fail "$test_id" "could not read window geometry before maximize"
+        fail "$test_id" "could not read window geometry before double tap"
     fi
     read -r before_w before_h <<<"$before"
-    log "$test_id: geometry before maximize: ${before_w}x${before_h}"
+    log "$test_id: geometry before double tap: ${before_w}x${before_h}"
 
+    # r40.3: MobaXterm only toggles maximize/restore from the top title bar;
+    # double-clicking the terminal display area must leave the window alone
+    # (native word selection on text still works via the terminal library).
     if ! double_click_window 600 300; then
         fail "$test_id" "could not double-click the terminal center at (600,300)"
     fi
-    if ! maximized="$(wait_for_window_size grow "$WINDOW_ID" "$before_w" "$before_h" 5)"; then
-        actual="$(read_window_dimensions "$WINDOW_ID" 2>/dev/null || printf 'unknown')"
-        fail "$test_id" "double-click did not maximize the window (before ${before_w}x${before_h}, now $actual)"
+    sleep 2
+    if ! after="$(read_window_dimensions "$WINDOW_ID")"; then
+        fail "$test_id" "could not read window geometry after double tap"
     fi
-    read -r max_w max_h <<<"$maximized"
-    log "$test_id: geometry after maximize: ${max_w}x${max_h}"
-
-    if ! double_click_window 600 300; then
-        fail "$test_id" "could not double-click the terminal center again to restore"
+    read -r after_w after_h <<<"$after"
+    log "$test_id: geometry after double tap: ${after_w}x${after_h}"
+    if [[ "$after_w" -ne "$before_w" || "$after_h" -ne "$before_h" ]]; then
+        fail "$test_id" "terminal-area double tap changed window geometry (${before_w}x${before_h} -> ${after_w}x${after_h})"
     fi
-    if ! restored="$(wait_for_window_size exact "$WINDOW_ID" "$before_w" "$before_h" 5)"; then
-        actual="$(read_window_dimensions "$WINDOW_ID" 2>/dev/null || printf 'unknown')"
-        fail "$test_id" "second double-click did not restore ${before_w}x${before_h} (now $actual)"
-    fi
-    read -r restored_w restored_h <<<"$restored"
-    log "$test_id: geometry after restore: ${restored_w}x${restored_h}"
 
     pass "$test_id"
 }
@@ -1174,8 +1166,8 @@ if [[ -n "$SSH_TEST_ID" ]]; then
     if matches_filter "UI05_TabSwitchTypingBothDirections"; then
         run_ui05_tab_switch
     fi
-    if matches_filter "TERM15_DoubleClickMaximizeE2E"; then
-        run_term15_double_click_maximize
+    if matches_filter "TERM15_TerminalDoubleTapNoResizeE2E"; then
+        run_term15_terminal_double_tap_no_resize
     fi
     if matches_filter "SFTP01_BrowserTransferE2E"; then
         run_sftp01_browser_transfer

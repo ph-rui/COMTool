@@ -1894,14 +1894,8 @@ public partial class MainWindow : Window
             InputElement.KeyDownEvent,
             OnTerminalReadOnlyGuard,
             RoutingStrategies.Tunnel);
-        // The terminal's own double-click handling may mark the event handled
-        // for word selection. Observe it anyway so the whole terminal pane
-        // mirrors the title bar and maximize button.
-        terminal.AddHandler(
-            InputElement.DoubleTappedEvent,
-            OnTerminalDoubleTapped,
-            RoutingStrategies.Bubble,
-            handledEventsToo: true);
+        // r40.3：终端显示区双击不再切换最大化/还原（用户实机确认 MobaXterm
+        // 只有最顶层标题栏有双击最大化；r15 旧实现已移除）。
         return terminal;
     }
 
@@ -2774,17 +2768,6 @@ public partial class MainWindow : Window
         source is Control control
         && (control.FindAncestorOfType<Button>(includeSelf: true) is not null
             || control.FindAncestorOfType<ToggleButton>(includeSelf: true) is not null);
-
-    private void OnTerminalDoubleTapped(object? sender, TappedEventArgs e)
-    {
-        if (sender is not TerminalControl)
-        {
-            return;
-        }
-
-        ToggleMaximize();
-        e.Handled = true;
-    }
 
     private void OnPinClick(object? sender, RoutedEventArgs e)
     {

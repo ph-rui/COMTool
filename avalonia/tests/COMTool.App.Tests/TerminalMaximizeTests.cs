@@ -13,8 +13,11 @@ namespace COMTool.App.Tests;
 
 public sealed class TerminalMaximizeTests
 {
+    // r40.3：用户实机确认 MobaXterm 只在最顶层标题栏有双击最大化/还原，
+    // 终端黑色显示区内双击不改窗口大小。r15 旧实现的「终端区双击=ToggleMaximize」
+    // 已移除；此测试改为断言窗口状态保持不变、焦点不丢失。
     [AvaloniaFact]
-    public void TERM15_DoubleClickUsesMaximizePath()
+    public void TERM15_TerminalDoubleTapKeepsWindowState()
     {
         using var env = new TestEnvironment();
         MainWindow? window = null;
@@ -42,13 +45,13 @@ public sealed class TerminalMaximizeTests
                 var before = window.WindowState;
                 Assert.Equal(WindowState.Normal, before);
 
-                var raised = RaiseDoubleTap(terminal, window);
+                RaiseDoubleTap(terminal, window);
                 RunJobs(window);
-                Assert.True(raised.Handled);
-                Assert.NotEqual(before, window.WindowState);
-                Assert.Equal(WindowState.Maximized, window.WindowState);
+                // 双击终端区后窗口状态必须保持 Normal（不再切换最大化）
+                Assert.Equal(WindowState.Normal, window.WindowState);
+                Assert.True(terminal.IsKeyboardFocusWithin);
 
-                // A second title-bar style double click restores the window.
+                // 再次双击仍然不改变窗口状态
                 RaiseDoubleTap(terminal, window);
                 RunJobs(window);
                 Assert.Equal(WindowState.Normal, window.WindowState);
@@ -94,8 +97,8 @@ public sealed class TerminalMaximizeTests
                 var raised = RaiseDoubleTap(terminal, window);
                 RunJobs(window);
 
-                Assert.True(raised.Handled);
-                Assert.Equal(WindowState.Maximized, window.WindowState);
+                // r40.3: 双击终端区不再切换窗口大小（对齐 MobaXterm，仅标题栏双击最大化）
+                Assert.Equal(WindowState.Normal, window.WindowState);
                 Assert.True(terminal.IsKeyboardFocusWithin);
                 Assert.True(terminal.Terminal.Selection.HasSelection);
                 Assert.Equal(selectedText, terminal.Terminal.Selection.GetSelectionText());
