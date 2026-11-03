@@ -1002,6 +1002,59 @@ MobaXterm 行为的误判（当时把"整块终端区镜像标题栏"当成了�
   readonly blocked、特殊命令矩阵（分母 5 顶层，无「忽略消息」）、local-SIGINT→unsupported、
   退出前方案恢复 default
 
+### 41 中文显示对齐 MobaXterm + 字符保真探针 + 几何诊断（2026-11-03，用户提问）
+
+用户提问：「中文显示，mobaxterm 是怎么做到？可以实现比较好的显示效果」。
+两截图（MobaXterm vs COMTool，同一路 ls 输出）逐像素对比：文字内容/引号/颜色/
+列对齐完全一致，唯一差异是 CJK 字形粗细——COMTool 中文落到 Microsoft YaHei UI
+（笔画偏粗），MobaXterm 用笔画更细的终端级 CJK 字体。
+
+MobaXterm 机制：终端是严格网格（拉丁 1 格、CJK 全角恰 2 格），主字体 Consolas
+缺 CJK 字形时回退到终端级 CJK 字体，渲染层强制 CJK 占恰好 2 格（r33 起我们的库
+已实现，见 TERM-22）。故「中文显示效果」差异 = CJK 回退字体的选择（笔画粗细），
+而非对齐机制。
+
+改动：
+- 字体回退链重排（MainWindow L1786 起）：Consolas → **内置 Noto Sans Mono CJK SC
+  （Regular+Bold，avares）** → Microsoft YaHei UI（降为最后系统兜底）。依据：
+  Noto Sans Mono CJK SC 为终端级 CJK 字体，0.5em 拉丁/1em CJK 度量恰好 2 格对齐，
+  笔画细、观感接近 MobaXterm（PIL 渲染样本比对）；avares 字体随单文件 publish
+  内置，Windows/Linux/headless 渲染一致（YaHei 效果随 Windows 版本而异）
+- `CjkTerminalFontTests.TERM17` 增回退顺序断言（Noto 先于 YaHei）；类注释同步
+- r39 自检新增 (0) 几何诊断节：记录 win/term bounds、库网格度量（CharWidth/
+  CharHeight/GutterWidth/grid CxR/calcCols）、实测字形步进（FormattedText
+  "M"×10 均宽）、DPI 缩放 → run.log `[SelfTest] r41: geometry ...` 行。用途：
+  排查用户实机「stty=58×181 但 ls 输出右缘被裁」疑云（run.log 曾同步
+  201x56/203x57，截图可见列仅 ~151-157，疑似 pty 列数比可见列数多 ~20%；
+  VM 96dpi 无法复现，等诊断数据定位）
+- 字符保真探针（登记 TERM-01，排除「引号丢失」疑云）：
+  - `QuoteProbeTests.TERM01_QuoteCharSurvivesParser`（Terminal.Tests）：XTerm.NET
+    解析层保留 ls 单引号 + CJK 文本
+  - `TerminalQuoteFidelityTests.TERM01_QuotesSurviveAttachedReadPath
+    {With,Without}Zmodem`（App.Tests）：真实 AttachConnection 读路径（含/不含
+    ZmodemStream）引号与 CJK 文本完整
+- 矩阵同步 6 处：parity TERM-01/09/22/24、feature TERM-01/09/24（字体链描述改
+  Noto 优先、YaHei 兜底；TERM-01 登记探针）
+
+验证（2026-11-03）：
+- 绿：过滤测试 31/31（CjkTerminalFont + QuoteFidelity + Maximize + MenuFeature）；
+  Terminal.Tests 27/27（含新引号探针）
+- gate（2026-11-03 18:05，results 20261103T100251Z）EXIT=0 全绿：单元 390 项
+  （Core 90/Sftp 42/Terminal 27/Connections 150/Zmodem 32/TestGate 49）+ App 268
+  + E2E 15/15 PASS + TestGate PASS，共 658 项（较上轮 +3：引号探针×1、保真探针×2）
+- publish win-x64 单文件：COMTool.App.exe 155,063,809 B，
+  SHA256=B26F16B47CBFD7D36533F480C415EE6D82E2B1FFF345B7DF3774EC9178E4AD89
+- deploy_r3.py 双份部署（C:\Users\devuser\COMTool-Avalonia.exe +
+  D:\Users\devuser\Desktop\COMTool-Avalonia.exe）SHA256 均校验 OK
+- VM 自检（--selftest-r39，run.log 18:11）全部 ok=True（高亮六色/clear-scrollback/
+  scrollbar/fullscreen/set-title 340×142/readonly/特殊命令矩阵 5 顶层+14 more/
+  退出前方案恢复 default）；r41 geometry 行（1024×768@96dpi）：
+  `win=1024x768 term=946x627 charW=7.422 charH=15.807 gutter=0 grid=127x39
+  calcCols=127 glyphAdvance=7.422 dpi=1` —— grid 列数(127)==calcCols(127)==
+  可见列，charW==实际字形步进，VM 上 pty 列数与视口一致；用户实机 stty=58×181
+  vs 截图可见 ~151-157 列的失配未在 96dpi VM 复现，待用户在本机跑
+  --selftest-r39 回传 geometry 行定位（疑似高 DPI 缩放相关）
+
 ## 已知偏差（已写入 spec 附录）
 
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
