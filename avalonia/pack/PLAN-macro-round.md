@@ -963,6 +963,45 @@ ini 里仅有 SyntaxType= 数值，无该选项文档。语义无法确认 → �
   Tcp 1/5·2/14、Telnet 1/5·2/14、Ssh 5/5·14/14（分母已是 5 顶层，无「忽略消息」）；
   local-SIGINT→unsupported/failed 自动确认；退出前方案恢复 default
 
+### 40.3 移除「终端显示区双击最大化/还原」（2026-11-03，用户实机纠错）
+
+用户实机反馈：MobaXterm 的终端黑色显示区内双击**不**做最大化/还原切换，
+只有最顶层标题栏才有。r15 实现的 TERM-15「双击终端面板=ToggleMaximize」是对
+MobaXterm 行为的误判（当时把"整块终端区镜像标题栏"当成了原版行为），本轮移除。
+
+改动：
+- MainWindow：删除 TerminalControl 的 `DoubleTappedEvent→OnTerminalDoubleTapped→ToggleMaximize()`
+  接线（L1897 附近）与 `OnTerminalDoubleTapped` 方法本体；标题栏双击
+  （`OnTitleBarDoubleTapped`）与标签页双击分离（`OnTabDoubleTapped`）不受影响
+- 测试（TDD 先红后绿）：
+  - `TERM15_DoubleClickUsesMaximizePath` → `TERM15_TerminalDoubleTapKeepsWindowState`：
+    双击终端区两次后断言 WindowState 保持 Normal、焦点不丢（原断言为 Maximized→Normal）
+  - `TERM15_DoubleClickDoesNotStealSelection`：去掉 `raised.Handled`/`Maximized` 断言，
+    改为断言窗口态不变 + 选区/焦点保持
+  - E2E `TERM15_DoubleClickMaximizeE2E` → `TERM15_TerminalDoubleTapNoResizeE2E`：
+    双击终端中心 (600,300) 后 sleep 2s 读尺寸，断言窗口保持 1000×650 不变
+    （原为 grow→exact 往返）；E2E_TESTS / SSH_TEST_IDS / dispatch 三处同步改名
+- 矩阵同步（TestGate 硬约束）：
+  - parity-matrix TERM-15 行改定义「终端显示区双击行为（不改窗口）」+ r40.3 依据；
+    UI-13 行描述去掉旧"双击终端面板最大化/还原"
+  - feature-test-matrix：UI-01 行 Automated 去掉 `TERM15_DoubleClickUsesMaximizePath`；
+    UI-13 行 Automated 去掉该测试；TERM-15 行改新测试名 + r40.3 描述
+- 终端库自身双击处理（选词）不受影响，仅去掉了叠加的 bubble 观察者
+
+验证（2026-11-03）：
+- 红：改测试后 `TerminalMaximizeTests` 2/2 FAIL（窗口仍被最大化）→ 移除接线
+- 绿：`TerminalMaximizeTests` 2/2 PASS；`dotnet build` 全 solution 无 error
+- gate-r41 **EXIT=0 全绿**：单元 Core 90 / Sftp 42 / Terminal 26 / Connections 150 /
+  Zmodem 32 / TestGate 49 / App 266 + E2E 15 项全 PASS
+  （`TERM15_TerminalDoubleTapNoResizeE2E` 实测双击前 1000×650 → 双击后 1000×650 不变）
+- publish win-x64 单文件：COMTool.App.exe 155,063,809 B，
+  SHA256=**C505B77FCDA85233FDF06ECBA8E4AB7D6F55AC8108D766DBF19D8BDB052C0005**
+- deploy_r3.py 双份部署，远端 SHA 均校验 OK
+- VM 实机自检（run.log 15:12:46）全部 ok=True：高亮六色、clear-scrollback YBase 23→0、
+  scrollbar toggle、fullscreen Maximized→FullScreen→Maximized、set-title 340×142、
+  readonly blocked、特殊命令矩阵（分母 5 顶层，无「忽略消息」）、local-SIGINT→unsupported、
+  退出前方案恢复 default
+
 ## 已知偏差（已写入 spec 附录）
 
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
