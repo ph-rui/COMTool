@@ -305,11 +305,17 @@
                              Margin="8,0,0,0"
                              VerticalAlignment="Center"
                              TextTrimming="CharacterEllipsis" />
+                  <!-- 20px 高的横幅按钮：Padding=0 + 11px 字号才能完整显示汉字
+                       （默认 Padding 5/6 + 14px 会把字底裁掉，2026-11-03 同类缺陷排查）。 -->
                   <Button Grid.Column="1"
                           Name="MacroBannerActionButton"
                           Content="停止"
-                          Width="64" Height="20"
-                          MinWidth="0" MinHeight="0"
+                          Width="64" MinHeight="20"
+                          MinWidth="0"
+                          Padding="0"
+                          FontSize="11"
+                          HorizontalContentAlignment="Center"
+                          VerticalContentAlignment="Center"
                           Margin="8,0,8,0"
                           Click="OnMacroBannerActionClick" />
                 </Grid>
@@ -354,17 +360,30 @@
                                FontSize="12"
                                Foreground="#e65100"
                                VerticalAlignment="Center" />
+                    <!-- Avalonia 12.1.4 Fluent Button 默认两轴 Stretch：字符串内容被
+                         TextBlock 拉伸后左对齐，固定 Height=26 时内框只有 15px，Windows
+                         上 12px 汉字行高约 17px → 字底被裁。故 MinHeight + 两轴居中
+                         （字号/按钮高度见「字体设置」对话框同一缺陷，2026-11-03 用户反馈）。 -->
                     <Button Name="SearchPrevButton"
                             Content="上一个"
-                            Width="60" Height="26"
+                            Width="60" MinHeight="26"
+                            Padding="8,4"
+                            HorizontalContentAlignment="Center"
+                            VerticalContentAlignment="Center"
                             Click="OnSearchPrevClick" />
                     <Button Name="SearchNextButton"
                             Content="下一个"
-                            Width="60" Height="26"
+                            Width="60" MinHeight="26"
+                            Padding="8,4"
+                            HorizontalContentAlignment="Center"
+                            VerticalContentAlignment="Center"
                             Click="OnSearchNextClick" />
                     <Button Name="SearchCloseButton"
                             Content="关闭"
-                            Width="56" Height="26"
+                            Width="56" MinHeight="26"
+                            Padding="8,4"
+                            HorizontalContentAlignment="Center"
+                            VerticalContentAlignment="Center"
                             Click="OnSearchCloseClick" />
                   </StackPanel>
                 </Border>
@@ -509,6 +528,7 @@
                           MinHeight="0"
                           Padding="0"
                           HorizontalContentAlignment="Center"
+                          VerticalContentAlignment="Center"
                           IsEnabled="{Binding SelectedTab.IsZmodemCancellable}"
                           IsVisible="{Binding SelectedTab.IsZmodemActive}"
                           Click="OnZmodemCancelClick" />

@@ -5193,6 +5193,53 @@ public partial class MainWindow : Window
         public void SetClientSize(Size size) => ClientSize = size;
     }
 
+    /// <summary>把已排布的可视子树渲染成 PNG 落盘（实机自检用，免截图目检）。
+    /// 透明度保留：调用方用图像工具合成到白底后再量像素。</summary>
+    private static void SaveVisualPng(Visual? visual, string fileName)
+    {
+        try
+        {
+            if (visual is null || visual.Bounds.Width < 1 || visual.Bounds.Height < 1)
+            {
+                AppLog.Info($"[SelfTest] png {fileName}: skipped (bounds={visual?.Bounds})");
+                return;
+            }
+
+            var size = new PixelSize(
+                (int)Math.Ceiling(visual.Bounds.Width),
+                (int)Math.Ceiling(visual.Bounds.Height));
+            using var bitmap = new Avalonia.Media.Imaging.RenderTargetBitmap(size, new Vector(96, 96));
+            bitmap.Render(visual);
+            var dir = Path.GetDirectoryName(AppLog.Path) ?? ".";
+            var path = Path.Combine(dir, fileName);
+            bitmap.Save(path, new Avalonia.Media.Imaging.PngBitmapEncoderOptions());
+            AppLog.Info($"[SelfTest] png {fileName}: {size.Width}x{size.Height} -> {path}");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Info($"[SelfTest] png {fileName}: failed {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    /// <summary>对话框文字按钮（字体设置/事件日志等共用）。
+    /// 实机缺陷（2026-11-03 用户反馈「取消与确定这两个字显示不完全，底部有一部分没显示」）：
+    /// Avalonia 12.1.4 Fluent 主题的 Button 默认 <c>HorizontalContentAlignment</c> /
+    /// <c>VerticalContentAlignment</c> 都是 Stretch —— 字符串内容被包成 TextBlock 并拉伸。
+    /// 后果有两个：(a) 文字在按钮里左对齐（实测 80px 宽按钮里文字起点 x=9）；
+    /// (b) 固定 Height=28 时内容内框只有 28-(5+6)=17px，而 Windows 上 14px 微软雅黑
+    /// 的 CJK 行高约 19px，汉字底部两行被内框裁掉（截图里「取消/确定」字底缺一截）。
+    /// 故这里显式两轴居中 + 不写死 Height（由真实行高+内边距撑开，MinHeight 仅保底）。
+    /// 不要改回 <c>Height = 28</c>：DPI/字体变化会再次裁切。</summary>
+    private static Button CreateDialogTextButton(string text, double minWidth) => new()
+    {
+        Content = text,
+        MinWidth = minWidth,
+        MinHeight = 28,
+        Padding = new Thickness(12, 4, 12, 4),
+        HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+        VerticalContentAlignment = Avalonia.Layout.VerticalAlignment.Center,
+    };
+
     private async Task ShowTerminalFontDialogAsync()
     {
         if (_config is null)
@@ -5248,8 +5295,8 @@ public partial class MainWindow : Window
             HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
         };
 
-        var ok = new Button { Content = "确定", Width = 80, Height = 28 };
-        var cancel = new Button { Content = "取消", Width = 80, Height = 28 };
+        var ok = CreateDialogTextButton("确定", 80);
+        var cancel = CreateDialogTextButton("取消", 80);
         ok.Click += (_, _) =>
         {
             var family = (familyCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? "Consolas";
@@ -5495,7 +5542,54 @@ public partial class MainWindow : Window
                     AppLog.Info($"[SelfTest] button[{label}] bounds={button.Bounds} bottomY={p.Y:0.#} " +
                         $"clientH={dialog.ClientSize.Height:0.#} gap={dialog.ClientSize.Height - p.Y:0.#}");
                 }
+
+                // 2026-11-03 缺陷复验：汉字「底部一部分没显示」的定量证据——
+                // 内容 TextBlock 若被 ContentPresenter 内框压扁（Bounds.Height <
+                // DesiredSize.Height）或横向被拉伸（文字左对齐），这里逐项写日志。
+                var presenter = button.GetVisualDescendants().OfType<Avalonia.Controls.Presenters.ContentPresenter>().FirstOrDefault();
+                var textBlock = button.GetVisualDescendants().OfType<TextBlock>().FirstOrDefault();
+                AppLog.Info($"[SelfTest] btn[{label}] pad={button.Padding} hca={button.HorizontalContentAlignment} " +
+                    $"vca={button.VerticalContentAlignment} cp={presenter?.Bounds}/{presenter?.DesiredSize} " +
+                    $"tb={textBlock?.Bounds} tbDesired={textBlock?.DesiredSize} " +
+                    $"tbSqueezedH={textBlock is not null && textBlock.Bounds.Height + 0.01 < textBlock.DesiredSize.Height} " +
+                    $"tbStretchedW={textBlock is not null && textBlock.Bounds.Width > textBlock.DesiredSize.Width + 0.5}");
             }
+
+            // 像素级证据：对话框内容与主窗根各渲染一张 PNG 落盘（软件渲染，Windows 真实
+            // 字体/DPI），随后经 SSH 取回逐像素量汉字墨迹是否有被裁掉的行、文字是否居中。
+            SaveVisualPng(dialog.Content as Visual, "fontdlg-content.png");
+            ShowTerminalSearchBar();
+            UpdateLayout();
+
+            // 同类缺陷全局排查：主窗里所有“字符串内容”按钮的 TextBlock 是否被内框压扁
+            // （汉字底部裁切）或横向拉伸（文字左对齐）。日志只列有问题的按钮。
+            var issues = 0;
+            foreach (var mainButton in this.GetVisualDescendants().OfType<Button>())
+            {
+                if (mainButton.Content is not string mainLabel)
+                {
+                    continue;
+                }
+                var mainText = mainButton.GetVisualDescendants().OfType<TextBlock>().FirstOrDefault();
+                if (mainText is null)
+                {
+                    continue;
+                }
+                var squeezed = mainText.Bounds.Height + 0.01 < mainText.DesiredSize.Height;
+                var stretched = mainText.Bounds.Width > mainText.DesiredSize.Width + 0.5;
+                if (!squeezed && !stretched)
+                {
+                    continue;
+                }
+                issues++;
+                AppLog.Info($"[SelfTest] main-btn[{mainLabel}] name={mainButton.Name} bounds={mainButton.Bounds} " +
+                    $"pad={mainButton.Padding} hca={mainButton.HorizontalContentAlignment} " +
+                    $"vca={mainButton.VerticalContentAlignment} tb={mainText.Bounds} " +
+                    $"tbDesired={mainText.DesiredSize} squeezed={squeezed} stretched={stretched}");
+            }
+            AppLog.Info($"[SelfTest] main window string-button layout issues: {issues}");
+
+            SaveVisualPng(Content as Visual, "main-content.png");
 
             AppLog.Info("[SelfTest] fontdlg 自检完成，退出");
             (Application.Current?.ApplicationLifetime
@@ -5969,8 +6063,9 @@ public partial class MainWindow : Window
             FontSize = 12,
             Margin = new Thickness(10, 10, 10, 4),
         };
-        var refresh = new Button { Content = "刷新", MinWidth = 88, Margin = new Thickness(0, 0, 8, 0) };
-        var close = new Button { Content = "关闭", MinWidth = 88 };
+        var refresh = CreateDialogTextButton("刷新", 88);
+        refresh.Margin = new Thickness(0, 0, 8, 0);
+        var close = CreateDialogTextButton("关闭", 88);
         refresh.Click += (_, _) => box.Text = ReadEventLogTail();
         close.Click += (_, _) => dialog.Close();
         var buttonRow = new StackPanel

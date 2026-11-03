@@ -91,6 +91,59 @@ public sealed class TerminalMenuFeatureTests
     }
 
     [AvaloniaFact]
+    public void TERM23_SearchBarButtonsCenterLabelsWithoutClipping()
+    {
+        // 回归（2026-11-03「汉字底部被裁」同类缺陷排查）：查找条三个按钮原本
+        // Content=字符串 + Height=26（内容内框 15px < Windows 12px 汉字行高 17px）
+        // + 默认 Stretch 对齐（文字左对齐）。改为 MinHeight + 两轴居中。
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                window = new MainWindow { DataContext = new MainViewModel() };
+                window.Show();
+                window.StopPortTimerForTests();
+                RunJobs(window);
+
+                var (terminal, _, _) = CreateTestTerminal(window, "ssh-search-btn");
+                terminal.Terminal.Write("hello\r\n");
+                RunJobs(window);
+
+                window.ShowSearchBarForTests();
+                RunJobs(window);
+
+                foreach (var name in new[] { "SearchPrevButton", "SearchNextButton", "SearchCloseButton" })
+                {
+                    var button = window.FindControl<Button>(name)!;
+                    Assert.Equal(Avalonia.Layout.HorizontalAlignment.Center, button.HorizontalContentAlignment);
+                    Assert.Equal(Avalonia.Layout.VerticalAlignment.Center, button.VerticalContentAlignment);
+                    Assert.True(double.IsNaN(button.Height),
+                        $"{name} must not fix Height ({button.Height:0.#}) — fixed height clips CJK glyph bottoms");
+
+                    var text = button.GetVisualDescendants().OfType<TextBlock>().First();
+                    Assert.True(button.Bounds.Width >= 55, $"{name} width {button.Bounds.Width:0.#}");
+                    Assert.True(text.Bounds.Width <= text.DesiredSize.Width + 0.5,
+                        $"{name} text block stretched: {text.Bounds.Width:0.#} > desired {text.DesiredSize.Width:0.#}");
+                    Assert.True(text.Bounds.Height + 0.01 >= text.DesiredSize.Height,
+                        $"{name} text block squeezed: {text.Bounds.Height:0.#} < desired {text.DesiredSize.Height:0.#}");
+
+                    var textCenter = text.Bounds.X + text.Bounds.Width / 2;
+                    Assert.True(Math.Abs(textCenter - button.Bounds.Width / 2) <= 1.0,
+                        $"{name} text center {textCenter:0.#} not centered in {button.Bounds.Width:0.#}");
+                }
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
     public void TERM23_SearchNotFoundShowsZero()
     {
         using var env = new TestEnvironment();
@@ -364,6 +417,85 @@ public sealed class TerminalMenuFeatureTests
         }
     }
 
+    [AvaloniaFact]
+    public async Task TERM24_FontDialogButtonLabelsCenteredAndNotClipped()
+    {
+        // 回归（实机 2026-11-03 用户反馈「取消与确定这两个字显示不完全，底部有一部分
+        // 没显示」）：Avalonia 12.1.4 Fluent 主题 Button 默认两轴
+        // Horizontal/VerticalContentAlignment=Stretch：
+        //   (a) 字符串内容被包成 TextBlock 横向拉伸 → 文字在按钮里左对齐；
+        //   (b) 固定 Height=28 时内容内框只有 17px，Windows 14px 微软雅黑的 CJK 行高
+        //       约 19px → 汉字底部被内框裁掉（截图逐像素：字底墨迹正好止于内框下沿）。
+        // 断言不变量：按钮内容两轴居中、高度不写死、TextBlock 未被拉伸/压扁且完整落在
+        // 按钮内边距之内。headless 的 Inter 字体行高比 Windows 低，故不断言绝对高度。
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            await env.RunAsync(async () =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                window = new MainWindow { DataContext = new MainViewModel() };
+                window.Show();
+                window.StopPortTimerForTests();
+                RunJobs(window);
+
+                var task = window.ShowFontDialogForTestsAsync();
+                WaitUntil(() => window.LastFontDialogForTests is not null, "font dialog opened");
+                var dialog = window.LastFontDialogForTests!;
+                RunJobs(window);
+
+                foreach (var label in new[] { "确定", "取消" })
+                {
+                    var button = dialog.GetVisualDescendants()
+                        .OfType<Button>()
+                        .First(b => Equals(b.Content, label));
+
+                    Assert.Equal(Avalonia.Layout.HorizontalAlignment.Center, button.HorizontalContentAlignment);
+                    Assert.Equal(Avalonia.Layout.VerticalAlignment.Center, button.VerticalContentAlignment);
+                    Assert.True(double.IsNaN(button.Height),
+                        $"button[{label}] must not have a fixed Height ({button.Height:0.#}) — " +
+                        "fixed height clips CJK glyph bottoms when the system line height is larger");
+
+                    var tb = button.GetVisualDescendants().OfType<TextBlock>().First();
+                    Assert.Equal(label, tb.Text);
+                    Assert.True(button.Bounds.Width >= 79.5, $"button[{label}] width {button.Bounds.Width:0.#}");
+
+                    // (a) 文字块不能被横向拉伸（拉伸后文字在块内左对齐 → 视觉上贴左）。
+                    Assert.True(tb.Bounds.Width <= tb.DesiredSize.Width + 0.5,
+                        $"button[{label}] text block stretched: bounds {tb.Bounds.Width:0.#} > desired {tb.DesiredSize.Width:0.#}");
+
+                    // (b) 文字块不能被内框压扁（压扁即汉字底部被裁）。
+                    Assert.True(tb.Bounds.Height + 0.01 >= tb.DesiredSize.Height,
+                        $"button[{label}] text block squeezed: bounds {tb.Bounds.Height:0.#} < desired {tb.DesiredSize.Height:0.#}");
+
+                    var innerTop = button.Padding.Top;
+                    var innerBottom = button.Bounds.Height - button.Padding.Bottom;
+                    Assert.True(tb.Bounds.Y >= innerTop - 0.5,
+                        $"button[{label}] text starts above inner area: y={tb.Bounds.Y:0.#} padTop={innerTop:0.#}");
+                    Assert.True(tb.Bounds.Y + tb.Bounds.Height <= innerBottom + 0.5,
+                        $"button[{label}] text bottom {tb.Bounds.Y + tb.Bounds.Height:0.#} exceeds inner bottom {innerBottom:0.#}");
+
+                    var textCenter = tb.Bounds.X + tb.Bounds.Width / 2;
+                    Assert.True(Math.Abs(textCenter - button.Bounds.Width / 2) <= 1.0,
+                        $"button[{label}] text center {textCenter:0.#} not centered in button width {button.Bounds.Width:0.#}");
+                }
+
+                // 取消路径仍须正常关闭（本轮只改按钮排版，不改行为）。
+                var cancel = dialog.GetVisualDescendants().OfType<Button>().First(b => Equals(b.Content, "取消"));
+                cancel.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+                RunJobs(window);
+                await task;
+                Assert.Null(window.LastFontDialogForTests);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
     // ═══════════════════════ TERM-25：录制终端输出到文件 ═══════════════════════
 
     [AvaloniaFact]
@@ -589,6 +721,20 @@ public sealed class TerminalMenuFeatureTests
                 RunJobs(window);
                 Assert.Contains(marker2, box.Text);
                 Assert.Contains(marker1, box.Text);
+
+                // 2026-11-03 同类缺陷：对话框文字按钮统一两轴居中、不写死高度
+                // （固定高度会把汉字底部裁掉，见 TERM24_FontDialogButtonLabelsCenteredAndNotClipped）。
+                foreach (var label in new[] { "刷新", "关闭" })
+                {
+                    var button = dialog.GetVisualDescendants().OfType<Button>()
+                        .First(b => string.Equals(b.Content, label));
+                    Assert.Equal(Avalonia.Layout.HorizontalAlignment.Center, button.HorizontalContentAlignment);
+                    Assert.Equal(Avalonia.Layout.VerticalAlignment.Center, button.VerticalContentAlignment);
+                    Assert.True(double.IsNaN(button.Height), $"{label} must not fix Height ({button.Height:0.#})");
+                    var text = button.GetVisualDescendants().OfType<TextBlock>().First();
+                    Assert.True(text.Bounds.Height + 0.01 >= text.DesiredSize.Height,
+                        $"{label} text squeezed: {text.Bounds.Height:0.#} < {text.DesiredSize.Height:0.#}");
+                }
 
                 // 关闭
                 var closeBtn = dialog.GetVisualDescendants().OfType<Button>()
