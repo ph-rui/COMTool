@@ -1099,6 +1099,54 @@ MobaXterm 机制：终端是严格网格（拉丁 1 格、CJK 全角恰 2 格）
   `win=1024x768 term=946x627 charW=7.422 charH=15.807 gutter=0 grid=127x39
   calcCols=127 glyphAdvance=7.422 dpi=1`（与 r41 一致：VM 上 pty 列数=可见列）
 
+### 42 终端字号对齐 MobaXterm 实测（13.5 → 14.5px）+ 旧配置迁移（2026-11-03，用户「图2 是 mobaxterm 还是有问题」）
+
+取证（用户同机两张截图，内容同为一条 ls 输出；图1 = COMTool r41.1，图2 = MobaXterm）：
+
+- 拉丁字距：COMTool 7.44px（= Consolas 13.5px 的 advance）vs MobaXterm 7.94px
+  （MobaFont 11pt，advance≈0.54em）→ 整屏小 7%
+- CJK：每字 ink 高 12px vs 13px；CJK ink 高 / 格宽 比 1.633 vs 1.638（相同）
+  → 两边**同一字体族**（雅黑），CJK 也是按字号渲染、没有额外缩放，唯一差异是绝对字号
+- 两图的 CJK 都带 ClearType 子像素彩边（通道极差均值 63.0 vs 70.8），
+  所以 AA 模式不是差异源；「中文发虚」是 12px 落在更小的字号上 + 整屏偏小造成的观感
+- 列对齐已逐格核对：CJK 占 8 格（4 字）后在下一格接 `.docx`，两图同一列（第 103 列）
+  → 不是 r33 的对齐问题
+
+改动：
+
+- `TerminalConfig.DefaultFontSize = 14.5`（Consolas advance 7.97px，与 MobaXterm 7.94px 对齐），
+  `MainWindow.TerminalFontSize` 改为引用该常量（Core/App 单一事实来源，防两处默认值漂移）
+- 旧配置迁移：新增 `terminal.fontSizeRevision`（旧配置缺键 = 1），加载时把旧默认
+  13.5 一次性迁移到 14.5 并落盘；迁移后用户主动调回 13.5 保留不动
+  （Ctrl+滚轮步进 1，13.5 在迁移前只可能是旧默认值）
+- 回归：`CjkTerminalFontTests.TERM17_ConfigDefaultFontSizeMatchesTerminalDefault`
+  （config 默认 == 视图默认；旧配置迁移、二次读盘、用户改回 13.5 保留、自定义 18 不迁移），
+  `TERM17_TerminalFontMatchesMobaxterm` 默认字号断言 14.5，`TERM18` clamp 回落值 14.5，
+  `TERM24_FontDialog...` 默认字号改 14.5
+- 矩阵 4 处同步：parity TERM-09/24、feature TERM-09/24（含新测试登记）
+
+说明：用户这台 MobaXterm 的会话字号是 11pt（MobaXterm 出厂默认是 10pt），
+本项目按用户实屏对齐，不按出厂默认。
+
+验证（2026-11-03）：
+- 过滤测试 CjkTerminalFontTests 9/9 绿；App 全量 269/269 绿；Core 90/90 绿
+- gate-r42b（`publish/test-results/20261103T132902Z`，GATE_EXIT=0）：restore/build/
+  unit-tests/app-tests/test-list/e2e/testgate 全 PASS，共 659 条
+  （Core 90 / Sftp 42 / Terminal 27 / Connections 150 / Zmodem 32 / TestGate 49 + App 269），
+  E2E 15/15 PASS；首次 gate-r42 FAIL 的唯一原因是
+  `ConfigTests.SaveAndLoad_RoundTripsTerminalFontSize` 仍断言旧默认 13.5，改 14.5 后复跑全绿
+- publish win-x64 单文件 155,063,809 字节，
+  SHA256 E009288F728897538C3E9A9EF21098D62E992F5BA0D8B74B3DD0948850CEF4E0
+- deploy_r3.py 双份部署 + SHA256 校验 OK
+  （`C:\Users\devuser\COMTool-Avalonia.exe`、桌面一份），远端 SHA256 与本地一致
+- VM 实机自检（`--selftest-r39`）：`r41: geometry win=1038x782 term=960x641
+  charW=7.972 charH=16.978 grid=120x37 calcCols=120`——charW 由 13.5px 的 7.44 升到
+  7.972（MobaXterm 实测 7.94，差 0.4%），grid 由 127 列变 120 列且 calcCols 仍等于 grid
+  （右缘无裁切）；同屏截图 `main-content.png` 无布局错位
+- 迁移实证：部署前远端 config.json 为 `fontSize:13.5` 且无 `fontSizeRevision`；
+  自检首启后落盘为 `fontSizeRevision:2, fontSize:14.5`（其余键 Consolas/UTF-8 等未动），
+  二次启动不再改写
+
 ## 已知偏差（已写入 spec 附录）
 
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
