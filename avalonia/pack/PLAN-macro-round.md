@@ -903,6 +903,33 @@
   （体积大于上轮 95MB，源于 SDK 10.0.402 runtime pack，功能实机已验）
 - deploy_r3.py 双份部署（C:\Users\devuser + D:\Users\devuser\Desktop）SHA256 均 OK
 
+### 40.1 用户实机反馈修复（2026-11-03 下午，截图红框+口述）
+
+用户反馈：①「重置终端输出/清除终端回滚」点了没反应、与 MobaXterm 不一样；
+②「本来就是最大化的，按 F11 之后再按一次，就不是最大化了」。定位并修复四处：
+
+1. **点击无反应的根因**：XTerm 的 Reset()/ClearScrollback() 直接改缓冲区、不经过输出流，
+   Iciclecreek 控件收不到重绘通知 → 界面看似无变化。两动作均补 `terminal.Refresh()` 强制重绘。
+2. **「清除终端回滚」语义对齐 MobaXterm**：官方 changelog 明确 Clear scrollback =
+   "clear the screen AND the scrollback buffer" → 改为 `ClearScrollback() + Clear()`
+   （当前屏一并清空；状态复位仍是「重置终端输出」RIS 的职责，分工与 MobaXterm 一致）。
+3. **F11 退出全屏恢复原窗口态**：新增 `_preFullScreenState`，进入全屏前记录、退出时恢复
+   （最大化进全屏 → 退出回最大化，而非退回 Normal）。
+4. **高亮水印收缩复位**：缓冲区 Reset/ClearScrollback 后水印归零，复位后新行不丢着色
+   （新增回归测试 TERM30_HlighterRecolorsAfterReset）。
+
+gate（gate-r40fix.log / gate-r40.log，双跑均绿）：Core 90 / Sftp 42 / Terminal 26（+1 回归测试）/
+Connections 150 / Zmodem 32 / TestGate 49 / App 266 / E2E 15/15，RESULT PASS×2，EXIT=0。
+
+实机复测（--selftest-r39，构建 F6BE87A3D67325E1D2577CE6DE45E7EE47A805A83DC46A940ABD822586F51E26，
+155,063,297 B，双份部署 SHA 校验 OK）全部 ok=True：
+- highlight probe：Error/crash=红(1)、warning=黄(3)、success=绿(2)、IP/localhost=品红(5)、非关键字 256
+- clear-scrollback：YBase 23→0，**screenBlank=True**（当前屏一并清空）
+- scrollbar toggle ok；set-title 340×142 无裁切；readonly blocked=True
+- **fullscreen：Maximized → FullScreen → Maximized ok=True**（反馈②修复验证）
+- special-cmd 矩阵不变（Local 0/5+0/14、Serial 2/5+2/14、Tcp/Telnet 1/5+2/14、Ssh 5/5+14/14）
+- 本地 SIGINT → unsupported/failed（错误框自动确认），退出前方案恢复 default
+
 ## 已知偏差（已写入 spec 附录）
 
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
