@@ -6799,6 +6799,34 @@ public static class ClipCheck {
                 $"grid={gridCols}x{gridRows} calcCols={calcCols} " +
                 $"glyphAdvance={measAdvance:0.###} dpi={dpiScale:0.###}");
 
+            // ── 0b) 中英文混排度量（r43）──
+            // 用户实屏：中英文混排时中文比英文「低一截、看着也小」，MobaXterm 是居中的。
+            // 这里把「字体链在 FontSize 下被量成什么」和「真正画出来的像素」一起留证：
+            // 前者能排除 Avalonia 的形状/回退问题，后者供逐像素比对（拉 cjk-content.png）。
+            try
+            {
+                var cjkTypeface = new Typeface(TerminalFontFamily(), FontStyle.Normal, FontWeight.Normal);
+                var latFmt = new FormattedText(
+                    "MMMM", System.Globalization.CultureInfo.InvariantCulture,
+                    FlowDirection.LeftToRight, cjkTypeface, terminal.FontSize, Brushes.White);
+                var cjkFmt = new FormattedText(
+                    "方案搭建", System.Globalization.CultureInfo.InvariantCulture,
+                    FlowDirection.LeftToRight, cjkTypeface, terminal.FontSize, Brushes.White);
+                AppLog.Info(
+                    $"[SelfTest] r43: metrics size={terminal.FontSize:0.###} " +
+                    $"cell={terminal.CharWidth:0.###}x{terminal.CharHeight:0.###} | " +
+                    $"latin W={latFmt.Width:0.###} H={latFmt.Height:0.###} base={latFmt.Baseline:0.###} | " +
+                    $"cjk W={cjkFmt.Width:0.###} H={cjkFmt.Height:0.###} base={cjkFmt.Baseline:0.###}");
+            }
+            catch (Exception ex)
+            {
+                AppLog.Info($"[SelfTest] r43: metrics failed {ex.GetType().Name}: {ex.Message}");
+            }
+
+            terminal.Terminal.Write("CJK 方案搭建.docx ABC 中文 12345\r\n");
+            await Task.Delay(300);
+            SaveVisualPng(terminal, "cjk-content.png");
+
             // ── 1) 语法高亮 ──
             // 先设方案再挂着色器：core 未实现时着色器走 Loaded 延迟路径，
             // 延迟创建会读 config 当前方案；且必须等着色器就位后再写探测行
