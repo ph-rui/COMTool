@@ -792,6 +792,43 @@
      gate-r24.log）；提交 5e4677c，发布部署双份。
      Windows 实机 WIN-28 补核：状态栏整排高度/CPU 条厚度/图标大小与 MobaXterm 并排一致。
 
+   - 追加（2026-11-03，第 39 轮）：对话框「取消/确定」汉字底部被裁修复（用户 RDP 截图逐像素坐实）
+      ① 缺陷与根因（用户反馈「取消与确定这两个字显示不完全，底部有一部分没显示出现」，415×230 截图）：
+         Avalonia 12.1.4 Fluent 主题的 Button 默认 HorizontalContentAlignment / VerticalContentAlignment
+         均为 **Stretch**：(a) 字符串内容被包成 TextBlock 横向拉伸 → 文字在按钮里**左对齐**
+         （截图逐像素：按钮 x229..308 宽 80px，「取消」墨迹仅占 x238..264，右侧留白 44px）；
+         (b) 固定 `Height=28` 时内容内框 = 28-(5+6)=**17px**，而 Windows 14px 微软雅黑的 CJK 行高
+         实测 **19px** → 汉字底部 2px 被内框裁掉（截图「取消」墨迹 y193..203，内框下沿 y204，
+         正好止于裁切线，底部缺两行）。headless 用 Inter（14px 行高 15.26，内框 17 可容纳）故不可复现。
+      ② 修复：新增 `CreateDialogTextButton(text, minWidth)` 帮助方法（MinWidth、MinHeight=28、
+         Padding 12,4、两轴 Center、**不写死 Height** → 由真实行高+内边距自适应撑开，DPI/字体变化不再裁切）。
+         字体设置「确定/取消」、事件日志「刷新/关闭」统一改用之。**不改全局 `Style Selector="Button"`**：
+         Avalonia 中 ToggleButton/CheckBox/RadioButton 派生自 Button，全局居中会把复选框文字/ComboBox
+         内容一起居中，风险大 → 逐处显式设置。
+      ③ 同类缺陷一并修（MainWindow.axaml）：查找条 3 按钮（Height 26→MinHeight 26、Padding 8,4、两轴
+         Center）、宏横幅「停止」（MinHeight 20、Padding 0、FontSize 11、两轴 Center）、Zmodem Cancel
+         按钮补 VerticalContentAlignment=Center。
+      ④ 实机自检扩展：`--selftest-fontdlg` 新增逐按钮 `pad/hca/vca/cp/tb/tbDesired/tbSqueezedH/
+         tbStretchedW` 定量日志 + 全主窗「字符串按钮」挤压/拉伸扫描（`main window string-button layout
+         issues: N`）+ SaveVisualPng 落盘 fontdlg-content.png / main-content.png（免截图目检通道）。
+         （RenderTargetBitmap 在本 VM 上 CJK 字形渲染为黑块、ASCII 正常，故最终以 [SelfTest] 布局数值
+         为证据；VM 会话锁屏时 CopyFromScreen 截屏产出 0 张。）
+      ⑤ 测试：新增 TERM24_FontDialogButtonLabelsCenteredAndNotClipped（已做红验证：旧代码失败于
+         Expected: Center / Actual: Stretch）、TERM23_SearchBarButtonsCenterLabelsWithoutClipping；
+         TERM27_EventLog_DialogShowsTailAndRefreshes 增加「刷新/关闭」居中+不写死高度+未挤压断言。
+      ⑥ 实机自测（构建 A36BF414，09:44:11）：`clientSize=420,202`；`button[取消] bounds=0,0,80,29
+         bottomY=181 gap=21`；`btn[取消] pad=12,4,12,4 hca=Center vca=Center cp=.../54,29
+         tb=26,5,28,19 tbDesired=28,19 tbSqueezedH=False tbStretchedW=False`（确定同，文字块中心
+         x=26=(80-28)/2 水平居中）；`post-layout: stable ... attempt=0`（此前 4 次无效 resize 循环消失）；
+         `main window string-button layout issues: 0`（全主窗无同类裁切/拉伸）。
+      ⑦ gate：gate-r39btn.log 首跑 App 测试进程偶发崩溃（exit 134，92/257 后
+         TestPipelineException；单独重跑 257/257 全绿——同 r37 记录的 SIGSEGV/139 环境性
+         偶发）；重跑 gate-r39btn2.log 全 PASS：Core 89/Sftp 42/Terminal 11/Connections
+         150/Zmodem 32/TestGate 49/App 257（含新增 2 项），E2E 15/15；RESULT PASS×2。
+         发布 A36BF41446D596A6960ADCBB3B7D4AFD287877617709CC51D021CE6DA3947E0F
+         （95,130,988 字节）双份部署+SHA 校验 OK、无残留进程。
+      ⑧ 待用户实机确认：字体设置对话框「取消/确定」字底完整、文字已居中；顺带核对查找条/宏横幅
+         「停止」按钮汉字完整。
 ## 已知偏差（已写入 spec 附录）
 
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
