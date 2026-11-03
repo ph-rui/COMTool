@@ -1147,6 +1147,41 @@ MobaXterm 机制：终端是严格网格（拉丁 1 格、CJK 全角恰 2 格）
   自检首启后落盘为 `fontSizeRevision:2, fontSize:14.5`（其余键 Consolas/UTF-8 等未动），
   二次启动不再改写
 
+### 43 中英文混排「中文比英文低一截」基线对齐（库 4.1.1 → 4.1.2，2026-11-03，用户「图2 mobaxterm 中文和英文是平行的，COMTool 高低不齐」）
+
+r42 把字号对齐后，用户仍指出一个观感差：**MobaXterm 里中英文在同一基线上（平行），COMTool 里中文偏低、看着也小**。实机逐像素比对（用户同机两张截图，同一行 `…cms方案搭建.docx`）：
+
+- 我们的中文字形 ink 顶比英文 cap 顶低 ~3px、底比英文基线低 ~5px（CJK 基线 ≈ band+16 vs 英文基线 ≈ band+11）；
+- MobaXterm 的中英文共用同一条基线，中文只是更高（ink 顶高出英文 cap 顶 ~3px）、居中。
+
+**根因（渲染层，库）**：终端把每个全角（width-2）中文字符作为独立的 width-2 run 渲染。主字体 Consolas 不含 CJK，所以这个 run 走 `FormattedText` 慢路径；而 `FormattedText` 的基线取**本 run 字体自己的 ascent**——雅黑的 ascent（1.14em≈16.6px）远大于 Consolas（0.83em≈12.0px）。于是每个中文字符被摆到雅黑那条更低的基线上，比旁边的英文整体下沉 ~4.6px（r43 自检实测：latin base=12.008 / cjk base=16.582，差 4.574）。r33 的「CJK 固定 2 格 advance」只保证了**水平**对齐（格网），没处理**垂直**基线，所以列对得上、行却高低不齐。
+
+**修复（库 Iciclecreek.Avalonia.Terminal 4.1.2，渲染 fast-path）**：width-2 单字 run 原来只在主字体含该字形时走 GlyphRun 快速路径，Windows 上（主=Consolas 无 CJK）恒落到 FormattedText。现改为：主字体不含该全角字符时，**沿字体链往下找到真正含它的那个 face**（Windows=Microsoft YaHei UI，Linux/headless=内置 Noto Sans Mono CJK SC），用它解析出字形、把 advance 固定为 2 格（沿用 r33），但**基线钉在主字体的 `_baseline`** 上，而不是该 CJK face 自己的 ascent。这样中文和英文共享 Consolas 基线 → 平行；advance 仍是 2 格 → 水平对齐不破。解析按 (style,weight) 缓存，命中后跳过整条链；缓存 face 不含某生僻字时继续往下探，不丢字。
+
+改动文件：
+- 库 `TerminalView.cs`：新增 `_wideFallback` 缓存字段（全角回退 face，按 style/weight）。
+- 库 `TerminalView.Render.cs`：`TryBuildGlyphRun` 的 width-2 分支改调新增 `ResolveWideGlyphTypeface(...)`（主字体→链上首个含该字形的 face），`baselineOrigin` 仍是主字体 `_baseline`。
+- 库 csproj 版本 4.1.1 → 4.1.2；`COMTool.Terminal.csproj` 引用改 4.1.2；`NuGet.config` 注释同步。
+- 自检增强（`--selftest-r39`，永久保留）：新增 `[SelfTest] r43: metrics` 行（打印 latin/cjk 的 FormattedText Width/Height/Baseline 与 cell 度量）+ 写一行中英文混排 + 抓 `cjk-content.png`，供逐像素核基线。
+
+实机验证（VM，部署后 `--selftest-r39` 抓 `cjk-content.png` 逐像素）：
+- 修复前：英文 cap `top=2 bottom=11`（基线≈11），中文 `top=5 bottom=16`（基线≈16）→ 中文低 5px、ink 仅 9px（被行框裁）。
+- 修复后：英文 cap `top=2 bottom=11`（基线≈11），中文 `top=0 bottom=12`（基线≈12）→ **共用基线（差≤1px）**、中文 ink 恢复 13px 全高，中文略高出英文 cap 顶 ~2px、略低于基线 ~1px——与 MobaXterm 的「平行、居中」一致。
+
+- 验证（2026-11-03）：
+  - gate（`publish/test-results/20261103T144656Z`，GATE_EXIT=0）：restore/build/unit-tests/
+    app-tests/test-list/e2e/testgate 全 PASS，共 659 条（Core 90 / Sftp 42 / Terminal 27 /
+    Connections 150 / Zmodem 32 / TestGate 49 + App 269），E2E 15/15 PASS——库 4.1.2 渲染改动
+    无回归（Linux/headless 下 E2E 真实渲染通过）
+  - publish win-x64 单文件 155,063,809 字节，
+    SHA256 5C2310745462D1CA984DFF380AB458F577782168A9BBB278E50E1722E83376F4
+  - deploy_r3.py 双份部署 + SHA256 校验 OK
+    （`C:\Users\devuser\COMTool-Avalonia.exe`、桌面一份）
+  - VM 实机自检（`--selftest-r39`）：`[SelfTest] r43: metrics size=14.5 cell=7.972x16.978 |
+    latin ... base=12.008 | cjk ... base=16.582`（FormattedText 度量，证明雅黑 ascent 比 Consolas
+    高 4.574px，即原下沉量）；`cjk-content.png` 逐像素：英文 cap 基线≈11、中文基线≈12（差≤1px），
+    中文 ink 由修复前 9px（被行框裁）恢复 13px 全高，中英文共用基线——与 MobaXterm 平行
+
 ## 已知偏差（已写入 spec 附录）
 
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
