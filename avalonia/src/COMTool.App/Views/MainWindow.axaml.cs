@@ -305,6 +305,12 @@ public partial class MainWindow : Window
         {
             _ = RunR44SelfTestAsync();
         }
+        // --selftest-r45：实机自检 r45 鼠标选中自动复制（MobaXterm 对齐）。开一个本地终端，
+        // 写入探测行后模拟鼠标拖选整行，读回系统剪贴板核对；选区保留在截图中。
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r45"))
+        {
+            _ = RunR45SelfTestAsync();
+        }
     }
 
     private void RefreshPorts()
@@ -7061,6 +7067,119 @@ public static class ClipCheck {
         catch (Exception ex)
         {
             AppLog.Error("[SelfTest] r44: 自检异常", ex);
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
+        }
+    }
+
+    /// <summary>
+    /// <c>--selftest-r45</c>：实机自检鼠标选中自动复制（MobaXterm 对齐）。开一个本地终端，
+    /// 写入探测行后在内层 TerminalView 上模拟按下→拖动→松开，随后读回系统剪贴板核对
+    /// 内容并确认选区保留（高亮不消失）。结果写 run.log，落盘 main-content.png（含选区高亮）。
+    /// </summary>
+    private async Task RunR45SelfTestAsync()
+    {
+        const string probe = "SELECT TO COPY R45"; // 18 个字符，列 0..17
+        try
+        {
+            AppLog.Info("[SelfTest] r45: 等主窗稳定 1.5s 后开本地终端验证选中自动复制");
+            await Task.Delay(1500);
+            if (DataContext is not MainViewModel viewModel)
+            {
+                throw new InvalidOperationException("MainViewModel 未就绪");
+            }
+
+            var terminal = CreateTerminal();
+            var tab = new TerminalTab
+            {
+                Title = "r45-selftest",
+                SessionId = "local:r45selftest",
+                Kind = SessionKind.Local,
+                Content = terminal,
+                Terminal = terminal,
+                IsAlive = true,
+                CloseAction = () => { },
+            };
+            viewModel.AddTab(tab);
+            await Task.Delay(500);
+            UpdateLayout();
+            terminal.Terminal.Write(probe + "\r\n");
+            await Task.Delay(500);
+            UpdateLayout();
+
+            var view = terminal.GetVisualDescendants()
+                .OfType<Iciclecreek.Terminal.TerminalView>()
+                .FirstOrDefault();
+            if (view is null)
+            {
+                throw new InvalidOperationException("未找到内层 TerminalView");
+            }
+            var charW = view.CharWidth;
+            var charH = view.CharHeight;
+            if (charW <= 0 || charH <= 0)
+            {
+                throw new InvalidOperationException($"终端度量未就绪: charW={charW} charH={charH}");
+            }
+            AppLog.Info($"[SelfTest] r45: charW={charW:0.###} charH={charH:0.###} gutter={view.GutterWidth:0.###} grid={terminal.Terminal.Cols}x{terminal.Terminal.Rows}");
+
+            // 模拟整行拖选：列 0 按下 → 列 17（末字符）松开，松开左键即触发选中即复制。
+            // 事件位置以窗口（TopLevel）坐标系给出：先算 view 局部坐标再 TranslatePoint
+            // 换算（库内 GetPosition(view) 会从 root 坐标换算回 view 局部，直接给 view 局部
+            // 坐标会整体平移一个 view 在窗口中的偏移——首轮实机选区偏左 58px 即此因）。
+            var win = TopLevel.GetTopLevel(view)!;
+            var pointer = new Pointer(Pointer.GetNextFreeId(), PointerType.Mouse, isPrimary: true);
+            Point WinPoint(double col, double rowFrac)
+            {
+                var local = new Point(view.GutterWidth + charW * (col + 0.5), charH * rowFrac);
+                return view.TranslatePoint(local, win) ?? local;
+            }
+            var p0 = WinPoint(0, 0.5);
+            var p1 = WinPoint(17, 0.5);
+            view.RaiseEvent(new PointerPressedEventArgs(view, pointer, win,
+                p0, 0,
+                new PointerPointProperties(RawInputModifiers.LeftMouseButton, PointerUpdateKind.LeftButtonPressed),
+                KeyModifiers.None)
+            {
+                RoutedEvent = InputElement.PointerPressedEvent,
+            });
+            await Task.Delay(100);
+            view.RaiseEvent(new PointerEventArgs(InputElement.PointerMovedEvent, view, pointer, win,
+                p1, 0,
+                new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.Other),
+                KeyModifiers.None));
+            await Task.Delay(100);
+            view.RaiseEvent(new PointerReleasedEventArgs(view, pointer, win,
+                p1, 0,
+                new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.LeftButtonReleased),
+                KeyModifiers.None, MouseButton.Left)
+            {
+                RoutedEvent = InputElement.PointerReleasedEvent,
+            });
+            await Task.Delay(800); // 异步剪贴板写入留出余量
+
+            bool hasSelection = terminal.Terminal.Selection.HasSelection;
+            string? clip = null;
+            try
+            {
+                clip = await win.Clipboard?.TryGetTextAsync();
+            }
+            catch (Exception ex)
+            {
+                AppLog.Info($"[SelfTest] r45: 剪贴板读取失败: {ex.Message}");
+            }
+            // 断言剪贴板整行等于探测文本（允许首尾空白差异）；空/无则说明自动复制未生效。
+            bool copied = string.Equals((clip ?? "").Trim(), probe, StringComparison.Ordinal);
+            AppLog.Info($"[SelfTest] r45: selection={hasSelection} clipboard='{clip}' autoCopy={(copied ? "OK" : "FAILED")}");
+
+            UpdateLayout();
+            SaveVisualPng(Content as Visual, "main-content.png");
+            AppLog.Info($"[SelfTest] r45: 自检完成，选中自动复制={(copied ? "OK" : "失败")}，退出");
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(0);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("[SelfTest] r45: 自检异常", ex);
             (Application.Current?.ApplicationLifetime
                 as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
         }
