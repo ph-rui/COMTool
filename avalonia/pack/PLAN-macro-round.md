@@ -1183,6 +1183,55 @@ r42 把字号对齐后，用户仍指出一个观感差：**MobaXterm 里中英�
     中文 ink 由修复前 9px（被行框裁）恢复 13px 全高，中英文共用基线——与 MobaXterm 平行
   - 2026-11-04 用户同屏截图确认中英文基线平行，r43 验收通过
 
+### 44 标签头按会话类型显示图标（对齐 MobaXterm，串口≠SSH 一目了然）（2026-11-04，用户「mobaxterm 里 ssh 与串口的 tab 图标有明显区别，COMTool 也改成类似的，图标区别分明」）
+
+取证：用户两张并排截图。MobaXterm 每个 tab 头带一个**类型图标**（串口=灰蓝插头、SSH=金色钥匙），
+一眼能分清；COMTool 所有 tab 头只有同一个绿色状态圆点 + 标题 + 关闭按钮，串口 COM99 和 SSH
+192.0.2.48 长得一模一样，分不清类型。
+
+改动（复用「新建会话」菜单/侧栏既有的 5 类图标+配色，tab 与入口一致）：
+- `TerminalTab.KindIconGlyph / KindIconBrush`（`MainViewModel.cs`）：按 `SessionKind` 映射
+  串口=f1e6 插头 #43a047 / SSH=f084 钥匙 #f0b429 / Telnet=f120 终端 #00897b /
+  TCP=f0ac 地球 #f57c00 / 本地=f108 桌面 #607d8b（图标固定 16px 宽占位，标题起点对齐）。
+- 标签模板（`MainWindow.axaml`）：**移除统一绿色状态圆点（Ellipse）**，换成本类型图标
+  `TextBlock.TabKindIcon`（FontAwesome，`{DynamicResource IconFontAwesome}`）。
+- 选中态：选中 tab 背景是蓝 #0f88eb，彩色图标会撞色 → 由模型层 `KindIconBrush` 在
+  `IsSelected==true` 时返回白色刷（`TabIconSelectedBrush #ffffff`），并新增
+  `OnIsSelectedChanged` 转发 `PropertyChanged(nameof(KindIconBrush))` 使绑定刷新。
+  （模板 Foreground 是本地绑定，优先级高于样式 setter，AppStyles 覆写不生效——
+  2026-11-04 实机截图证实。）
+- SSH 图标从原 `f233`（服务器，蓝 #1976d2）改成 `f084`（钥匙，金 #f0b429），对齐 MobaXterm 的
+  金色钥匙；同步更新「新建会话」两处菜单（`MainWindow.axaml` 空状态 + `SessionSidebar.axaml` 侧栏 `+`）
+  和 `SessionItem.IconGlyph`（侧栏会话行）以及 `NewSessionMenuTests` 的图标断言，保持全 App 一致。
+- 状态信息不丢：连接/断线/重连仍由底部状态栏（`StatusMessage`/`StatusBrush`）显示，标签头不再重复。
+- E2E 坐标连带修正（`tests/e2e/linux/lib.sh`）：图标 16px 比原圆点 8px 宽 8px，标签内关闭按钮整体右移 8px，
+  原固定点击坐标 FIRST_TAB_X=125 / SECOND_TAB_X=239 恰好落在两个 tab 的关闭按钮上（UI05 点击即关 tab、
+  键入落入剩余 tab，连挂两轮且失败截图证实只剩一个 tab）→ 改为标题区坐标 96 / 208（远离关闭按钮
+  116..132 / 230..246，标题区 86..108 / 200..222），并更新布局注释。
+
+测试：
+- 新增 `TabKindIconTests`（`UI05_TerminalTabKindIconGlyphPerKind` 断言 5 类字形+色；
+  `UI05_SelectedTabKindIconTurnsWhite` 断言选中态图标刷变白且发出 KindIconBrush 变更通知；
+  `UI05_TabTemplateShowsKindIconGlyph` 建 SSH/串口 tab 断言模板里 `TabKindIcon` 的 Text=对应字形、
+  字体=bundled FontAwesome，且标签里已无 Ellipse 状态圆点）。
+- 矩阵：UI-05 两文件登记 3 个新测试 + r44 描述（选中态白图标由模型层实现）；UI-06「SSH 服务器」改「SSH 钥匙」；
+  UI-08 标签头描述由「状态点」改「类型图标」。
+- 新增实机自检 `--selftest-r44`（`RunR44SelfTestAsync`）：开假 Serial+SSH 双 tab（SSH 选中），打印两 tab
+  字形/图标刷颜色/选中态 + r41 几何，落盘 `main-content.png`（主窗整体含标签条）供实机核对。
+
+验证（2026-11-04）：
+- 过滤测试 TabKindIconTests/NewSessionMenuTests/MainWindowHeadlessTests 17/17 绿（含新增选中态白刷断言）。
+- gate 20261104T080533Z 全绿：build/单测 390/App 272（662 项）/test-list/E2E 15 项/TestGate 全 PASS。
+  （期间 075821Z 一次 app-tests 宿主 exit 139 原生崩溃，重跑恢复，判定为环境抖动非代码回归；
+  073127Z、073922Z 两轮在自测入口加入前亦全绿。）
+- publish：win-x64 单文件 COMTool.App.exe 155,067,905 B，
+  SHA256 e89dcb5b1930bb205f374e4068514d094154615c088de9f6a089a6616300c579。
+- deploy：deploy_r3.py 双份部署（C:\Users\devuser\COMTool-Avalonia.exe + 桌面副本）SHA256 均校验 OK。
+- 实机自检 --selftest-r44：Serial tab 图标刷 #43A047 selected=False，SSH tab #FFFFFF selected=True；
+  main-content.png 标签条实机截图：COM99=绿插头（未选灰底）/ devuser@192.0.2.48=白钥匙（选中蓝底），
+  两类型图标区别分明，与 MobaXterm 对齐。r41 几何顺带复测：grid=118x36 calcCols=118 dpi=1
+  （VM 96dpi 下 grid==calcCols，右缘裁切问题本机仍不可复现，继续等用户本机数据）。
+
 ## 已知偏差（已写入 spec 附录）
 
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
