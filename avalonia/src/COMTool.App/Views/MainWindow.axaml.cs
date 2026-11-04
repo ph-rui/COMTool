@@ -299,6 +299,12 @@ public partial class MainWindow : Window
         {
             _ = RunR39SelfTestAsync();
         }
+        // --selftest-r44：实机自检 r44 标签类型图标（串口/SSH 区别 + 选中态白图标），
+        // 开一对假 Serial+SSH tab 后落盘 main-content.png（含标签条），见 RunR44SelfTestAsync。
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r44"))
+        {
+            _ = RunR44SelfTestAsync();
+        }
     }
 
     private void RefreshPorts()
@@ -6982,6 +6988,79 @@ public static class ClipCheck {
                 // 恢复失败不影响退出
             }
             AppLog.Error("[SelfTest] r39: 自检异常", ex);
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
+        }
+    }
+
+    /// <summary>
+    /// <c>--selftest-r44</c>：实机自检 r44 标签类型图标（r44：标签头用会话类型图标取代统一绿点）。
+    /// 开一对「假」Serial + SSH tab（不接真实连接，CreateTerminal 空终端），SSH 选中、串口未选中，
+    /// 打印两 tab 的字形/图标刷颜色/选中态与几何，落盘 <c>main-content.png</c>（主窗整体，含标签条）
+    /// 供实机核对「串口 vs SSH 图标区别分明、选中态白图标」。
+    /// </summary>
+    private async Task RunR44SelfTestAsync()
+    {
+        string Hex(Avalonia.Media.IBrush? b) => b is Avalonia.Media.ISolidColorBrush sb
+            ? string.Format("#{0:X2}{1:X2}{2:X2}", sb.Color.R, sb.Color.G, sb.Color.B) : "?";
+        try
+        {
+            AppLog.Info("[SelfTest] r44: 等主窗稳定 1.5s 后开 Serial+SSH tab 验证标签类型图标");
+            await Task.Delay(1500);
+            if (DataContext is not MainViewModel viewModel)
+            {
+                throw new InvalidOperationException("MainViewModel 未就绪");
+            }
+
+            var t1 = CreateTerminal();
+            var serialTab = new TerminalTab
+            {
+                Title = "COM99",
+                SessionId = "serial:r44selftest",
+                Kind = SessionKind.Serial,
+                Content = t1,
+                Terminal = t1,
+                IsAlive = true,
+                CloseAction = () => { },
+            };
+            var t2 = CreateTerminal();
+            var sshTab = new TerminalTab
+            {
+                Title = "devuser@192.0.2.48",
+                SessionId = "ssh:r44selftest",
+                Kind = SessionKind.Ssh,
+                Content = t2,
+                Terminal = t2,
+                IsAlive = true,
+                CloseAction = () => { },
+            };
+            viewModel.AddTab(serialTab);
+            viewModel.AddTab(sshTab);   // 依次 AddTab：最终 sshTab 被选中、serialTab 未选中
+            await Task.Delay(500);
+            UpdateLayout();
+
+            AppLog.Info($"[SelfTest] r44: Serial tab glyph=\u201c{serialTab.KindIconGlyph}\u201d color={Hex(serialTab.KindIconBrush)} selected={serialTab.IsSelected}");
+            AppLog.Info($"[SelfTest] r44: SSH    tab glyph=\u201c{sshTab.KindIconGlyph}\u201d color={Hex(sshTab.KindIconBrush)} selected={sshTab.IsSelected}");
+
+            // 几何（r41 右缘裁切排查项顺带再记一次）
+            var dpiScale = TopLevel.GetTopLevel(this)?.RenderScaling ?? 1.0;
+            var term = sshTab.Terminal;
+            var charW = term?.CharWidth ?? 0;
+            var charH = term?.CharHeight ?? 0;
+            var gutter = term?.GutterWidth ?? 0;
+            var gridCols = term?.Terminal?.Cols ?? 0;
+            var gridRows = term?.Terminal?.Rows ?? 0;
+            var calcCols = (charW > 0 && term != null) ? (int)((term.Bounds.Width - Math.Max(0, gutter)) / charW) : 0;
+            AppLog.Info($"[SelfTest] r41: geometry win={Bounds.Width:0.#}x{Bounds.Height:0.#} term={(term?.Bounds.Width ?? 0):0.#}x{(term?.Bounds.Height ?? 0):0.#} charW={charW:0.###} charH={charH:0.###} gutter={gutter:0.###} grid={gridCols}x{gridRows} calcCols={calcCols} dpi={dpiScale:0.###}");
+
+            SaveVisualPng(Content as Visual, "main-content.png");
+            AppLog.Info("[SelfTest] r44: 已落盘 main-content.png，自检完成，退出");
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(0);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("[SelfTest] r44: 自检异常", ex);
             (Application.Current?.ApplicationLifetime
                 as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
         }

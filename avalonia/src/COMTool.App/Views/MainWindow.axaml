@@ -199,10 +199,10 @@
                   </MenuItem>
                   <MenuItem Header="SSH" Tag="SSH" Click="OnNewSessionClick">
                     <MenuItem.Icon>
-                      <TextBlock Text="&#xf233;"
+                      <TextBlock Text="&#xf084;"
                                  FontFamily="{DynamicResource IconFontAwesome}"
                                  FontSize="14"
-                                 Foreground="#1976d2"
+                                 Foreground="#f0b429"
                                  VerticalAlignment="Center" />
                     </MenuItem.Icon>
                   </MenuItem>
@@ -267,9 +267,18 @@
                       <StackPanel Orientation="Horizontal"
                                   VerticalAlignment="Center"
                                   Spacing="8">
-                        <Ellipse Width="8" Height="8"
-                                 Fill="{Binding TabDotBrush}"
-                                 VerticalAlignment="Center" />
+                        <!-- 类型图标（MobaXterm 式：串口=插头 / SSH=钥匙 / Telnet / TCP / 本地），
+                             固定 16px 宽占位，不同字形宽窄不一但标题起点仍对齐。选中 tab 底是
+                             蓝色，彩色会撞色，选中态图标由模型 KindIconBrush 返回白色
+                             （本地绑定优先级高于样式 setter，AppStyles 覆写不生效）。 -->
+                        <TextBlock Classes="TabKindIcon"
+                                   Text="{Binding KindIconGlyph}"
+                                   FontFamily="{DynamicResource IconFontAwesome}"
+                                   FontSize="13"
+                                   Foreground="{Binding KindIconBrush}"
+                                   Width="16"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center" />
                         <TextBlock Classes="TabTitle"
                                    Text="{Binding Title}"
                                    VerticalAlignment="Center" />

@@ -345,7 +345,7 @@ public sealed class NewSessionMenuTests
         var expected = new Dictionary<string, (string Glyph, Color Color)>
         {
             ["Serial"] = ("\uf1e6", Color.Parse("#43a047")),
-            ["SSH"] = ("\uf233", Color.Parse("#1976d2")),
+            ["SSH"] = ("\uf084", Color.Parse("#f0b429")),
             ["Telnet"] = ("\uf120", Color.Parse("#00897b")),
             ["TCP"] = ("\uf0ac", Color.Parse("#f57c00")),
             ["Local"] = ("\uf108", Color.Parse("#607d8b")),

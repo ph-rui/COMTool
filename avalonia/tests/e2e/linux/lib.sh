@@ -47,13 +47,17 @@ SIDEBAR_SESSION_Y="${SIDEBAR_SESSION_Y:-118}"
 
 # The tab strip is the first 36px row of MainStack. Collapsing the sidebar
 # panel leaves the 40px rail on screen and shrinks the content inset from
-# 32px to 8px, so MainStack starts at x=48 (40 + 8). The tab list has a
-# 10px left margin and each tab is at least 112px wide with a 2px right
-# margin, so the 125/239 click points still land inside the first and
-# second tabs. Keeping the panel collapsed makes these coordinates stable;
-# an open sessions panel shifts every tab 247px right.
-FIRST_TAB_X="${FIRST_TAB_X:-125}"
-SECOND_TAB_X="${SECOND_TAB_X:-239}"
+# 32px to 8px, so MainStack starts at x=48 (40 + 8). Each tab is at least
+# 112px wide with a 2px right margin, so with the E2E "e2e" tab titles the
+# first tab spans x 48..160 and the second x 162..274. Inside a tab the
+# layout is [padding 14][icon 16][gap 8][title ~22][gap 8][close 16]: the
+# close button therefore sits at x 116..132 (first tab) and x 230..246
+# (second tab), so the click points aim at the title area, well clear of
+# the close buttons (they closed the tabs in 2026-11-04 when they were at
+# 125/239). Keeping the panel collapsed makes these coordinates stable; an
+# open sessions panel shifts every tab 247px right.
+FIRST_TAB_X="${FIRST_TAB_X:-96}"
+SECOND_TAB_X="${SECOND_TAB_X:-208}"
 TAB_STRIP_Y="${TAB_STRIP_Y:-53}"
 SESSIONS_TOGGLE_X="${SESSIONS_TOGGLE_X:-201}"
 SESSIONS_TOGGLE_Y="${SESSIONS_TOGGLE_Y:-18}"

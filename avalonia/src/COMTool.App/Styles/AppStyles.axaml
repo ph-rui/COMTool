@@ -247,6 +247,13 @@
   <Style Selector="Border.TabItemBorder.selected">
     <Setter Property="Background" Value="{DynamicResource TabSelectedBrush}" />
   </Style>
+  <Style Selector="TextBlock.TabKindIcon">
+    <Setter Property="FontSize" Value="13" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+  <!-- 选中态的白色图标由模型层提供（TerminalTab.KindIconBrush 在 IsSelected 时
+       返回白色刷）：模板对 Foreground 是本地绑定，本地值优先级高于样式 setter，
+       这里写 selected 覆写样式不会生效（2026-11-04 实机截图证实）。 -->
   <Style Selector="TextBlock.TabTitle">
     <Setter Property="FontSize" Value="12" />
     <Setter Property="Foreground" Value="{DynamicResource WindowTextBrush}" />

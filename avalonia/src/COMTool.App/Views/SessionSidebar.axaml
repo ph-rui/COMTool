@@ -97,10 +97,10 @@
               </MenuItem>
               <MenuItem Header="SSH" Tag="SSH" Click="OnNewSessionMenuItemClick">
                 <MenuItem.Icon>
-                  <TextBlock Text="&#xf233;"
+                  <TextBlock Text="&#xf084;"
                              FontFamily="{DynamicResource IconFontAwesome}"
                              FontSize="14"
-                             Foreground="#1976d2"
+                             Foreground="#f0b429"
                              VerticalAlignment="Center" />
                 </MenuItem.Icon>
               </MenuItem>

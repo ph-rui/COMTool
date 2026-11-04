@@ -36,7 +36,7 @@ public sealed partial class SessionItem : ObservableObject
 
     public string IconGlyph => Kind switch
     {
-        SessionKind.Ssh => "\uf233",
+        SessionKind.Ssh => "\uf084",
         SessionKind.Telnet => "\uf120",
         SessionKind.Tcp => "\uf0ac",
         _ => "\uf1e6",
@@ -122,6 +122,48 @@ public sealed partial class TerminalTab : ObservableObject
     public bool IsSshTab => Kind == SessionKind.Ssh;
 
     /// <summary>
+    /// The session-type glyph shown at the head of the tab, so a serial and an SSH tab are
+    /// distinguishable at a glance instead of both showing a generic status dot. MobaXterm tags each
+    /// tab with a type-specific icon (plug for serial, key for SSH); ours mirrors that. The glyphs and
+    /// colours match the "new session" menu and the sidebar, so the icon a session picks at creation is
+    /// the same one on its tab. FontAwesome 6 Free Solid (see IconFontAwesome).
+    /// </summary>
+    public string KindIconGlyph => Kind switch
+    {
+        SessionKind.Ssh => "\uf084",      // key (MobaXterm-style gold key)
+        SessionKind.Serial => "\uf1e6",   // plug
+        SessionKind.Telnet => "\uf120",   // terminal
+        SessionKind.Tcp => "\uf0ac",      // globe
+        _ => "\uf108",                    // desktop (Local)
+    };
+
+    /// <summary>
+    /// Brush for the kind icon. When the tab is selected its background becomes the blue
+    /// TabSelectedBrush and a coloured icon would clash with it, so the selected tab shows
+    /// a white icon (matching the white title). This is decided here rather than via an
+    /// AppStyles override because the template binds Foreground locally, and a local value
+    /// always outranks a style setter in Avalonia.
+    /// </summary>
+    public IBrush KindIconBrush => IsSelected
+        ? TabIconSelectedBrush
+        : Kind switch
+        {
+            SessionKind.Ssh => TabIconSshBrush,
+            SessionKind.Serial => TabIconSerialBrush,
+            SessionKind.Telnet => TabIconTelnetBrush,
+            SessionKind.Tcp => TabIconTcpBrush,
+            _ => TabIconLocalBrush, // Local
+        };
+
+    // Warm gold for the SSH key, matching MobaXterm's; the rest reuse the new-session menu palette.
+    private static readonly IBrush TabIconSshBrush = new SolidColorBrush(Color.Parse("#f0b429"));
+    private static readonly IBrush TabIconSelectedBrush = new SolidColorBrush(Color.Parse("#ffffff"));
+    private static readonly IBrush TabIconSerialBrush = new SolidColorBrush(Color.Parse("#43a047"));
+    private static readonly IBrush TabIconTelnetBrush = new SolidColorBrush(Color.Parse("#00897b"));
+    private static readonly IBrush TabIconTcpBrush = new SolidColorBrush(Color.Parse("#f57c00"));
+    private static readonly IBrush TabIconLocalBrush = new SolidColorBrush(Color.Parse("#607d8b"));
+
+    /// <summary>
     /// 只读终端（MobaXterm「只读终端」）：运行时开关，不持久化。
     /// 拦截键盘输入（tunnel KeyDown）与粘贴（PasteNormalizedAsync 守卫）。
     /// 宏执行/Zmodem 等显式用户操作不受限。
@@ -130,6 +172,12 @@ public sealed partial class TerminalTab : ObservableObject
 
     [ObservableProperty]
     private bool _isSelected;
+
+    // KindIconBrush depends on IsSelected (selected tab -> white icon). The generated
+    // property only notifies IsSelected, so forward a notification for KindIconBrush
+    // here; otherwise the tab icon would keep its colour after being selected.
+    partial void OnIsSelectedChanged(bool value) =>
+        OnPropertyChanged(nameof(KindIconBrush));
 
     [ObservableProperty]
     private bool _isAlive = true;
