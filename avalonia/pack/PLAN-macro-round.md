@@ -1233,6 +1233,42 @@ r42 把字号对齐后，用户仍指出一个观感差：**MobaXterm 里中英�
   （VM 96dpi 下 grid==calcCols，右缘裁切问题本机仍不可复现，继续等用户本机数据）。
 
 ## 已知偏差（已写入 spec 附录）
+### 45 终端鼠标选中自动复制（对齐 MobaXterm，选中即入剪贴板）（2026-11-04，用户「鼠标选中自动复制」+ MobaXterm 选中高亮截图）
+
+取证：MobaXterm 截图——选中 `pwd` 结果行后蓝高亮保留、文本同时进剪贴板；COMTool 此前选中只高亮，
+必须再右键/Ctrl+Shift+C 才复制，且选中即触发终端菜单（右键）时先复制再清除，路径绕。
+
+改动（库 Iciclecreek.Avalonia.Terminal **4.1.2 → 4.1.3**，本地 nupkg 已提交 third_party/）：
+- `TerminalView.AutoCopyOnSelection`（StyledProperty<bool>，**默认 true**，对齐 MobaXterm 默认行为）：
+  `OnPointerReleased` 的选区结束分支里，`EndSelection()` 后若 `HasSelection` 则 fire-and-forget
+  `CopyOnSelectionAsync()`（内部 try/catch `CopyAsync()`，剪贴板被占用等失败只写 Debug，不炸 async-void handler）。
+- 语义：拖选/双击单词/三击整行均触发；单击未拖动不触发（无选区）；**选区高亮保留不自动清除**
+  （MobaXterm 行为；清除靠再次单击/键盘操作，原有逻辑不变）；右键复制粘贴路径不变。
+- `TerminalControl` 镜像属性 + `Generic.axaml` TemplateBinding（值从 control 传到内层 view，
+  与 ShowCaretOnClick 同款「真 StyledProperty 而非 forwarder」模式）。
+- TerminalWindow 同镜像（保持 TerminalWindow/TerminalControl/TerminalView 三面 API 对齐，
+  库内 surface 一致性测试强制）。
+- 未接 config 持久化开关（MobaXterm 有该选项，本轮先默认开启；要开关时再加 terminal.autoCopyOnSelection）。
+
+测试：
+- 库级（Iciclecreek.Avalonia.Terminal.Tests，3 项）：`AutoCopySelectionTests`——拖选后 headless 剪贴板
+  == 选中文本且选区保留；单击未拖动不写剪贴板；AutoCopyOnSelection=false 时选区在但剪贴板不动。
+- App 级（COMTool.App.Tests，2 项）：`TerminalSelectCopyTests.TERM32_*`——经 TerminalControl 模板
+  TemplateBinding 验证属性默认 true、可在 control 上置 false 并传到内层 view（模板接线回归护栏）。
+- 矩阵：TERM-32 新行登记 5 个测试；TestGate 单向校验覆盖。
+- E2E 未加：Xvfb 环境无 xclip/xsel 读不了 X11 剪贴板，headless+实机自检已覆盖逻辑与实机链路。
+
+验证（2026-11-04）：
+- 库全套 662 项 0 失败（653 过 + 9 skip，含 3 新）；App 全量 274/274（+2 新）。
+- gate 20261104T100625Z 全绿：build/单测 390/App 274（共 664 项）/test-list/E2E 15 项/TestGate 全 PASS。
+  （期间 093745Z 一次 app-tests 宿主 exit 139 原生崩溃，单独复跑 274/274 恢复，判定为环境抖动非代码回归。）
+- publish：win-x64 单文件 COMTool.App.exe 155,072,001 B，
+  SHA256 c0a84ac8bb82b9470ed8cd79e56b81d9350b13f6a5bfc38bab7eb8b968492f72。
+- deploy：deploy_r3.py 双份部署（C:\Users\devuser\COMTool-Avalonia.exe + 桌面副本）SHA256 均校验 OK。
+- 实机 --selftest-r45：`[SelfTest] r45: selection=True clipboard='SELECT TO COPY R45' autoCopy=OK`——
+  模拟整行拖选松开后系统剪贴板=整行探测文本，main-content.png 实机截图显示整行蓝高亮保留（MobaXterm 行为）。
+  首跑曾因合成指针事件坐标按窗口系换算偏差只选中 11 列，自检代码改用 TranslatePoint 换算后复跑通过。
+
 
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
 2. 热键 .mxtmacros 编码未实测：导出恒 0，导入非 0 忽略+警告
