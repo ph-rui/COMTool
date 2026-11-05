@@ -1384,6 +1384,50 @@ r44 当时为避免彩色图标撞蓝底而让选中态变白，用户反馈后�
   →「选中态图标保持类型色=OK」；main-content.png 标签条截图：选中 SSH tab（蓝底）钥匙为金色，
   与 MobaXterm 截图一致。
 
+### 49 会话设置对话框布局修复：Key file 浏览按钮垂直居中 + 长标签不再顶框（2026-11-05，用户「图1的...不居中；图2，Auto reconnect的t都跑到右边的框框里了」+ 两张对话框截图）
+
+取证（用户截图像素级测量）：
+- 图1（SSH）：「...」按钮外框与输入框顶边对齐（同 y），问题在 `Content="…"`（U+2026）贴基线渲染，
+  在 28px 按钮内字形中心偏低约 8px。
+- 图2（TCP）：四面板标签列均为 86px；「Auto reconnect」12pt 实测渲染约 84px（x 23→107），
+  复选框左缘恰在 x=107（列边界），末位 t 顶到框边。
+
+改动（ConnectionSettingsWindow.axaml，无库改动）：
+- Key file 浏览按钮：`Content="…"` → `&#xF141;`（FontAwesome f141 ellipsis，设计在 em 盒垂直中心，
+  与 MobaXterm 的居中省略号一致）+ `FontFamily="{DynamicResource IconFontAwesome}"` + `FontSize="14"`；
+  去掉固定 `Height="28"`（Fluent 主题 TextBox MinHeight=32，输入框实际上屏 32px，固定 28 的按钮
+  与输入框不同高且顶对齐，进一步放大视觉偏移），改 `VerticalAlignment="Stretch"` 随输入框同高；
+  加 `Name="KeyFileBrowseButton"` 与 ToolTip 供测试/自检引用。
+- 四面板（Serial/Ssh/Telnet/Tcp）标签列 `86,*` → `108,*` 统一加宽：最长标签「Auto reconnect」
+  约 84px，108 列宽留出约 24px 空隙；统一加宽保证跨连接类型切换时输入列起点仍对齐
+  （各输入框均固定 Width=155 Left，右移 22px 后 380px 窗宽足够）。
+
+测试（TDD 先红后绿，新增 tests/COMTool.App.Tests/ConnectionDialogLayoutTests.cs）：
+- `UI06_SshKeyFileBrowseButtonUsesCenteredIconGlyph`：按钮存在（Name 契约）、Content=="\uf141"、
+  FontFamily 含 fontawesome6-solid、Width=30 且高度属性未写死（NaN，靠 Stretch 跟随行高）。
+- `UI06_SshKeyFileBrowseButtonVerticallyCenteredWithKeyFileBox`：切 SSH 面板后实测
+  按钮与 KeyFileBox 同高（Fluent MinHeight 32 下均为 32）且垂直中心差 ≤1px。
+- `UI06_ConnectionDialogLabelColumnFitsLongestLabel`：四面板标签列均 ≥100 且宽度一致
+  （headless 字体度量与 Windows 不同，用列宽契约断言而非文本宽度）。
+- 改前 3/3 红（按钮无名、列宽 86）；改后 3/3 绿。
+
+验证（2026-11-05）：
+- 过滤测试 ConnectionDialogLayoutTests 3/3 绿（改前 3/3 红：按钮无名/非 f141、列宽 86<100）；App 全量 280/280。
+- gate 20261105T042356Z 全绿：build/单测 390/App 280（共 670 项）/test-list/E2E 15/TestGate 全 PASS。
+  （过程：035538Z 构建失败——自检代码插值内误加集合表达式方括号（CS9174），已修；
+  035751Z 矩阵 UI-06 行行尾竖线丢失致 TestGate 报 9 cell，修正后 TestGate 单独复跑 PASS；
+  最终代码态 042356Z 全量一次通过。）
+- publish：win-x64 单文件 COMTool.App.exe 155,088,385 B，
+  SHA256 f9bd75e97e72077821ae3e402bec2f1671693ff8c011e42bdbf6e00b051a4961。
+- deploy：deploy_r3.py 双份部署（C:\Users\devuser\COMTool-Avalonia.exe + 桌面副本）SHA256 均校验 OK。
+- 实机 --selftest-r49：全部 OK——
+  button=(125,0,30x32) box=(0,0,121x32) 中心差=0.00px 同高=OK；
+  四面板标签列宽=108/108/108/108（≥100 且一致 OK）；
+  TCP「Auto reconnect」文字实测宽=82.0px、标签列宽=108px、右侧余量=26.0px（旧 86px 列宽下余量仅约 4px）；
+  像素复核（r49-ssh-dialog.png 整窗 380x500）：按钮盒 y=232..263（h=32）与输入框同高 32px，
+  f141 三点字形质心偏离盒中心 +0.63px（修复前 U+2026 偏低约 8px）；
+  r49-tcp-dialog.png 目视：Auto reconnect 标签与 Enable 复选框之间有可见空隙，不再顶框。
+
 ## 已知偏差（已写入 spec 附录）
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
 2. 热键 .mxtmacros 编码未实测：导出恒 0，导入非 0 忽略+警告
