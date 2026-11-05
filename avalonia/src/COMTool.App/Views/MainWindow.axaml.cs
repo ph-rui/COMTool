@@ -357,6 +357,13 @@ public partial class MainWindow : Window
         {
             _ = RunR51SelfTestAsync();
         }
+        // --selftest-r53：实机自检 CJK/Latin 混排基线（用户反馈「英文比中文高了一点」）。
+        // 开本地终端写入探测混排行，读每条 run 的真实绘制基线（GlyphRun 快路径 vs
+        // FormattedText 路径）、回退链各字体面的墨迹度量，落盘 r53-terminal.png 供对比。
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r53"))
+        {
+            _ = RunR53SelfTestAsync();
+        }
     }
 
     private volatile bool _portScanBusy;
@@ -7707,6 +7714,165 @@ public static class ClipCheck {
             AppLog.Error("[SelfTest] r51: 自检异常", ex);
             (Application.Current?.ApplicationLifetime
                 as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
+        }
+    }
+
+    /// <summary>
+    /// <c>--selftest-r53</c>：实机自检 CJK/Latin 混排基线。
+    /// 开本地终端写入探测混排行，把整块 TerminalView 渲染进 DrawingGroup 并走查每条
+    /// GlyphRun 的真实 baselineOrigin 与字体面，再逐一解析回退链各面的 'o'/'编' 墨迹
+    /// 度量（YBearing/Height），落盘 r53-terminal.png。用于判定 AOT 实机下 CJK 走
+    /// GlyphRun 快路径（共享主面基线）还是 FormattedText 路径（用 CJK 面自身 ascent），
+    /// 以及两个面墨迹中心的真实偏差方向与幅度。
+    /// </summary>
+    private async Task RunR53SelfTestAsync()
+    {
+        const string probeLine = "Yocto imx-image-full 编译排查";
+        const string probeTabTitle = "r53 编译排查 Yocto";
+        try
+        {
+            AppLog.Info("[SelfTest] r53: 等主窗稳定 1.5s 后开本地终端写混排行并读真实基线");
+            await Task.Delay(1500);
+            if (DataContext is not MainViewModel viewModel)
+            {
+                throw new InvalidOperationException("MainViewModel 未就绪");
+            }
+
+            var terminal = CreateTerminal();
+            var tab = new TerminalTab
+            {
+                Title = probeTabTitle,
+                SessionId = "local:r53selftest",
+                Kind = SessionKind.Local,
+                Content = terminal,
+                Terminal = terminal,
+                IsAlive = true,
+                CloseAction = () => { },
+            };
+            viewModel.AddTab(tab);
+            await Task.Delay(500);
+            UpdateLayout();
+            terminal.Terminal.Write(probeLine + "\r\n");
+            await Task.Delay(600);
+            UpdateLayout();
+
+            var view = terminal.GetVisualDescendants()
+                .OfType<Iciclecreek.Terminal.TerminalView>()
+                .FirstOrDefault();
+            if (view is null)
+            {
+                throw new InvalidOperationException("未找到内层 TerminalView");
+            }
+            AppLog.Info($"[SelfTest] r53: FontSize={view.FontSize:0.###} charW={view.CharWidth:0.###} charH={view.CharHeight:0.###} grid={terminal.Terminal.Cols}x{terminal.Terminal.Rows}");
+            AppLog.Info("[SelfTest] r53: 回退链 = " + string.Join(" | ", view.FontFamily.FamilyNames));
+
+            // 与库内 _measureText 相同的构造：主面（整条 family 链）的 line-top->baseline。
+            var measure = new FormattedText("M", System.Globalization.CultureInfo.InvariantCulture,
+                FlowDirection.LeftToRight, new Typeface(view.FontFamily), view.FontSize, Brushes.Black);
+            AppLog.Info($"[SelfTest] r53: FormattedText('M').Baseline={measure.Baseline:0.###}px（主面基线参考）");
+
+            // 逐一解析回退链各字体面：谁带 'o'/'编'，墨迹度量多少（yBearing 正=向上）。
+            foreach (var fam in view.FontFamily.FamilyNames)
+            {
+                try
+                {
+                    var gt = new Typeface(fam).GlyphTypeface;
+                    var hasO = gt.CharacterToGlyphMap.TryGetGlyph('o', out var go) && go != 0;
+                    var hasC = gt.CharacterToGlyphMap.TryGetGlyph('编', out var gc) && gc != 0;
+                    var line = $"[SelfTest] r53: 面 '{fam}' -> {gt.FamilyName}/{gt.FaceNames}  o={hasO}  CJK编={hasC}";
+                    if (hasO && gt.TryGetGlyphMetrics(go, out var mo))
+                        line += $"  o(yB={mo.YBearing:0.###},h={mo.Height:0.###})";
+                    if (hasC && gt.TryGetGlyphMetrics(gc, out var mc))
+                        line += $"  编(yB={mc.YBearing:0.###},h={mc.Height:0.###})";
+                    AppLog.Info(line);
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Info($"[SelfTest] r53: 面 '{fam}' 解析失败: {ex.Message}");
+                }
+            }
+
+            // 真实绘制走查：每条 GlyphRun 的 baselineOrigin + 字体面；非 GlyphRun 绘制记类型。
+            var group = new DrawingGroup();
+            using (var ctx = group.Open())
+                view.Render(ctx);
+            var sb = new System.Text.StringBuilder();
+            WalkR53Drawings(group, "", sb);
+            AppLog.Info("[SelfTest] r53: 绘制走查开始");
+            foreach (var l in sb.ToString().Split('\n'))
+                AppLog.Info("[SelfTest] r53:" + l.TrimEnd());
+            AppLog.Info("[SelfTest] r53: 绘制走查结束");
+
+            // 标签页标题字体（App.axaml.cs 的 Windows 覆盖 = 单族 "Microsoft YaHei"，12px）。
+            // 用户截图红框是标签栏：核对该字体链在实机上的存在性与 FormattedText 基线。
+            var uiFamily = (FontFamily)Application.Current.Resources["UiFontFamily"];
+            AppLog.Info("[SelfTest] r53: UiFontFamily = " + string.Join(" | ", uiFamily.FamilyNames));
+            var uiMeasure = new FormattedText(probeTabTitle, System.Globalization.CultureInfo.InvariantCulture,
+                FlowDirection.LeftToRight, new Typeface(uiFamily), 12, Brushes.Black);
+            AppLog.Info($"[SelfTest] r53: 标签标题 FormattedText(12px).Baseline={uiMeasure.Baseline:0.###} Height={uiMeasure.Height:0.###}");
+            foreach (var fam in uiFamily.FamilyNames)
+            {
+                try
+                {
+                    var gt = new Typeface(fam).GlyphTypeface;
+                    var hasO = gt.CharacterToGlyphMap.TryGetGlyph('o', out var go) && go != 0;
+                    var hasC = gt.CharacterToGlyphMap.TryGetGlyph('编', out var gc) && gc != 0;
+                    var line = $"[SelfTest] r53: UI面 '{fam}' -> {gt.FamilyName}  o={hasO}  CJK编={hasC}";
+                    if (hasO && gt.TryGetGlyphMetrics(go, out var mo))
+                        line += $"  o(yB={mo.YBearing:0.###},h={mo.Height:0.###})";
+                    if (hasC && gt.TryGetGlyphMetrics(gc, out var mc))
+                        line += $"  编(yB={mc.YBearing:0.###},h={mc.Height:0.###})";
+                    AppLog.Info(line);
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Info($"[SelfTest] r53: UI面 '{fam}' 解析失败: {ex.Message}");
+                }
+            }
+            try
+            {
+                var fontDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows) + "\\Fonts";
+                var fontFiles = Directory.GetFiles(fontDir, "msyh*")
+                    .Concat(Directory.GetFiles(fontDir, "*yahei*"))
+                    .Select(Path.GetFileName)
+                    .Distinct()
+                    .OrderBy(n => n);
+                AppLog.Info("[SelfTest] r53: Windows Fonts 中 msyh/yahei 文件: " + string.Join(", ", fontFiles));
+            }
+            catch (Exception ex)
+            {
+                AppLog.Info("[SelfTest] r53: 字体目录枚举失败: " + ex.Message);
+            }
+
+            AppLog.Info("[SelfTest] r53: 自检完成，退出");
+            SaveVisualPng(Content as Visual, "r53-terminal.png");
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(0);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("[SelfTest] r53: 自检异常", ex);
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
+        }
+    }
+
+    private static void WalkR53Drawings(Avalonia.Media.Drawing d, string indent, System.Text.StringBuilder sb)
+    {
+        if (d is Avalonia.Media.GlyphRunDrawing grd && grd.GlyphRun is not null)
+        {
+            var gr = grd.GlyphRun;
+            sb.AppendLine(indent + "GLYPHRUN text='" + gr.Characters + "' baselineOrigin=" + gr.BaselineOrigin
+                + " emSize=" + gr.FontRenderingEmSize + " face=" + gr.GlyphTypeface.FamilyName);
+        }
+        else if (d is Avalonia.Media.DrawingGroup dg)
+        {
+            foreach (var c in dg.Children)
+                WalkR53Drawings(c, indent + "  ", sb);
+        }
+        else
+        {
+            sb.AppendLine(indent + "OTHER " + d.GetType().Name);
         }
     }
 

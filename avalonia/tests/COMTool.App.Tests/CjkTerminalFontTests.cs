@@ -300,6 +300,50 @@ public sealed class CjkTerminalFontTests
         }
     }
 
+    [AvaloniaFact]
+    public void TERM34_WideCjkRunSharesLatinBaseline()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                window = new MainWindow { DataContext = new MainViewModel() };
+                window.Show();
+                window.StopPortTimerForTests();
+                var viewModel = (MainViewModel)window.DataContext!;
+
+                var terminal = AddTerminalTab(viewModel, "term34");
+                window.UpdateLayout();
+                Dispatcher.UIThread.RunJobs();
+
+                var view = terminal.GetVisualDescendants().OfType<TerminalView>().Single();
+                var cell = view.CharWidth;
+                Assert.True(cell > 0);
+
+                // 同一条混排行里，拉丁 run 与 CJK 宽字符 run 必须落在同一条基线上。
+                // r43 之前宽字符走 FormattedText，基线取 CJK 面自身的 ascent（比主面高
+                // ~3-5px），中文整行下沉；r53 用真实用户截图复核：旧构建偏差 2.7px，
+                // 新构建 <0.6px。这里断言两 run 基线一致，防止回归。
+                var latin = view.TryBuildGlyphRun("o", 1, FontStyle.Normal, FontWeight.Normal);
+                var cjk = view.TryBuildGlyphRun("编", 2, FontStyle.Normal, FontWeight.Normal);
+                Assert.NotNull(latin); // 必须走 glyph 快路径
+                Assert.NotNull(cjk); // CJK 宽字符走 glyph 快路径而不是 FormattedText
+                Assert.True(latin!.BaselineOrigin.Y > 0, "主面基线必须可解析");
+                Assert.Equal(latin.BaselineOrigin.Y, cjk!.BaselineOrigin.Y, precision: 4);
+
+                // 宽字符仍钉在恰好 2 格（r33/r42 的格宽对齐，与基线修复互不干扰）。
+                Assert.Equal(cell * 2, cjk.GlyphInfos.Single().GlyphAdvance, precision: 4);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
     private static TerminalControl AddTerminalTab(MainViewModel viewModel, string id)
     {
         var terminal = new TerminalControl
