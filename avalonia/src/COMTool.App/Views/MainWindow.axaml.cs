@@ -311,6 +311,12 @@ public partial class MainWindow : Window
         {
             _ = RunR45SelfTestAsync();
         }
+        // --selftest-r46：实机自检 r46 SSH 重启进度条清除。打开配置里的第一个 SSH 会话，
+        // 连接成功后触发一次 R 重启，重启完成后断言 IsRestarting 已清、状态栏进度区隐藏。
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r46"))
+        {
+            _ = RunR46SelfTestAsync();
+        }
     }
 
     private void RefreshPorts()
@@ -417,6 +423,12 @@ public partial class MainWindow : Window
     internal void StopPortTimerForTests() => _portTimer?.Stop();
 
     internal void CloseTabForTests(TerminalTab tab) => CloseTab(tab);
+
+    /// <summary>
+    /// Test seam: the SSH password dialog while it is on screen (null once closed),
+    /// so a headless test can cancel it and drive the no-connection restart exit.
+    /// </summary>
+    internal SshPasswordDialog? LastSshPasswordDialogForTests { get; private set; }
 
     private (HashSet<string> Serial, HashSet<string> Ssh, HashSet<string> Telnet, HashSet<string> Tcp)
         ConnectedSessions()
@@ -1018,14 +1030,25 @@ public partial class MainWindow : Window
             if (string.IsNullOrWhiteSpace(session.SshKey) && string.IsNullOrEmpty(password))
             {
                 var dialog = new SshPasswordDialog(SshSessionRules.Detail(session));
-                var accepted = await dialog.ShowDialog<bool>(owner);
-                if (!accepted)
+                LastSshPasswordDialogForTests = dialog;
+                try
                 {
-                    return null;
-                }
+                    var accepted = await dialog.ShowDialog<bool>(owner);
+                    if (!accepted)
+                    {
+                        return null;
+                    }
 
-                password = dialog.Password;
-                remember = dialog.Remember;
+                    password = dialog.Password;
+                    remember = dialog.Remember;
+                }
+                finally
+                {
+                    if (ReferenceEquals(LastSshPasswordDialogForTests, dialog))
+                    {
+                        LastSshPasswordDialogForTests = null;
+                    }
+                }
             }
 
             try
@@ -1160,6 +1183,7 @@ public partial class MainWindow : Window
             {
                 tab.StatusMessage = "Session stopped";
                 tab.StatusBrush = StatusWarningBrush;
+                tab.IsRestarting = false;
                 if (terminal is not null)
                 {
                     RestoreStoppedTerminalFocus(tab, terminal);
@@ -1171,6 +1195,7 @@ public partial class MainWindow : Window
             if (!_sshRestarts.Contains(tab) || !IsTabOpen(tab) || terminal is null)
             {
                 connection.Dispose();
+                tab.IsRestarting = false;
                 return;
             }
 
@@ -1205,6 +1230,11 @@ public partial class MainWindow : Window
             tab.StatusMessage = $"Connected {SshSessionRules.Detail(session)}";
             tab.StatusBrush = StatusInfoBrush;
             tab.TabDotBrush = StatusInfoBrush;
+            // The attempt is over and the session is live again: clear the
+            // restart flag here as well (previously only the catch path did,
+            // so the status bar kept showing "Restarting..." after a
+            // successful reconnect).
+            tab.IsRestarting = false;
             UpdateConnectionStates();
             RestoreStoppedTerminalFocus(tab, terminal);
         }
@@ -1506,6 +1536,7 @@ public partial class MainWindow : Window
             if (!_telnetRestarts.Contains(tab) || !IsTabOpen(tab) || terminal is null)
             {
                 connection.Dispose();
+                tab.IsRestarting = false;
                 return;
             }
 
@@ -1536,6 +1567,9 @@ public partial class MainWindow : Window
             tab.StatusMessage = $"Connected {TelnetSessionRules.Detail(session)}";
             tab.StatusBrush = StatusInfoBrush;
             tab.TabDotBrush = StatusInfoBrush;
+            // Same as the SSH restart: the successful reconnect ends the attempt,
+            // so the progress area goes away with it.
+            tab.IsRestarting = false;
             UpdateConnectionStates();
             RestoreStoppedTerminalFocus(tab, terminal);
         }
@@ -7180,6 +7214,78 @@ public static class ClipCheck {
         catch (Exception ex)
         {
             AppLog.Error("[SelfTest] r45: 自检异常", ex);
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
+        }
+    }
+
+    /// <summary>
+    /// <c>--selftest-r46</c>：实机自检「SSH 重启成功后 Restarting 进度条不再挂死」。
+    /// 打开配置中第一个 SSH 会话，连接成功后触发一次 R 重启（RestartSshSessionAsync），
+    /// 重启完成后断言 IsRestarting==false 且状态栏进度区隐藏（r46 修复前成功路径漏清该
+    /// 标志，右下角「Restarting...」会一直显示），落盘 main-content.png 取证。
+    /// </summary>
+    private async Task RunR46SelfTestAsync()
+    {
+        try
+        {
+            AppLog.Info("[SelfTest] r46: 等主窗稳定 1.5s 后打开 SSH 会话验证重启进度条清除");
+            await Task.Delay(1500);
+            if (DataContext is not MainViewModel viewModel)
+            {
+                throw new InvalidOperationException("MainViewModel 未就绪");
+            }
+
+            var firstKey = _config?.SshSessions.Sessions.FirstOrDefault()?.Key;
+            if (string.IsNullOrEmpty(firstKey))
+            {
+                throw new InvalidOperationException("config 中没有 SSH 会话，无法跑 r46 自检");
+            }
+            AppLog.Info($"[SelfTest] r46: 打开 SSH 会话 {firstKey}");
+
+            var openTask = OpenSshSessionAsync(firstKey!);
+            TerminalTab? tab = null;
+            var deadline = DateTime.UtcNow.AddSeconds(60);
+            while (!(openTask.IsCompleted && tab is not null && tab.IsAlive))
+            {
+                if (DateTime.UtcNow > deadline)
+                {
+                    throw new TimeoutException("SSH 会话 60s 内未连接成功");
+                }
+                tab = viewModel.Tabs.FirstOrDefault(t => t.SessionId == firstKey);
+                await Task.Delay(250);
+            }
+            await openTask;
+            AppLog.Info($"[SelfTest] r46: 首次连接成功 status='{tab!.StatusMessage}' alive={tab.IsAlive} restarting={tab.IsRestarting}");
+
+            // 触发一次 R 重启：r46 修复前成功路径漏清 IsRestarting，
+            // 重连成功后右下角「Restarting...」进度条会一直挂着。
+            var restartTask = RestartSshSessionAsync(tab);
+            deadline = DateTime.UtcNow.AddSeconds(90);
+            while (!(restartTask.IsCompleted && !tab.IsRestarting))
+            {
+                if (DateTime.UtcNow > deadline)
+                {
+                    throw new TimeoutException("SSH 重启 90s 内未完成或 IsRestarting 未清");
+                }
+                await Task.Delay(250);
+            }
+            await restartTask;
+            await Task.Delay(500);
+
+            bool ok = !tab.IsRestarting && !tab.ShowStatusProgress && tab.IsAlive
+                && tab.StatusMessage.StartsWith("Connected", StringComparison.Ordinal);
+            AppLog.Info($"[SelfTest] r46: 重启后 IsRestarting={tab.IsRestarting} ShowStatusProgress={tab.ShowStatusProgress} status='{tab.StatusMessage}' alive={tab.IsAlive} => {(ok ? "OK" : "FAILED")}");
+
+            UpdateLayout();
+            SaveVisualPng(Content as Visual, "main-content.png");
+            AppLog.Info($"[SelfTest] r46: 自检完成，重启成功后进度条清除={(ok ? "OK" : "失败")}，退出");
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(ok ? 0 : 2);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("[SelfTest] r46: 自检异常", ex);
             (Application.Current?.ApplicationLifetime
                 as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
         }

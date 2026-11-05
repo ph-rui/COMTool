@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Interactivity;
@@ -121,6 +122,75 @@ public sealed class RestartProgressTests
                 WaitUntil(() => window.LastRestartDialogForTests is null, "continue closed the dialog");
                 WaitUntil(() => result.IsCompleted, "continue resolved");
                 Assert.True(await result);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            RunJobs();
+        }
+    }
+
+    /// <summary>
+    /// r46: the restart flow itself must clear IsRestarting when an attempt ENDS
+    /// without a new one starting. Drives the real R-restart against a session with
+    /// no key/password, cancels the password prompt (connection comes back null),
+    /// and asserts the progress area is gone — previously only the catch path
+    /// cleared the flag, so every other exit leaked it and the "Restarting..."
+    /// bar stayed visible after a successful (or cancelled) reconnect.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task SSH11_RestartProgressClearedWhenAttemptEnds()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            await env.RunAsync(async () =>
+            {
+                var config = new ComtoolConfig();
+                var session = new COMTool.Core.Config.SshSession
+                {
+                    Key = COMTool.Core.Config.SshSessionRules.Key("127.0.0.1", 22, "probe"),
+                    Host = "127.0.0.1",
+                    Port = 22,
+                    User = "probe",
+                };
+                config.SshSessions.Add(session);
+                env.SeedConfig(config);
+
+                window = new MainWindow { DataContext = new MainViewModel() };
+                window.Show();
+                window.StopPortTimerForTests();
+                RunJobs();
+
+                var viewModel = (MainViewModel)window.DataContext!;
+                var terminal = new Iciclecreek.Terminal.TerminalControl { Process = string.Empty };
+                var tab = new TerminalTab
+                {
+                    Title = session.Key,
+                    SessionId = session.Key,
+                    Kind = SessionKind.Ssh,
+                    Content = terminal,
+                    Terminal = terminal,
+                    IsAlive = false,
+                    IsSessionStopped = true,
+                };
+                viewModel.AddTab(tab);
+                RunJobs();
+
+                // No key/password → the restart suspends on the password dialog;
+                // cancelling it ends the attempt with connection == null.
+                var task = window.RestartSshSessionForTests(tab);
+                WaitUntil(() => window.LastSshPasswordDialogForTests is not null, "ssh password dialog");
+                ClickButton(window.LastSshPasswordDialogForTests!, "Cancel");
+                WaitUntil(() => task.IsCompleted, "restart attempt finished");
+                await task;
+                RunJobs();
+
+                Assert.Equal("Session stopped", tab.StatusMessage);
+                Assert.False(tab.IsRestarting, "the attempt ended, the restart flag must be cleared");
+                Assert.False(tab.ShowStatusProgress, "the progress area must be gone");
             });
         }
         finally
