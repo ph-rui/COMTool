@@ -1617,6 +1617,65 @@ Native AOT 评估（用户提议，本轮仅评估不实施）：
   保证）；AOT 产物非单文件（多文件目录部署）；config.json 中 CJK 存 \uXXXX（source-gen
   默认转义，往返等价）。
 
+### 53 中英文混排基线对齐复核（2026-11-05，用户「COMTool的英文显示比中文显示高了一点」+ COMTool/MobaXterm 同文对照截图）
+
+背景：用户在 opencode TUI 里对比 COMTool 与 MobaXterm 对同一行
+「Yocto imx-image-full 编译排查」的渲染，红框标出 COMTool 侧中文偏低。
+
+取证（用户截图逐像素测量，684×381，红框 COMTool x59-319 y74-102 / MobaXterm x65-320 y189-216，
+排除红框像素后按列统计墨迹）：
+- COMTool：Latin 段加权中心 y=85.17，CJK 段 y=87.87 → **CJK 低 2.7px**（方向与用户描述一致：英文偏高）
+- MobaXterm：Latin 中心 y≈203.2，CJK 中心 y≈202.5 → 差 0.7px，视觉对齐（参照正常）
+- 2.7px 的量级与「r43 修复前 CJK 走 FormattedText、基线取 CJK 面自身 ascent」的偏差吻合
+  （YaHei ascent≈14.3px vs Consolas 11.18px，@13.5px 差 ~3.1px）——r43（库 4.1.2，
+  提交 04f32aa）起宽字符已改走 GlyphRun 快路径并钉主面基线，r51 R2R / r52 AOT 均含此修复。
+
+实机复核（r53 新增 `--selftest-r53`，VM win-x64 AOT 构建 1052c82，exe SHA256
+6E2ECE65AB52FD339979E069426760577E7161B90D92EB7678A3358F04C7D94F，部署
+C:\Users\devuser\COMTool-Avalonia-AOT\）：
+- 回退链实机解析 = Consolas | Microsoft YaHei UI | Noto Sans Mono CJK SC(×2)。
+  注：avares 内置 Noto 在 AOT 实机上按族名解析落到 Segoe UI（未生效），但链上
+  Microsoft YaHei UI 先于它且完整覆盖 CJK，实际 CJK 面 = YaHei UI（与 MobaXterm
+  系统回退一致，r41.1 结论不变）。
+- 终端混排行绘制走查：`Yocto imx-image-full ` GlyphRun face=Consolas
+  baselineOrigin=11.18px；编/译/排/查 各为独立 GlyphRun face=Microsoft YaHei UI
+  baselineOrigin=11.18px → **CJK 与 Latin 共享主面基线（r43 钉扎在 AOT 实机生效）**。
+- 截图像素复测：Latin 中心 115.50，CJK 中心 115.85 → 差 0.35px（不可感知）。
+- 标签标题（12px，App.axaml.cs Windows 覆盖 UiFontFamily="Microsoft YaHei" 单族）：
+  「r53 编译排查 Yocto」三段加权中心 53.88 / 54.47 / 54.36 → 差 ≤0.6px（同族天然对齐）。
+- 结论：当前构建（R2R r51 / AOT r52+）无法复现用户截图的 2.7px 偏差，
+  截图对应 r43 修复前旧构建行为。
+
+方案取舍（运行时度量修正否决）：曾计划用
+`GlyphTypeface.TryGetGlyphMetrics` 运行时计算 CJK 墨迹中心偏移并统一两条渲染路径。
+实机数据表明 Win32 该 API 不可用：Consolas 返回 (0,0)、YaHei 返回设计单位
+（o yB=445 h=2048，非墨迹框），无法换算到像素。且当前两条路径本就共享基线，
+无偏差可修——不改渲染代码，改为固化回归防线。
+
+防线（防回归）：
+1. App 级（进 gate 矩阵）：CjkTerminalFontTests.TERM34_WideCjkRunSharesLatinBaseline——
+   经真实 MainWindow/TerminalControl 链路取 TerminalView，断言 CJK 宽字符
+   TryBuildGlyphRun 非空（即走快路径而非 FormattedText）、与 Latin run
+   BaselineOrigin 相等（≤0.01px）、advance 精确 2 格。
+2. 库级（库仓库 Iciclecreek.Avalonia.Terminal）：BaselineProbeTests.cs 探针改造为
+   正式断言 WideGlyphBaselineTests——真实渲染 walk DrawingGroup，断言混排行 4 个
+   CJK GlyphRun 与 Latin GlyphRun 基线一致且每 CJK 字独立单字符 run。
+3. 实机探针：--selftest-r53 常驻（开本地终端写同文混排行，打印回退链各面
+   字形覆盖/度量、逐 GlyphRun 基线+字体面、标签标题字体，落盘 r53-terminal.png），
+   用户/后续轮次可一键复核。
+
+验证：
+- 库测试 659 通过 / 9 跳过（mac 平台用例）/ 0 失败（含新 WideGlyphBaselineTests）。
+- App 测试 CjkTerminalFontTests 10/10 通过（原 9 项 + 新 TERM34）。
+- 全量 gate（最终代码状态）：**20261105T134412Z 全绿**——build 通过，单测
+  Core 90 / Sftp 42 / Terminal 27 / Connections 150 / Zmodem 32 / TestGate 49，
+  App 测试 283/283（含新 TERM34），E2E 15/15 PASS，TestGate 校验含新 TERM-34 行。
+- VM AOT 构建 rc=0（仅 3×IL2075 已知告警），自检 r53 实机数据如上。
+
+遗留：用户截图为旧构建行为，已请用户在最新 AOT 部署（桌面快捷方式
+COMTool-Avalonia-AOT）下用同一 opencode TUI 复测并回传新截图；若仍见偏差，
+跑 `COMTool.App.exe --selftest-r53` 回传 run.log + r53-terminal.png 精确定位。
+
 ## 已知偏差（已写入 spec 附录）
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
 2. 热键 .mxtmacros 编码未实测：导出恒 0，导入非 0 忽略+警告
