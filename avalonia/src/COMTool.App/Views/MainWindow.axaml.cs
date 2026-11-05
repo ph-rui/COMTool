@@ -340,6 +340,14 @@ public partial class MainWindow : Window
         {
             _ = RunR49SelfTestAsync();
         }
+        // --selftest-r50：实机自检 r50 对话框 OPEN/Close 按钮文字垂直居中
+        // （用户反馈「open、x close 好像也没居中，有点中间偏上」）。
+        // 校验 5 个动作按钮 VerticalContentAlignment=Center 且高度非写死，
+        // 落盘 r50-dialog.png（整窗截图，默认 Serial 面板，OPEN 按钮可见）供像素核对。
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r50"))
+        {
+            _ = RunR50SelfTestAsync();
+        }
     }
 
     private void RefreshPorts()
@@ -7577,6 +7585,64 @@ public static class ClipCheck {
         catch (Exception ex)
         {
             AppLog.Error("[SelfTest] r49: 自检异常", ex);
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
+        }
+    }
+
+    /// <summary>
+    /// <c>--selftest-r50</c>：实机自检会话设置对话框 OPEN/Close 按钮文字垂直居中。
+    /// r50：Fluent 主题 Button 默认 VerticalContentAlignment=Stretch，文字顶到内容框上方，
+    /// 用户截图反馈 OPEN 与 Close 按钮文字「中间偏上」。修复为显式两轴居中 + MinHeight 保底。
+    /// 自检校验 5 个动作按钮的布局属性并整窗截图，供像素法核对文字是否居中。
+    /// </summary>
+    private async Task RunR50SelfTestAsync()
+    {
+        try
+        {
+            AppLog.Info("[SelfTest] r50: 等主窗稳定 1.5s 后打开会话设置对话框验证 OPEN/Close 按钮文字垂直居中");
+            await Task.Delay(1500);
+            var service = _config ?? AppConfigService.Load();
+            Func<string, TerminalTab?, Task> open = (_, _) => Task.CompletedTask;
+            var dlg = new ConnectionSettingsWindow(service, null, open, open, open, open, _ => Task.CompletedTask);
+            dlg.Show();
+            await Task.Delay(800);
+            UpdateLayout();
+            dlg.UpdateLayout();
+
+            var ok = true;
+            var names = new[] { "SerialOpenButton", "SshOpenButton", "TelnetOpenButton", "TcpOpenButton", "CloseButton" };
+            foreach (var name in names)
+            {
+                var btn = dlg.FindControl<Button>(name);
+                if (btn is null)
+                {
+                    AppLog.Error($"[SelfTest] r50: 未找到按钮 {name}");
+                    ok = false;
+                    continue;
+                }
+                var centred = btn.VerticalContentAlignment == Avalonia.Layout.VerticalAlignment.Center
+                    && btn.HorizontalContentAlignment == Avalonia.Layout.HorizontalAlignment.Center;
+                var heightFree = double.IsNaN(btn.Height) && btn.MinHeight >= 28;
+                ok = ok && centred && heightFree;
+                AppLog.Info($"[SelfTest] r50: {name} bounds=({btn.Bounds.X:F0},{btn.Bounds.Y:F0},{btn.Bounds.Width:F0}x{btn.Bounds.Height:F0}) 两轴居中={(centred ? "OK" : "FAILED")} 高度非写死={(heightFree ? "OK" : "FAILED")}");
+            }
+            // 默认 Serial 面板，其 OPEN 按钮可见，整窗截图供像素核对
+            var openBtn = dlg.FindControl<Button>("SerialOpenButton");
+            if (openBtn is not null)
+            {
+                AppLog.Info($"[SelfTest] r50: SerialOpen 文字=“OPEN” 按钮中心 y={(openBtn.Bounds.Y + openBtn.Bounds.Height / 2):F1}");
+            }
+            SaveVisualPng(dlg, "r50-dialog.png");
+
+            dlg.Close();
+            AppLog.Info($"[SelfTest] r50: 自检完成，OPEN/Close 按钮文字居中={(ok ? "OK" : "失败")}，退出");
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(ok ? 0 : 2);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("[SelfTest] r50: 自检异常", ex);
             (Application.Current?.ApplicationLifetime
                 as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
         }

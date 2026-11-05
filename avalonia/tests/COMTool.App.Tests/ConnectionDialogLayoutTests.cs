@@ -113,6 +113,37 @@ public sealed class ConnectionDialogLayoutTests
     }
 
     [AvaloniaFact]
+    public void UI06_DialogActionButtonsTextVerticallyCentered()
+    {
+        using var env = new TestEnvironment();
+        env.Run(() =>
+        {
+            var window = OpenDialog(env);
+            try
+            {
+                // r50: OPEN/Close 按钮文字「中间偏上」（用户截图）：Fluent 主题 Button 默认
+                // VerticalContentAlignment=Stretch，文字顶在内容框上方。必须显式两轴居中，
+                // 且高度改用 MinHeight 保底、不写死 Height（与 CreateDialogTextButton 约定一致，
+                // 防 DPI/字体变化下裁切或偏移复现）。
+                var names = new[] { "SerialOpenButton", "SshOpenButton", "TelnetOpenButton", "TcpOpenButton", "CloseButton" };
+                foreach (var name in names)
+                {
+                    var button = window.FindControl<Button>(name);
+                    Assert.NotNull(button);
+                    Assert.Equal(Avalonia.Layout.VerticalAlignment.Center, button!.VerticalContentAlignment);
+                    Assert.True(double.IsNaN(button.Height));
+                    Assert.True(button.MinHeight >= 28);
+                }
+            }
+            finally
+            {
+                window.Close();
+                Dispatcher.UIThread.RunJobs();
+            }
+        });
+    }
+
+    [AvaloniaFact]
     public void UI06_ConnectionDialogLabelColumnFitsLongestLabel()
     {
         using var env = new TestEnvironment();
