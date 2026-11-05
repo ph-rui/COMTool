@@ -9,8 +9,12 @@ sealed class Program
     // SynchronizationContext-reliant code before AppMain is called: things aren't initialized
     // yet and stuff might break.
     [STAThread]
-    public static void Main(string[] args) => BuildAvaloniaApp()
-        .StartWithClassicDesktopLifetime(args);
+    public static void Main(string[] args)
+    {
+        // r51: 锁定启动计时 T0（单文件自提取发生在 CLR 之前，不含在此时长内）
+        Services.StartupClock.Start();
+        BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+    }
 
     // Avalonia configuration, don't remove; also used by visual designer.
     public static AppBuilder BuildAvaloniaApp()

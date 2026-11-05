@@ -53,8 +53,12 @@ Windows self-contained, single-file:
   -p:PublishSingleFile=true \
   -p:IncludeNativeLibrariesForSelfExtract=true \
   -p:EnableCompressionInSingleFile=true \
+  -p:PublishReadyToRun=true \
   -p:DebugType=None -p:DebugSymbols=false \
   -o publish/win-x64
+# r51 (2026-11-05): PublishReadyToRun 为启动性能关键项（VM 实测进程内就绪
+# 434ms→107-169ms，约 2.5x；恢复 2026-10-19「以包体积换启动」的原始策略，
+# 此前逐轮 publish 命令漂移把 R2R/压缩弄丢了）。勿删。
 # Native library PDBs are still copied by NuGet; remove them from the package.
 find publish/win-x64 -name '*.pdb' -delete
 ```
@@ -67,6 +71,7 @@ Linux self-contained, single-file:
   -p:PublishSingleFile=true \
   -p:IncludeNativeLibrariesForSelfExtract=true \
   -p:EnableCompressionInSingleFile=true \
+  -p:PublishReadyToRun=true \
   -p:DebugType=None -p:DebugSymbols=false \
   -o publish/linux-x64
 ```

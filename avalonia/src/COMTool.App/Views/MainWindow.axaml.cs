@@ -257,6 +257,7 @@ public partial class MainWindow : Window
             {
                 _config = AppConfigService.Load();
                 AppLog.Info($"Config loaded: {_config.ConfigPath}");
+                StartupClock.Mark("config-loaded（含首次串口扫描）");
                 viewModel.LoadMonitorOptions(_config.Config.RemoteMonitor);
                 // "COMTool 启动时启动 Cron 服务器" 勾选时随主窗口自启
                 _ = CronAutoStart.EnsureAsync(_config.Config.Servers.Cron);
@@ -269,6 +270,7 @@ public partial class MainWindow : Window
                 _portTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
                 _portTimer.Tick += (_, _) => RefreshPorts();
                 _portTimer.Start();
+                StartupClock.Mark("loaded（侧栏/窗口配置就绪）");
             }
             catch (Exception ex)
             {
@@ -348,20 +350,51 @@ public partial class MainWindow : Window
         {
             _ = RunR50SelfTestAsync();
         }
+        // --selftest-r51：启动性能自检——打印各启动阶段耗时（[Startup] 系列日志）、
+        // 单独串口扫描耗时与进程内总耗时，供打包策略 A/B 对比（自检脚本另记外层 wall time，
+        // 二者之差 = 单文件自提取 + CLR 初始化）。
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r51"))
+        {
+            _ = RunR51SelfTestAsync();
+        }
     }
 
-    private void RefreshPorts()
+    private volatile bool _portScanBusy;
+
+    // r51：串口扫描（GetPortNames + SetupAPI 友好名）原先每 2s 在 UI 线程同步执行，
+    // 带 USB 串口适配器的机器上会周期性卡 UI（用户反馈「运行卡卡的」）。
+    // 现移到工作线程，结果回 UI 线程应用；上一轮扫描未结束时跳过本次。
+    internal void RefreshPorts()
     {
-        if (_config is null)
+        if (_config is null || _portScanBusy)
         {
             return;
         }
 
-        var previous = _config.Ports
-            .Select(port => port.Device)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        ApplyPortScan(previous, _config.RefreshPorts());
+        _portScanBusy = true;
+        var config = _config;
+        _ = Task.Run(() =>
+        {
+            var scan = PortScanOverrideForTests is { } f ? f() : SerialPortCatalog.Scan();
+            Dispatcher.UIThread.Post(() =>
+            {
+                _portScanBusy = false;
+                if (!ReferenceEquals(_config, config))
+                {
+                    return;
+                }
+
+                var previous = config.Ports
+                    .Select(port => port.Device)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                config.RefreshPorts(scan);
+                ApplyPortScan(previous, scan);
+            });
+        });
     }
+
+    // r51：测试/自检注入点（慢扫描），生产恒为 null。
+    internal Func<SerialPortScanResult>? PortScanOverrideForTests { get; set; }
 
     internal void ApplyPortScanForTests(SerialPortScanResult scan)
     {
@@ -7643,6 +7676,35 @@ public static class ClipCheck {
         catch (Exception ex)
         {
             AppLog.Error("[SelfTest] r50: 自检异常", ex);
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
+        }
+    }
+
+    /// <summary>
+    /// <c>--selftest-r51</c>：启动性能自检。启动阶段的 [Startup] 日志在窗口就绪前已陆续落盘
+    /// （见 StartupClock.Mark），此处再补：独立串口扫描耗时、进程内总耗时（T0=Main 首行；
+    /// 单文件自提取 + CLR 初始化发生在 T0 之前，用自检脚本外层 wall time 减去本值即可反出）。
+    /// </summary>
+    private async Task RunR51SelfTestAsync()
+    {
+        try
+        {
+            AppLog.Info("[SelfTest] r51: 启动性能自检（打印各阶段耗时后退出）");
+            await Task.Delay(300);
+            UpdateLayout();
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var scan = SerialPortCatalog.Scan();
+            sw.Stop();
+            AppLog.Info($"[SelfTest] r51: 独立串口扫描耗时={sw.ElapsedMilliseconds}ms ports={scan.Ports.Count} success={scan.Success}");
+            StartupClock.Mark("selftest-ready");
+            AppLog.Info($"[SelfTest] r51: 进程内总耗时 T0→now={StartupClock.Ms:F0}ms（不含自提取/CLR 初始化）");
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(0);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("[SelfTest] r51: 自检异常", ex);
             (Application.Current?.ApplicationLifetime
                 as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
         }

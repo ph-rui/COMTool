@@ -29,6 +29,7 @@ public partial class App : Application
             {
                 DataContext = viewModel,
             };
+            StartupClock.Mark("framework-init+MainWindow-ctor");
         }
 
         base.OnFrameworkInitializationCompleted();
