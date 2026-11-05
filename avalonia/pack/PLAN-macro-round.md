@@ -1428,6 +1428,38 @@ r44 当时为避免彩色图标撞蓝底而让选中态变白，用户反馈后�
   f141 三点字形质心偏离盒中心 +0.63px（修复前 U+2026 偏低约 8px）；
   r49-tcp-dialog.png 目视：Auto reconnect 标签与 Enable 复选框之间有可见空隙，不再顶框。
 
+### 50 会话设置对话框 OPEN/Close 按钮文字垂直居中（2026-11-05，用户「open、x close，好像也没居中，有点中间偏上」+ 对话框截图）
+
+取证：
+- 用户截图（红框）：TCP 面板底部蓝色 OPEN 按钮文字明显偏上；右下角 ✕ Close 同样偏上。
+- 根因与 r49「…」按钮同源：Avalonia Fluent 主题 Button 的 `VerticalContentAlignment`
+  默认为 Stretch——文字被包成 TextBlock 后从内容框顶部起排，行高（~16px）小于内容框
+  （30px 固定高 − 上下 padding ≈ 19px）时视觉上「中间偏上」/底部留白。
+  代码库已有同坑记录（CreateDialogTextButton 注释：r44「取消/确定」字底裁切，约定
+  显式两轴居中 + 不写死 Height）。
+
+改动（ConnectionSettingsWindow.axaml，无库改动）：
+- 4 个 OPEN 按钮（Serial/Ssh/Telnet/Tcp，补 `Name="SshOpenButton"`）与右下角 Close 按钮
+  （补 `Name="CloseButton"`）：`Height="30"` → `MinHeight="30"`（保底不写死，防 DPI/字体
+  变化复发），新增 `VerticalContentAlignment="Center"`（横向 Center 已有）。
+- 与 r49 的 KeyFileBrowseButton 同一约定：两轴显式居中 + MinHeight 保底。
+
+测试（TDD 先红后绿，ConnectionDialogLayoutTests 追加）：
+- `UI06_DialogActionButtonsTextVerticallyCentered`：5 个按钮均存在（Name 契约）、
+  VerticalContentAlignment==Center、Height 未写死（NaN）、MinHeight≥28。
+  改前红（Stretch + Height=30 写死），改后绿。
+
+验证（2026-11-05）：
+- 过滤测试 ConnectionDialogLayoutTests 4/4 绿；App 全量 281/281。
+- gate 20261105T052941Z 全绿：build/单测 390/App 281（共 671 项）/test-list/E2E 15/TestGate 全 PASS。
+- publish：win-x64 单文件 COMTool.App.exe 155,092,481 B，
+  SHA256 c182cde703c5b9be731a88c43b852aa77de170d67c802ae1cbeace05d1fdad0f。
+- deploy：deploy_r3.py 双份部署（C:\Users\devuser\COMTool-Avalonia.exe + 桌面副本）SHA256 均校验 OK。
+- 实机 --selftest-r50：全部 OK——5 按钮均「两轴居中=OK 高度非写死=OK」
+  （SerialOpen bounds=328x30、Close bounds=100x30）；
+  像素复核（r50-dialog.png 380x500 整窗截图）：OPEN 白字质心偏离盒中心 -0.31px、
+  Close 白字质心偏离 -0.40px（修复前文字顶在内容框上沿，明显偏上）。
+
 ## 已知偏差（已写入 spec 附录）
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
 2. 热键 .mxtmacros 编码未实测：导出恒 0，导入非 0 忽略+警告
