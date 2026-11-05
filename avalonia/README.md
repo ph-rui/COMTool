@@ -76,6 +76,47 @@ Linux self-contained, single-file:
   -o publish/linux-x64
 ```
 
+## Publish — Native AOT (r52, 2026-11-05)
+
+Native AOT removes the JIT and the single-file self-extraction: fastest startup,
+smallest memory. The build is **slower** and needs a C++ toolchain:
+
+- Windows: VS Build Tools with the C++ workload (MSVC cl/link + Windows SDK)
+  installed at a custom path is fine (dotnet auto-discovers it via vswhere), or
+  clang+lld. AOT cannot be cross-compiled across OSes — build win-x64 on Windows.
+- Linux: clang + lld on PATH (e.g. conda-forge `clangdev`/`llvmdev` + `lld`).
+
+```bash
+# win-x64 (run on a Windows machine with the C++ toolchain)
+/tmp/opencode/dotnet/dotnet publish src/COMTool.App/COMTool.App.csproj \
+  -c Release -r win-x64 -p:PublishAot=true \
+  -p:DebugType=None -p:DebugSymbols=false \
+  -o publish/win-x64-aot
+find publish/win-x64-aot -name '*.pdb' -delete
+
+# linux-x64 (clang/lld on PATH)
+PATH=/tmp/opencode/miniforge/bin:$PATH /tmp/opencode/dotnet/dotnet publish \
+  src/COMTool.App/COMTool.App.csproj -c Release -r linux-x64 -p:PublishAot=true \
+  -p:DebugType=None -p:DebugSymbols=false -o publish/linux-x64-aot
+```
+
+The output is a native executable plus a few native DLLs/.so
+(libSkiaSharp, libHarfBuzzSharp, av_libglesv2, conpty, ...) — deploy the whole
+folder. r52 VM measurement (cold start): wall 0.58-0.76s vs 1.51-2.53s for the
+R2R single file; in-process ready 22-58ms vs 107-169ms.
+
+AOT rules this repo follows (do not break them):
+
+- Every App .axaml root carries `x:CompileBindings="True"`.
+- XAML that is loaded at runtime (not just compiled in) must have an `x:Class`
+  and be instantiated in C# — `new ResourceInclude(uri)` / `new StyleInclude(uri)`
+  fail under AOT with "No precompiled XAML found". See ThemeLight/ThemeDark
+  (ThemeManager) and the terminal library 4.1.5 (TerminalGenericStyles).
+- JSON goes through `ConfigJsonContext` (source generation), never reflective
+  `JsonSerializer`.
+- All projects set `IsAotCompatible=true` (Directory.Build.props); keep new
+  code free of runtime reflection, or annotate with DynamicDependency.
+
 ## Current implementation (Phase 0 + Phase 1)
 
 Implemented:

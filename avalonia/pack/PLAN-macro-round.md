@@ -1520,6 +1520,103 @@ Native AOT 评估（用户提议，本轮仅评估不实施）：
 - Native AOT：未实施（本机无 clang/LLVM；win-x64 AOT 官方建议 Windows 侧构建；代码需全工程
   IsAotCompatible + JSON source generation + SshNet 兼容处理，工作量单列 r52+ 评估）。
 
+### 52 Native AOT 启动性能（2026-11-05，用户批准「直接立项 r52 做 AOT」）
+
+背景：r51 已把打包恢复到 R2R+压缩（VM 冷启动进程内就绪 107-169ms），用户要求进一步
+上 Native AOT（无 JIT、无单文件自提取，预期启动 <0.5s、内存下降）。
+
+环境与构建路径（关键事实）：
+- Native AOT 不支持跨 OS：win-x64 AOT 产物必须在 Windows 上构建。
+- 双机分工：
+  - 开发机（Linux 8 核）：Miniforge(conda-forge llvmdev=18) 提供 clang/lld，构建
+    linux-x64 AOT 做**回归验证**（E2E 15 项 + 全量单测），快速暴露 trim/反射/运行时问题。
+  - VM（Win10 1909，Core 2 Duo T7700，慢 CPU）：用户 devuser 在 Administrators 组，
+    通过 schtasks /rl HIGHEST 提权技巧静默安装 VS Build Tools（VC.Tools.x86.x64 +
+    Windows11SDK.26100 → D:\vsbt，C:\ 仅剩 10GB 故装 D:\），提供 AOT 官方 Windows 工具链
+    （MSVC cl/link + Windows SDK 头与导入库）。VM 上 GitHub 被限速（~8KB/s），
+    nuget.org/微软 CDN 正常（1.7-2.6MB/s），源码经 git bundle 上传（comtool-r52.bundle →
+    D:\Users\devuser\comtool-aot @ r52-aot，终版同步 030e74d），nuget 缓存 115 包经
+    nuget-cache.tgz 上传（D:\Users\devuser\nuget-pkgs，NUGET_PACKAGES 指向它）。
+
+代码改动（r52-aot 分支，两笔：a6c8ba6 准备 + 030e74d 修复；普通构建行为零变化，仅增加 IL 分析）：
+1. Directory.Build.props：全工程 IsAotCompatible=true。
+2. JSON source generation：新增 COMTool.Core/Config/ConfigJsonContext.cs
+   （[JsonSourceGenerationOptions(WriteIndented=true)] [JsonSerializable(ComtoolConfig)]），
+   AppConfigService.Load / ComtoolConfig.Load / ComtoolConfig.Save 三处改用
+   ConfigJsonContext.Default.ComtoolConfig（消除 IL3050 反射序列化）。
+   注：.NET 10 的 JsonSourceGenerationOptions 无 Encoder 属性，生成器用默认 JS 转义
+   （CJK 存 \uXXXX），JSON 往返等价，仅配置文件可读性略降。
+3. SSH.NET 2026.0.0 内部类型反射注解（全库扫描仅此一处反射家族）：
+   - SshConnection.ProbeSshChannelOnce：[DynamicDependency(NonPublic|PublicFields,
+     typeof(ShellStream))]（保留私有字段 _channel）。
+   - SshConnection.TrySendSignal/TrySendBreak：[DynamicDependency(PublicMethods,
+     "Renci.SshNet.Channels.ChannelSession", "Renci.SshNet")]——ChannelSession 为 internal 类型
+     不能 typeof，用 (memberTypes, typeName, assemblyName) 字符串构造；程序集实名是
+     Renci.SshNet（首版误写 "SSH.NET" 触发 IL2035 Unresolved assembly，已修正）；调用点
+     channel.GetType().GetMethod 因值经 object 流转无法做注解流证明，
+     #pragma warning disable IL2075（成员保留由 DynamicDependency 保证）。
+   - SshSftpFileSystem.GetSftpSession：[DynamicDependency(NonPublic|PublicProperties,
+     typeof(SftpClient))]（SftpClient 在 Renci.SshNet 根命名空间，public）。
+   - SshSftpFileSystem.InvokeSessionRequest：[DynamicDependency(NonPublic|PublicMethods,
+     "Renci.SshNet.Sftp.SftpSession", "Renci.SshNet")]（SftpSession 为 internal）。
+4. XAML 编译绑定 + 主题 AOT 适配（修复 AOT 启动 "No precompiled XAML found" 崩溃）：
+   - 全部 16 个 App .axaml 根元素加 x:CompileBindings="True"（Avalonia 12 AOT 要求）。
+   - ThemeLight/ThemeDark.axaml 加 x:Class + 新建 partial class（构造函数走
+     AvaloniaXamlLoader.Load(this) 预编译路径）；ThemeManager.Apply 从 new ResourceInclude(uri)
+     改为直接 new ThemeLight()/new ThemeDark() 并入 MergedDictionaries——AOT 下运行时 XAML
+     解析器被裁剪，URI 式加载（含 App.axaml 里的静态 ResourceInclude）都不可用，
+     App.axaml 相应改为 <local:ThemeLight/> 编译期内联；IL2026 随之消除。
+   - MacroEditorWindow/MacroStepEditorDialog 构造函数改 public（编译绑定要求根类型可实例化，
+     否则 AVLN3000）。
+   - AppLog.Error 增加 InnerException 链打印（AOT 的 TypeInitializationException 根因藏在
+     inner 里，不打印无法定位——本次主题/终端两处崩溃均靠它定位）。
+5. 终端库（Iciclecreek.Avalonia.Terminal 4.1.4→4.1.5，源仓库 d4ead56）：
+   TerminalControl 静态构造 LoadDefaultStyles() 原用 new StyleInclude(uri) 按 URI 动态加载
+   Generic.axaml，AOT 下运行时 XAML 解析器被裁剪 → TypeInitializationException
+   （SSH 连接成功但终端模板不渲染、输入不转发，E2E UI02 失败，且异常被 async 吞掉无日志）。
+   修复：Generic.axaml 根元素加 x:Class="Iciclecreek.Terminal.TerminalGenericStyles"
+   + partial class（global::Avalonia.Markup.Xaml.AvaloniaXamlLoader.Load(this)）；
+   LoadDefaultStyles 改为直接 new TerminalGenericStyles()，兼容识别旧 StyleInclude；
+   csproj 移除重复的 <AvaloniaResource Include="Themes\**"/>（Avalonia SDK 默认已含
+   **/*.axaml，重复包含导致 AVLN2002 Duplicate x:Class）；StylesAndLifecycleTests 2 项
+   同步更新为新类型。库测试 658/658 通过；4.1.5 nupkg 提交至 third_party/，
+   NuGet.config 注释已补记（LF 无 BOM 未动行尾）。
+
+验证（2026-11-05）：
+- 开发机 linux-x64 AOT：构建 exit 0，IL 警告仅剩 3×IL2075（SshConnection/SshSftpFileSystem
+  的 GetMethod 注解流提示，成员保留已由 DynamicDependency 显式保证）；IL2035（程序集名）、
+  IL2026（主题 ResourceInclude）、IL2104（终端库）全部消除。
+  AOT 二进制 E2E **15/15 全 PASS**（APP01/UI01/UI02/SSH 输入/SFTP 传输/Telnet 自动登录/
+  监控重启——AOT 风险路径全覆盖；UI02 在终端库修复前稳定失败，修复后通过）。
+- JIT 全量 gate（最终代码状态）：**20261105T114621Z 全绿**（build/单测 390/App 282/
+  test-list/E2E 15/TestGate 全 PASS）。此前 20261105T111115Z 的 app-tests exit 134 为已知
+  xunit 宿主原生崩溃抖动（274/282 运行、0 失败，单独复跑 282/282 绿），非回归。
+- 终端库 4.1.5 自身套件 658/658 通过（StylesAndLifecycleTests 2 项随实现更新）。
+- VM win-x64 AOT 构建：rc=0，全程 ~2.5min（.NET 10 ILC 提速，2 核 C2D 亦快）；
+  trim 警告与 linux 一致仅 3×IL2075。产物：COMTool.App.exe 68.6MB
+  （SHA256 C61740CB12C9C048300AC4C9FC828A316CA1940EE603923C09C32AEBBC56F253）
+  + libSkiaSharp.dll 11.1MB + av_libglesv2.dll 5.1MB + libHarfBuzzSharp.dll 1.7MB
+  + conpty.dll 0.1MB + x64/arm64 OpenConsole.exe（原生 .pdb 符号约 100MB 已排除）。
+- 部署：C:\Users\devuser\COMTool-Avalonia-AOT\（整目录）+ 桌面快捷方式
+  COMTool-Avalonia-AOT.lnk；r51 R2R 单文件版保留在 C:\Users\devuser\COMTool-Avalonia.exe
+  作对照，两版并存待用户体感后定夺主部署。
+- 实机 --selftest-r51 冷启动 A/B（同口径：清 %TEMP%\.net 自提取缓存后 start /wait；
+  AOT 无自提取，--cold 等效真实冷启动）：
+  | 版本 | 体积 | wall 冷启动 | 进程内 loaded |
+  |---|---|---|---|
+  | r51 V2 R2R+压缩（基线） | 118,512,587 B 单文件 | 1.51 / 2.53 s | 107-169 ms |
+  | r52 AOT win-x64 | exe 68.6MB（部署 ~86MB 多文件） | 0.76 / 0.58 / 0.59 s（3 次） | 58 / 25 / 22 ms |
+  → AOT 全流程 wall 约快 2.6-4.3x，进程内就绪约快 4-7x（无 JIT、无 CLR 初始化、无自提取）。
+- 内存（主窗空闲 6s，WorkingSet）：AOT 167MB（冷）/166MB（热） vs R2R 214MB（冷）/242MB（热），
+  省 47-76MB。
+- 实机功能自检（AOT 二进制）：r47 本地终端（Windows ConPTY）charW/charH 正常、双击整路径
+  选中 OK、IBeam OK；r49 对话框布局 OK（KeyFile 按钮中心差 0.00px、四面板列宽 108）；
+  r50 OPEN/Close 按钮居中 OK；暗色主题 skin=dark 启动 0 错误（ThemeManager 直接实例化在
+  AOT 下验证通过，配置已还原 light）。
+- 残留说明：3×IL2075 为 GetMethod 注解流告警（非裁剪风险，成员保留由 DynamicDependency
+  保证）；AOT 产物非单文件（多文件目录部署）；config.json 中 CJK 存 \uXXXX（source-gen
+  默认转义，往返等价）。
+
 ## 已知偏差（已写入 spec 附录）
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
 2. 热键 .mxtmacros 编码未实测：导出恒 0，导入非 0 忽略+警告
