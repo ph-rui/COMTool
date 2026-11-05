@@ -1232,6 +1232,44 @@ r42 把字号对齐后，用户仍指出一个观感差：**MobaXterm 里中英�
   两类型图标区别分明，与 MobaXterm 对齐。r41 几何顺带复测：grid=118x36 calcCols=118 dpi=1
   （VM 96dpi 下 grid==calcCols，右缘裁切问题本机仍不可复现，继续等用户本机数据）。
 
+### 46 SSH/Telnet 重连成功后状态栏「Restarting...」进度条挂死（2026-11-05，用户报「已经重连成功了，右下角的 restart 进度条一直在显示」+ 截图）
+
+取证：用户截图——左下状态已是 Connected（绿色），右下进度区却挂着不定长「Restarting...」条。
+根因：`MainWindow.RestartSshSessionAsync` / `RestartTelnetSessionAsync` 在尝试开始时置
+`tab.IsRestarting = true`，但**只有 catch 失败分支**清回 false；成功路径（attach 新连接、
+`tab.IsAlive = true`、StatusMessage="Connected..." 之后）、`connection is null` 早退路径
+（用户取消密码框）与连接后守卫 return（tab 已关/已分离）都漏清。状态栏模型层
+`ShowStatusProgress => IsZmodemActive || IsRestarting`，于是重连成功后进度条常驻。
+
+改动（5 处补清标志，均在 MainWindow.axaml.cs）：
+- SSH 成功路径：`tab.TabDotBrush = StatusInfoBrush` 之后 `tab.IsRestarting = false`（用户报障主现场）
+- SSH `connection is null` 路径（取消密码框）：`StatusMessage = "Session stopped"` 处同清
+- SSH 连接后守卫 return（`!_sshRestarts.Contains(tab) || !IsTabOpen(tab) || terminal is null`）：同清
+- Telnet 成功路径 / 守卫 return：同构同病，同样补清
+- catch 分支原有清除保持不变；`LastSshPasswordDialogForTests` 测试接缝（ConnectSshSessionAsync
+  内 ShowDialog 前后置/清，try/finally）供 headless 测试驱动取消密码框路径
+
+测试（TDD 先红后绿）：
+- App 级 `RestartProgressTests.SSH11_RestartProgressClearedWhenAttemptEnds`：经
+  `RestartSshSessionForTests` 驱动真实 R 重启——无 key/密码的会话 → 重启悬停在密码框 →
+  测试点 Cancel → 尝试以 connection==null 结束 → 断言 StatusMessage="Session stopped" 且
+  IsRestarting==false、ShowStatusProgress==false。修复前红（标志残留），修复后绿。
+- 成功路径 headless 不可达（SshConnection 为 sealed + 静态 Connect，需真实 SSH 握手），
+  由实机 `--selftest-r46` 覆盖：打开配置中第一个 SSH 会话（devuser@192.0.2.48）连接成功 →
+  触发一次 RestartSshSessionAsync → 断言完成后 IsRestarting/ShowStatusProgress 已清且
+  StatusMessage 以 Connected 开头。
+- 矩阵 SSH-11 行 Automated 列登记新测试；TestGate 校验。
+- 相邻已知问题（本轮不修，仅记录）：「重连失败」对话框选「继续重试」时，外层 finally 会在
+  重试刚入队时把 tab 从 `_sshRestarts` 集合移除，重试在连接完成后的守卫处静默中止
+  （IsRestarting 已随守卫 return 清除，UI 不再挂死，但不会真正重连）。
+
+验证（2026-11-05）：
+- 过滤测试 RestartProgressTests 4/4 绿（含新项 SSH11_RestartProgressClearedWhenAttemptEnds）；App 全量 275/275（+1 新）。
+- gate 20261105T012419Z 全绿：build/单测 390/App 275（共 665 项）/test-list/E2E 15/TestGate 全 PASS。
+- publish：win-x64 单文件 COMTool.App.exe 155,076,097 B，SHA256 090e3ae577a683fafa3c96c41ce111d179949a1d29439d0f6797b1ad120864a9。
+- deploy：deploy_r3.py 双份部署（C:\Users\devuser\COMTool-Avalonia.exe + 桌面副本）SHA256 均校验 OK。
+- 实机 --selftest-r46：打开 devuser@192.0.2.48 连接成功→触发 R 重启→`[SelfTest] r46: 重启后 IsRestarting=False ShowStatusProgress=False status='Connected devuser@192.0.2.48:22' alive=True => OK`，main-content.png 无 Restarting 进度条。
+
 ## 已知偏差（已写入 spec 附录）
 ### 45 终端鼠标选中自动复制（对齐 MobaXterm，选中即入剪贴板）（2026-11-04，用户「鼠标选中自动复制」+ MobaXterm 选中高亮截图）
 
