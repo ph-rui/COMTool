@@ -332,6 +332,14 @@ public partial class MainWindow : Window
         {
             _ = RunR48SelfTestAsync();
         }
+        // --selftest-r49：实机自检 r49 会话设置对话框布局（Key file 浏览按钮垂直居中 +
+        // TCP「Auto reconnect」标签不再顶到复选框）。打开真实对话框，切 SSH/TCP 面板，
+        // 断言按钮与输入框垂直中心差 ≤1px、四面板标签列宽 ≥100，落盘 r49-ssh-dialog.png /
+        // r49-tcp-dialog.png 供像素级核对。
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r49"))
+        {
+            _ = RunR49SelfTestAsync();
+        }
     }
 
     private void RefreshPorts()
@@ -7478,6 +7486,97 @@ public static class ClipCheck {
         catch (Exception ex)
         {
             AppLog.Error("[SelfTest] r48: 自检异常", ex);
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
+        }
+    }
+
+    /// <summary>
+    /// <c>--selftest-r49</c>：实机自检会话设置对话框布局修复：
+    /// ① SSH Key file 浏览按钮（FontAwesome f141 省略号）与输入框同高且垂直中心对齐；
+    /// ② 四面板标签列宽 ≥100，TCP「Auto reconnect」标签与复选框之间留出空隙。
+    /// 打开真实对话框（不建连），切 SSH/TCP 面板各截一张图。
+    /// </summary>
+    private async Task RunR49SelfTestAsync()
+    {
+        try
+        {
+            AppLog.Info("[SelfTest] r49: 等主窗稳定 1.5s 后打开会话设置对话框验证布局");
+            await Task.Delay(1500);
+            var service = _config ?? AppConfigService.Load();
+            Func<string, TerminalTab?, Task> open = (_, _) => Task.CompletedTask;
+            var dlg = new ConnectionSettingsWindow(service, null, open, open, open, open, _ => Task.CompletedTask);
+            dlg.Show();
+            await Task.Delay(800);
+            UpdateLayout();
+            dlg.UpdateLayout();
+
+            var combo = dlg.FindControl<ComboBox>("ConnectionTypeCombo")!;
+            var ok = true;
+
+            // ── SSH 面板：Key file 行 ──
+            combo.SelectedIndex = 1;
+            await Task.Delay(400);
+            UpdateLayout();
+            dlg.UpdateLayout();
+            var btn = dlg.FindControl<Button>("KeyFileBrowseButton");
+            var box = dlg.FindControl<TextBox>("KeyFileBox");
+            if (btn is null || box is null || btn.Bounds.Height < 1)
+            {
+                AppLog.Error("[SelfTest] r49: KeyFileBrowseButton/KeyFileBox 未找到或未布局");
+                ok = false;
+            }
+            else
+            {
+                var btnC = btn.Bounds.Y + btn.Bounds.Height / 2;
+                var boxC = box.Bounds.Y + box.Bounds.Height / 2;
+                var diff = Math.Abs(btnC - boxC);
+                var sameH = Math.Abs(btn.Bounds.Height - box.Bounds.Height) <= 1.0;
+                ok = ok && diff <= 1.0 && sameH;
+                AppLog.Info($"[SelfTest] r49: SSH KeyFile button=({btn.Bounds.X:F0},{btn.Bounds.Y:F0},{btn.Bounds.Width:F0}x{btn.Bounds.Height:F0}) box=({box.Bounds.X:F0},{box.Bounds.Y:F0},{box.Bounds.Width:F0}x{box.Bounds.Height:F0}) 中心差={diff:F2}px 同高={(sameH ? "OK" : "FAILED")}");
+                AppLog.Info($"[SelfTest] r49: 浏览按钮垂直居中={(diff <= 1.0 && sameH ? "OK" : "FAILED")}（字形 f141，FontAwesome 居中设计）");
+            }
+            SaveVisualPng(dlg, "r49-ssh-dialog.png");
+
+            // ── TCP 面板：Auto reconnect 行 ──
+            combo.SelectedIndex = 3;
+            await Task.Delay(400);
+            UpdateLayout();
+            dlg.UpdateLayout();
+            var widths = new[] { "SerialPanel", "SshPanel", "TelnetPanel", "TcpPanel" }
+                .Select(n => dlg.FindControl<Grid>(n)?.ColumnDefinitions[0].Width.Value ?? 0)
+                .ToArray();
+            var colOk = widths.All(w => w >= 100) && widths.Distinct().Count() == 1;
+            ok = ok && colOk;
+            AppLog.Info($"[SelfTest] r49: 四面板标签列宽={string.Join("/", widths.Select(w => w.ToString("F0")))}（≥100 且一致: {(colOk ? "OK" : "FAILED")}）");
+            var label = dlg.FindControl<TextBlock>("TcpAutoReconnectLabel");
+            var check = dlg.FindControl<CheckBox>("TcpAutoReconnectCheck");
+            if (label is not null && check is not null && label.Bounds.Height > 0)
+            {
+                AppLog.Info($"[SelfTest] r49: TCP AutoReconnect label=({label.Bounds.X:F0},{label.Bounds.Y:F0},{label.Bounds.Width:F0}x{label.Bounds.Height:F0}) checkbox=({check.Bounds.X:F0},{check.Bounds.Y:F0},{check.Bounds.Width:F0}x{check.Bounds.Height:F0})");
+                // 实测标签文字渲染宽度与标签列宽的余量（复现用户「t 顶框」问题：
+                // 旧 86px 列宽下余量仅约 2px；现 108px 列宽下余量应 ≥8px）
+                var probe = new TextBlock { Text = "Auto reconnect" };
+                if (!double.IsNaN(label.FontSize))
+                {
+                    probe.FontSize = label.FontSize;
+                }
+                probe.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                var colW = dlg.FindControl<Grid>("TcpPanel")!.ColumnDefinitions[0].Width.Value;
+                var margin = colW - probe.DesiredSize.Width;
+                ok = ok && margin >= 8;
+                AppLog.Info($"[SelfTest] r49: TCP AutoReconnect 文字实测宽={probe.DesiredSize.Width:F1}px 标签列宽={colW:F0}px 右侧余量={margin:F1}px（≥8px: {(margin >= 8 ? "OK" : "FAILED")}）");
+            }
+            SaveVisualPng(dlg, "r49-tcp-dialog.png");
+
+            dlg.Close();
+            AppLog.Info($"[SelfTest] r49: 自检完成，对话框布局={(ok ? "OK" : "失败")}，退出");
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(ok ? 0 : 2);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("[SelfTest] r49: 自检异常", ex);
             (Application.Current?.ApplicationLifetime
                 as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
         }

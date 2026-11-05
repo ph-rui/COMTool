@@ -24,7 +24,7 @@
             </ComboBox>
 
             <Grid Name="SerialPanel"
-                  ColumnDefinitions="86,*"
+                  ColumnDefinitions="108,*"
                   RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
                   RowSpacing="6">
               <TextBlock Grid.Row="0" Grid.Column="0" Text="Port" VerticalAlignment="Center" />
@@ -80,7 +80,7 @@
             </Grid>
 
             <Grid Name="SshPanel"
-                  ColumnDefinitions="86,*"
+                  ColumnDefinitions="108,*"
                   RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
                   RowSpacing="6"
                   IsVisible="False">
@@ -100,9 +100,18 @@
               <Grid Grid.Row="4" Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="4"
                     Width="155" HorizontalAlignment="Left">
                 <TextBox Name="KeyFileBox" Height="28" />
-                <Button Grid.Column="1" Content="…" Width="30" Height="28"
+                <!-- r49：U+2026「…」贴基线渲染、28px 按钮内偏低约 8px（用户截图）；
+                     改用 FontAwesome 省略号字形 f141（设计在 em 盒垂直中心），与 MobaXterm 一致 -->
+                <Button Grid.Column="1"
+                        Name="KeyFileBrowseButton"
+                        Content="&#xF141;"
+                        FontFamily="{DynamicResource IconFontAwesome}"
+                        FontSize="14"
+                        Width="30"
+                        VerticalAlignment="Stretch"
                         MinWidth="0" Padding="0"
                         HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                        ToolTip.Tip="Browse for SSH key file"
                         Click="OnBrowseKeyClick" />
               </Grid>
 
@@ -132,7 +141,7 @@
             </Grid>
 
             <Grid Name="TelnetPanel"
-                  ColumnDefinitions="86,*"
+                  ColumnDefinitions="108,*"
                   RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
                   RowSpacing="6"
                   IsVisible="False">
@@ -181,7 +190,7 @@
             </Grid>
 
             <Grid Name="TcpPanel"
-                  ColumnDefinitions="86,*"
+                  ColumnDefinitions="108,*"
                   RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
                   RowSpacing="6"
                   IsVisible="False">
