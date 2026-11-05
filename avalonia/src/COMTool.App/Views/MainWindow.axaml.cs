@@ -317,6 +317,13 @@ public partial class MainWindow : Window
         {
             _ = RunR46SelfTestAsync();
         }
+        // --selftest-r47：实机自检 r47 终端鼠标交互（双击整路径选中 + 悬停 IBeam 光标）。
+        // 开一个本地终端写入探测路径行，模拟悬停与双击，核对选区内容与光标类型，
+        // 落盘 main-content.png（含路径选区高亮）。
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r47"))
+        {
+            _ = RunR47SelfTestAsync();
+        }
     }
 
     private void RefreshPorts()
@@ -7286,6 +7293,114 @@ public static class ClipCheck {
         catch (Exception ex)
         {
             AppLog.Error("[SelfTest] r46: 自检异常", ex);
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
+        }
+    }
+
+    /// <summary>
+    /// <c>--selftest-r47</c>：实机自检 MobaXterm 对齐的终端鼠标交互：
+    /// 1) 双击路径选中整条路径（而非仅一个词段）；2) 指针悬停终端显示区域时呈文本型 IBeam。
+    /// 开本地终端写探测路径行，合成悬停+双击，核对选区内容与光标类型，截图留证选区高亮。
+    /// </summary>
+    private async Task RunR47SelfTestAsync()
+    {
+        const string probePath = "/home/devuser/tftp_dir/patent"; // 28 字符，列 0..27
+        try
+        {
+            AppLog.Info("[SelfTest] r47: 等主窗稳定 1.5s 后开本地终端验证双击路径选中与 IBeam 光标");
+            await Task.Delay(1500);
+            if (DataContext is not MainViewModel viewModel)
+            {
+                throw new InvalidOperationException("MainViewModel 未就绪");
+            }
+
+            var terminal = CreateTerminal();
+            var tab = new TerminalTab
+            {
+                Title = "r47-selftest",
+                SessionId = "local:r47selftest",
+                Kind = SessionKind.Local,
+                Content = terminal,
+                Terminal = terminal,
+                IsAlive = true,
+                CloseAction = () => { },
+            };
+            viewModel.AddTab(tab);
+            await Task.Delay(500);
+            UpdateLayout();
+            terminal.Terminal.Write(probePath + "\r\n");
+            await Task.Delay(500);
+            UpdateLayout();
+
+            var view = terminal.GetVisualDescendants()
+                .OfType<Iciclecreek.Terminal.TerminalView>()
+                .FirstOrDefault();
+            if (view is null)
+            {
+                throw new InvalidOperationException("未找到内层 TerminalView");
+            }
+            var charW = view.CharWidth;
+            var charH = view.CharHeight;
+            if (charW <= 0 || charH <= 0)
+            {
+                throw new InvalidOperationException($"终端度量未就绪: charW={charW} charH={charH}");
+            }
+            AppLog.Info($"[SelfTest] r47: charW={charW:0.###} charH={charH:0.###} gutter={view.GutterWidth:0.###} grid={terminal.Terminal.Cols}x{terminal.Terminal.Rows}");
+
+            // 事件位置以窗口（TopLevel）坐标系给出：先算 view 局部坐标再 TranslatePoint 换算
+            // （库内 GetPosition(view) 从 root 坐标换算，直接给 view 局部坐标会整体偏掉 view
+            // 在窗口中的 x 偏移——r45 实机教训）。
+            var win = TopLevel.GetTopLevel(view)!;
+            Point WinPoint(double col, double rowFrac)
+            {
+                var local = new Point(view.GutterWidth + charW * (col + 0.5), charH * rowFrac);
+                return view.TranslatePoint(local, win) ?? local;
+            }
+
+            var pointer = new Pointer(Pointer.GetNextFreeId(), PointerType.Mouse, isPrimary: true);
+            var p0 = WinPoint(8, 0.5); // 路径中段（第 8 列 'g'，devuser 词段内）
+
+            // 1) 悬停：光标应由箭头变为 IBeam
+            view.RaiseEvent(new PointerEventArgs(InputElement.PointerMovedEvent, view, pointer, win,
+                p0, 0,
+                new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.Other),
+                KeyModifiers.None));
+            await Task.Delay(100);
+            var cursorName = view.Cursor?.ToString() ?? "null";
+            bool cursorOk = cursorName == "Ibeam";
+            AppLog.Info($"[SelfTest] r47: 悬停 cursor='{cursorName}' => {(cursorOk ? "OK" : "FAILED")}");
+
+            // 2) 双击路径中段：应选中整条路径
+            var pressProps = new PointerPointProperties(RawInputModifiers.LeftMouseButton, PointerUpdateKind.LeftButtonPressed);
+            view.RaiseEvent(new PointerPressedEventArgs(view, pointer, win,
+                p0, 0, pressProps, KeyModifiers.None, 1)
+            {
+                RoutedEvent = InputElement.PointerPressedEvent,
+            });
+            await Task.Delay(100);
+            view.RaiseEvent(new PointerPressedEventArgs(view, pointer, win,
+                p0, 0, pressProps, KeyModifiers.None, 2)
+            {
+                RoutedEvent = InputElement.PointerPressedEvent,
+            });
+            await Task.Delay(300);
+
+            bool hasSelection = terminal.Terminal.Selection.HasSelection;
+            string? selected = terminal.Terminal.Selection.GetSelectionText();
+            bool selectOk = selected == probePath;
+            AppLog.Info($"[SelfTest] r47: selection={hasSelection} selectedText='{selected}' => {(selectOk ? "OK" : "FAILED")}");
+
+            bool ok = cursorOk && selectOk;
+            UpdateLayout();
+            SaveVisualPng(Content as Visual, "main-content.png");
+            AppLog.Info($"[SelfTest] r47: 自检完成，双击路径选中={(selectOk ? "OK" : "失败")}，IBeam 光标={(cursorOk ? "OK" : "失败")}，退出");
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(ok ? 0 : 2);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("[SelfTest] r47: 自检异常", ex);
             (Application.Current?.ApplicationLifetime
                 as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
         }
