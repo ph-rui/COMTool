@@ -25,7 +25,7 @@ public sealed class AppConfigService
                 return null;
             }
 
-            return JsonSerializer.Deserialize<ComtoolConfig>(File.ReadAllText(path))?.Window;
+            return JsonSerializer.Deserialize<ComtoolConfig>(File.ReadAllText(path), ConfigJsonContext.Default.ComtoolConfig)?.Window;
         }
         catch (Exception ex)
         {

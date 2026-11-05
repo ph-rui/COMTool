@@ -324,12 +324,20 @@ public sealed class SshSftpFileSystem : ISftpFileSystem
         InvokeSessionRequest("RequestRename", oldPath, newPath);
     }
 
+    [System.Diagnostics.CodeAnalysis.DynamicDependency(
+        System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.NonPublicMethods
+        | System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.PublicMethods,
+        "Renci.SshNet.Sftp.SftpSession", "SSH.NET")]
     private void InvokeSessionRequest(string name, params object[] arguments)
     {
         var session = GetSftpSession();
+#pragma warning disable IL2075
+        // r52: 会话类型 SftpSession 为 SSH.NET 内部类型，经 object 流转；
+        // 成员保留由本方法 DynamicDependency 保证
         var method = session?.GetType().GetMethod(
             name,
             BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+#pragma warning restore IL2075
 
         if (session is null || method is null)
         {
@@ -350,6 +358,12 @@ public sealed class SshSftpFileSystem : ISftpFileSystem
     /// <summary>
     /// The session of the sftp client. The library keeps it for itself.
     /// </summary>
+    // r52: AOT 下按名反射 SftpClient 的 SftpSession（非公开）属性与
+    // SftpSession（SSH.NET 内部类型）的请求方法，显式声明依赖。
+    [System.Diagnostics.CodeAnalysis.DynamicDependency(
+        System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.NonPublicProperties
+        | System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.PublicProperties,
+        typeof(SftpClient))]
     private object? GetSftpSession()
     {
         var property = typeof(SftpClient).GetProperty(

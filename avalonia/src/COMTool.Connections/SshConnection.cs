@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using COMTool.Connections.RemoteMonitoring;
 using COMTool.Sftp;
@@ -266,6 +267,10 @@ public sealed class SshConnection : IDisposable, IExecRunner
     private static MethodInfo? _sshBreakMethod;
     private static bool _sshProbeDone;
 
+    // r52：Native AOT 下按名反射 GetField("_channel") 需要显式声明依赖，
+    // 保证 trimmer 保留 ShellStream 的全部字段。
+    [DynamicDependency(DynamicallyAccessedMemberTypes.NonPublicFields | DynamicallyAccessedMemberTypes.PublicFields,
+        typeof(ShellStream))]
     private static void ProbeSshChannelOnce()
     {
         lock (_sshProbeLock)
@@ -308,6 +313,10 @@ public sealed class SshConnection : IDisposable, IExecRunner
     /// 发 SSH 会话信号请求（MobaXterm「特殊命令 → SIGxx」，RFC 4254 §6.5）。
     /// signalName 用协议名（"INT"/"TERM"/"KILL"/"HUP"…）。失败返回 false。
     /// </summary>
+    // r52: AOT 下按名查找 ChannelSession 的公共方法，显式声明依赖保留成员
+    [System.Diagnostics.CodeAnalysis.DynamicDependency(
+        System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.PublicMethods,
+        "Renci.SshNet.Channels.ChannelSession", "SSH.NET")]
     public bool TrySendSignal(string signalName)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
@@ -318,8 +327,11 @@ public sealed class SshConnection : IDisposable, IExecRunner
         }
         if (_sshSignalMethod is null)
         {
+            // r52: 值经 object 流转，注解流无法证明；成员保留由 DynamicDependency 保证
+#pragma warning disable IL2075
             _sshSignalMethod = channel.GetType().GetMethod(
                 "SendSignalRequest", BindingFlags.Public | BindingFlags.Instance);
+#pragma warning restore IL2075
         }
         if (_sshSignalMethod is null)
         {
@@ -339,6 +351,9 @@ public sealed class SshConnection : IDisposable, IExecRunner
     /// 发 SSH break 请求（MobaXterm「特殊命令 → Break」，RFC 4254 §6.7）。
     /// 失败返回 false。
     /// </summary>
+    [System.Diagnostics.CodeAnalysis.DynamicDependency(
+        System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.PublicMethods,
+        "Renci.SshNet.Channels.ChannelSession", "SSH.NET")]
     public bool TrySendBreak(uint durationMs = 250)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
@@ -349,8 +364,10 @@ public sealed class SshConnection : IDisposable, IExecRunner
         }
         if (_sshBreakMethod is null)
         {
+#pragma warning disable IL2075
             _sshBreakMethod = channel.GetType().GetMethod(
                 "SendBreakRequest", BindingFlags.Public | BindingFlags.Instance);
+#pragma warning restore IL2075
         }
         if (_sshBreakMethod is null)
         {

@@ -6,5 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <Deterministic>true</Deterministic>
+    <!-- r52：全工程保持 Native AOT 兼容（PublishAot=true 发布时用；
+         普通构建仅增加 IL 分析告警，不影响行为） -->
+    <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
 </Project>

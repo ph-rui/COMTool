@@ -113,7 +113,7 @@ public sealed class ComtoolConfig
         }
 
         var json = File.ReadAllText(path);
-        var config = JsonSerializer.Deserialize<ComtoolConfig>(json) ?? new ComtoolConfig();
+        var config = JsonSerializer.Deserialize<ComtoolConfig>(json, ConfigJsonContext.Default.ComtoolConfig) ?? new ComtoolConfig();
         if (config.Version != 3)
         {
             var backup = $"{path}.bak.{DateTime.Now:yyyy-MM-dd_HH-mm-ss}.json";
@@ -145,12 +145,7 @@ public sealed class ComtoolConfig
             Directory.CreateDirectory(directory);
         }
 
-        var options = new JsonSerializerOptions
-        {
-            WriteIndented = true,
-            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-        };
-        File.WriteAllText(path, JsonSerializer.Serialize(this, options));
+        File.WriteAllText(path, JsonSerializer.Serialize(this, ConfigJsonContext.Default.ComtoolConfig));
     }
 }
 
