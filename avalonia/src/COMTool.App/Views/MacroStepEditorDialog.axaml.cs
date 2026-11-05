@@ -15,7 +15,7 @@ namespace COMTool.App.Views;
 /// </summary>
 public partial class MacroStepEditorDialog : Window
 {
-    private MacroStepEditorDialog()
+    public MacroStepEditorDialog()
     {
         InitializeComponent();
         foreach (var key in MacroKeys.All)

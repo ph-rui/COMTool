@@ -63,6 +63,16 @@ public static class AppLog
         {
             Write("ERROR", stack);
         }
+        // r52: 打印 InnerException 链——AOT 下 TypeInitializationException 等的
+        // 根因藏在内部异常里，不打印无法定位。
+        for (var inner = exception?.InnerException; inner is not null; inner = inner.InnerException)
+        {
+            Write("ERROR", $"  inner {inner.GetType().FullName}: {inner.Message}");
+            if (inner.StackTrace is { Length: > 0 } innerStack)
+            {
+                Write("ERROR", innerStack);
+            }
+        }
     }
 
     private static void Write(string level, string message)

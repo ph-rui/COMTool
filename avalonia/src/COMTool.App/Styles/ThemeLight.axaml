@@ -1,4 +1,7 @@
-<ResourceDictionary xmlns="https://github.com/avaloniaui"
+<!-- r52: AOT 下动态 ResourceInclude 需要预编译 XAML（x:Class），
+     否则运行时抛 XamlLoadException: No precompiled XAML found。 -->
+<ResourceDictionary x:Class="COMTool.App.Styles.ThemeLight"
+                    x:CompileBindings="True" xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
   <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#f5f5f5" />
   <SolidColorBrush x:Key="WindowTextBrush" Color="#6b6b6b" />

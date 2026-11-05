@@ -1,4 +1,4 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<UserControl x:CompileBindings="True" xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="COMTool.App.Views.SshSessionView">
   <!-- The SFTP browser lives in the left sidebar, so the tab of an SSH

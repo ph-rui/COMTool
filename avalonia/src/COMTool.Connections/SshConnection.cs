@@ -316,7 +316,7 @@ public sealed class SshConnection : IDisposable, IExecRunner
     // r52: AOT 下按名查找 ChannelSession 的公共方法，显式声明依赖保留成员
     [System.Diagnostics.CodeAnalysis.DynamicDependency(
         System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.PublicMethods,
-        "Renci.SshNet.Channels.ChannelSession", "SSH.NET")]
+        "Renci.SshNet.Channels.ChannelSession", "Renci.SshNet")]
     public bool TrySendSignal(string signalName)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
@@ -353,7 +353,7 @@ public sealed class SshConnection : IDisposable, IExecRunner
     /// </summary>
     [System.Diagnostics.CodeAnalysis.DynamicDependency(
         System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.PublicMethods,
-        "Renci.SshNet.Channels.ChannelSession", "SSH.NET")]
+        "Renci.SshNet.Channels.ChannelSession", "Renci.SshNet")]
     public bool TrySendBreak(uint durationMs = 250)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);

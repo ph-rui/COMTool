@@ -22,7 +22,7 @@ public partial class MacroEditorWindow : Window
 {
     private readonly ObservableCollection<MacroStep> _steps = new();
 
-    private MacroEditorWindow()
+    public MacroEditorWindow()
     {
         InitializeComponent();
         StepList.ItemsSource = _steps;

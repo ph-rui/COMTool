@@ -327,7 +327,7 @@ public sealed class SshSftpFileSystem : ISftpFileSystem
     [System.Diagnostics.CodeAnalysis.DynamicDependency(
         System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.NonPublicMethods
         | System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.PublicMethods,
-        "Renci.SshNet.Sftp.SftpSession", "SSH.NET")]
+        "Renci.SshNet.Sftp.SftpSession", "Renci.SshNet")]
     private void InvokeSessionRequest(string name, params object[] arguments)
     {
         var session = GetSftpSession();
