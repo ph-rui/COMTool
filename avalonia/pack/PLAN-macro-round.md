@@ -1460,6 +1460,66 @@ r44 当时为避免彩色图标撞蓝底而让选中态变白，用户反馈后�
   像素复核（r50-dialog.png 380x500 整窗截图）：OPEN 白字质心偏离盒中心 -0.31px、
   Close 白字质心偏离 -0.40px（修复前文字顶在内容框上沿，明显偏上）。
 
+### 51 启动性能优化：R2R + 压缩 + 串口扫描移后台 + 启动耗时自检（2026-11-05，用户「COMTool-Avalonia.exe 运行启动感觉卡卡的，能否优化性能，比如 Native AOT」）
+
+取证（代码审查，未猜）：
+- 单文件自提取：当前部署版 155MB（r50）为**无压缩、含调试符号、无 R2R** 打包——
+  与 README 标准命令（EnableCompressionInSingleFile=true、DebugType=None）及 10-19 原始决策
+  （PublishReadyToRun=true，「以包体积换启动速度」）均不一致，是逐轮 publish 命令漂移所致。
+  r29 曾按 README 标准出过 95MB 压缩包。
+- 启动路径：AppLog 初始化 → MainViewModel+MainWindow 构造（轻）→ OnLoaded：
+  AppConfigService.Load()（含**一次同步串口扫描** GetPortNames+SetupAPI）→ 侧栏/主题/窗口配置
+  → 启动 2s 周期 DispatcherTimer 调 RefreshPorts()（**UI 线程同步串口扫描**，周期性卡 UI，
+  对应用户「运行卡卡的」体感）。
+- WarmUpTerminalFonts 已在 Task.Run 后台预热（不阻塞）。
+
+改动：
+1. 启动计时埋点：新增 Services/StartupClock.cs（T0=Program.Main 首行），App/MainWindow 在
+   framework-init、config-loaded、loaded 三处 Mark；新增 --selftest-r51 自检：打印各阶段耗时、
+   独立串口扫描耗时、进程内总耗时；run_selftest_fontdlg.py 增加外层 wall time 与 --cold
+   （清 %TEMP%\.net\COMTool.App* 自提取缓存，强制完整自提取）——wall − 进程内 = 自提取+CLR。
+2. 串口扫描移后台：RefreshPorts 改 Task.Run 扫描 + Dispatcher.UIThread.Post 应用结果，
+   _portScanBusy 防重入；保留 internal 测试注入点 PortScanOverrideForTests。
+   TDD：StartupPerfTests.PERF01_PortScanDoesNotBlockUiThread 注入 300ms 慢扫描——
+   同步版调用内阻塞（红：耗时≥300ms>100ms 断言），异步版立即返回且结果落地（绿）。
+3. 打包 A/B（代码相同、仅 publish 参数不同，VM 冷启动实测对比）：
+   - V0 基线：单文件、无 R2R、无压缩（=当前部署口径，155MB）。
+   - V1：+ PublishReadyToRun=true（215MB，交叉编译成功，obj 生成 COMTool.App.r2r.dll）。
+   - V2：+ PublishReadyToRun + EnableCompressionInSingleFile + DebugType=None + DebugSymbols=false
+     （118MB，README 标准 + R2R）。
+   选型：（待回填——以 VM 冷启动 wall time 为准，预期 V2 最优：写入量 155→~118MB 且 JIT 被 R2R 跳过）
+
+Native AOT 评估（用户提议，本轮仅评估不实施）：
+- Avalonia 12 官方文档已支持 Native AOT（PublishAot=true + 全工程 IsAotCompatible=true +
+  x:CompileBindings，避免运行时动态 XAML/反射）；社区已有 Avalonia12+net10 单文件 AOT 模板
+  （Avalonia-AOT-SingleFile-Template，用 StaticLink.Avalonia 静态链 Skia/HarfBuzz，win-x64 可出 ~15-30MB 单文件）。
+- 本机（Linux 开发盒）无 clang/LLVM，且 win-x64 AOT 官方建议「在 Windows 上构建」——
+  可行路径：Windows VM（192.0.2.163）装 .NET 10 SDK + LLVM，源码 git bundle 上传后构建。
+- 代码风险点：System.Text.Json（AppConfigService，需 source generator）、Renci.SshNet
+  （AOT 兼容问题常见）、DPAPI P/Invoke、DynamicResource 主题切换、5 个 COMTool.* 库 +
+  第三方库 Iciclecreek.Terminal 均需 IsAotCompatible 并过 trim 警告。
+- 预期收益：无 JIT、无单文件自提取，启动通常 <0.5s，内存占用下降。
+- 结论：建议单列一轮（r52）实施，本轮先用 R2R+压缩+异步扫描拿到量化基线。
+
+验证（2026-11-05，VM 192.0.2.163 冷启动口径：清 %TEMP%\.net 自提取缓存后 `--selftest-r51 --cold`）：
+- App 全量 282/282（含新 PERF01）；gate 20261105T094220Z 全绿：build/单测 390/App 282（共 672 项）/test-list/E2E 15/TestGate 全 PASS。
+  （首轮 gate 093438Z 仅 E2E TELNET01 偶发失败——telnet fixture 抖动家族，单独复跑 TELNET01/02 双 PASS，
+  判环境抖动非回归，复跑 094220Z 全绿。）
+- 打包 A/B 实测（wall total 含自提取+启动+自检退出；loaded = 进程内「侧栏/窗口配置就绪」时刻）：
+  | 变体 | 大小 | wall 冷启动 | 进程内 loaded |
+  |---|---|---|---|
+  | V0 无R2R无压缩（基线） | 155,092,481 B | 2.89s / 2.33s | 434ms / 374ms |
+  | V1 +R2R 无压缩 | 215,505,854 B | （未实测，体积过大弃用） | — |
+  | V2 +R2R+压缩+去调试符号 | 118,512,587 B | 2.53s / 1.52s / 热 1.51s | 169ms / 107ms / 热 123ms |
+  → R2R 把进程内就绪时间砍掉约 2/3（JIT 被跳过），压缩后体积 155→118MB，冷启动写入量下降；
+    串口扫描在 VM 上 0ms（无 USB 串口），用户带 USB 适配器机器上每 2s 的同步扫描是「运行卡卡的」主因，已移后台。
+- 选型 V2：publish SHA256 f68dd95f3611a3d0a8cce8b2b57f4b5cbe62d4e4a179ac142522311af57bdc13，deploy 双份 OK。
+- R2R 构建功能回归：实机 --selftest-r47（本地终端渲染/双击整路径选中/IBeam 光标）全 OK，
+  证明 R2R 产物终端链路无回归。
+- README Publish 段已固化 `-p:PublishReadyToRun=true`（win/linux 两处），防止后续轮次再漂移。
+- Native AOT：未实施（本机无 clang/LLVM；win-x64 AOT 官方建议 Windows 侧构建；代码需全工程
+  IsAotCompatible + JSON source generation + SshNet 兼容处理，工作量单列 r52+ 评估）。
+
 ## 已知偏差（已写入 spec 附录）
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
 2. 热键 .mxtmacros 编码未实测：导出恒 0，导入非 0 忽略+警告

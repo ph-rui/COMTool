@@ -131,7 +131,7 @@
 | PKG-02 | 部分 | - | manual | all | manual | WIN-15 | Wayland 与 AppImage 需要真实桌面会话验证，无法自动化 |
 | PKG-03 | 未开始 | - | manual | all | manual | - | 未开始 |
 | PKG-04 | 部分 | - | manual | all | manual | WIN-08 | Windows/Linux 安装、升级、卸载和保留 Beta 配置需真实桌面安装环境，无法自动化 |
-| PKG-05 | 部分 | - | manual | all | manual | WIN-21 | 包体积和启动时间需真实 Windows/Linux 桌面测量并与性能基线对照，无法自动化 |
+| PKG-05 | 部分 | StartupPerfTests.PERF01_PortScanDoesNotBlockUiThread | verify | all | dotnet test | WIN-21 | 包体积与启动性能：r51 打包改 R2R+压缩+去调试符号（155MB→118MB，恢复 10-19 原始策略），串口扫描（GetPortNames+SetupAPI）移出 UI 线程（2s 定时器周期性卡 UI，用户反馈「运行卡卡的」；PERF01 注入 300ms 慢扫描断言调用不阻塞且结果落地）；新增 `--selftest-r51` 启动阶段计时（StartupClock：framework-init/config-loaded/loaded/进程内总耗时 + 独立串口扫描耗时，自检脚本 --cold 清自提取缓存记 wall time，wall−进程内=自提取+CLR 初始化）；VM 冷启动 A/B 实测数据见 PLAN 51，用户本机最终体感 WIN-21 核对 |
 | PKG-06 | 部分 | - | manual | all | manual | WIN-16 | CI 流水线需在托管 CI 实际运行并核对日志，本地门禁无法自动化 |
 | TST-01 | 完成 | CI01_SerializesCandidateInfo | verify | all | dotnet test | - | 完整套件 388 项通过（Core 47/SFTP 40/Connections 66/Terminal 11/ZMODEM 32/TestGate 49/App 143）；CI01 覆盖 TestGate 候选元数据 |
 | TST-02 | 完成 | TerminalEmulatorTests.MatchesPythonPyteGoldenScreen | verify | all | dotnet test | - | 同一字节流与 Python pyte 0.8.2 的 60x20 屏幕快照一致 |
