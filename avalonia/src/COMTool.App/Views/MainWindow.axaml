@@ -268,9 +268,9 @@
                                   VerticalAlignment="Center"
                                   Spacing="8">
                         <!-- 类型图标（MobaXterm 式：串口=插头 / SSH=钥匙 / Telnet / TCP / 本地），
-                             固定 16px 宽占位，不同字形宽窄不一但标题起点仍对齐。选中 tab 底是
-                             蓝色，彩色会撞色，选中态图标由模型 KindIconBrush 返回白色
-                             （本地绑定优先级高于样式 setter，AppStyles 覆写不生效）。 -->
+                             固定 16px 宽占位，不同字形宽窄不一但标题起点仍对齐。图标颜色恒定
+                             （MobaXterm 行为：选中 tab 只换底色，图标不变色；r48 按用户反馈
+                             撤销 r44 的「选中变白」）。 -->
                         <TextBlock Classes="TabKindIcon"
                                    Text="{Binding KindIconGlyph}"
                                    FontFamily="{DynamicResource IconFontAwesome}"

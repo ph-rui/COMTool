@@ -51,26 +51,20 @@ public sealed class TabKindIconTests
     }
 
     [AvaloniaFact]
-    public void UI05_SelectedTabKindIconTurnsWhite()
+    public void UI05_SelectedTabKeepsKindIconColor()
     {
         using var env = new TestEnvironment();
         env.Run(() =>
         {
-            // 选中 tab 底是蓝 #0f88eb，彩色图标会撞色：KindIconBrush 必须随
-            // IsSelected 切到白色刷，并且要发 KindIconBrush 的变更通知，
-            // 模板里的 Foreground 绑定才会跟着变（本地绑定优先级高于样式
-            // setter，所以这里不能靠 AppStyles 覆写）。
+            // r48：MobaXterm 的选中 tab 只换底色，类型图标保持原色（金色钥匙/绿色插头，
+            // 用户 MobaXterm 截图佐证）；r44 曾实现「选中变白」，用户反馈不符合预期，改回恒定类型色。
             var tab = MakeTab(SessionKind.Ssh);
             var gold = Assert.IsAssignableFrom<ISolidColorBrush>(tab.KindIconBrush);
             Assert.Equal(Color.Parse("#f0b429"), gold.Color);
 
-            var changed = new System.Collections.Generic.List<string>();
-            tab.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
-
             tab.IsSelected = true;
-            Assert.Contains("KindIconBrush", changed);
-            var white = Assert.IsAssignableFrom<ISolidColorBrush>(tab.KindIconBrush);
-            Assert.Equal(Colors.White, white.Color);
+            var stillGold = Assert.IsAssignableFrom<ISolidColorBrush>(tab.KindIconBrush);
+            Assert.Equal(Color.Parse("#f0b429"), stillGold.Color);
 
             tab.IsSelected = false;
             Assert.Equal(Color.Parse("#f0b429"),

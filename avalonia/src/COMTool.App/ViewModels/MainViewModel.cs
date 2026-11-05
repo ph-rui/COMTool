@@ -138,26 +138,22 @@ public sealed partial class TerminalTab : ObservableObject
     };
 
     /// <summary>
-    /// Brush for the kind icon. When the tab is selected its background becomes the blue
-    /// TabSelectedBrush and a coloured icon would clash with it, so the selected tab shows
-    /// a white icon (matching the white title). This is decided here rather than via an
-    /// AppStyles override because the template binds Foreground locally, and a local value
-    /// always outranks a style setter in Avalonia.
+    /// Brush for the kind icon. MobaXterm parity (r48): the icon keeps its type colour in
+    /// EVERY state, selected or not — MobaXterm's selected tab only changes its background,
+    /// the key stays gold and the plug stays green. r44's white-when-selected was reverted
+    /// on user feedback (a white icon lost the type-at-a-glance signal the icon exists for).
     /// </summary>
-    public IBrush KindIconBrush => IsSelected
-        ? TabIconSelectedBrush
-        : Kind switch
-        {
-            SessionKind.Ssh => TabIconSshBrush,
-            SessionKind.Serial => TabIconSerialBrush,
-            SessionKind.Telnet => TabIconTelnetBrush,
-            SessionKind.Tcp => TabIconTcpBrush,
-            _ => TabIconLocalBrush, // Local
-        };
+    public IBrush KindIconBrush => Kind switch
+    {
+        SessionKind.Ssh => TabIconSshBrush,
+        SessionKind.Serial => TabIconSerialBrush,
+        SessionKind.Telnet => TabIconTelnetBrush,
+        SessionKind.Tcp => TabIconTcpBrush,
+        _ => TabIconLocalBrush, // Local
+    };
 
     // Warm gold for the SSH key, matching MobaXterm's; the rest reuse the new-session menu palette.
     private static readonly IBrush TabIconSshBrush = new SolidColorBrush(Color.Parse("#f0b429"));
-    private static readonly IBrush TabIconSelectedBrush = new SolidColorBrush(Color.Parse("#ffffff"));
     private static readonly IBrush TabIconSerialBrush = new SolidColorBrush(Color.Parse("#43a047"));
     private static readonly IBrush TabIconTelnetBrush = new SolidColorBrush(Color.Parse("#00897b"));
     private static readonly IBrush TabIconTcpBrush = new SolidColorBrush(Color.Parse("#f57c00"));
@@ -172,12 +168,6 @@ public sealed partial class TerminalTab : ObservableObject
 
     [ObservableProperty]
     private bool _isSelected;
-
-    // KindIconBrush depends on IsSelected (selected tab -> white icon). The generated
-    // property only notifies IsSelected, so forward a notification for KindIconBrush
-    // here; otherwise the tab icon would keep its colour after being selected.
-    partial void OnIsSelectedChanged(bool value) =>
-        OnPropertyChanged(nameof(KindIconBrush));
 
     [ObservableProperty]
     private bool _isAlive = true;

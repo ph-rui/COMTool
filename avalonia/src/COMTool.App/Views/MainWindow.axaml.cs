@@ -324,6 +324,14 @@ public partial class MainWindow : Window
         {
             _ = RunR47SelfTestAsync();
         }
+        // --selftest-r48：实机自检 r48 标签图标选中态保持类型色（MobaXterm 对齐）。
+        // 开一对假 Serial+SSH tab（SSH 选中），断言选中的 SSH 图标仍是金色、
+        // 未选中串口仍是绿色（r44 曾「选中变白」，用户反馈后 r48 撤销），
+        // 落盘 main-content.png（含标签条）供截图核对。
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r48"))
+        {
+            _ = RunR48SelfTestAsync();
+        }
     }
 
     private void RefreshPorts()
@@ -7401,6 +7409,75 @@ public static class ClipCheck {
         catch (Exception ex)
         {
             AppLog.Error("[SelfTest] r47: 自检异常", ex);
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
+        }
+    }
+
+    /// <summary>
+    /// <c>--selftest-r48</c>：实机自检「标签类型图标选中态保持原色」（MobaXterm 对齐）。
+    /// r44 曾实现选中 tab 图标变白，用户反馈 MobaXterm 选中 tab 只换底色、图标保持
+    /// 类型色（金色钥匙/绿色插头），r48 撤销。开一对假 Serial+SSH tab（SSH 选中），
+    /// 断言两 tab 图标刷颜色均为类型色，落盘 main-content.png 供截图核对。
+    /// </summary>
+    private async Task RunR48SelfTestAsync()
+    {
+        string Hex(Avalonia.Media.IBrush? b) => b is Avalonia.Media.ISolidColorBrush sb
+            ? string.Format("#{0:X2}{1:X2}{2:X2}", sb.Color.R, sb.Color.G, sb.Color.B) : "?";
+        try
+        {
+            AppLog.Info("[SelfTest] r48: 等主窗稳定 1.5s 后开 Serial+SSH tab 验证选中态图标保持类型色");
+            await Task.Delay(1500);
+            if (DataContext is not MainViewModel viewModel)
+            {
+                throw new InvalidOperationException("MainViewModel 未就绪");
+            }
+
+            var t1 = CreateTerminal();
+            var serialTab = new TerminalTab
+            {
+                Title = "COM99",
+                SessionId = "serial:r48selftest",
+                Kind = SessionKind.Serial,
+                Content = t1,
+                Terminal = t1,
+                IsAlive = true,
+                CloseAction = () => { },
+            };
+            var t2 = CreateTerminal();
+            var sshTab = new TerminalTab
+            {
+                Title = "devuser@192.0.2.48",
+                SessionId = "ssh:r48selftest",
+                Kind = SessionKind.Ssh,
+                Content = t2,
+                Terminal = t2,
+                IsAlive = true,
+                CloseAction = () => { },
+            };
+            viewModel.AddTab(serialTab);
+            viewModel.AddTab(sshTab);   // 依次 AddTab：最终 sshTab 被选中、serialTab 未选中
+            await Task.Delay(500);
+            UpdateLayout();
+
+            var serialColor = Hex(serialTab.KindIconBrush);
+            var sshColor = Hex(sshTab.KindIconBrush);
+            bool ok = serialTab.IsSelected == false
+                && sshTab.IsSelected == true
+                && serialColor == "#43A047"   // 串口插头绿
+                && sshColor == "#F0B429";     // SSH 钥匙金（选中态保持金色，不再变白）
+            AppLog.Info($"[SelfTest] r48: Serial glyph=\u201c{serialTab.KindIconGlyph}\u201d color={serialColor} selected={serialTab.IsSelected}");
+            AppLog.Info($"[SelfTest] r48: SSH    glyph=\u201c{sshTab.KindIconGlyph}\u201d color={sshColor} selected={sshTab.IsSelected}");
+            AppLog.Info($"[SelfTest] r48: 选中态图标保持类型色={(ok ? "OK" : "FAILED")}（期望 Serial=#43A047 SSH=#F0B429）");
+
+            SaveVisualPng(Content as Visual, "main-content.png");
+            AppLog.Info($"[SelfTest] r48: 自检完成，选中态图标类型色={(ok ? "OK" : "失败")}，退出");
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(ok ? 0 : 2);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("[SelfTest] r48: 自检异常", ex);
             (Application.Current?.ApplicationLifetime
                 as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
         }
