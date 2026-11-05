@@ -1350,6 +1350,40 @@ col8 选中 `devuser`；`-` 同样断开——ShiftSelectionTests 已有「hyphe
   `[SelfTest] r47: selection=True selectedText='/home/devuser/tftp_dir/patent' => OK`，
   main-content.png 整路径高亮选中（OS 层指针形状需真实鼠标确认，合成事件只改控件 Cursor）。
 
+### 48 标签类型图标选中态保持类型色（对齐 MobaXterm，撤销 r44 的「选中变白」）（2026-11-05，用户「钥匙这个图标会变白色，mobaxterm这种就比较好（图2），串口的也有同样的问题，图标会变白色」+ 两张截图）
+
+取证：用户截图①——COMTool 选中的 SSH tab（蓝底）上钥匙图标变白；截图②（MobaXterm）——
+选中的 tab「2. Linux云桌面」深色底上钥匙仍是**金色**，图标颜色恒定，只有 tab 底色随选中变化。
+r44 当时为避免彩色图标撞蓝底而让选中态变白，用户反馈后确认 MobaXterm 行为才是目标。
+
+改动（COMTool App 模型层，无库改动）：
+- `TerminalTab.KindIconBrush` 不再依赖 IsSelected：任何选中态都返回类型色
+  （SSH 金 #f0b429 / 串口绿 #43a047 / Telnet 青 #00897b / TCP 橙 #f57c00 / 本地灰 #607d8b）；
+  删除 `TabIconSelectedBrush`（白刷）与 `OnIsSelectedChanged` 的 KindIconBrush 转发
+  （brush 不再随选中变化，无需再通知）。
+- 模板注释同步（MainWindow.axaml 标签条 TabKindIcon 注释）。
+- 视觉结果：选中 tab 蓝底 + 金色钥匙 / 绿插头，与 MobaXterm「底色变、图标色不变」一致。
+
+测试（TDD 先红后绿）：
+- `TabKindIconTests.UI05_SelectedTabKindIconTurnsWhite` 改写为
+  `UI05_SelectedTabKeepsKindIconColor`：SSH tab 选中前/选中后/取消选中后 KindIconBrush
+  恒为 #f0b429（改前红：选中时变白）。
+- 矩阵 UI-05 行 Automated 列测试名同步更新。
+- 实机 `--selftest-r48`：开一对假 Serial+SSH tab（SSH 选中），断言 SSH 图标 #F0B429、
+  Serial 图标 #43A047 且选中态正确，落盘 main-content.png 标签条截图。
+
+验证（2026-11-05）：
+- 过滤测试 TabKindIconTests 3/3 绿（含改写项 UI05_SelectedTabKeepsKindIconColor）；App 全量 277/277。
+- gate 20261105T025433Z 全绿：build/单测 390/App 277（共 667 项）/test-list/E2E 15/TestGate 全 PASS。
+  （首轮 gate 024845Z 遇 app-tests 宿主 exit 139 原生崩溃（213 项已跑 0 失败），单独复跑 277/277 恢复，
+  判定为环境抖动非代码回归，与 r45/r46 记录一致。）
+- publish：win-x64 单文件 COMTool.App.exe 155,084,289 B，
+  SHA256 eccbba01839453d7a7bd18fd3fdaa6ed6836568c74e5ce8c0d61e1c3e31dd74a。
+- deploy：deploy_r3.py 双份部署（C:\Users\devuser\COMTool-Avalonia.exe + 桌面副本）SHA256 均校验 OK。
+- 实机 --selftest-r48：`Serial color=#43A047 selected=False`、`SSH color=#F0B429 selected=True`
+  →「选中态图标保持类型色=OK」；main-content.png 标签条截图：选中 SSH tab（蓝底）钥匙为金色，
+  与 MobaXterm 截图一致。
+
 ## 已知偏差（已写入 spec 附录）
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
 2. 热键 .mxtmacros 编码未实测：导出恒 0，导入非 0 忽略+警告
