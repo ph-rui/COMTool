@@ -32,7 +32,7 @@
 | ID | 功能 | 优先级 | 状态 | 验收要点 |
 |---|---|---|---|---|
 | TERM-01 | ANSI/VT100 基础序列 | P0 | 完成 | 换行、自动换行、制表、清行/清屏、光标定位与滚动均由 pyte 对照 golden 测试覆盖；r41 增字符保真探针（远端 zh_CN.UTF-8 下 ls 对含空格文件名的单引号与 CJK 文本，经 XTerm.NET 解析层及真实 AttachConnection 读路径（含/不含 Zmodem）不丢失，回归实机「引号丢失」疑云） |
-| TERM-02 | 256 色/真彩色 | P0 | 完成 | 256 色调色板与前景/背景实测通过；基础 16 色改为 Python 主题（blue `#2196f3`、bright blue `#6cb6ff`），ANSI 蓝/亮蓝在 `#212121` 背景上的 WCAG 对比度分别为 5.15/7.49，避免提示符和目录名近乎不可读；Windows 实测见 `docs/fixtures/phase1/terminal-palette-windows-1280x800.png` |
+| TERM-02 | 256 色/真彩色 | P0 | 完成 | 256 色调色板与前景/背景实测通过；基础 16 色 r54 改为 MobaXterm v22.1 默认调色板 1:1（ini [Colors]+实机截图双重取证：背景 `#1c1c1c`、前景 `#ececec`、光标 `#b4b4c0`、blue `#6060ff`、bright blue `#8080ff`），ANSI 蓝/亮蓝在 `#1c1c1c` 背景上的 WCAG 对比度分别为 3.74/5.23（蓝 3.74:1 为 MobaXterm 自身默认值，阈值放宽 ≥3.5；亮蓝保持 ≥4.5） |
 | TERM-03 | 自动换行、窗口 resize | P0 | 完成 | 窗口 resize 后 `stty size` 同步变化 |
 | TERM-04 | 滚动回看 | P0 | 完成 | 历史缓冲、滚轮/PageUp/PageDown 已实现；滚动条按 Python 隐藏 |
 | TERM-05 | 选择与复制 | P0 | 完成 | 左键拖选、右键复制、高亮已验证 |
@@ -120,6 +120,7 @@
 | SFTP-06 | 符号链接与递归限制 | P2 | 完成 | 默认跟随链接并可关闭；递归上限 16 层与 100000 个文件，跳过的文件逐个记入结果 |
 | SFTP-07 | 进度、取消与错误 | P1 | 完成 | 进度显示文件数与字节总量；取消删除未完成的文件；一个文件失败不终止队列，状态行给出原因并保留可重试 |
 | SFTP-08 | Windows 实机 SFTP 与视觉 | P2 | 部分 | 见 WIN-23 |
+| SFTP-09 | SSH 连接成功自动打开 SFTP 浏览器 | P1 | 完成 | MobaXterm AutoStartSSHGUI=1 行为：SSH 连上后左侧立即出现该会话的图形 SFTP 浏览器（无需手动点地球图标）；r54 起 OpenSshSessionAsync 连接成功后（AddTab+UpdateConnectionStates 后）调 OpenSshBrowserFor：选中该 tab、侧栏切浏览器页并显示、SFTP 面板展开；非 SSH/未连接/无 pane no-op；手动地球点击开/关语义不变 |
 
 ## 7. TCP/UDP
 

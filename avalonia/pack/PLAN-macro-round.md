@@ -1676,6 +1676,100 @@ C:\Users\devuser\COMTool-Avalonia-AOT\）：
 COMTool-Avalonia-AOT）下用同一 opencode TUI 复测并回传新截图；若仍见偏差，
 跑 `COMTool.App.exe --selftest-r53` 回传 run.log + r53-terminal.png 精确定位。
 
+### 54 MobaXterm 1:1 复刻三项：连字符路径双击整选 / 主题 1:1 / SSH 自动开 SFTP（2026-11-06，用户批准「可以」+ 1920×1033 MobaXterm 参照截图）
+
+三项需求（用户原话）：
+1. 双击 `/home/kami/nxp/yocto_imx-6.18.20-2.0.0` 选不中整条（MobaXterm 能整条选中）
+2. COMTool 主题做成跟 MobaXterm 一模一样
+3. SSH 连上后自动打开 SFTP 浏览器（AutoStartSSHGUI=1 行为）
+
+**① 连字符路径双击整选（库 4.1.6）**
+- 根因：库 `TerminalView.Mouse.cs` `IsPathCell` 字符集缺 `-`，含连字符的路径在每个 `-` 处断开，双击落在版本段只选到片段（如 "6.18.20"）
+- 修复：字符集补 `-`（`'_' or '/' or '.' or '~' or '-'`）。普通连字符词（无 `/ . ~`）仍走核心词扩展，行为不变
+- 红测：选区只到 "6.18.20" → 修复后整条路径；库全量 660 通过 / 9 跳过（mac 平台用例）/ 0 失败
+- 库提交 main `0302c30`（未 push，沿 r53 惯例）；nupkg 4.1.6 入 `third_party/iciclecreek/`，csproj/NuGet.config 同步
+
+**② 主题 1:1（仅浅色皮肤，用户 skin=light；深色无参照保持原样只补齐新资源键）**
+取色依据（三重取证）：
+- 用户 1920×1033 MobaXterm 参照截图（`/tmp/opencode/r54-ref-thumb.png`、`r54-tabstrip-4x.png`）逐像素采样
+- 用户 `MobaXterm.ini` [Colors] 段（LastSession 串：前景 236,236,236 / 光标 180,180,192 / 16 色标准值）
+- VM 实机双 tab 实验（`r54-moba2c-full.png` 1920×1080，两个不同 ssh 目标强制出第二 tab）
+
+| 元素 | 取值 | 证据 |
+|---|---|---|
+| 标题栏 | 白底黑字，hover #e5e5e5，关闭 hover #e81123+白字形 | 参照图 |
+| tab 条底 | 白 + 下沿 1px #8b99a8 | 参照图 y114 |
+| 选中 tab | 竖向渐变 #4d4d4d→#1f1f1f + 白字 | 参照图 x600 垂直剖面 + 双 tab 实验 x600 剖面（#4d4d4d→#1f1f1f 逐行吻合） |
+| 未选中 tab | 白底 + #b4b4b4 细边 + 深字 | 参照图 Home tab（x440-490 众数 #b4b4b4；双 tab 实验 v25.2 为 #d9d9d9，取用户 v22.1 值） |
+| 状态栏 | #f0f0f0 黑字 | 参照图 y1019 段采样 |
+| 监控图标 | 主机 #000000 / **CPU #4aaf4f / RAM #4aaf4f（绿）** / 上 #ab6000 / 下 #ff6400 / 磁盘 #009588 / uptime #009588 / 热分区 #ff6400 | 初版整屏分桶采样误将 CPU 判 #363687、RAM 判 #600060；2026-11-06 用户 248×30 状态栏局部裁剪图（图1=MobaXterm）权威实测：CPU/RAM 图标主体同为绿 #4aaf4f，已改并加 RM06 取值断言锁死。CPU 条列色 #2e9e4f 属 MainViewModel 逻辑色，不动 |
+| 内容框 | 间隙 4px（原 9px）、直角（原 3px 圆角）、底=窗口底色 | 参照图 x500/x1000 边界剖面 |
+| 终端 | 底 #1c1c1c（ini 写 0,0,0 但屏上实测 #1c1c1c，实测优先）/ 前景 #ececec / 光标 #b4b4c0 | ini + 屏上实测 |
+| 16 色 | 000000/ff6060/60ff60/ffff36/6060ff/ff36ff/36ffff/ececec + 363636/ff8080/80ff80/ffff80/8080ff/ff80ff/80ffff/ffffff | ini [Colors] |
+
+改动面：`ThemeLight.axaml`（全量浅色新配色）、`ThemeDark.axaml`（补 9 个新键）、`AppStyles.axaml`（tab 边框/渐变/✕ 按钮/hover）、`MainWindow.axaml`（✕ 改 TextBlock、TabStripLine、内容框、状态栏 Name="StatusBar"、MonSeg 图标资源化）、`TerminalTheme.cs`（`CreatePythonTheme`→`CreateMobaXtermTheme`，2 个调用点同步）。布局不变（tab 高 36px 保 E2E 坐标、不加 MobaXterm 菜单栏/工具栏），仅颜色/样式 1:1。
+WCAG：MobaXterm 默认蓝 #6060ff 对 #1c1c1c 仅 3.74:1（其默认值）→ TERM02 蓝阈值 4.5 放宽至 3.5，亮蓝仍 ≥4.5（实测 5.23）。
+
+**③ SSH 自动开 SFTP 浏览器（AutoStartSSHGUI=1）**
+- 提取 `internal void MainWindow.OpenSshBrowserFor(TerminalTab tab)`（非 SSH/未连接/无 pane 均 no-op；选中 tab→SidebarTab=SshBrowser→显示侧栏）
+- `OpenSshSessionAsync` 在 AddTab+UpdateConnectionStates 后调用（~L1083）；`OnSshBrowserRequested`（手动地球点击）委托给它，手动开/关语义不变
+
+**实机自检 `--selftest-r54`**（三段断言，落盘 `r54-theme.png`，退出码 0/2）：
+1. 本地终端写用户实路径、双击 "18" 列 → 断言选区 == 整条路径
+2. 真实 SSH（config 第一个会话，90s 超时）→ 断言 SidebarTab==SshBrowser && IsSidebarVisible && SelectedTab==sshTab && SftpPane.IsExpanded
+3. 读计算后刷值断言（标题栏/状态栏/tab 渐变与未选中/终端色）
+
+**VM 实验备注（需在用户汇报中说明）**：为取未选中 tab 颜色，曾以 schtasks /IT 交互任务启动 MobaXterm 双 tab（127.0.0.1 + 192.0.2.163），实验结束 taskkill 时杀掉了**用户正在使用的 MobaXterm 实例**（192.0.2.48 会话断开）；`MobaXterm.ini` 已从 `.bak-r54` 还原，临时脚本/截图已清理。
+
+**测试**（全绿）：
+- 新增 `SshBrowserAutoOpenTests` 3 项（自动打开/非 SSH no-op/手动 rail 收合不变）
+- `TerminalPaletteTests.TERM02_BaseAnsiPaletteMatchesMobaXtermDefaultAndKeepsPromptContrast`（旧名 `...MatchesPythonAndPromptTextKeepsContrast` 更名，矩阵同步）
+- `RemoteMonitorFeatureTests.RM06` 图标断言改走新资源（MonCpuIconBrush 等），并补 CPU/RAM = #4aaf4f 取值断言（防回退到初版误采样值）
+- App 测试 286/286 通过
+
+**验证**：
+- 全量 gate（终版 20261106T060950Z 全绿）：restore/build 通过；单测
+  Core 90 / Sftp 42 / Terminal 27 / Connections 150 / Zmodem 32 / TestGate 49，
+  App 测试 286/286（含新 SshBrowserAutoOpenTests 3 项、TERM02 更名后用例、
+  RM06 新资源色断言 + CPU/RAM 绿 #4aaf4f 取值断言），E2E 全 PASS，TestGate
+  校验含新 SFTP-09 行与 TERM-02 新测试名。060439Z 一次 app-tests 出现
+  xunit 宿主 exit 134（跑到 236/286、0 失败后进程崩溃），复跑 060950Z 全绿，
+  判环境抖动非回归（r51 TELNET01 同族先例）。
+- VM win-x64 双份部署 + SHA256（终版 2026-11-06 14:07，源码 1ea5935）：
+  - R2R 单文件 `C:\Users\devuser\COMTool-Avalonia.exe`：118,789,308 字节，
+    SHA256 `99ffdca0821db413da11e7e30f0cf4f9d6d9fef35eded37d940619b23b03a914`。
+  - AOT 目录 `C:\Users\devuser\COMTool-Avalonia-AOT\COMTool.App.exe`
+    （bundle 克隆构建，publish rc=0）：SHA256
+    `b79eed53e1a4f6d2c85c4446e23ecb75b3dbf32777c9b2866f4541ce1cf9d045`。
+  - 注：11:26 首轮部署（R2R 6f8444ca / AOT 316da998）早于 CPU/RAM 图标改绿，
+    14:07 已用含绿改动的构建整体替换。
+- `--selftest-r54` 实机（AOT 构建，真实 SSH devuser@192.0.2.48:22，终版
+  wall 7.3s）：
+  - ① 双击 `/home/kami/nxp/yocto_imx-6.18.20-2.0.0` 选区=整条路径 OK
+    （charW=7.422 charH=15.807 grid=128x40）。
+  - ② 连接成功 status='Connected devuser@192.0.2.48:22'，SidebarTab=SshBrowser、
+    sidebarVisible=True、paneExpanded=True OK（AutoStartSSHGUI 行为实机生效）。
+  - ③ 标题栏 #FFFFFF / 状态栏 #F0F0F0 / 选中 tab 渐变 #4D4D4D→#1F1F1F /
+    选中 tab 标题 #FFFFFF / 未选中 tab 底 #FFFFFF 边 #B4B4B4 / 终端底 #1C1C1C /
+    前景 #ECECEC / 光标 #B4B4C0 / 蓝 #6060FF 全 OK，落盘 r54-theme.png。
+  - 三项均 OK，退出码 0。AOT 首测 ③ 曾因 XAML 字面色编译为
+    ImmutableSolidColorBrush 误读为 #000000，自检改 BrushColor 兼容读取后通过
+    （渲染本身一直正确，像素取证为白字）。
+- CPU/RAM 图标绿（#4aaf4f）实机证据：终版 r54-theme.png 状态栏像素取证
+  RAM 图标 = #4aaf4f（27 纯绿像素 + 抗锯齿）；CPU 段需 SSH 监控满两个采样
+  间隔（~4s）才出现，自检截图时刻未及，与 RAM 同走 DynamicResource 机制、
+  RM06 已锁双图标 = #4aaf4f。
+
+**用户反馈回环（2026-11-06 14:xx）**：用户反馈「颜色没改」——其本地 PC 桌面
+的 `COMTool-Avalonia.exe` 为上一轮旧拷贝（蓝/紫图标），本流程无该机器访问权；
+VM 侧 11:26 部署亦早于改绿提交。14:07 双份重部署后用户本地需自行替换/删除
+（SFTP 拉 VM 单文件替换桌面旧 exe，或直接删本地旧件改用 VM AOT 版）。
+
+**遗留**：
+- 用户本地 PC 桌面的旧 `COMTool-Avalonia.exe` 与 Python 版 `COMTool` 在流程无
+  访问权的机器上，由用户自行删除/替换（新单文件 SHA256 见上）。
+- 库仓库 main 领先 origin/main 5 提交未 push（沿 r53 惯例，待用户确认）。
+
 ## 已知偏差（已写入 spec 附录）
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
 2. 热键 .mxtmacros 编码未实测：导出恒 0，导入非 0 忽略+警告
