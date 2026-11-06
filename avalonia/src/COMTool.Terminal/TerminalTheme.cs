@@ -3,37 +3,41 @@ using XTerm.Options;
 namespace COMTool.Terminal;
 
 /// <summary>
-/// Terminal colors are kept in sync with the Python reference terminal
-/// (COMTool/plugins/terminal.py). The base 16 ANSI colors are deliberately
-/// explicit: XTerm.NET's stock palette uses very dark blue values that are
-/// almost unreadable on the dark terminal background.
+/// Terminal colors are 1:1 with the user's MobaXterm v22.1 (light skin), as
+/// recorded in its MobaXterm.ini [Colors] section and verified against a
+/// full-screen capture (r54): background #1c1c1c (measured on screen; the
+/// ini's BackgroundColour=0,0,0 is the raw setting but the rendered surface
+/// is #1c1c1c), foreground #ececec, cursor #b4b4c0. The base 16 ANSI colors
+/// are MobaXterm's defaults (e.g. blue #6060ff), NOT XTerm.NET's stock
+/// palette (whose near-black blues are unreadable) and NOT the old Python
+/// reference theme (superseded in r54 by the MobaXterm 1:1 parity goal).
 /// </summary>
 public static class TerminalTheme
 {
-    public const string Background = "#212121";
-    public const string Foreground = "#ffffff";
-    public const string Cursor = "#4caf50";
+    public const string Background = "#1c1c1c";
+    public const string Foreground = "#ececec";
+    public const string Cursor = "#b4b4c0";
 
-    public static ThemeOptions CreatePythonTheme() => new()
+    public static ThemeOptions CreateMobaXtermTheme() => new()
     {
         Background = Background,
         Foreground = Foreground,
         Cursor = Cursor,
-        Black = "#212121",
-        Red = "#f44336",
-        Green = "#4caf50",
-        Yellow = "#a1887f",
-        Blue = "#2196f3",
-        Magenta = "#e85aad",
-        Cyan = "#26c6da",
-        White = "#cacaca",
-        BrightBlack = "#666666",
-        BrightRed = "#ff6b6b",
-        BrightGreen = "#7ee787",
-        BrightYellow = "#ffff66",
-        BrightBlue = "#6cb6ff",
-        BrightMagenta = "#ff7cd6",
-        BrightCyan = "#66e0ff",
+        Black = "#000000",
+        Red = "#ff6060",
+        Green = "#60ff60",
+        Yellow = "#ffff36",
+        Blue = "#6060ff",
+        Magenta = "#ff36ff",
+        Cyan = "#36ffff",
+        White = "#ececec",
+        BrightBlack = "#363636",
+        BrightRed = "#ff8080",
+        BrightGreen = "#80ff80",
+        BrightYellow = "#ffff80",
+        BrightBlue = "#8080ff",
+        BrightMagenta = "#ff80ff",
+        BrightCyan = "#80ffff",
         BrightWhite = "#ffffff",
     };
 }

@@ -695,9 +695,11 @@ run_sftp01_browser_transfer() {
 
     log "Running $test_id"
 
-    # The browser of a new SSH tab stays closed. The orange globe of the
-    # left rail opens it in the sidebar, and only then does the app ask
-    # the server for the sftp subsystem.
+    # r54: a connected SSH tab opens its SFTP browser automatically
+    # (MobaXterm AutoStartSSHGUI=1), so the sidebar starts expanded. The
+    # collapse below normalizes the tab-strip position either way; the globe
+    # click then re-opens the browser, and only then does the app ask the
+    # server for the sftp subsystem.
     ensure_first_shell "$test_id"
 
     # Keep the tab strip at its stable collapsed-panel position before the

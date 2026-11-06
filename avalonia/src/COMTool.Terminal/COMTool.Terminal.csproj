@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Iciclecreek.Avalonia.Terminal" Version="4.1.5" />
+    <PackageReference Include="Iciclecreek.Avalonia.Terminal" Version="4.1.6" />
   </ItemGroup>
 
 </Project>

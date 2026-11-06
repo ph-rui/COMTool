@@ -25,8 +25,13 @@
   <SolidColorBrush x:Key="SidebarRailActiveBrush" Color="#3a3a3a" />
   <SolidColorBrush x:Key="SidebarGroupHeaderBrush" Color="#333333" />
   <SolidColorBrush x:Key="TabBarBackgroundBrush" Color="#2b2b2b" />
+  <SolidColorBrush x:Key="TabUnselectedBackgroundBrush" Color="#2b2b2b" />
+  <SolidColorBrush x:Key="TabUnselectedBorderBrush" Color="#404040" />
+  <SolidColorBrush x:Key="TabSelectedBorderBrush" Color="#0f88eb" />
   <SolidColorBrush x:Key="TabSelectedBrush" Color="#0f88eb" />
   <SolidColorBrush x:Key="TabForegroundBrush" Color="#0f88eb" />
+  <SolidColorBrush x:Key="TabStripLineBrush" Color="#3a3a3a" />
+  <SolidColorBrush x:Key="StatusBarBackgroundBrush" Color="#212121" />
 
   <!-- 远程监控状态栏分段盒子（暗色主题）。 -->
   <SolidColorBrush x:Key="MonSegBackgroundBrush" Color="#2b2b2b" />
@@ -35,6 +40,10 @@
   <SolidColorBrush x:Key="MonCpuBarTrackBrush" Color="#111111" />
   <!-- 分段图标配色（暗色主题）。 -->
   <SolidColorBrush x:Key="MonIconDarkBrush" Color="#d8d8d8" />
+  <SolidColorBrush x:Key="MonCpuIconBrush" Color="#2e9e4f" />
+  <SolidColorBrush x:Key="MonRamIconBrush" Color="#2e9e4f" />
+  <SolidColorBrush x:Key="MonNetUpIconBrush" Color="#2e9e4f" />
+  <SolidColorBrush x:Key="MonNetDownIconBrush" Color="#2f7ed8" />
   <SolidColorBrush x:Key="MonIconDiskBrush" Color="#9aa5b1" />
   <SolidColorBrush x:Key="MonIconUptimeBrush" Color="#6fc39a" />
   <SolidColorBrush x:Key="MonSegHotBrush" Color="#ff8a3d" />

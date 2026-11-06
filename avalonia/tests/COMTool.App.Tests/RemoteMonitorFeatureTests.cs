@@ -750,18 +750,21 @@ public sealed class RemoteMonitorFeatureTests
             Assert.Null(window.FindControl<Border>("MonSegFds"));
             Assert.Null(window.FindControl<Border>("MonSegUsers"));
 
-            // 图标码位与配色必须与参考图一致：主机深灰，CPU/内存/上传绿，
-            // 下载蓝，运行时长灰绿，磁盘灰蓝。
+            // 图标码位与配色按 MobaXterm 实机状态栏采样（r54 1:1）：主机黑、
+            // CPU/RAM 绿（#4aaf4f，用户局部裁剪图实测）、上行深橙、下行亮橙、运行时长青。
+            // 取值断言走资源键，颜色调整时测试自动跟随。
             var dark = ResourceColor(window, "MonIconDarkBrush");
             var uptime = ResourceColor(window, "MonIconUptimeBrush");
-            var green = Color.Parse("#2e9e4f");
-            var blue = Color.Parse("#2f7ed8");
+            var cpu = ResourceColor(window, "MonCpuIconBrush");
+            var ram = ResourceColor(window, "MonRamIconBrush");
+            var netUp = ResourceColor(window, "MonNetUpIconBrush");
+            var netDown = ResourceColor(window, "MonNetDownIconBrush");
 
             AssertIcon(window, "MonSegHost", '\uF108', dark);
-            AssertIcon(window, "MonSegCpu", '\uF2DB', green);
-            AssertIcon(window, "MonSegRam", '\uF538', green);
-            AssertIcon(window, "MonSegNetUp", '\uF093', green);
-            AssertIcon(window, "MonSegNetDown", '\uF019', blue);
+            AssertIcon(window, "MonSegCpu", '\uF2DB', cpu);
+            AssertIcon(window, "MonSegRam", '\uF538', ram);
+            AssertIcon(window, "MonSegNetUp", '\uF093', netUp);
+            AssertIcon(window, "MonSegNetDown", '\uF019', netDown);
             AssertIcon(window, "MonSegUptime", '\uF017', uptime);
 
             // CPU 条是 28 列的时间序列（示波器 roll），不是单条静态填充。

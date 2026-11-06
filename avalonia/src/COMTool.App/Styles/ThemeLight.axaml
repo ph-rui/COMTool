@@ -3,18 +3,21 @@
 <ResourceDictionary x:Class="COMTool.App.Styles.ThemeLight"
                     x:CompileBindings="True" xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-  <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#f5f5f5" />
-  <SolidColorBrush x:Key="WindowTextBrush" Color="#6b6b6b" />
-  <SolidColorBrush x:Key="TitleBarBackgroundBrush" Color="#0b1722" />
-  <SolidColorBrush x:Key="TitleBarForegroundBrush" Color="#ffffff" />
-  <SolidColorBrush x:Key="TitleBarHoverBrush" Color="#273b4e" />
-  <SolidColorBrush x:Key="MinimizeHoverBrush" Color="#2ba13e" />
-  <SolidColorBrush x:Key="MaximizeHoverBrush" Color="#cf9001" />
-  <SolidColorBrush x:Key="CloseHoverBrush" Color="#df2f25" />
-  <SolidColorBrush x:Key="AccentBrush" Color="#0f88eb" />
-  <SolidColorBrush x:Key="AccentHoverBrush" Color="#0772ca" />
-  <SolidColorBrush x:Key="SidebarTitleBrush" Color="#37474f" />
-  <SolidColorBrush x:Key="SidebarBorderBrush" Color="#cfd8dc" />
+  <!-- r54: 浅色皮肤按 MobaXterm v22.1 实机截图 1:1 取色（用户 1920x1033 全屏参照图 +
+       其 MobaXterm.ini [Colors] 段）：白色 chrome、黑字、深灰 tab、#1c1c1c 终端、
+       #f0f0f0 状态栏。 -->
+  <SolidColorBrush x:Key="WindowBackgroundBrush" Color="#ffffff" />
+  <SolidColorBrush x:Key="WindowTextBrush" Color="#1c1c1c" />
+  <SolidColorBrush x:Key="TitleBarBackgroundBrush" Color="#ffffff" />
+  <SolidColorBrush x:Key="TitleBarForegroundBrush" Color="#000000" />
+  <SolidColorBrush x:Key="TitleBarHoverBrush" Color="#e5e5e5" />
+  <SolidColorBrush x:Key="MinimizeHoverBrush" Color="#e5e5e5" />
+  <SolidColorBrush x:Key="MaximizeHoverBrush" Color="#e5e5e5" />
+  <SolidColorBrush x:Key="CloseHoverBrush" Color="#e81123" />
+  <SolidColorBrush x:Key="AccentBrush" Color="#1e95f4" />
+  <SolidColorBrush x:Key="AccentHoverBrush" Color="#1a7fd4" />
+  <SolidColorBrush x:Key="SidebarTitleBrush" Color="#1c1c1c" />
+  <SolidColorBrush x:Key="SidebarBorderBrush" Color="#b4b4b4" />
   <SolidColorBrush x:Key="SidebarListBackgroundBrush" Color="#ffffff" />
   <SolidColorBrush x:Key="SidebarSectionBrush" Color="#607d8b" />
   <SolidColorBrush x:Key="SessionNameBrush" Color="#263238" />
@@ -24,21 +27,39 @@
   <SolidColorBrush x:Key="SidebarRailBackgroundBrush" Color="#e6e6e6" />
   <SolidColorBrush x:Key="SidebarRailActiveBrush" Color="#ffffff" />
   <SolidColorBrush x:Key="SidebarGroupHeaderBrush" Color="#eeeeee" />
-  <SolidColorBrush x:Key="TabBarBackgroundBrush" Color="#e6e6e6" />
-  <SolidColorBrush x:Key="TabSelectedBrush" Color="#0f88eb" />
-  <SolidColorBrush x:Key="TabForegroundBrush" Color="#0f88eb" />
+  <!-- 标签条（MobaXterm 实机参照）：白条底色；选中 tab 是深灰竖向渐变 + 白字，
+       未选中 tab 白底 + #b4b4b4 细边 + 深字。tab 条下沿一条 #8b99a8 分隔线。 -->
+  <SolidColorBrush x:Key="TabBarBackgroundBrush" Color="#ffffff" />
+  <SolidColorBrush x:Key="TabUnselectedBackgroundBrush" Color="#ffffff" />
+  <SolidColorBrush x:Key="TabUnselectedBorderBrush" Color="#b4b4b4" />
+  <SolidColorBrush x:Key="TabSelectedBorderBrush" Color="#1f1f1f" />
+  <LinearGradientBrush x:Key="TabSelectedBrush" StartPoint="0,0" EndPoint="0,1">
+    <GradientStop Offset="0" Color="#4d4d4d" />
+    <GradientStop Offset="1" Color="#1f1f1f" />
+  </LinearGradientBrush>
+  <SolidColorBrush x:Key="TabForegroundBrush" Color="#1c1c1c" />
+  <SolidColorBrush x:Key="TabStripLineBrush" Color="#8b99a8" />
+
+  <!-- 状态栏：MobaXterm 实机底 #f0f0f0、黑字、指标色取截图采样值。 -->
+  <SolidColorBrush x:Key="StatusBarBackgroundBrush" Color="#f0f0f0" />
 
   <!-- 远程监控状态栏分段盒子（MobaXterm 风格：浅灰条上的白色小格）。 -->
   <SolidColorBrush x:Key="MonSegBackgroundBrush" Color="#ffffff" />
-  <SolidColorBrush x:Key="MonSegBorderBrush" Color="#cfd8dc" />
+  <SolidColorBrush x:Key="MonSegBorderBrush" Color="#b4b4b4" />
   <SolidColorBrush x:Key="MonIconBrush" Color="#5f6368" />
   <SolidColorBrush x:Key="MonCpuBarTrackBrush" Color="#1f1f1f" />
-  <!-- 分段图标配色（对齐 MobaXterm 状态栏：主机/用户深灰、磁盘灰蓝、运行时长灰绿）。 -->
-  <SolidColorBrush x:Key="MonIconDarkBrush" Color="#3d3d3d" />
-  <SolidColorBrush x:Key="MonIconDiskBrush" Color="#5b6b7b" />
-  <SolidColorBrush x:Key="MonIconUptimeBrush" Color="#3f7f63" />
-  <!-- 磁盘占用最高的分区（MobaXterm 用橙红粗斜体文字突出）。 -->
-  <SolidColorBrush x:Key="MonSegHotBrush" Color="#e2590b" />
+  <!-- 分段图标配色（对齐 MobaXterm 状态栏采样：主机黑、CPU/RAM 绿、
+       上/下行橙、磁盘/运行时长青）。CPU/RAM 绿色 #4aaf4f 按用户提供的
+       MobaXterm 状态栏局部裁剪图（248x30）实测，权威于整屏采样结论。 -->
+  <SolidColorBrush x:Key="MonIconDarkBrush" Color="#000000" />
+  <SolidColorBrush x:Key="MonCpuIconBrush" Color="#4aaf4f" />
+  <SolidColorBrush x:Key="MonRamIconBrush" Color="#4aaf4f" />
+  <SolidColorBrush x:Key="MonNetUpIconBrush" Color="#ab6000" />
+  <SolidColorBrush x:Key="MonNetDownIconBrush" Color="#ff6400" />
+  <SolidColorBrush x:Key="MonIconDiskBrush" Color="#009588" />
+  <SolidColorBrush x:Key="MonIconUptimeBrush" Color="#009588" />
+  <!-- 磁盘占用最高的分区（MobaXterm 用橙红文字突出）。 -->
+  <SolidColorBrush x:Key="MonSegHotBrush" Color="#ff6400" />
 
   <FontFamily x:Key="IconFontAwesome">avares://COMTool.App/Assets/Fonts/fontawesome6-solid.ttf#Font Awesome 6 Free Solid</FontFamily>
   <FontFamily x:Key="IconMaterialDesign">avares://COMTool.App/Assets/Fonts/materialdesignicons6.ttf#Material Design Icons</FontFamily>

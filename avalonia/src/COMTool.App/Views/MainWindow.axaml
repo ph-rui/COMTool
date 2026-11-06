@@ -288,14 +288,23 @@
                                 Padding="0"
                                 Tag="{Binding}"
                                 Click="OnCloseTabClick">
-                          <Image Source="/Assets/close.png"
-                                 Width="10" Height="10" />
+                          <!-- r54: MobaXterm 式裸 ✕（选中深色 tab 上需白字，PNG 无法变色） -->
+                          <TextBlock Classes="TabClose"
+                                     Text="&#x2715;"
+                                     FontSize="10"
+                                     HorizontalAlignment="Center"
+                                     VerticalAlignment="Center" />
                         </Button>
                       </StackPanel>
                     </Border>
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
+              <!-- r54: MobaXterm 标签条下沿的 #8b99a8 分隔线（实机截图取证）。 -->
+              <Border Grid.Column="0"
+                      VerticalAlignment="Bottom"
+                      Height="1"
+                      Background="{DynamicResource TabStripLineBrush}" />
             </Grid>
 
             <Grid Grid.Row="1" RowDefinitions="Auto,*,6,34">
@@ -330,11 +339,13 @@
                 </Grid>
               </Border>
               <Grid Grid.Row="1">
-                <Border Background="White"
+                <!-- r54: MobaXterm 里终端几乎贴边（约 4px 间隙），边框直角；
+                     间隙颜色 = 窗口底色（浅色白 / 深色 #212121）。 -->
+                <Border Background="{DynamicResource WindowBackgroundBrush}"
                         BorderBrush="{DynamicResource SidebarBorderBrush}"
                         BorderThickness="1"
-                        CornerRadius="3"
-                        Padding="9">
+                        CornerRadius="0"
+                        Padding="4">
                   <ContentControl Name="TabContentHost"
                                   Content="{Binding SelectedTab.Content}"
                                   HorizontalContentAlignment="Stretch"
@@ -398,7 +409,8 @@
                 </Border>
               </Grid>
               <Grid Grid.Row="3"
-                    Background="Transparent"
+                    Name="StatusBar"
+                    Background="{DynamicResource StatusBarBackgroundBrush}"
                     ColumnDefinitions="Auto,*,Auto">
                 <Grid.ContextMenu>
                   <ContextMenu Name="MonitorBarMenu">
@@ -431,7 +443,7 @@
                   </Border>
                   <Border Name="MonSegCpu" Classes="MonSeg" IsVisible="{Binding SegCpuVisible}">
                     <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
-                      <TextBlock Text="&#xf2db;" Classes="MonIcon" Foreground="#2e9e4f" />
+                      <TextBlock Text="&#xf2db;" Classes="MonIcon" Foreground="{DynamicResource MonCpuIconBrush}" />
                       <TextBlock Text="{Binding SegCpuText}" Classes="MonSegText" />
                       <Border Width="56" Height="18" CornerRadius="2" ClipToBounds="True"
                               Background="{DynamicResource MonCpuBarTrackBrush}"
@@ -460,19 +472,19 @@
                   </Border>
                   <Border Name="MonSegRam" Classes="MonSeg" IsVisible="{Binding SegRamVisible}">
                     <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
-                      <TextBlock Text="&#xf538;" Classes="MonIcon" Foreground="#2e9e4f" />
+                      <TextBlock Text="&#xf538;" Classes="MonIcon" Foreground="{DynamicResource MonRamIconBrush}" />
                       <TextBlock Text="{Binding SegRamText}" Classes="MonSegText" />
                     </StackPanel>
                   </Border>
                   <Border Name="MonSegNetUp" Classes="MonSeg" IsVisible="{Binding SegNetUpVisible}">
                     <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
-                      <TextBlock Text="&#xf093;" Classes="MonIcon" Foreground="#2e9e4f" />
+                      <TextBlock Text="&#xf093;" Classes="MonIcon" Foreground="{DynamicResource MonNetUpIconBrush}" />
                       <TextBlock Text="{Binding SegNetUpText}" Classes="MonSegText" />
                     </StackPanel>
                   </Border>
                   <Border Name="MonSegNetDown" Classes="MonSeg" IsVisible="{Binding SegNetDownVisible}">
                     <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
-                      <TextBlock Text="&#xf019;" Classes="MonIcon" Foreground="#2f7ed8" />
+                      <TextBlock Text="&#xf019;" Classes="MonIcon" Foreground="{DynamicResource MonNetDownIconBrush}" />
                       <TextBlock Text="{Binding SegNetDownText}" Classes="MonSegText" />
                     </StackPanel>
                   </Border>

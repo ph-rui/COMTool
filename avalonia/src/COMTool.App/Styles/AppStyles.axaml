@@ -36,6 +36,8 @@
   </Style>
   <Style Selector="Button.WindowCloseButton:pointerover">
     <Setter Property="Background" Value="{DynamicResource CloseHoverBrush}" />
+    <!-- Win10 式关闭悬停（红底）配白色字形；浅色主题下红底压不住深色字形。 -->
+    <Setter Property="Foreground" Value="White" />
   </Style>
 
   <Style Selector="Button.PinButton">
@@ -236,24 +238,28 @@
     <Setter Property="Background" Value="{DynamicResource SidebarRailActiveBrush}" />
   </Style>
 
+  <!-- r54: MobaXterm 标签——未选中白底 #b4b4b4 细边深字；选中深灰竖向渐变 + 白字
+       （用户参照图 + 实机双 tab 截屏取证，见 PLAN 54）。 -->
   <Style Selector="Border.TabItemBorder">
     <Setter Property="Height" Value="36" />
     <Setter Property="MinWidth" Value="112" />
     <Setter Property="Padding" Value="14,0,8,0" />
     <Setter Property="Margin" Value="0,0,2,0" />
-    <Setter Property="Background" Value="{DynamicResource TabBarBackgroundBrush}" />
+    <Setter Property="Background" Value="{DynamicResource TabUnselectedBackgroundBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource TabUnselectedBorderBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
     <Setter Property="CornerRadius" Value="4,4,0,0" />
   </Style>
   <Style Selector="Border.TabItemBorder.selected">
     <Setter Property="Background" Value="{DynamicResource TabSelectedBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource TabSelectedBorderBrush}" />
   </Style>
   <Style Selector="TextBlock.TabKindIcon">
     <Setter Property="FontSize" Value="13" />
     <Setter Property="VerticalAlignment" Value="Center" />
   </Style>
-  <!-- 选中态的白色图标由模型层提供（TerminalTab.KindIconBrush 在 IsSelected 时
-       返回白色刷）：模板对 Foreground 是本地绑定，本地值优先级高于样式 setter，
-       这里写 selected 覆写样式不会生效（2026-11-04 实机截图证实）。 -->
+  <!-- r48 后图标颜色恒定：TerminalTab.KindIconBrush 按类型返回固定色（SSH 金、
+       串口绿……），选中与否都不变，与 MobaXterm 一致（选中 tab 只换底色）。 -->
   <Style Selector="TextBlock.TabTitle">
     <Setter Property="FontSize" Value="12" />
     <Setter Property="Foreground" Value="{DynamicResource WindowTextBrush}" />
@@ -268,16 +274,21 @@
     <Setter Property="Foreground" Value="White" />
   </Style>
 
+  <!-- r54: MobaXterm 的关闭符是裸 ✕（白×于深色选中 tab、深×于浅色未选中 tab），
+       去掉原先的浅蓝药丸底；悬停仅给轻量底色反馈。 -->
   <Style Selector="Button.TabCloseButton">
-    <Setter Property="Background" Value="#79b0e0" />
+    <Setter Property="Background" Value="Transparent" />
     <Setter Property="BorderThickness" Value="0" />
     <Setter Property="Focusable" Value="False" />
-    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="CornerRadius" Value="3" />
     <Setter Property="HorizontalContentAlignment" Value="Center" />
     <Setter Property="VerticalContentAlignment" Value="Center" />
   </Style>
   <Style Selector="Button.TabCloseButton:pointerover">
-    <Setter Property="Background" Value="#cc2626" />
+    <Setter Property="Background" Value="#d9d9d9" />
+  </Style>
+  <Style Selector="Border.TabItemBorder.selected Button.TabCloseButton:pointerover">
+    <Setter Property="Background" Value="#5a5a5a" />
   </Style>
 
   <Style Selector="TextBlock.EmptyTitle">

@@ -364,6 +364,12 @@ public partial class MainWindow : Window
         {
             _ = RunR53SelfTestAsync();
         }
+        // --selftest-r54：实机自检 r54 三项（连字符路径双击整选 / SSH 连接成功自动
+        // 打开 SFTP 浏览器 / 浅色主题 MobaXterm 1:1 取色），落盘 r54-theme.png。
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r54"))
+        {
+            _ = RunR54SelfTestAsync();
+        }
     }
 
     private volatile bool _portScanBusy;
@@ -1072,6 +1078,9 @@ public partial class MainWindow : Window
 
         viewModel.AddTab(tab);
         UpdateConnectionStates();
+        // r54 ③: MobaXterm parity (AutoStartSSHGUI=1) — every freshly
+        // connected SSH session opens its SFTP browser automatically.
+        OpenSshBrowserFor(tab);
         AppLog.Info(
             $"SSH session {key} tab created after {stopwatch.ElapsedMilliseconds} ms");
     }
@@ -1992,7 +2001,7 @@ public partial class MainWindow : Window
         if (terminal.Options is { } terminalOptions)
         {
             terminalOptions.RightClickSelectsWord = false;
-            terminalOptions.Theme = TerminalTheme.CreatePythonTheme();
+            terminalOptions.Theme = TerminalTheme.CreateMobaXtermTheme();
         }
 
         terminal.AttachedToVisualTree += (_, _) =>
@@ -2035,8 +2044,8 @@ public partial class MainWindow : Window
 
         // The control seeds its palette from the Foreground/Background brushes
         // when the template is applied, which happens after the options are
-        // created. Re-apply the Python palette once the XTerm instance exists.
-        var theme = TerminalTheme.CreatePythonTheme();
+        // created. Re-apply the MobaXterm palette once the XTerm instance exists.
+        var theme = TerminalTheme.CreateMobaXtermTheme();
         if (terminal.Options is { } options)
         {
             options.Theme = theme;
@@ -3417,6 +3426,32 @@ public partial class MainWindow : Window
         }
 
         if (tab?.SftpPane is null)
+        {
+            return;
+        }
+
+        OpenSshBrowserFor(tab);
+    }
+
+    /// <summary>
+    /// MobaXterm parity (r54, AutoStartSSHGUI=1): a connected SSH session
+    /// starts with its graphical SFTP browser open. Selects the tab,
+    /// switches the sidebar to the browser page and shows it. No-op for
+    /// non-SSH/disconnected tabs or tabs without a pane.
+    /// </summary>
+    internal void OpenSshBrowserFor(TerminalTab tab)
+    {
+        if (DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        if (tab is null || !tab.IsSshTab || !IsTabConnected(tab))
+        {
+            return;
+        }
+
+        if (tab.SftpPane is null)
         {
             return;
         }
@@ -5323,6 +5358,15 @@ public partial class MainWindow : Window
 
     /// <summary>把已排布的可视子树渲染成 PNG 落盘（实机自检用，免截图目检）。
     /// 透明度保留：调用方用图像工具合成到白底后再量像素。</summary>
+    // r54: AOT 下 XAML 字面色编译为 ImmutableSolidColorBrush，资源刷仍是
+    // SolidColorBrush；自检读刷值时两种都要认，否则字面色会被误读为默认黑。
+    private static Color BrushColor(IBrush? brush) => brush switch
+    {
+        SolidColorBrush s => s.Color,
+        Avalonia.Media.Immutable.ImmutableSolidColorBrush i => i.Color,
+        _ => Color.FromRgb(0, 0, 0),
+    };
+
     private static void SaveVisualPng(Visual? visual, string fileName)
     {
         try
@@ -7852,6 +7896,175 @@ public static class ClipCheck {
         catch (Exception ex)
         {
             AppLog.Error("[SelfTest] r53: 自检异常", ex);
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
+        }
+    }
+
+    /// <summary>
+    /// <c>--selftest-r54</c>：实机自检 r54 三项。
+    /// ① 双击含连字符路径选中整条路径（库 4.1.6，用户实路径
+    ///    /home/kami/nxp/yocto_imx-6.18.20-2.0.0，修复前只能选到片段）；
+    /// ② SSH 连接成功后自动打开该会话的 SFTP 浏览器
+    ///    （MobaXterm AutoStartSSHGUI=1）；
+    /// ③ 浅色主题 MobaXterm 1:1 取色（标题栏白 / 选中 tab 深灰渐变
+    ///    #4d4d4d→#1f1f1f / 未选中 tab 白底 #b4b4b4 边 / 终端底 #1c1c1c
+    ///    前景 #ececec / 状态栏 #f0f0f0），读取计算值断言并落盘 r54-theme.png。
+    /// </summary>
+    private async Task RunR54SelfTestAsync()
+    {
+        const string probePath = "/home/kami/nxp/yocto_imx-6.18.20-2.0.0";
+        var pathOk = false;
+        var sshOk = false;
+        var themeOk = false;
+        try
+        {
+            AppLog.Info("[SelfTest] r54: 等主窗稳定 1.5s 后开始三项自检");
+            await Task.Delay(1500);
+            if (DataContext is not MainViewModel viewModel)
+            {
+                throw new InvalidOperationException("MainViewModel 未就绪");
+            }
+
+            // ── ① 双击含连字符路径：应选中整条路径而非片段 ──
+            var terminal = CreateTerminal();
+            var localTab = new TerminalTab
+            {
+                Title = "r54-selftest",
+                SessionId = "local:r54selftest",
+                Kind = SessionKind.Local,
+                Content = terminal,
+                Terminal = terminal,
+                IsAlive = true,
+                CloseAction = () => { },
+            };
+            viewModel.AddTab(localTab);
+            await Task.Delay(500);
+            UpdateLayout();
+            terminal.Terminal.Write(probePath + "\r\n");
+            await Task.Delay(500);
+            UpdateLayout();
+
+            var view = terminal.GetVisualDescendants()
+                .OfType<Iciclecreek.Terminal.TerminalView>()
+                .FirstOrDefault();
+            if (view is null)
+            {
+                throw new InvalidOperationException("未找到内层 TerminalView");
+            }
+            var charW = view.CharWidth;
+            var charH = view.CharHeight;
+            if (charW <= 0 || charH <= 0)
+            {
+                throw new InvalidOperationException($"终端度量未就绪: charW={charW} charH={charH}");
+            }
+            AppLog.Info($"[SelfTest] r54: ① charW={charW:0.###} charH={charH:0.###} gutter={view.GutterWidth:0.###} grid={terminal.Terminal.Cols}x{terminal.Terminal.Rows}");
+
+            var win = TopLevel.GetTopLevel(view)!;
+            Point WinPoint(double col, double rowFrac)
+            {
+                var local = new Point(view.GutterWidth + charW * (col + 0.5), charH * rowFrac);
+                return view.TranslatePoint(local, win) ?? local;
+            }
+
+            // 双击落在 "18"（版本段中、两侧各有 . 和 -），修复前只会选到 "6.18.20"
+            var col = probePath.IndexOf("18", StringComparison.Ordinal);
+            var p0 = WinPoint(col, 0.5);
+            var pointer = new Pointer(Pointer.GetNextFreeId(), PointerType.Mouse, isPrimary: true);
+            var pressProps = new PointerPointProperties(RawInputModifiers.LeftMouseButton, PointerUpdateKind.LeftButtonPressed);
+            view.RaiseEvent(new PointerPressedEventArgs(view, pointer, win, p0, 0, pressProps, KeyModifiers.None, 1)
+            {
+                RoutedEvent = InputElement.PointerPressedEvent,
+            });
+            await Task.Delay(100);
+            view.RaiseEvent(new PointerPressedEventArgs(view, pointer, win, p0, 0, pressProps, KeyModifiers.None, 2)
+            {
+                RoutedEvent = InputElement.PointerPressedEvent,
+            });
+            await Task.Delay(300);
+
+            var selected = terminal.Terminal.Selection.GetSelectionText();
+            pathOk = string.Equals(selected, probePath, StringComparison.Ordinal);
+            AppLog.Info($"[SelfTest] r54: ① 双击路径选区='{selected ?? "(空)"}' => {(pathOk ? "OK" : "FAILED")}（期望整条路径）");
+
+            // ── ② SSH 连接成功后自动打开 SFTP 浏览器 ──
+            var firstKey = _config?.SshSessions.Sessions.FirstOrDefault()?.Key;
+            if (string.IsNullOrEmpty(firstKey))
+            {
+                throw new InvalidOperationException("config 中没有 SSH 会话，无法跑 r54 ② 自检");
+            }
+            AppLog.Info($"[SelfTest] r54: ② 打开 SSH 会话 {firstKey}，验证 SFTP 浏览器自动打开");
+            var openTask = OpenSshSessionAsync(firstKey!);
+            TerminalTab? sshTab = null;
+            var deadline = DateTime.UtcNow.AddSeconds(90);
+            while (!(openTask.IsCompleted && sshTab is not null && sshTab.IsAlive))
+            {
+                if (DateTime.UtcNow > deadline)
+                {
+                    throw new TimeoutException("SSH 会话 90s 内未连接成功");
+                }
+                sshTab = viewModel.Tabs.FirstOrDefault(t => t.SessionId == firstKey);
+                await Task.Delay(250);
+            }
+            await openTask;
+            await Task.Delay(800);
+            UpdateLayout();
+
+            sshOk = viewModel.SidebarTab == SidebarTab.SshBrowser
+                && viewModel.IsSidebarVisible
+                && ReferenceEquals(viewModel.SelectedTab, sshTab)
+                && sshTab.SftpPane is { IsExpanded: true };
+            AppLog.Info($"[SelfTest] r54: ② status='{sshTab.StatusMessage}' SidebarTab={viewModel.SidebarTab} sidebarVisible={viewModel.IsSidebarVisible} paneExpanded={(sshTab.SftpPane?.IsExpanded ?? false)} => {(sshOk ? "OK" : "FAILED")}");
+
+            // ── ③ 浅色主题 MobaXterm 1:1 取色（读计算后的刷值，不靠像素猜坐标）──
+            var titleBar = this.FindControl<Border>("TitleBar");
+            var statusGrid = this.FindControl<Grid>("StatusBar");
+            var titleBg = BrushColor(titleBar?.Background);
+            var statusBg = BrushColor(statusGrid?.Background);
+
+            var tabBorders = this.GetVisualDescendants()
+                .OfType<Border>()
+                .Where(b => b.Classes.Contains("TabItemBorder"))
+                .ToList();
+            var selTab = tabBorders.FirstOrDefault(b => b.Classes.Contains("selected"));
+            var unselTab = tabBorders.FirstOrDefault(b => !b.Classes.Contains("selected"));
+            var grad = selTab?.Background as LinearGradientBrush;
+            var gradTop = grad is { GradientStops.Count: >= 1 } ? grad.GradientStops[0].Color : Color.FromRgb(0, 0, 0);
+            var gradBottom = grad is { GradientStops.Count: >= 2 } ? grad.GradientStops[grad.GradientStops.Count - 1].Color : Color.FromRgb(0, 0, 0);
+            var unselBg = BrushColor(unselTab?.Background);
+            var unselBorder = BrushColor(unselTab?.BorderBrush);
+            var selTitle = selTab?.GetVisualDescendants().OfType<TextBlock>()
+                .FirstOrDefault(t => t.Classes.Contains("TabTitle"));
+            var selTitleFg = BrushColor(selTitle?.Foreground);
+
+            var tc = terminal.Terminal.Colors;
+            themeOk = titleBg == Color.Parse("#ffffff")
+                && statusBg == Color.Parse("#f0f0f0")
+                && gradTop == Color.Parse("#4d4d4d")
+                && gradBottom == Color.Parse("#1f1f1f")
+                && unselBg == Color.Parse("#ffffff")
+                && unselBorder == Color.Parse("#b4b4b4")
+                && selTitleFg == Colors.White
+                && (tc.Background & 0xffffff) == 0x1c1c1c
+                && (tc.Foreground & 0xffffff) == 0xececec
+                && (tc.Cursor & 0xffffff) == 0xb4b4c0
+                && (tc[4] & 0xffffff) == 0x6060ff;
+            AppLog.Info($"[SelfTest] r54: ③ 标题栏=#{titleBg.R:X2}{titleBg.G:X2}{titleBg.B:X2} 状态栏=#{statusBg.R:X2}{statusBg.G:X2}{statusBg.B:X2} " +
+                $"选中tab渐变=#{gradTop.R:X2}{gradTop.G:X2}{gradTop.B:X2}→#{gradBottom.R:X2}{gradBottom.G:X2}{gradBottom.B:X2} 选中tab标题=#{selTitleFg.R:X2}{selTitleFg.G:X2}{selTitleFg.B:X2} " +
+                $"未选中tab底=#{unselBg.R:X2}{unselBg.G:X2}{unselBg.B:X2} 边=#{unselBorder.R:X2}{unselBorder.G:X2}{unselBorder.B:X2} " +
+                $"终端底=#{tc.Background:X6} 前景=#{tc.Foreground:X6} 光标=#{tc.Cursor:X6} 蓝=#{tc[4]:X6} => {(themeOk ? "OK" : "FAILED")}");
+
+            UpdateLayout();
+            SaveVisualPng(Content as Visual, "r54-theme.png");
+
+            var ok = pathOk && sshOk && themeOk;
+            AppLog.Info($"[SelfTest] r54: 自检完成，连字符路径={(pathOk ? "OK" : "失败")}，SSH 自动开 SFTP={(sshOk ? "OK" : "失败")}，主题取色={(themeOk ? "OK" : "失败")}，退出");
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(ok ? 0 : 2);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("[SelfTest] r54: 自检异常", ex);
             (Application.Current?.ApplicationLifetime
                 as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
         }
