@@ -1911,6 +1911,64 @@ r56-terminal.png。
   截图中 MAC 仍为品红即此行为）
 - e2e UI05 / TELNET01 输入送达偶发抖动见上（复跑判定）
 
+### 57 语法高亮实时着色“只生效一次”修复（2026-11-10，用户实机反馈「只生效一次，下次执行 ifconfig 的时候就没效果了」）
+
+**现象**：切到 EWS 方案后历史被一次性全量染色（MAC 品红可见），但之后每次
+执行 ifconfig，新输出行都不再着色。
+
+**根因**（TDD 先红复现）：`TerminalHighlighter.OnLineFed` 在 LF 触发时把水印
+推进到“游标所在行”。但 LF 触发时游标已落到下一行（刚写入内容的下一行），
+于是刚结束的输出行从未被扫描，而下一行（尚未写入）被提前标记为已处理：
+- 只有高亮器创建后的第一个 LF 能着色（水印还是 0）；
+- 命令回显行（`$ x\r\n`）一出现，水印就越过了后续所有输出行；
+- 用户看到的“生效一次”实际是方案切换时 `ApplyToAll` 对历史的全量重染。
+
+**修复**（`TerminalHighlighter`）：
+- LF 时改为只推进到“刚结束的行” = `YBase + Y - 1`，折行长行也一并覆盖；
+- 新增 `_lastLength` 区分两种“水印超前”：
+  - 缓冲区收缩（RIS/清回滚，`Length` 变小）→ 水印归零，从头重染；
+  - 回滚写满后 XTerm 整体上移（绝对行号漂移，`Length` 不变）→ 只处理刚结束行，
+    避免把每行都误判为收缩而全量重染（性能保护）；
+- `ApplyToAll` / Resized / BufferChanged 同步维护 `_lastLength`。
+
+**测试**（先红后绿，已确认旧实现下 2 项失败）：
+- `SyntaxHighlightTests.TERM30_HlighterColorsLinesAfterCommandEcho`：命令回显后
+  MAC 行=品红、errors 行=红、普通行=默认（旧实现全 256）
+- `SyntaxHighlightTests.TERM30_HlighterColorsWrappedLineAfterEcho`：折行长行
+  首尾两段都要着色（旧实现首段被跳过）
+- `SyntaxHighlightTests.TERM30_HlighterColorsAcrossScrollbackTrim`：回滚满后
+  整体上移，新行仍着色（回归保护）
+- `TerminalR39FeatureTests.TERM30_HighlightColorsOutputAfterPromptEcho`：真实
+  MainWindow + TerminalControl 接线，连续两轮 ifconfig 输出都要着色（旧实现红）
+- 新增 `--selftest-r57`：先落错误/警告/成功方案再建终端，全程不调用
+  `SetSyntaxHighlightScheme`（不触发 ApplyToAll），连续写两轮 ifconfig 形态
+  输出，逐轮核对 MAC=品红、errors=红，落盘 r57-terminal.png
+
+**验证**：
+- 全量 gate：20261110T060905Z 全绿（unit 394 / app 291 / e2e 15 项 PASS /
+  testgate PASS）
+- VM win-x64 AOT 部署（publish rc=0；仅更新 AOT 目录，R2R 单文件仍不部署）：
+  - `C:\Users\devuser\COMTool-Avalonia-AOT\COMTool.App.exe`
+    SHA256 = `9729c95259a3823b8fb96f5921fe3e10de87cbee33b1e6153516de87a31942cc`
+  - AOT 包 `C:\Users\devuser\COMTool-Avalonia-AOT-r57.zip`
+    SHA256 = `f78ec0814f8de943181639fc02b6239f0ddd93fb3b6f1073a2a1c9f290bda91b`
+    （78,332,743 B，用户 SFTP 拉取）
+- `--selftest-r57` 实机（VM，wall 3.6s，退出码 0）：全程不调用
+  `SetSyntaxHighlightScheme`（不触发 ApplyToAll），连续两轮 ifconfig 形态输出
+  - 轮1：MAC 行=1 品红=True；errors 行=2 红=True
+  - 轮2：MAC 行=4 品红=True；errors 行=5 红=True
+  - r57-terminal.png 目检：两轮 ether 行 MAC 均为品红、两轮 errors 均为红，
+    与用户 MobaXterm 参照一致（修复前只有切换方案那一次可见颜色）
+
+**遗留**：
+- 桌面快捷方式 `D:\Users\devuser\Desktop\COMTool-Avalonia-AOT.lnk` 指向
+  `C:\Users\devuser\COMTool-Avalonia-AOT\COMTool.App.exe`：每轮 AOT 部署
+  （robocopy /MIR）即自动覆盖该目录，双击快捷方式就是最新版，用户无需手动
+  解压 zip（zip 仅供其他机器取用）
+- r39 既有局限仍在：着色只写默认前景格；方案切回 default 时 `ApplyToAll` 仅
+  重置水印不清旧色（EWS→default 后已染格子保留颜色）
+- MAC→品红规则仍只在 EWS 方案内（r56 用户已确认的落点），不改为全局规则
+
 ## 已知偏差（已写入 spec 附录）
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
 2. 热键 .mxtmacros 编码未实测：导出恒 0，导入非 0 忽略+警告
