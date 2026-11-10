@@ -388,6 +388,13 @@ public partial class MainWindow : Window
         {
             _ = RunR57SelfTestAsync();
         }
+        // --selftest-r58：实机自检 r58 三项（用户同板 ifconfig 对照截图）：netmask
+        // 不染品红（IPv4 首段 1..254）、unspec 连字符长链不染品红（MAC 边界排除 -）、
+        // 品红取色对齐用户 ini #ff4dff，落盘 r58-terminal.png。
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r58"))
+        {
+            _ = RunR58SelfTestAsync();
+        }
     }
 
     private volatile bool _portScanBusy;
@@ -8186,7 +8193,7 @@ public static class ClipCheck {
     /// <c>--selftest-r56</c>：实机自检 r56 两项。
     /// ① SGR 粗体渲染对齐 MobaXterm（其字体无粗体面，SGR 1 视觉无效果）：
     ///    写 SGR 1 / SGR 1;35 探测行，走查真实 GlyphRun——不得出现粗体面，
-    ///    粗体品红段按普通品红 #ff36ff 绘制（不提亮为 #ff80ff）；
+    ///    粗体品红段按普通品红绘制（不提亮为 BrightMagenta）；
     /// ② EWS 方案 MAC 规则（复刻用户 MobaXterm 个人高亮）：启用
     ///    error_warning 方案后写 ifconfig ether 行，MAC 格子前景=调色板
     ///    索引 5（品红），验证后恢复原方案。落盘 r56-terminal.png 供目检。
@@ -8244,11 +8251,13 @@ public static class ClipCheck {
             var hasBoldFace = runs.Any(r => r.Weight.Equals(FontWeight.Bold)
                 || r.Weight.Equals(FontWeight.ExtraBold) || r.Weight.Equals(FontWeight.Black));
             var magRun = runs.FirstOrDefault(r => r.Text.Contains("BMAG", StringComparison.Ordinal));
+            var magHex = COMTool.Terminal.TerminalTheme.CreateMobaXtermTheme().Magenta;
+            var magExpected = Color.Parse(magHex);
             boldOk = runs.Count > 0 && !hasBoldFace
                 && magRun.Text.Length > 0
-                && magRun.Color == Color.Parse("#ff36ff");
+                && magRun.Color == magExpected;
             AppLog.Info($"[SelfTest] r56: ① SGR粗体 glyphrun={runs.Count} 粗体面={hasBoldFace} " +
-                $"BMAG色=#{(magRun.Color.R << 16) | (magRun.Color.G << 8) | magRun.Color.B:X6}（期望 FF36FF）=> {(boldOk ? "OK" : "FAILED")}");
+                $"BMAG色=#{(magRun.Color.R << 16) | (magRun.Color.G << 8) | magRun.Color.B:X6}（期望 {magHex}）=> {(boldOk ? "OK" : "FAILED")}");
 
             // ── ② EWS 方案 MAC 地址→品红（验证后恢复原方案）──
             var prevScheme = _config?.Config.Terminal.SyntaxHighlight ?? "default";
@@ -8393,6 +8402,131 @@ public static class ClipCheck {
         finally
         {
             // 自检不落盘方案：恢复内存配置，避免污染用户 config.json。
+            if (_config is not null && prevScheme is not null)
+            {
+                _config.Config.Terminal.SyntaxHighlight = prevScheme;
+            }
+        }
+    }
+
+    /// <summary>
+    /// <c>--selftest-r58</c>：实机自检 r58 三项（用户同板 ifconfig 对照截图）。
+    /// ① MobaXterm EWS 的 IPv4 规则首段仅 1..254 → netmask 255.255.255.0 保持
+    ///    默认前景色，inet/broadcast 地址仍为品红；
+    /// ② MAC 规则两侧边界字符类排除 '-' → unspec 的 00-00-…-00 长链保持默认色，
+    ///    ether 的冒号 MAC 仍为品红；
+    /// ③ 品红取色对齐用户 MobaXterm.ini [Colors] Magenta=255,77,255（#ff4dff），
+    ///    用真实 GlyphRun 复核渲染色。
+    /// 全程不调用 SetSyntaxHighlightScheme（先落配置再建终端），走实时着色路径；
+    /// 落盘 r58-terminal.png 供目检。
+    /// </summary>
+    private async Task RunR58SelfTestAsync()
+    {
+        var ok = false;
+        string? prevScheme = null;
+        try
+        {
+            AppLog.Info("[SelfTest] r58: 等主窗稳定 1.5s 后开始");
+            await Task.Delay(1500);
+            if (DataContext is not MainViewModel viewModel)
+            {
+                throw new InvalidOperationException("MainViewModel 未就绪");
+            }
+
+            prevScheme = _config?.Config.Terminal.SyntaxHighlight ?? "default";
+            if (_config is not null)
+            {
+                _config.Config.Terminal.SyntaxHighlight = "error_warning";
+            }
+
+            var terminal = CreateTerminal();
+            viewModel.AddTab(new TerminalTab
+            {
+                Title = "r58-selftest",
+                SessionId = "local:r58selftest",
+                Kind = SessionKind.Local,
+                Content = terminal,
+                Terminal = terminal,
+                IsAlive = true,
+                CloseAction = () => { },
+            });
+            await Task.Delay(500);
+            UpdateLayout();
+            AttachTerminalHighlighter(terminal);
+            if (terminal.Terminal is null)
+            {
+                throw new InvalidOperationException("XTerm 未就绪");
+            }
+
+            const string mac = "02:42:5b:d8:95:d3";
+            const string unspec = "00-00-00-00-00-00-00-00-00-00-00-00-00-00-00-00";
+            terminal.Terminal.Write("$ ifconfig\r\n");
+            terminal.Terminal.Write("inet 10.0.9.5 netmask 255.255.255.0 broadcast 10.0.9.255\r\n");
+            terminal.Terminal.Write("unspec " + unspec + "\r\n");
+            terminal.Terminal.Write("ether " + mac + "\r\n");
+            await Task.Delay(300);
+            UpdateLayout();
+
+            static int Col(string text, string token)
+            {
+                var col = text.IndexOf(token, StringComparison.Ordinal);
+                if (col < 0)
+                {
+                    throw new InvalidOperationException($"未找到 {token}：{text}");
+                }
+                return col;
+            }
+
+            var inetLine = terminal.Terminal.Buffer.GetLine(1)!;
+            var inetText = inetLine.TranslateToString(true, 0);
+            var inetOk = inetLine[Col(inetText, "10.0.9.5")].Attributes.GetFgColor() == 5;
+            var netmaskOk = inetLine[Col(inetText, "255.255.255.0")].Attributes.GetFgColor() == 256;
+            var broadcastOk = inetLine[Col(inetText, "10.0.9.255")].Attributes.GetFgColor() == 5;
+
+            var unspecLine = terminal.Terminal.Buffer.GetLine(2)!;
+            var unspecText = unspecLine.TranslateToString(true, 0);
+            var unspecOk = unspecLine[Col(unspecText, unspec)].Attributes.GetFgColor() == 256;
+
+            var etherLine = terminal.Terminal.Buffer.GetLine(3)!;
+            var etherText = etherLine.TranslateToString(true, 0);
+            var macOk = etherLine[Col(etherText, mac)].Attributes.GetFgColor() == 5;
+
+            // ③ 渲染色复核：MAC 段 GlyphRun 的前景必须是 #ff4dff
+            var runs = new List<(string Text, FontWeight Weight, Color Color)>();
+            var view = terminal.GetVisualDescendants()
+                .OfType<Iciclecreek.Terminal.TerminalView>().FirstOrDefault();
+            if (view is not null)
+            {
+                var group = new DrawingGroup();
+                using (var ctx = group.Open())
+                {
+                    view.Render(ctx);
+                }
+                WalkR56Runs(group, runs);
+            }
+            var magExpected = Color.Parse("#ff4dff");
+            var macRun = runs.FirstOrDefault(r => r.Text.Contains(mac, StringComparison.Ordinal));
+            var colorOk = macRun.Text.Length > 0 && macRun.Color == magExpected;
+
+            AppLog.Info($"[SelfTest] r58: ① inet品红={inetOk} netmask默认={netmaskOk} broadcast品红={broadcastOk}");
+            AppLog.Info($"[SelfTest] r58: ② unspec默认={unspecOk} etherMAC品红={macOk}");
+            AppLog.Info($"[SelfTest] r58: ③ MAC渲染色=#{(macRun.Color.R << 16) | (macRun.Color.G << 8) | macRun.Color.B:X6}（期望 FF4DFF）=> {(colorOk ? "OK" : "FAILED")}");
+
+            UpdateLayout();
+            SaveVisualPng(Content as Visual, "r58-terminal.png");
+            ok = inetOk && netmaskOk && broadcastOk && unspecOk && macOk && colorOk;
+            AppLog.Info($"[SelfTest] r58: 自检完成，三项{(ok ? "全部 OK" : "存在失败")}，退出");
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(ok ? 0 : 2);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("[SelfTest] r58: 自检异常", ex);
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
+        }
+        finally
+        {
             if (_config is not null && prevScheme is not null)
             {
                 _config.Config.Terminal.SyntaxHighlight = prevScheme;

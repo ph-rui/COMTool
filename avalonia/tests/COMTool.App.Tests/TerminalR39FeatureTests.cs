@@ -471,6 +471,72 @@ public sealed class TerminalR39FeatureTests
     }
 
     [AvaloniaFact]
+    public async Task TERM30_NetmaskAndUnspecStayDefaultAfterEcho()
+    {
+        // r58（用户同板 ifconfig 对照截图）：MobaXterm 的 IPv4 规则首段排除 255，
+        // 故 netmask 值保持默认色；MAC 规则边界排除 '-'，故 unspec 的
+        // 00-00-…-00 链不染品红；inet/broadcast 地址与 ether MAC 仍为品红。
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            await env.RunAsync(async () =>
+            {
+                env.SeedConfig(new ComtoolConfig
+                {
+                    Terminal = new TerminalConfig { SyntaxHighlight = "error_warning" },
+                });
+                window = new MainWindow { DataContext = new MainViewModel() };
+                window.Show();
+                window.StopPortTimerForTests();
+                RunJobs(window);
+
+                var (terminal, _, _) = CreateTestTerminal(window, "hl-netmask");
+                window.AttachTerminalHighlighter(terminal);
+                Assert.NotNull(window.GetHighlighterForTests(terminal));
+
+                terminal.Terminal.Write("$ ifconfig\r\n");
+                terminal.Terminal.Write(
+                    "inet 10.0.9.5 netmask 255.255.255.0 broadcast 10.0.9.255\r\n");
+                terminal.Terminal.Write(
+                    "unspec 00-00-00-00-00-00-00-00-00-00-00-00-00-00-00-00\r\n");
+                terminal.Terminal.Write(
+                    "ether 02:42:5b:d8:95:d3\r\n");
+                RunJobs(window);
+
+                static int ColOf(string text, string token)
+                {
+                    var col = text.IndexOf(token, StringComparison.Ordinal);
+                    Assert.True(col >= 0, $"未找到 {token}：{text}");
+                    return col;
+                }
+
+                var inetLine = terminal.Terminal.Buffer.GetLine(1)!;
+                var inetText = inetLine.TranslateToString(true, 0);
+                Assert.Equal(5, inetLine[ColOf(inetText, "10.0.9.5")].Attributes.GetFgColor());        // inet 地址→品红
+                Assert.Equal(256, inetLine[ColOf(inetText, "255.255.255.0")].Attributes.GetFgColor()); // netmask→默认
+                Assert.Equal(5, inetLine[ColOf(inetText, "10.0.9.255")].Attributes.GetFgColor());      // broadcast→品红
+
+                var unspecLine = terminal.Terminal.Buffer.GetLine(2)!;
+                var unspecText = unspecLine.TranslateToString(true, 0);
+                Assert.Equal(256, unspecLine[ColOf(unspecText,
+                    "00-00-00-00-00-00-00-00-00-00-00-00-00-00-00-00")].Attributes.GetFgColor());
+
+                var etherLine = terminal.Terminal.Buffer.GetLine(3)!;
+                var etherText = etherLine.TranslateToString(true, 0);
+                Assert.Equal(5, etherLine[ColOf(etherText, "02:42:5b:d8:95:d3")].Attributes.GetFgColor()); // MAC→品红
+
+                await Task.Delay(0);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
     public async Task TERM30_HighlightWiringColorsNewLines()
     {
         using var env = new TestEnvironment();

@@ -78,10 +78,17 @@ public static class SyntaxHighlightRules
         new() { Color = 3, Regex = Rx(@"\bcaught signal \d+\b") },
         new() { Color = 2, Regex = Rx(@"\b(success|successful|successfully|succeeded|succeed|ok|okay|yes|true|enabled|connected|accept(ed|ing)?|allow(ed|ing)?|complet(ed|ion))\b") },
         new() { Color = 5, Regex = Rx(@"\blocalhost\b") },
-        new() { Color = 5, Regex = Rx(@"\b(?:\d{1,3}\.){3}\d{1,3}\b") },
+        // r58：IPv4 规则照抄 MobaXterm EWS 原文
+        //   [^0-9A-Za-z_&-](([1-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-4])\.[0-9]+\.[0-9]+\.[0-9]+)[^0-9A-Za-z_-]
+        // 首段仅 1..254 → netmask 255.255.255.0 / 255.255.0.0 不染品红
+        // （用户 MobaXterm 对照截图：inet/broadcast 品红、netmask 白）。
+        // .NET 无 \K，改用前后负向断言（MobaXterm 的边界字符类排除 - 与 &）。
+        new() { Color = 5, Regex = Rx(@"(?<![0-9A-Za-z_&-])(?:[1-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-4])\.[0-9]+\.[0-9]+\.[0-9]+(?![0-9A-Za-z_-])") },
         // r56：MAC 地址→品红（复刻用户 MobaXterm 的个人高亮规则，ifconfig
-        // ether 行的 82:37:a3:fe:87:0b 等；支持冒号/连字符两种分隔）
-        new() { Color = 5, Regex = Rx(@"\b(?:[0-9a-f]{2}[:-]){5}[0-9a-f]{2}\b") },
+        // ether 行的 82:37:a3:fe:87:0b 等；支持冒号/连字符两种分隔）。
+        // r58：边界字符类同样排除 '-'，unspec 的 00-00-…-00 长链不再命中
+        // （MobaXterm 截图中该链不是品红）。
+        new() { Color = 5, Regex = Rx(@"(?<![0-9A-Za-z_&-])(?:[0-9a-f]{2}(?::|-)){5}[0-9a-f]{2}(?![0-9A-Za-z_-])") },
         new() { Color = 6, Regex = Rx(@"\b(info|information|informational|notice|launching|checking|loading|creating|building|booting|starting|started|important|debug|last (failed )?login)\b") },
     };
 

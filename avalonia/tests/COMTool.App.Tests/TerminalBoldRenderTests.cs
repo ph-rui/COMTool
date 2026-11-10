@@ -150,10 +150,10 @@ public sealed class TerminalBoldRenderTests
                 r.Weight != FontWeight.Bold && r.Weight != FontWeight.ExtraBold
                     && r.Weight != FontWeight.Black,
                 $"BoldFont=false 不应出现粗体面: {r.Weight}"));
-            // SGR 1;35（粗体品红）按普通品红 #ff36ff 画，不提亮为 #ff80ff
+            // SGR 1;35（粗体品红）按普通品红 #ff4dff 画，不提亮为 #ff7dff
             var colors = runs.Where(r => r.Color.A > 0).Select(r => r.Color).ToList();
-            Assert.Contains(Color.Parse("#ff36ff"), colors);
-            Assert.DoesNotContain(Color.Parse("#ff80ff"), colors);
+            Assert.Contains(Color.Parse("#ff4dff"), colors);
+            Assert.DoesNotContain(Color.Parse("#ff7dff"), colors);
         }
         finally
         {
@@ -176,11 +176,11 @@ public sealed class TerminalBoldRenderTests
 
             var runs = CollectRuns(terminal);
             Assert.NotEmpty(runs);
-            // 粗体品红提亮为亮品红 #ff80ff，且不出现普通品红。
+            // 粗体品红提亮为亮品红 #ff7dff，且不出现普通品红。
             // 只断言颜色（调色板确定）；字重取决于本机字体解析，不做跨平台断言。
             var colors = runs.Where(r => r.Color.A > 0).Select(r => r.Color).ToList();
-            Assert.Contains(Color.Parse("#ff80ff"), colors);
-            Assert.DoesNotContain(Color.Parse("#ff36ff"), colors);
+            Assert.Contains(Color.Parse("#ff7dff"), colors);
+            Assert.DoesNotContain(Color.Parse("#ff4dff"), colors);
         }
         finally
         {

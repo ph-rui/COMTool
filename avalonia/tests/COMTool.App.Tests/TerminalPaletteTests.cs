@@ -13,7 +13,9 @@ public sealed class TerminalPaletteTests
     // r54: the terminal palette is 1:1 with the user's MobaXterm v22.1
     // (light skin) as recorded in its MobaXterm.ini [Colors] section and
     // verified against a full-screen capture (terminal background #1c1c1c,
-    // prompt text #ececec, cursor #b4b4c0).
+    // prompt text #ececec, cursor #b4b4c0). r58: the user's ini overrides
+    // Magenta=255,77,255 / BoldMagenta=255,125,255 (#ff4dff / #ff7dff),
+    // confirmed by the same-board ifconfig capture.
     private static readonly int[] ExpectedPalette =
     {
         0x000000, // Black
@@ -21,7 +23,7 @@ public sealed class TerminalPaletteTests
         0x60ff60, // Green
         0xffff36, // Yellow
         0x6060ff, // Blue
-        0xff36ff, // Magenta
+        0xff4dff, // Magenta
         0x36ffff, // Cyan
         0xececec, // White
         0x363636, // BrightBlack
@@ -29,7 +31,7 @@ public sealed class TerminalPaletteTests
         0x80ff80, // BrightGreen
         0xffff80, // BrightYellow
         0x8080ff, // BrightBlue
-        0xff80ff, // BrightMagenta
+        0xff7dff, // BrightMagenta
         0x80ffff, // BrightCyan
         0xffffff, // BrightWhite
     };

@@ -11,6 +11,10 @@ namespace COMTool.Terminal;
 /// are MobaXterm's defaults (e.g. blue #6060ff), NOT XTerm.NET's stock
 /// palette (whose near-black blues are unreadable) and NOT the old Python
 /// reference theme (superseded in r54 by the MobaXterm 1:1 parity goal).
+/// r58: the user overrides Magenta=255,77,255 / BoldMagenta=255,125,255 in
+/// their ini (found on the same-board ifconfig capture: IP/MAC pixels are
+/// #ff4dff), so those two slots follow the user's values instead of the
+/// factory #ff36ff/#ff80ff.
 /// </summary>
 public static class TerminalTheme
 {
@@ -28,7 +32,7 @@ public static class TerminalTheme
         Green = "#60ff60",
         Yellow = "#ffff36",
         Blue = "#6060ff",
-        Magenta = "#ff36ff",
+        Magenta = "#ff4dff",
         Cyan = "#36ffff",
         White = "#ececec",
         BrightBlack = "#363636",
@@ -36,7 +40,7 @@ public static class TerminalTheme
         BrightGreen = "#80ff80",
         BrightYellow = "#ffff80",
         BrightBlue = "#8080ff",
-        BrightMagenta = "#ff80ff",
+        BrightMagenta = "#ff7dff",
         BrightCyan = "#80ffff",
         BrightWhite = "#ffffff",
     };

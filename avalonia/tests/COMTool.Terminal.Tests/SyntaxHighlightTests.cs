@@ -48,7 +48,7 @@ public sealed class SyntaxHighlightTests
     public void TERM30_EwsColorsMacAddressMagenta()
     {
         // r56：复刻用户 MobaXterm 的个人规则——ifconfig 输出里的 MAC 地址
-        // 染品红（Color 5，MobaXterm 主题下为 #ff36ff）。
+        // 染品红（Color 5，MobaXterm 主题下 r58 起为 #ff4dff）。
         var spans = SyntaxHighlightRules.FindSpans(
             "      ether 82:37:a3:fe:87:0b   txqueuelen 1000  (Ethernet)",
             HighlightScheme.ErrorWarningSuccess);
@@ -56,6 +56,53 @@ public sealed class SyntaxHighlightTests
         // 只染 MAC 本身，不得吞掉相邻单词
         Assert.DoesNotContain(spans, s => s.Text.Contains("ether"));
         Assert.DoesNotContain(spans, s => s.Text.Contains("txqueuelen"));
+    }
+
+    [Fact]
+    public void TERM30_EwsIpv4SkipsNetmaskAndKeepsBroadcast()
+    {
+        // r58：照抄 MobaXterm EWS 的 IPv4 规则——首段只允许 1..254
+        // （([1-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-4])\.…），
+        // 所以 netmask 255.255.255.0 / 255.255.0.0 不染品红（与用户 MobaXterm
+        // 截图一致），而 inet / broadcast 地址仍染品红。
+        var spans = SyntaxHighlightRules.FindSpans(
+            "        inet 10.0.9.5  netmask 255.255.255.0  broadcast 172.17.255.255",
+            HighlightScheme.ErrorWarningSuccess);
+        var magenta = spans.Where(s => s.Color == 5).Select(s => s.Text).ToList();
+        Assert.Contains("10.0.9.5", magenta);
+        Assert.Contains("172.17.255.255", magenta);
+        Assert.DoesNotContain("255.255.255.0", magenta);
+        Assert.DoesNotContain(spans, s => s.Text.Contains("255.255.255.0"));
+    }
+
+    [Fact]
+    public void TERM30_EwsMacIgnoresHyphenChain()
+    {
+        // r58：MobaXterm 的 MAC 规则两侧边界字符类排除 '-'（[^0-9A-Za-z_&-]），
+        // unspec 的 16 组 00-00-…-00 连字符链因此不会命中（用户 MobaXterm
+        // 截图中该链不是品红）。
+        var spans = SyntaxHighlightRules.FindSpans(
+            "        unspec 00-00-00-00-00-00-00-00-00-00-00-00-00-00-00-00  txqueuelen 1000",
+            HighlightScheme.ErrorWarningSuccess);
+        Assert.DoesNotContain(spans, s => s.Color == 5);
+
+        // 连字符分隔的独立 MAC 仍应命中（MobaXterm 的 MAC 规则允许 : 或 - 分隔）
+        var dash = SyntaxHighlightRules.FindSpans(
+            "      ether 82-37-a3-fe-87-0b  txqueuelen 1000",
+            HighlightScheme.ErrorWarningSuccess);
+        Assert.Contains(dash, s => s.Color == 5 && s.Text == "82-37-a3-fe-87-0b");
+    }
+
+    [Fact]
+    public void TERM30_ThemeMagentaMatchesUserIni()
+    {
+        // r58：用户 MobaXterm.ini [Colors] 实测 Magenta=255,77,255、
+        // BoldMagenta=255,125,255（截图像素亦为 #ff4dff），此前沿用的是
+        // MobaXterm 出厂值 #ff36ff。
+        var theme = TerminalTheme.CreateMobaXtermTheme();
+        Assert.Equal("#ff4dff", theme.Magenta);
+        Assert.Equal("#ff7dff", theme.BrightMagenta);
+        Assert.Equal("#ff6060", theme.Red);
     }
 
     [Fact]
