@@ -1969,6 +1969,85 @@ r56-terminal.png。
   重置水印不清旧色（EWS→default 后已染格子保留颜色）
 - MAC→品红规则仍只在 EWS 方案内（r56 用户已确认的落点），不改为全局规则
 
+### 58 语法高亮与 MobaXterm 逐像素对齐（IPv4/MAC 边界 + 品红取色）（2026-11-10，用户同板对照截图「仔细对比看有什么差别」）
+
+**截图对比结论（A=COMTool r57 实机，B=用户 MobaXterm 同板 ifconfig）**：
+1. 规则集不同（最大观感差别）：用户 MobaXterm `MobaXterm.ini` 为
+   `SyntaxType=1`，即「Standard keywords」——会额外把关键字、数字、提示符
+   染成其内建粉彩色（浅蓝 #8DCDEC、淡黄 #ECCD8D、橙 #ECA85E、薄荷 #AECDCD）；
+   COMTool 的 error_warning 方案只染错误红/警告黄/成功绿/信息青/IP·MAC 品红。
+   本轮不实现（见遗留）。
+2. netmask `255.255.255.0`：A 品红、B 白。
+3. `unspec` 的 `00-00-…-00` 16 组长链：A 品红、B 非品红。
+4. 品红色值：A #FF36FF、B #FF4DFF。
+5. 字体/行距：B 为 MobaFont 10pt（行距约 15px），A 为 Consolas 14.5
+   （行距约 17px）——用户两侧设置差异，不做改动。
+6. A 截图外圈白色是窗口边框，非终端内容差异。
+
+**取证**：
+- MobaXterm 默认 CustomSyntax（EWS）原文（wezterm #4348 评论内导出）：
+  - IPv4 规则首段只允许 1..254（原文按 1 / 10-99 / 100-199 / 200-249 /
+    250-254 五段交替表达），故 netmask 的 255 不命中；broadcast 以
+    10/172 开头仍命中；两侧边界字符类 `[^0-9A-Za-z_&-]` / `[^0-9A-Za-z_-]`。
+  - MAC 规则两侧边界字符类排除 `-`，故 unspec 的 `00-00-…` 不属于独立
+    MAC（截图中确实不品红）；`:` 与 `-` 分隔的独立 MAC 仍命中。
+- 用户 `MobaXterm.ini [Colors]`：`Magenta=255,77,255`、
+  `BoldMagenta=255,125,255`；B 截图 IP/MAC 像素实测 (255,77,255) 完全吻合。
+
+**修复**：
+- `SyntaxHighlightRules` EWS：
+  - IPv4 规则按原文重写为
+    `(?<![0-9A-Za-z_&-])((?:[1-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-4])\.[0-9]+\.[0-9]+\.[0-9]+)(?![0-9A-Za-z_-])`
+    （.NET 无 `\K`，用前后负向断言表达 MobaXterm 的边界字符类）。
+  - MAC 规则同理改为
+    `(?<![0-9A-Za-z_&-])(?:[0-9a-f]{2}(?::|-)){5}[0-9a-f]{2}(?![0-9A-Za-z_-])`。
+- `TerminalTheme`：`Magenta #ff36ff→#ff4dff`、`BrightMagenta #ff80ff→#ff7dff`
+  （用户 ini 覆盖值）。
+- `MainWindow` r56 自检里硬编码的品红色改为读
+  `TerminalTheme.CreateMobaXtermTheme().Magenta`，避免取色再漂移。
+
+**测试**（TDD 先红后绿）：
+- 先红确认（旧实现三项失败，失败原因与截图差异一一对应）：
+  - `SyntaxHighlightTests.TERM30_EwsIpv4SkipsNetmaskAndKeepsBroadcast`
+    （旧：品红集合含 `255.255.255.0`）
+  - `SyntaxHighlightTests.TERM30_EwsMacIgnoresHyphenChain`
+    （旧：unspec 链被切成两段 `00-00-00-00-00-00` 染品红）
+  - `SyntaxHighlightTests.TERM30_ThemeMagentaMatchesUserIni`
+    （旧：`Expected "#ff4dff" Actual "#ff36ff"`）
+- 接线测试 `TerminalR39FeatureTests.TERM30_NetmaskAndUnspecStayDefaultAfterEcho`：
+  真实 MainWindow + 实时着色路径，inet/broadcast=品红、netmask=默认、
+  unspec=默认、ether MAC=品红。
+- 旧调色板断言同步：`TerminalPaletteTests.ExpectedPalette`、
+  `TerminalBoldRenderTests` 两处 #ff4dff/#ff7dff。
+
+**验证**：
+- 全量 gate：2026-11-10T07:14:06Z 全绿（unit 397 / app 292 / e2e 15 项 PASS /
+  testgate PASS）。同日两次前跑遇环境性偶发（同代码复跑全绿）：e2e
+  `UI01_TitleBarDoubleClickMaximizeE2E` 双击未最大化、App 测试进程
+  SIGSEGV(139, libc memcpy) + Connections `NET05` loopback 端口 +
+  `TELNET01` 输入送达。
+- VM win-x64 AOT 部署（仅更新 AOT 目录）：
+  - `C:\Users\devuser\COMTool-Avalonia-AOT\COMTool.App.exe`
+    SHA256 = `2f36ad05a9f8f843d1d6e418f0eb63da153b6e7736b44832a849e92dfb56030b`
+  - AOT 包 `C:\Users\devuser\COMTool-Avalonia-AOT-r58.zip`
+    SHA256 = `1792df6fd5bb4ed2a3a161d185d7fb5862aac7a8cddcc4f5329762e606c2c3fc`（78,334,193 B，用户 SFTP 拉取）
+- `--selftest-r58` 实机（VM，wall 3.2s，退出码 0（`start /wait` 正常返回））：
+  - ① inet 品红 / netmask 默认 / broadcast 品红：inet品红=True netmask默认=True broadcast品红=True => OK
+  - ② unspec 默认 / ether MAC 品红：unspec默认=True etherMAC品红=True => OK
+  - ③ MAC 渲染色：#FF4DFF（期望 FF4DFF）=> OK
+  - r58-terminal.png 目检：inet/broadcast 品红、netmask 白、unspec 整条白、ether MAC 品红，与用户 MobaXterm 参照一致
+
+**遗留**：
+- MobaXterm `SyntaxType=1`（Standard keywords）规则集未实现——这是 A/B
+  观感最大差别（粉彩关键字/数字/提示符）。COMTool 的 5 个方案照抄的是
+  MobaXterm 的 CustomSyntax 定义，没有 Standard keywords 这一档；若要
+  1:1 复刻需另立一轮，先取得该内建规则集的权威定义与配色表。
+- 字体/行距差异（MobaFont 10pt vs Consolas 14.5）属用户设置，不做对齐。
+- 既有局限仍在：着色只写默认前景格；方案切回 default 时 `ApplyToAll` 仅
+  重置水印不清旧色。
+- 库仓库 Iciclecreek.Avalonia.Terminal main 本地领先 origin 6 提交未 push
+  （沿 r53+ 惯例，待用户确认）。
+
 ## 已知偏差（已写入 spec 附录）
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
 2. 热键 .mxtmacros 编码未实测：导出恒 0，导入非 0 忽略+警告
