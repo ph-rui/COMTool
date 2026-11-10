@@ -1770,6 +1770,79 @@ VM 侧 11:26 部署亦早于改绿提交。14:07 双份重部署后用户本地�
   访问权的机器上，由用户自行删除/替换（新单文件 SHA256 见上）。
 - 库仓库 main 领先 origin/main 5 提交未 push（沿 r53 惯例，待用户确认）。
 
+### 55 标题栏精简与分层：移除标题栏"会话"按钮 + 标题栏下沿 1px 分隔线（2026-11-10，用户截图反馈「图1去掉这个；顶部栏与下面的显示内容分层不明显，看不出顶部栏的区域是哪些」）
+
+两项需求（用户原话）：
+1. 去掉标题栏箭头所指的"会话"按钮（SessionsButton，f03a 列表图标，Show/hide sessions）
+2. 标题栏与下方内容分层不明显，看不出顶部栏区域 → 标题栏下沿加分隔线
+
+**① 移除标题栏 SessionsButton**
+- MobaXterm 标题栏本就无此按钮；COMTool 侧栏折叠/展开的替代入口用侧栏
+  rail 的 `RailSessionsButton`（`OnRailTabRequested` 已具备等价语义：面板可见
+  且当前页=Sessions → 折叠；否则切到 Sessions 页并展开）
+- 改动：`MainWindow.axaml` 删按钮与 `Click="OnSessionsToggle"`；标题栏列定义
+  `40,104,40,35,*,35,35,35` → `40,104,40,*,35,35,35`（min/max/close 列号
+  5,6,7→4,5,6，`*` spacer 吸收宽度，右侧窗口按钮位置不变）；
+  `MainWindow.axaml.cs` 删 `OnSessionsToggle`
+- 测试（TDD 先红后绿）：`UI02_TitleBarButtonTogglesDockedSidebar` 更名
+  `UI02_RailSessionsButtonTogglesDockedSidebar` 且改点 rail 会话图标（矩阵
+  UI-02 行同步）；`UI02_CollapsedDockPersistsAcrossRestart`、
+  `UI16_RailStaysVisibleWhenTheDockCollapses` 同样改点 rail 图标；新增
+  `UI01_TitleBarHasNoSessionsButton`（断言按钮已移除、rail 图标存在）
+- E2E：`lib.sh` 的 `SESSIONS_TOGGLE_X/Y`(201,18) 改为 `RAIL_SESSIONS_X/Y`
+  (20,60)（rail 第 1 格 40×44px，35px 标题栏 + 5px 上边距下，中心 ≈(20,62)）；
+  `collapse_sidebar_for_tabs` 保持"探测-点击"重试循环（当前页非 Sessions 时
+  第一次点击只切页、第二次才折叠，循环可收敛）；`run-ui-e2e.sh`
+  UI02_SidebarStaysDockedE2E 的点击同样改为 rail 图标 + 收敛循环
+  （SSH 连接成功后 r54 行为会把侧栏切到 SFTP 页，单次点击不再保证折叠）
+
+**② 标题栏下沿 1px 分隔线**
+- 取值：浅色 `#b4b4b4`（用户 1920×1033 MobaXterm 参照图白底区 y≈91 实测，
+  与未选中 tab 边框同色，r54 已取证）；深色 `#3a3a3a`（与深色主题
+  SidebarBorderBrush/MonSegBorderBrush 同族）。新增资源键
+  `TitleBarBorderBrush`，双主题补齐（符合"只改浅色皮肤取色、深色仅补资源键"
+  约定）
+- 改动：`TitleBar` Border 加 `BorderThickness="0,0,0,1"` +
+  `BorderBrush="{DynamicResource TitleBarBorderBrush}"`（仅底边，35px 行高
+  布局与右侧窗口按钮坐标均不受影响）
+- 测试：新增 `UI01_TitleBarHasBottomDivider`（断言四边厚度 0,0,0,1 且
+  BorderBrush 色值 = TitleBarBorderBrush 资源值，颜色调整时自动跟随）
+
+**实机自检**：新增 `--selftest-r55` 三项：① 标题栏下沿 1px 分隔线（厚度 +
+线色=资源值）；② SessionsButton 已移除、RailSessionsButton 存在；
+③ rail 会话图标折叠（列宽 40px）/展开（恢复原宽）。落盘 r55-titlebar.png。
+
+**验证**：
+- 全量 gate（终版 20261110T023603Z 全绿）：restore/build 通过；单测
+  Core 90 / Sftp 42 / Terminal 27 / Connections 150 / Zmodem 32 / TestGate 49，
+  App 测试 288/288（新增 TitleBarTests.UI01_TitleBarHasBottomDivider、
+  UI01_TitleBarHasNoSessionsButton，UI02 折叠用例更名为
+  UI02_RailSessionsButtonTogglesDockedSidebar），E2E 全 PASS（含
+  UI02_SidebarStaysDockedE2E 改用 rail 会话图标坐标），TestGate 校验含
+  UI-02 新测试名。首跑 20261110T023027Z 出现两处抖动：app-tests
+  TERM01_QuotesSurviveAttachedReadPathWithoutZmodem 一次断言失败（单独复跑 2/2
+  通过，终端 CJK 渲染时序）、TELNET01 输入 marker 15s 未达（复跑 PASS），
+  均与本轮改动无交集，判环境抖动非回归（r51/r54 同族先例）。
+- VM win-x64 双份部署 + SHA256（2026-11-10 10:53，源码 0f712f6）：
+  - R2R 单文件 `C:\Users\devuser\COMTool-Avalonia.exe`：118,798,350 字节，
+    SHA256 `e76ea6775ce9ed34f53645d974ffbe61b2064efe3db678a60c4260df21c1828a`。
+  - AOT 目录 `C:\Users\devuser\COMTool-Avalonia-AOT\COMTool.App.exe`
+    （bundle 克隆 0f712f6 构建，publish rc=0）：SHA256
+    `799c6c2ad2989f002b86b52ef71fa324726b443fb72469aecaf2525c3bb4d289`。
+- `--selftest-r55` 实机（AOT 构建，wall 6.2s）三项全 OK：
+  ① 标题栏下沿线 thickness=1、线色 #B4B4B4 = TitleBarBorderBrush 资源值 OK；
+  ② SessionsButton 已移除、RailSessionsButton 存在 OK；
+  ③ rail 会话图标 初始宽=40 → 一次点击后=360 → 二次点击后=40 OK
+  （VM 配置恢复为折叠态+宽度 360，自检按"状态翻转+恢复原宽+两态分别
+  40px/配置宽"断言，不依赖初始方向）；落盘 r55-titlebar.png 目检：
+  标题栏无会话按钮、下沿分隔线清晰可见。首跑（AOT 克隆早于自检③修复的
+  860a740）③ 误判 FAILED（自检假设初始为展开态），修复后重建重部署通过。
+
+**遗留**：
+- 用户本地 PC 桌面旧 `COMTool-Avalonia.exe`/Python 版 `COMTool` 仍在流程无
+  访问权的机器上，由用户自行替换/删除（新单文件 SHA256 见上）。
+- 库仓库 main 领先 origin/main 5 提交未 push（沿 r53/r54 惯例，待用户确认）。
+
 ## 已知偏差（已写入 spec 附录）
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
 2. 热键 .mxtmacros 编码未实测：导出恒 0，导入非 0 忽略+警告
