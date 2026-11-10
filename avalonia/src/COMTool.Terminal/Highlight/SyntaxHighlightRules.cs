@@ -15,6 +15,9 @@ public enum HighlightScheme
     Cisco = 3,
     PerLine = 4,
     Sql = 5,
+
+    /// <summary>r59：MobaXterm 内建「Standard keywords」（SyntaxType=1）。</summary>
+    Standard = 6,
 }
 
 /// <summary>方案 ↔ config.json 键名（terminal.syntaxHighlight）。</summary>
@@ -28,6 +31,7 @@ public static class HighlightSchemes
         HighlightScheme.Cisco => "cisco",
         HighlightScheme.PerLine => "per_line",
         HighlightScheme.Sql => "sql",
+        HighlightScheme.Standard => "standard",
         _ => "default",
     };
 
@@ -40,6 +44,7 @@ public static class HighlightSchemes
             "cisco" => HighlightScheme.Cisco,
             "per_line" or "perline" => HighlightScheme.PerLine,
             "sql" => HighlightScheme.Sql,
+            "standard" or "standard_keywords" => HighlightScheme.Standard,
             _ => HighlightScheme.Default,
         };
     }
@@ -129,8 +134,28 @@ public static class SyntaxHighlightRules
         new() { Color = 6, Regex = Rx(@"\b(if exists|inner join|alter|all|and|as|between|by|case|collate|commit|constraint|create|deferrable|delete|distinct|else|except|foreign|from|glob|group|having|check|in|index|insert|intersect|into|is|isnull|join|like|limit|on|or|order|primary|references|rollback|select|set|then|transaction|union|unique|update|using|values|when|where)\b") },
     };
 
+    // ── r59：MobaXterm「Standard keywords」补充规则 ──
+    // Standard keywords（SyntaxType=1）在 EWS 分组之外还有两类实证着色：
+    //   · null/none → 品红（MobaXterm EWS 导出原文 Magneta 组本就含 `null|none`，
+    //     r39 抄规则时漏掉；博客实机截图 `Variant = "none"` 为品红）
+    //   · 时间戳 → 黄（博客实机截图 `[ 67705.015]`、日志时间戳着色）
+    // 时间戳在 MobaXterm 里是橙色系（#ECA85E），该色不在 ANSI 16 色调色板内，
+    // 当前高亮器只能写调色板索引，故此处取最接近的黄色（3），偏差见 PLAN §59。
+    // 顺序：日期时间整体 > 日期 > 时间 > 方括号时间戳，避免被拆段。
+    private static readonly Rule[] StandardExtraRules =
+    {
+        new() { Color = 3, Regex = Rx(@"\b\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?\b") },
+        new() { Color = 3, Regex = Rx(@"\b\d{4}-\d{2}-\d{2}\b") },
+        new() { Color = 3, Regex = Rx(@"\b\d{2}:\d{2}:\d{2}(?:[.,]\d+)?\b") },
+        new() { Color = 3, Regex = Rx(@"\[\s*\d+(?:\.\d+)?\s*\]") },
+        new() { Color = 5, Regex = Rx(@"(?<![0-9A-Za-z_&-])(?:null|none)(?![0-9A-Za-z_-])") },
+    };
+
+    private static readonly Rule[] StandardRules = EwsRules.Concat(StandardExtraRules).ToArray();
+
     private static Rule[] RulesFor(HighlightScheme scheme) => scheme switch
     {
+        HighlightScheme.Standard => StandardRules,
         HighlightScheme.ErrorWarningSuccess => EwsRules,
         HighlightScheme.UnixShell => UnixRules,
         HighlightScheme.Cisco => CiscoRules,

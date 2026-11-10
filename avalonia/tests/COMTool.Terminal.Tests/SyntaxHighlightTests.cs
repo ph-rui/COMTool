@@ -105,6 +105,66 @@ public sealed class SyntaxHighlightTests
         Assert.Equal("#ff6060", theme.Red);
     }
 
+    // ───────────────── r59：MobaXterm「标准关键字」方案 ─────────────────
+
+    [Fact]
+    public void TERM30_StandardSchemeColorsNullNoneMagenta()
+    {
+        // r59：MobaXterm Standard keywords（SyntaxType=1）的 null/none 规则
+        // （EWS 导出原文 Magneta 组含 `null|none`，r39 抄规则时漏掉）。
+        // 边界照抄原文：前后不得是 [0-9A-Za-z_&-]，故 --none / none-arg 不命中。
+        var spans = SyntaxHighlightRules.FindSpans(
+            "Variant = \"none\" Options = \"null\" kernel=none-arg flags=--none",
+            HighlightScheme.Standard);
+        var magenta = spans.Where(s => s.Color == 5).Select(s => s.Text).ToList();
+        Assert.Equal(2, magenta.Count);
+        Assert.Contains("none", magenta);
+        Assert.Contains("null", magenta);
+
+        // EWS 方案保持不变（两条新规则只属于标准关键字）
+        Assert.DoesNotContain(
+            SyntaxHighlightRules.FindSpans("none null", HighlightScheme.ErrorWarningSuccess),
+            s => s.Color == 5);
+    }
+
+    [Fact]
+    public void TERM30_StandardSchemeColorsTimestamps()
+    {
+        // r59：Standard keywords 的时间戳规则（博客实机截图：`[ 67705.015]`
+        // 与日志时间戳染黄）。日期时间优先整体命中，不被日期/时间子规则拆开。
+        var spans = SyntaxHighlightRules.FindSpans(
+            "[ 67705.015] 2026-11-10 15:23:51 INFO boot at 15:23:51.250 done",
+            HighlightScheme.Standard);
+        var stamps = spans.Where(s => s.Color == 3).Select(s => s.Text).ToList();
+        Assert.Contains("[ 67705.015]", stamps);
+        Assert.Contains("2026-11-10 15:23:51", stamps);
+        Assert.Contains("15:23:51.250", stamps);
+        // 日期时间不得被拆成两段（先整体声明，抢占机制下后声明的时间规则不重叠）
+        Assert.DoesNotContain("2026-11-10", stamps);
+    }
+
+    [Fact]
+    public void TERM30_StandardSchemeKeepsEwsRules()
+    {
+        // r59：标准关键字 = EWS 全部规则 + null/none + 时间戳，原有分组不得回退。
+        var spans = SyntaxHighlightRules.FindSpans(
+            "error WARNING success 10.0.9.5 02:42:5b:d8:95:d3",
+            HighlightScheme.Standard);
+        Assert.Contains(spans, s => s.Color == 1 && s.Text == "error");
+        Assert.Contains(spans, s => s.Color == 3 && s.Text == "WARNING");
+        Assert.Contains(spans, s => s.Color == 2 && s.Text == "success");
+        Assert.Contains(spans, s => s.Color == 5 && s.Text == "10.0.9.5");
+        Assert.Contains(spans, s => s.Color == 5 && s.Text == "02:42:5b:d8:95:d3");
+    }
+
+    [Fact]
+    public void TERM30_StandardSchemeKeyRoundTrip()
+    {
+        Assert.Equal("standard", HighlightSchemes.KeyOf(HighlightScheme.Standard));
+        Assert.Equal(HighlightScheme.Standard, HighlightSchemes.FromName("standard"));
+        Assert.Equal(HighlightScheme.Standard, HighlightSchemes.FromName(" Standard "));
+    }
+
     [Fact]
     public void TERM30_UnixShellColorsCommentsVariablesKeywords()
     {

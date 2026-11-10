@@ -140,13 +140,14 @@ public sealed class TerminalR39FeatureTests
                 var fullGrid = Assert.IsType<Grid>(displayKids[4].Header);
                 Assert.Equal("F11", fullGrid.Children.OfType<TextBlock>().Last().Text);
 
-                // 语法高亮：5 项单选（r40.2 用户决定移除「逐行」——MobaXterm 语义无公开资料），
+                // 语法高亮：6 项单选（r59 新增「标准关键字」，对齐 MobaXterm
+                // SyntaxType 选项；r40.2 用户决定移除「逐行」——语义无公开资料），
                 // 当前方案（默认）打勾
                 var hl = ItemByLabel(items, "语法高亮");
                 var hlKids = hl.Items.OfType<MenuItem>().ToList();
                 Assert.Equal(new[]
                 {
-                    "默认", "错误/警告/成功关键字", "Unix shell 脚本",
+                    "默认", "标准关键字", "错误/警告/成功关键字", "Unix shell 脚本",
                     "Cisco（网络配置）", "SQL 语法",
                 },
                 hlKids.Select(k => ItemLabel(k)).ToList());
@@ -525,6 +526,64 @@ public sealed class TerminalR39FeatureTests
                 var etherLine = terminal.Terminal.Buffer.GetLine(3)!;
                 var etherText = etherLine.TranslateToString(true, 0);
                 Assert.Equal(5, etherLine[ColOf(etherText, "02:42:5b:d8:95:d3")].Attributes.GetFgColor()); // MAC→品红
+
+                await Task.Delay(0);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task TERM30_StandardSchemeWiringColorsTimestampsAndNone()
+    {
+        // r59：MobaXterm「标准关键字」方案（SyntaxType=1）接线——真实 MainWindow，
+        // 配置落 terminal.syntaxHighlight="standard" 后新输出行自动着色：
+        // 时间戳→黄(3)、null/none→品红(5)，原有 error 红不变。
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            await env.RunAsync(async () =>
+            {
+                env.SeedConfig(new ComtoolConfig
+                {
+                    Terminal = new TerminalConfig { SyntaxHighlight = "standard" },
+                });
+                window = new MainWindow { DataContext = new MainViewModel() };
+                window.Show();
+                window.StopPortTimerForTests();
+                RunJobs(window);
+
+                // 菜单里「标准关键字」被勾选
+                var menu = window.BuildSyntaxHighlightMenuItem();
+                var kids = menu.Items.OfType<MenuItem>().ToList();
+                Assert.Equal(6, kids.Count);
+                Assert.True(kids.Single(k => ItemLabel(k) == "标准关键字").IsChecked);
+
+                var (terminal, _, _) = CreateTestTerminal(window, "hl-standard");
+                window.AttachTerminalHighlighter(terminal);
+                Assert.Equal(COMTool.Terminal.Highlight.HighlightScheme.Standard,
+                    window.GetHighlighterForTests(terminal)!.Scheme);
+
+                terminal.Terminal.Write("$ dmesg\r\n");
+                terminal.Terminal.Write("[ 67705.015] variant=\"none\" error\r\n");
+                RunJobs(window);
+
+                var line = terminal.Terminal.Buffer.GetLine(1)!;
+                var text = line.TranslateToString(true, 0);
+                static int ColOf(string s, string token)
+                {
+                    var c = s.IndexOf(token, StringComparison.Ordinal);
+                    Assert.True(c >= 0, $"未找到 {token}：{s}");
+                    return c;
+                }
+                Assert.Equal(3, line[ColOf(text, "[ 67705.015]")].Attributes.GetFgColor()); // 时间戳→黄
+                Assert.Equal(5, line[ColOf(text, "\"none\"") + 1].Attributes.GetFgColor()); // none→品红
+                Assert.Equal(1, line[ColOf(text, "error")].Attributes.GetFgColor());        // error→红
 
                 await Task.Delay(0);
             });

@@ -395,6 +395,12 @@ public partial class MainWindow : Window
         {
             _ = RunR58SelfTestAsync();
         }
+        // --selftest-r59：实机自检 r59「标准关键字」方案：时间戳→黄、null/none→品红、
+        // EWS 原有 error 红/IP 品红不回退，落盘 r59-terminal.png。
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r59"))
+        {
+            _ = RunR59SelfTestAsync();
+        }
     }
 
     private volatile bool _portScanBusy;
@@ -6359,6 +6365,8 @@ public partial class MainWindow : Window
     private static (string Key, string Label, bool Enabled)[] SyntaxHighlightMenuItems() =>
     [
         ("default", "默认", true),
+        // r59：对齐 MobaXterm 内建 6 项，新增「标准关键字」（SyntaxType=1）
+        ("standard", "标准关键字", true),
         ("error_warning", "错误/警告/成功关键字", true),
         ("unix_shell", "Unix shell 脚本", true),
         ("cisco", "Cisco（网络配置）", true),
@@ -8522,6 +8530,129 @@ public static class ClipCheck {
         catch (Exception ex)
         {
             AppLog.Error("[SelfTest] r58: 自检异常", ex);
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
+        }
+        finally
+        {
+            if (_config is not null && prevScheme is not null)
+            {
+                _config.Config.Terminal.SyntaxHighlight = prevScheme;
+            }
+        }
+    }
+
+    /// <summary>
+    /// <c>--selftest-r59</c>：实机自检 r59「标准关键字」（MobaXterm SyntaxType=1）方案。
+    /// ① 时间戳（`[ 67705.015]` 与 `2026-11-10 15:23:51`）染黄（调色板 3）；
+    /// ② null/none 染品红（调色板 5）；
+    /// ③ EWS 既有分组不回退：error 红（1）、IP 品红（5）；
+    /// ④ 走真实 GlyphRun 复核渲染色：时间戳=Yellow、none=Magenta（用户 ini 值）。
+    /// 全程不调用 SetSyntaxHighlightScheme（先落配置再建终端），走实时着色路径；
+    /// 落盘 r59-terminal.png 供目检。
+    /// </summary>
+    private async Task RunR59SelfTestAsync()
+    {
+        var ok = false;
+        string? prevScheme = null;
+        try
+        {
+            AppLog.Info("[SelfTest] r59: 等主窗稳定 1.5s 后开始");
+            await Task.Delay(1500);
+            if (DataContext is not MainViewModel viewModel)
+            {
+                throw new InvalidOperationException("MainViewModel 未就绪");
+            }
+
+            prevScheme = _config?.Config.Terminal.SyntaxHighlight ?? "default";
+            if (_config is not null)
+            {
+                _config.Config.Terminal.SyntaxHighlight = "standard";
+            }
+
+            var terminal = CreateTerminal();
+            viewModel.AddTab(new TerminalTab
+            {
+                Title = "r59-selftest",
+                SessionId = "local:r59selftest",
+                Kind = SessionKind.Local,
+                Content = terminal,
+                Terminal = terminal,
+                IsAlive = true,
+                CloseAction = () => { },
+            });
+            await Task.Delay(500);
+            UpdateLayout();
+            AttachTerminalHighlighter(terminal);
+            if (terminal.Terminal is null)
+            {
+                throw new InvalidOperationException("XTerm 未就绪");
+            }
+
+            terminal.Terminal.Write("$ dmesg | head -2\r\n");
+            terminal.Terminal.Write("[ 67705.015] variant=\"none\" error on 10.0.9.5\r\n");
+            terminal.Terminal.Write("2026-11-10 15:23:51 boot ok\r\n");
+            await Task.Delay(300);
+            UpdateLayout();
+
+            static int Col(string text, string token)
+            {
+                var col = text.IndexOf(token, StringComparison.Ordinal);
+                if (col < 0)
+                {
+                    throw new InvalidOperationException($"未找到 {token}：{text}");
+                }
+                return col;
+            }
+
+            var line1 = terminal.Terminal.Buffer.GetLine(1)!;
+            var text1 = line1.TranslateToString(true, 0);
+            var tsOk = line1[Col(text1, "[ 67705.015]")].Attributes.GetFgColor() == 3;
+            var noneOk = line1[Col(text1, "\"none\"") + 1].Attributes.GetFgColor() == 5;
+            var errorOk = line1[Col(text1, "error")].Attributes.GetFgColor() == 1;
+            var ipOk = line1[Col(text1, "10.0.9.5")].Attributes.GetFgColor() == 5;
+
+            var line2 = terminal.Terminal.Buffer.GetLine(2)!;
+            var text2 = line2.TranslateToString(true, 0);
+            var dateOk = line2[Col(text2, "2026-11-10 15:23:51")].Attributes.GetFgColor() == 3;
+
+            // ④ 渲染色复核
+            var runs = new List<(string Text, FontWeight Weight, Color Color)>();
+            var view = terminal.GetVisualDescendants()
+                .OfType<Iciclecreek.Terminal.TerminalView>().FirstOrDefault();
+            if (view is not null)
+            {
+                var group = new DrawingGroup();
+                using (var ctx = group.Open())
+                {
+                    view.Render(ctx);
+                }
+                WalkR56Runs(group, runs);
+            }
+            var yellow = Color.Parse(COMTool.Terminal.TerminalTheme.CreateMobaXtermTheme().Yellow);
+            var magenta = Color.Parse(COMTool.Terminal.TerminalTheme.CreateMobaXtermTheme().Magenta);
+            var tsRun = runs.FirstOrDefault(r => r.Text.Contains("67705", StringComparison.Ordinal));
+            var noneRun = runs.FirstOrDefault(r => r.Text.Contains("none", StringComparison.Ordinal));
+            var renderOk = tsRun.Text.Length > 0 && tsRun.Color == yellow
+                && noneRun.Text.Length > 0 && noneRun.Color == magenta;
+
+            AppLog.Info($"[SelfTest] r59: ① 时间戳黄={tsOk} none品红={noneOk} error红={errorOk} ip品红={ipOk}");
+            AppLog.Info($"[SelfTest] r59: ② 日期时间黄={dateOk}");
+            AppLog.Info($"[SelfTest] r59: ③ 渲染色 时间戳=#{(tsRun.Color.R << 16) | (tsRun.Color.G << 8) | tsRun.Color.B:X6}" +
+                $"（期望 {COMTool.Terminal.TerminalTheme.CreateMobaXtermTheme().Yellow}）" +
+                $" none=#{(noneRun.Color.R << 16) | (noneRun.Color.G << 8) | noneRun.Color.B:X6}" +
+                $"（期望 {COMTool.Terminal.TerminalTheme.CreateMobaXtermTheme().Magenta}）=> {(renderOk ? "OK" : "FAILED")}");
+
+            UpdateLayout();
+            SaveVisualPng(Content as Visual, "r59-terminal.png");
+            ok = tsOk && noneOk && errorOk && ipOk && dateOk && renderOk;
+            AppLog.Info($"[SelfTest] r59: 自检完成，{(ok ? "全部 OK" : "存在失败")}，退出");
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(ok ? 0 : 2);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("[SelfTest] r59: 自检异常", ex);
             (Application.Current?.ApplicationLifetime
                 as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
         }
