@@ -212,6 +212,85 @@ public sealed class SyntaxHighlightTests
     }
 
     [Fact]
+    public void TERM30_HlighterColorsLinesAfterCommandEcho()
+    {
+        // r57 回归：真实会话先有命令回显行，之后每条输出行都必须着色。
+        // 旧实现把水印推进到 LF 后的“下一行”，导致回显之后的每一行都被跳过
+        // （用户实测：切到 EWS 方案时 ApplyToAll 把历史全量染一次，之后新
+        // ifconfig 输出再无颜色）。
+        var emu = new TerminalEmulator(60, 20, 500);
+        using var hl = new TerminalHighlighter(emu.Terminal, HighlightScheme.ErrorWarningSuccess);
+        emu.Write("$ ifconfig\r\n");
+        emu.Write("      ether 82:37:a3:fe:87:0b   txqueuelen 1000  (Ethernet)\r\n");
+        emu.Write("        RX errors 0  dropped 0  overruns 0  frame 0\r\n");
+        emu.Write("        plain text row\r\n");
+
+        var macLine = emu.Terminal.Buffer.GetLine(1)!;
+        var macText = macLine.TranslateToString(true, 0);
+        var macCol = macText.IndexOf("82:37:a3:fe:87:0b", StringComparison.Ordinal);
+        Assert.True(macCol >= 0);
+        Assert.Equal(5, macLine[macCol].Attributes.GetFgColor()); // 品红
+
+        var errLine = emu.Terminal.Buffer.GetLine(2)!;
+        var errText = errLine.TranslateToString(true, 0);
+        var errCol = errText.IndexOf("errors", StringComparison.Ordinal);
+        Assert.True(errCol >= 0);
+        Assert.Equal(1, errLine[errCol].Attributes.GetFgColor()); // 红
+
+        // 普通行保持默认前景色
+        Assert.Equal(256, emu.Terminal.Buffer.GetLine(3)![0].Attributes.GetFgColor());
+    }
+
+    [Fact]
+    public void TERM30_HlighterColorsAcrossScrollbackTrim()
+    {
+        // r57 回归：回滚缓冲写满后 XTerm 整体上移（绝对行号漂移），
+        // 新行仍必须着色，且不能因“缓冲区收缩”误判而重复全量重染。
+        var emu = new TerminalEmulator(30, 6, 6);
+        using var hl = new TerminalHighlighter(emu.Terminal, HighlightScheme.ErrorWarningSuccess);
+        emu.Write("$ run\r\n");
+        for (var i = 0; i < 20; i++)
+        {
+            emu.Write($"error {i:00}\r\n");
+        }
+
+        var checkedLines = 0;
+        for (var row = 0; row < emu.Terminal.Buffer.Length; row++)
+        {
+            var line = emu.Terminal.Buffer.GetLine(row)!;
+            var text = line.TranslateToString(true, 0);
+            if (!text.StartsWith("error ", StringComparison.Ordinal))
+            {
+                continue;
+            }
+            checkedLines++;
+            Assert.Equal(1, line[0].Attributes.GetFgColor());
+        }
+        Assert.True(checkedLines >= 5, $"仅检查到 {checkedLines} 条 error 行");
+    }
+
+    [Fact]
+    public void TERM30_HlighterColorsWrappedLineAfterEcho()
+    {
+        // r57 回归：自动折行的长行在最后一个视觉行才触发 LF，
+        // 着色流程必须覆盖折行涉及的整段（水印到刚结束行）。
+        var emu = new TerminalEmulator(30, 10, 200);
+        using var hl = new TerminalHighlighter(emu.Terminal, HighlightScheme.ErrorWarningSuccess);
+        emu.Write("$ run\r\n");
+        emu.Write("error " + new string('a', 29) + " warning here\r\n");
+
+        // 第 1 视觉行以 error 开头，第 2 视觉行含 warning：
+        // 折行涉及的整段（水印到 LF 结束行）都必须被着色。
+        var first = emu.Terminal.Buffer.GetLine(1)!;
+        Assert.Equal(1, first[0].Attributes.GetFgColor());
+        var second = emu.Terminal.Buffer.GetLine(2)!;
+        var text = second.TranslateToString(true, 0);
+        var col = text.IndexOf("warning", StringComparison.Ordinal);
+        Assert.True(col >= 0, $"第 2 行无 warning：{text}");
+        Assert.Equal(3, second[col].Attributes.GetFgColor());
+    }
+
+    [Fact]
     public void TERM30_DefaultFgProbe()
     {
         // 锁定 XTerm 默认前景色编码（256/mode0），防止库升级破坏着色判定

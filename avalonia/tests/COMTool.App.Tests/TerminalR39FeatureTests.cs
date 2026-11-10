@@ -415,6 +415,62 @@ public sealed class TerminalR39FeatureTests
     // ═══════════════════════ TERM-30：语法高亮接线 ═══════════════════════
 
     [AvaloniaFact]
+    public async Task TERM30_HighlightColorsOutputAfterPromptEcho()
+    {
+        // r57 回归（用户实机反馈“只生效一次，下次执行 ifconfig 就没效果了”）：
+        // 真实会话先有命令回显行，之后每条输出行都必须着色，且连续两轮输出都要着色。
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            await env.RunAsync(async () =>
+            {
+                env.SeedConfig(new ComtoolConfig
+                {
+                    Terminal = new TerminalConfig { SyntaxHighlight = "error_warning" },
+                });
+                window = new MainWindow { DataContext = new MainViewModel() };
+                window.Show();
+                window.StopPortTimerForTests();
+                RunJobs(window);
+
+                var (terminal, _, _) = CreateTestTerminal(window, "hl-prompt");
+                window.AttachTerminalHighlighter(terminal);
+                Assert.NotNull(window.GetHighlighterForTests(terminal));
+
+                const string mac = "82:37:a3:fe:87:0b";
+                for (var round = 0; round < 2; round++)
+                {
+                    terminal.Terminal.Write("$ ifconfig\r\n");
+                    terminal.Terminal.Write("      ether " + mac + "  txqueuelen 1000  (Ethernet)\r\n");
+                    terminal.Terminal.Write("        RX errors 0  dropped 0  overruns 0  frame 0\r\n");
+                    RunJobs(window);
+
+                    var etherRow = round * 3 + 1;
+                    var line = terminal.Terminal.Buffer.GetLine(etherRow)!;
+                    var text = line.TranslateToString(true, 0);
+                    var col = text.IndexOf(mac, StringComparison.Ordinal);
+                    Assert.True(col >= 0, $"第 {round + 1} 轮 ether 行缺失：{text}");
+                    Assert.Equal(5, line[col].Attributes.GetFgColor()); // 品红
+
+                    var errLine = terminal.Terminal.Buffer.GetLine(etherRow + 1)!;
+                    var errText = errLine.TranslateToString(true, 0);
+                    var errCol = errText.IndexOf("errors", StringComparison.Ordinal);
+                    Assert.True(errCol >= 0, $"第 {round + 1} 轮 errors 行缺失：{errText}");
+                    Assert.Equal(1, errLine[errCol].Attributes.GetFgColor()); // 红
+                }
+
+                await Task.Delay(0);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
     public async Task TERM30_HighlightWiringColorsNewLines()
     {
         using var env = new TestEnvironment();

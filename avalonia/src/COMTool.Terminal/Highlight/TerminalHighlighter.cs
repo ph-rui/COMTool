@@ -14,12 +14,15 @@ namespace COMTool.Terminal.Highlight;
 /// - 宽字符（CJK）按 cell 宽度映射，匹配按字符偏移、落色按格子覆盖；
 /// - 水标记（watermark）只处理新增行；方案切换调 ApplyToAll 全量重染；
 ///   缓冲区收缩（Reset/ClearScrollback）后水印归零，新写入的行重新参与着色；
+///   r57：LF 时只推进到“刚结束的行”（游标上一行），不再跳过下一条输出行；
+///   回滚写满后整体上移（绝对行号漂移）时只处理刚结束行，不误判为缓冲区收缩；
 /// - 备用屏（vim/less 等 alt screen）不着色。
 /// </summary>
 public sealed class TerminalHighlighter : IDisposable
 {
     private readonly XTermTerminal _term;
     private int _nextRow;
+    private int _lastLength;
     private bool _disposed;
 
     /// <summary>当前方案；置为 Default 后新行不再着色。</summary>
@@ -30,6 +33,7 @@ public sealed class TerminalHighlighter : IDisposable
         _term = term;
         Scheme = scheme;
         _nextRow = term.Buffer.YBase + term.Buffer.Y; // 从“现在”之后开始着色
+        _lastLength = term.Buffer.Length;
         _term.LineFed += OnLineFed;
         _term.Resized += OnResized;
         _term.BufferChanged += OnBufferSwitched;
@@ -47,8 +51,36 @@ public sealed class TerminalHighlighter : IDisposable
         }
         try
         {
-            // LF 触发时游标已落到下一行：活动行（可能未写完）= 游标所在行
-            ColorizeUpTo(_term.Buffer.YBase + _term.Buffer.Y);
+            var buf = _term.Buffer;
+            var length = buf.Length;
+            if (length < _lastLength)
+            {
+                // 缓冲区被 Reset/ClearScrollback 收缩：旧水印失效，从头重染
+                // （复位后写入的新行必须能被着色，不能错过）。
+                _nextRow = 0;
+            }
+            _lastLength = length;
+
+            // LF 触发时游标已落到下一行：刚结束的行 = 游标上一行。
+            // r57 修复：旧实现按“游标所在行”推进水印，等于把尚未写入的
+            // 下一行提前标记为已处理；命令回显之后的所有输出行因此被跳过
+            // （只有首次写入/方案切换 ApplyToAll 才看得到颜色）。
+            var lastRow = buf.YBase + buf.Y - 1;
+            if (lastRow < 0)
+            {
+                return;
+            }
+            if (lastRow >= length)
+            {
+                lastRow = length - 1;
+            }
+            if (lastRow < _nextRow)
+            {
+                // 回滚满后 XTerm 整体上移（绝对行号漂移），或 ApplyToAll 已把
+                // 水位留在缓冲区末尾：只需处理刚结束的这一个逻辑行。
+                _nextRow = lastRow;
+            }
+            ColorizeUpTo(lastRow);
         }
         catch
         {
@@ -60,12 +92,14 @@ public sealed class TerminalHighlighter : IDisposable
     {
         // 重排后旧行的折行可能变化：放弃历史，只染新来的行
         _nextRow = _term.Buffer.YBase + _term.Buffer.Y;
+        _lastLength = _term.Buffer.Length;
     }
 
     private void OnBufferSwitched(object? sender, TerminalEvents.BufferChangedEventArgs e)
     {
         // normal<->alt 切换：重置水印，只处理切换后的新内容
         _nextRow = _term.Buffer.YBase + _term.Buffer.Y;
+        _lastLength = _term.Buffer.Length;
     }
 
     /// <summary>把 [watermark, lastRow] 全部着色一次（方案切换后全量重染）。</summary>
@@ -78,6 +112,7 @@ public sealed class TerminalHighlighter : IDisposable
         if (Scheme == HighlightScheme.Default)
         {
             _nextRow = _term.Buffer.YBase + _term.Buffer.Y;
+            _lastLength = _term.Buffer.Length;
             return;
         }
         ColorizeUpTo(_term.Buffer.Length - 1);
@@ -92,9 +127,7 @@ public sealed class TerminalHighlighter : IDisposable
         }
         if (lastRow < _nextRow)
         {
-            // 缓冲区被 Reset/ClearScrollback 收缩：旧水印失效，从头重染
-            // （复位后写入的新行必须能被着色，不能错过）。
-            _nextRow = 0;
+            return;
         }
         for (var row = _nextRow; row <= lastRow; row++)
         {

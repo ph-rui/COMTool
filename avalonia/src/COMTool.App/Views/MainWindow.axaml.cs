@@ -382,6 +382,12 @@ public partial class MainWindow : Window
         {
             _ = RunR56SelfTestAsync();
         }
+        // --selftest-r57：实机自检 r57 语法高亮实时着色回归（命令回显后连续两轮
+        // ifconfig 输出都必须着色，验证不再“只生效一次”），落盘 r57-terminal.png。
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r57"))
+        {
+            _ = RunR57SelfTestAsync();
+        }
     }
 
     private volatile bool _portScanBusy;
@@ -8286,6 +8292,111 @@ public static class ClipCheck {
             AppLog.Error("[SelfTest] r56: 自检异常", ex);
             (Application.Current?.ApplicationLifetime
                 as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
+        }
+    }
+
+    /// <summary>
+    /// <c>--selftest-r57</c>：实机自检 r57 语法高亮实时着色回归。
+    /// 用户实机反馈“只生效一次，下次执行 ifconfig 就没效果了”：旧实现 LF 时把
+    /// 水印推进到游标下一行，命令回显之后的输出行全部被跳过（只有方案切换
+    /// ApplyToAll 能把历史一次性染色）。本自检全程不调用 SetSyntaxHighlightScheme，
+    /// 先落配置再挂着色器，连续写两轮 ifconfig 形态输出，逐轮核对 MAC=品红、
+    /// errors=红；落盘 r57-terminal.png 供目检。
+    /// </summary>
+    private async Task RunR57SelfTestAsync()
+    {
+        var ok = false;
+        string? prevScheme = null;
+        try
+        {
+            AppLog.Info("[SelfTest] r57: 等主窗稳定 1.5s 后开始");
+            await Task.Delay(1500);
+            if (DataContext is not MainViewModel viewModel)
+            {
+                throw new InvalidOperationException("MainViewModel 未就绪");
+            }
+
+            // 先落方案再建终端：不调用 SetSyntaxHighlightScheme（那会 ApplyToAll，
+            // 掩盖 LineFed 实时着色缺陷）。
+            prevScheme = _config?.Config.Terminal.SyntaxHighlight ?? "default";
+            if (_config is not null)
+            {
+                _config.Config.Terminal.SyntaxHighlight = "error_warning";
+            }
+
+            var terminal = CreateTerminal();
+            viewModel.AddTab(new TerminalTab
+            {
+                Title = "r57-selftest",
+                SessionId = "local:r57selftest",
+                Kind = SessionKind.Local,
+                Content = terminal,
+                Terminal = terminal,
+                IsAlive = true,
+                CloseAction = () => { },
+            });
+            await Task.Delay(500);
+            UpdateLayout();
+            AttachTerminalHighlighter(terminal);
+            if (terminal.Terminal is null)
+            {
+                throw new InvalidOperationException("XTerm 未就绪");
+            }
+
+            const string mac = "82:37:a3:fe:87:0b";
+            var rounds = new List<string>();
+            var allOk = true;
+            for (var round = 0; round < 2; round++)
+            {
+                terminal.Terminal.Write("$ ifconfig\r\n");
+                terminal.Terminal.Write("      ether " + mac + "   txqueuelen 1000  (Ethernet)\r\n");
+                terminal.Terminal.Write("        RX errors 0  dropped 0  overruns 0  frame 0\r\n");
+                await Task.Delay(200);
+
+                var baseRow = round * 3;
+                var macRow = baseRow + 1;
+                var errRow = baseRow + 2;
+                var macLine = terminal.Terminal.Buffer.GetLine(macRow)!;
+                var macText = macLine.TranslateToString(true, 0);
+                var macCol = macText.IndexOf(mac, StringComparison.Ordinal);
+                var macOk = macCol >= 0;
+                for (var x = macCol; macOk && x < macCol + mac.Length; x++)
+                {
+                    macOk = macLine[x].Attributes.GetFgColorMode() == 0
+                        && macLine[x].Attributes.GetFgColor() == 5; // 品红
+                }
+
+                var errLine = terminal.Terminal.Buffer.GetLine(errRow)!;
+                var errText = errLine.TranslateToString(true, 0);
+                var errCol = errText.IndexOf("errors", StringComparison.Ordinal);
+                var errOk = errCol >= 0
+                    && errLine[errCol].Attributes.GetFgColor() == 1; // 红
+
+                allOk &= macOk && errOk;
+                rounds.Add($"轮{round + 1} MAC行={macRow}品红={macOk} errors行={errRow}红={errOk}");
+                AppLog.Info($"[SelfTest] r57: {rounds[^1]}");
+            }
+
+            UpdateLayout();
+            SaveVisualPng(Content as Visual, "r57-terminal.png");
+            ok = allOk;
+            AppLog.Info($"[SelfTest] r57: 自检完成，实时着色两轮均{(ok ? "OK" : "失败")}（{string.Join("; ", rounds)}），退出");
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(ok ? 0 : 2);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("[SelfTest] r57: 自检异常", ex);
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
+        }
+        finally
+        {
+            // 自检不落盘方案：恢复内存配置，避免污染用户 config.json。
+            if (_config is not null && prevScheme is not null)
+            {
+                _config.Config.Terminal.SyntaxHighlight = prevScheme;
+            }
         }
     }
 
