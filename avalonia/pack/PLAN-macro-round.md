@@ -2048,6 +2048,65 @@ r56-terminal.png。
 - 库仓库 Iciclecreek.Avalonia.Terminal main 本地领先 origin 6 提交未 push
   （沿 r53+ 惯例，待用户确认）。
 
+### 59 新增「标准关键字」方案（对齐 MobaXterm SyntaxType=1）（2026-11-10，承接 r58 遗留）
+
+**前置修正（推翻 r58 的一条结论）**：r58 报告称 Standard keywords 会额外把
+关键字/数字/提示符染成粉彩。对用户自己那张 MobaXterm 截图做逐像素复核后确认
+**该说法不成立**：同一份 ifconfig 输出里，Standard keywords 只染 IP（品红）与
+`errors`（红），`flags=209`、`<UP,POINTTOPOINT,…>`、`mtu 1420` 及全部计数都是
+纯白。r58 的“粉彩”来自一张第三方博客截图——那张图经过 JPEG 转存，色度扩散把
+白字边缘染成粉彩，属取证陷阱。
+
+**实证差距（只剩两条）**：
+1. `null` / `none` → 品红：MobaXterm EWS 导出原文的品红组本就含 `null|none`
+   （博客实机截图 `Variant = "none"` 为品红），r39 抄规则时漏掉；
+2. 时间戳 → 着色：博客实机截图中 `[ 67705.015]` 与日志时间戳被着色。MobaXterm
+   此处用橙 #ECA85E，该色**不在 ANSI 16 色调色板内**，而高亮器当前只能写
+   调色板索引（0–15）。
+
+**实现**：
+- `HighlightScheme.Standard = 6`，`HighlightSchemes` 键 `standard`（兼容
+  `standard_keywords`）；菜单在「默认」之后插入第 6 项「标准关键字」，顺序
+  对齐 MobaXterm 内建 6 项（默认/标准关键字/错误·警告·成功/Unix shell/Cisco/SQL）。
+- `StandardRules = EwsRules + StandardExtraRules`：
+  - 时间戳：日期时间整体（`YYYY-MM-DD HH:MM:SS[.mmm]`）→ 日期 → 时间 →
+    方括号 `[ 67705.015]`，全部 Color 3（黄）；顺序保证不被拆段；
+  - `null|none`：边界照抄 EWS 原文（前后不得为 `[0-9A-Za-z_&-]`），Color 5。
+- EWS 方案保持原样（两条新规则只属于标准关键字；单测锁定）。
+
+**测试**（TDD 先红后绿；先红为编译期红：`HighlightScheme` 无 `Standard`）：
+- `SyntaxHighlightTests.TERM30_StandardSchemeColorsNullNoneMagenta`
+- `SyntaxHighlightTests.TERM30_StandardSchemeColorsTimestamps`
+- `SyntaxHighlightTests.TERM30_StandardSchemeKeepsEwsRules`
+- `SyntaxHighlightTests.TERM30_StandardSchemeKeyRoundTrip`
+- `TerminalR39FeatureTests.TERM30_StandardSchemeWiringColorsTimestampsAndNone`
+  （真实 MainWindow + 实时着色：时间戳黄、none 品红、error 红）
+
+**已知偏差**：
+- 时间戳颜色：MobaXterm 橙 #ECA85E vs COMTool 黄 #ffff36。要做真橙需让高亮器
+  支持真彩色（改库），本轮按方案 A 不做，记入偏差。
+
+**验证**：
+- 全量 gate：2026-11-10T07:59:58Z 全绿（unit 401 / app 293 / e2e 15 / testgate PASS；总 694 results）
+- VM win-x64 AOT 部署（仅更新 AOT 目录）：
+  - `C:\Users\devuser\COMTool-Avalonia-AOT\COMTool.App.exe`
+    SHA256 = `91219d7ebc342bfe899401a21d5dce240cba63b95ccc0fae0190944cc8aec4c1`
+  - AOT 包 `C:\Users\devuser\COMTool-Avalonia-AOT-r59.zip`
+    SHA256 = `979f6ecbf8f922ccd3de5d58feba70f08074545a2de06bee426a9fa6521d1228`（78,349,449 B，用户 SFTP 拉取）
+- `--selftest-r59` 实机（VM，wall 3.3s，退出码 0）：
+  - ① 时间戳黄 / none 品红 / error 红 / IP 品红：时间戳黄=True、none 品红=True、error 红=True、IP 品红=True
+  - ② 日期时间黄：日期时间黄=True
+  - ③ 渲染色：时间戳=#FFFF36（期望 #ffff36）、none=#FF4DFF（期望 #ff4dff）=> OK
+  - r59-terminal.png 目检：通过（时间戳/日期时间黄色、none 品红、error 红、IP 品红，其余纯白）
+
+**遗留**：
+- 时间戳真橙（#ECA85E）需高亮器真彩色支持，未做（见已知偏差）。
+- Standard keywords 仍是“实证复刻”而非逐条抄录：MobaXterm 内建规则表未公开，
+  规则集来自用户截图 + 其 EWS 导出原文；若后续拿到更权威定义可再收敛。
+- 既有局限仍在：着色只写默认前景格；方案切回 default 时 `ApplyToAll` 仅重置
+  水印不清旧色。
+- 库仓库 Iciclecreek.Avalonia.Terminal main 本地领先 origin 6 提交未 push（待用户确认）。
+
 ## 已知偏差（已写入 spec 附录）
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
 2. 热键 .mxtmacros 编码未实测：导出恒 0，导入非 0 忽略+警告
