@@ -1843,6 +1843,74 @@ VM 侧 11:26 部署亦早于改绿提交。14:07 双份重部署后用户本地�
   访问权的机器上，由用户自行替换/删除（新单文件 SHA256 见上）。
 - 库仓库 main 领先 origin/main 5 提交未 push（沿 r53/r54 惯例，待用户确认）。
 
+### 56 终端 SGR 粗体渲染对齐 MobaXterm + EWS 补 MAC 品红规则（2026-11-10，用户同板对照截图「对比mobaxterm（图2）」）
+
+两项需求（用户原话 + 截图取证）：
+1. COMTool 终端里 ifconfig 的数值 token（flags=…/mtu/MAC/txqueuelen/计数器等）
+   渲染成粗字，MobaXterm 全细体
+2. MobaXterm 里 MAC 地址是品红色，COMTool 是白字
+
+**取证结论（像素级 + 配置级）**：
+- 远端 imx95evk 的 ifconfig 自带 ANSI：SGR 1（粗体）标数值 token、SGR 31 红
+  标 errors、SGR 1;35/95 品红标 127.0.0.1——证据：COMTool 侧 config.json
+  `terminal.syntaxHighlight="default"`（高亮全关）却仍有红/品红/粗体，说明
+  颜色来自远端字节流
+- MobaXterm 侧 `UP`/`mtu`/`1500` 实测纯前景色 #ececec（细体）→ 其字体
+  （Lucida Console 类）无粗体面，SGR 1 视觉无效果且不变亮
+- MobaXterm 的 MAC 品红：远端对 MAC 只发粗体不发色（COMTool 收到后 MAC 是
+  白字粗体可证），故品红来自用户 MobaXterm 本地个人高亮规则
+
+**① 粗体渲染（库 4.1.7）**
+- 根因：COMTool 终端字体 Consolas 有粗体面，XTerm 的 SGR 1 被照实画成粗字
+- 修复：`Iciclecreek.Avalonia.Terminal` 4.1.6→4.1.7，`TerminalView`/
+  `TerminalControl` 新增 `BoldFont` 开关（库默认 true 保留原行为；
+  Generic.axaml TemplateBinding 透传）；false 时渲染路径（主 run/块字符/
+  宽字符 4 处 typeface + 3 处 foreground）强制常规字重、`GetForegroundBrush`
+  的 boldIsBright 参数置 false（不提亮）
+- COMTool `CreateTerminal()` 设 `BoldFont = false`（对齐用户 MobaXterm）
+
+**② EWS MAC 规则**
+- `SyntaxHighlightRules` EwsRules 加 `\b(?:[0-9a-f]{2}[:-]){5}[0-9a-f]{2}\b`
+  → Color 5（品红 #ff36ff），置于 IP 规则之后（互不重叠，抢占机制下安全）
+
+**测试**（TDD 先红后绿）：
+- `SyntaxHighlightTests.TERM30_EwsColorsMacAddressMagenta`：MAC 染品红且
+  不吞相邻词（先红：规则不存在）
+- 新增 `TerminalBoldRenderTests`（App 级，真实 CreateTerminal + 模板链路 +
+  headless `view.Render(DrawingGroup)` 走查 GlyphRun）：
+  - `TERM35_BoldFontOffDrawsNormalWeightPlainColor`：全部 run 无粗体面；
+    SGR 1;35 按 #ff36ff 画、#ff80ff 不出现
+  - `TERM35_BoldFontOnBrightensBoldColor`：回退路径 SGR 1;35 提亮 #ff80ff
+
+**实机自检**：新增 `--selftest-r56` 两项：① SGR 粗体走查（无粗体面 +
+BMAG 色 #ff36ff）；② EWS MAC 17 格全品红（验证后恢复原方案）。落盘
+r56-terminal.png。
+
+**验证**：
+- 全量 gate：20261110T043940Z 全绿（unit 391 / app 290 / e2e 15 项 PASS /
+  testgate PASS）。前 3 轮 e2e 轮换挂 UI05_TabSwitchTypingBothDirections
+  （042144Z/042205Z）与 TELNET01_AutoLoginE2E（042907Z/043256Z）——均为
+  输入送达类已知偶发项，同代码 041323Z 曾 e2e 全绿，复跑判定为环境抖动
+- VM win-x64 AOT 部署（R2R 单文件 r55 起已删，本轮只部署 AOT 目录）+ SHA256：
+  - `C:\Users\devuser\COMTool-Avalonia-AOT\COMTool.App.exe`
+    = `1db8076df5e2a0e2874918ab4fd717544809954bb630b40bb65673149ac5380c`
+  - AOT 包 `C:\Users\devuser\COMTool-Avalonia-AOT-r56.zip`
+    SHA256 = `b162e1d60d6917a4b1f149e95c61db88538cbcf3f3dfcab43a2097f14ba861b2`
+    （78,332,270 B，用户 SFTP 拉取）
+- `--selftest-r56` 实机（VM，wall 4.9s，退出码 0）：
+  - ① SGR 粗体：glyphrun=2 粗体面=False BMAG 色=#FF36FF（期望 FF36FF）=> OK
+  - ② EWS MAC：行=1 MAC 17 格全品红(index5) => OK（方案已恢复 default）
+  - r56-terminal.png 目检：BOLDVAL 细体白、BMAG 普通品红（非亮品红）、
+    ether 行 MAC 品红——与用户 MobaXterm 参照一致
+
+**遗留**：
+- 库仓库 Iciclecreek.Avalonia.Terminal 4.1.7 提交 41ffc0d 未 push（沿 r53/54/55
+  惯例，main 本地领先 origin，待用户确认）
+- r39 高亮器既有局限（非本轮引入）：着色只写默认前景格、方案切回 default 时
+  ApplyToAll 仅重置水印不清旧色，故 EWS→default 后已染格子保留颜色（自检
+  截图中 MAC 仍为品红即此行为）
+- e2e UI05 / TELNET01 输入送达偶发抖动见上（复跑判定）
+
 ## 已知偏差（已写入 spec 附录）
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
 2. 热键 .mxtmacros 编码未实测：导出恒 0，导入非 0 忽略+警告

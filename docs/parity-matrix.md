@@ -37,7 +37,7 @@
 | TERM-04 | 滚动回看 | P0 | 完成 | 历史缓冲、滚轮/PageUp/PageDown 已实现；滚动条按 Python 隐藏 |
 | TERM-05 | 选择与复制 | P0 | 完成 | 左键拖选、右键复制、高亮已验证 |
 | TERM-06 | 粘贴 | P0 | 完成 | 右键、Ctrl+V/Ctrl+Shift+V、中文已验证 |
-| TERM-07 | MobaXterm 关键字高亮 | P0 | 完成 | 错误红、成功绿、警告黄、URL 下划线、ANSI 优先；流式高亮测试通过 |
+| TERM-07 | MobaXterm 关键字高亮 | P0 | 完成 | 错误红、成功绿、警告黄、URL 下划线、ANSI 优先；流式高亮测试通过；r56：EWS 方案补 MAC 地址→品红规则（复刻用户 MobaXterm 个人高亮，同板 ifconfig 对照截图取证）；SGR 粗体渲染对齐 MobaXterm（其字体无粗体面，粗体细体显示、不提亮——COMTool 库 4.1.7 BoldFont 开关，默认关，见 TERM-35） |
 | TERM-08 | 光标显示 | P0 | 完成 | 光标颜色/位置正常，隐藏/显示和宽字符推进已通过单元测试 |
 | TERM-09 | 字体/字号配置 | P1 | 完成（Avalonia 增强） | 2026-10-25 按用户要求对齐 MobaXterm 默认字体：Consolas 14.5px（r42：用户同机截图实测 MobaXterm 字距 7.94px = MobaFont 11pt，我们 13.5px Consolas 仅 7.44px，整屏含中文小 7%；14.5px advance 7.97px 对齐，旧配置 13.5 一次性迁移到 14.5），中文优先回退系统 Microsoft YaHei UI（r41.1：用户同机 MobaXterm 截图比对证实 MobaXterm 的中文即 Windows 系统雅黑回退；r41 曾改内置 Noto 优先，因笔画细、字形方，与 MobaXterm 观感不符，回退），内置 Noto Sans Mono CJK SC（Regular+Bold，OFL，0.5em/1em 度量保持 2 格对齐）作跨平台兜底，保证 Linux/headless 不出 .notdef；启动时后台预热字型缓存，首个 SSH 标签不再因解析 16MB CJK 字体而变慢（Windows 实机点击→终端可输入 573ms，见 run.log 三段耗时），resize/分离渲染正常；中英文混排观感由 WIN-20 实机核对（r41 CJK 字形改由内置 Noto 解析，观感待 WIN-20 复核）；r43：库 4.1.2 把 width-2 中文字符钉到主字体基线（此前 CJK run 走 FormattedText 落在雅黑更高 ascent 上，中文比英文低 ~4.6px），中英文混排现与 MobaXterm 一样共用基线（实机 cjk-content.png 证基线差≤1px、中文 ink 13px 全高） |
 | TERM-10 | 终端输入映射 | P0 | 部分 | 文本、Enter、Ctrl+C/V、方向键、Home/End、Insert/Delete、F1-F12 已通过 `cat -v` 实测 |
@@ -64,6 +64,7 @@
 | TERM-32 | 终端鼠标选中自动复制（MobaXterm select-to-copy） | P1 | 完成（Avalonia 增强） | 2026-11-04 第 45 轮：终端内鼠标框选（拖选/双击单词/三击整行）松开左键即自动把选中文本写入系统剪贴板，选区高亮保留不自动清除（与 MobaXterm 一致；此前需再右键/Ctrl+Shift+C 才复制）；库 4.1.3 新增 TerminalView.AutoCopyOnSelection StyledProperty（默认 true），OnPointerReleased 选区结束分支 EndSelection 后若 HasSelection 则 fire-and-forget 复制（失败只写 Debug，不炸 async-void handler），单击未拖动不触发，右键复制/粘贴路径不变；TerminalControl 镜像 + TemplateBinding，未接 config 持久化开关（MobaXterm 有该选项，本轮先默认开启，要开关再加 terminal.autoCopyOnSelection）；headless 单测（库 3 项 + App 2 项）覆盖 |
 | TERM-33 | 终端双击整路径选中 + 悬停文本光标（MobaXterm 对齐） | P1 | 完成（Avalonia 增强） | 2026-11-05 第 47 轮：① 终端内双击路径（如 /home/devuser/tftp_dir/patent）直接选中整条路径（此前仅选中一个词段）；双击普通单词仍按词扩展（foo-bar 行为不变），含 . 的 IP/文件名亦可整选；② 鼠标移入终端显示区域时指针变为文本型 IBeam（MobaXterm 同），移开恢复箭头；URL 悬停小手与程序 OSC22 形状优先级更高不受影响；库 4.1.4 实现（双击后路径游程扩展 + 指针 enter/move/exit 光标管理），headless 单测（库 5 项 + App 2 项）+ 实机 --selftest-r47 覆盖 |
 | TERM-34 | 中英文混排基线对齐（MobaXterm 对齐） | P1 | 完成（Avalonia 增强）  | 2026-11-05 第 53 轮：用户截图反馈「英文比中文高一点」，实机（VM win-x64 AOT）--selftest-r53 复核确认当前构建（r43 钉扎已含）下 CJK 与 Latin 共享主面基线（终端 0.35px / 标签 ≤0.6px，均不可感知），用户偏差 2.7px 对应 r43 修复前旧构建行为；App 级回归 TERM34_WideCjkRunSharesLatinBaseline（CJK 宽字符 run 走 glyph 快路径、基线与 Latin 相等、advance=2 格），库仓库另增渲染级 WideGlyphBaselineTests；Win32 TryGetGlyphMetrics 返回非墨迹值，运行时度量修正方案否决 |
+| TERM-35 | 终端 SGR 粗体渲染对齐（MobaXterm 对齐） | P1 | 完成（Avalonia 增强） | 2026-11-10 第 56 轮：用户同板 imx95evk ifconfig 与 MobaXterm 对照截图取证——远端 ifconfig 自带 SGR 1 粗体标数值 token，MobaXterm 字体无粗体面故粗体视觉无效果（细体、不变亮），COMTool 原以 Consolas 粗体面画粗字不一致；库 4.1.7 新增 TerminalView/TerminalControl.BoldFont 开关（默认 true 保留原行为），COMTool CreateTerminal 设 BoldFont=false：SGR 粗体按常规字重+原色绘制（粗体品红 #ff36ff 不提亮为 #ff80ff）；同轮 EWS 高亮方案补 MAC 地址→品红规则（复刻用户 MobaXterm 个人高亮，见 TERM-30）；实机 --selftest-r56 双项覆盖 |
 
 ## 3. 串口
 
