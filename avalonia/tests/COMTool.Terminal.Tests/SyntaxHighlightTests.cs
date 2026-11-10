@@ -45,6 +45,20 @@ public sealed class SyntaxHighlightTests
     }
 
     [Fact]
+    public void TERM30_EwsColorsMacAddressMagenta()
+    {
+        // r56：复刻用户 MobaXterm 的个人规则——ifconfig 输出里的 MAC 地址
+        // 染品红（Color 5，MobaXterm 主题下为 #ff36ff）。
+        var spans = SyntaxHighlightRules.FindSpans(
+            "      ether 82:37:a3:fe:87:0b   txqueuelen 1000  (Ethernet)",
+            HighlightScheme.ErrorWarningSuccess);
+        Assert.Contains(spans, s => s.Color == 5 && s.Text == "82:37:a3:fe:87:0b");
+        // 只染 MAC 本身，不得吞掉相邻单词
+        Assert.DoesNotContain(spans, s => s.Text.Contains("ether"));
+        Assert.DoesNotContain(spans, s => s.Text.Contains("txqueuelen"));
+    }
+
+    [Fact]
     public void TERM30_UnixShellColorsCommentsVariablesKeywords()
     {
         var spans = SyntaxHighlightRules.FindSpans("# install the thing", HighlightScheme.UnixShell);

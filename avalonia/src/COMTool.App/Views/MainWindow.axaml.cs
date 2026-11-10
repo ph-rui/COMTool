@@ -376,6 +376,12 @@ public partial class MainWindow : Window
         {
             _ = RunR55SelfTestAsync();
         }
+        // --selftest-r56：实机自检 r56 两项（SGR 粗体对齐 MobaXterm：无粗体面/不提亮 /
+        // EWS 方案 MAC 地址品红规则），落盘 r56-terminal.png。
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r56"))
+        {
+            _ = RunR56SelfTestAsync();
+        }
     }
 
     private volatile bool _portScanBusy;
@@ -1997,6 +2003,11 @@ public partial class MainWindow : Window
             // an empty Process stops a local shell from starting on reparent and
             // writing its own prompt into the terminal buffer.
             Process = string.Empty,
+            // r56：MobaXterm 默认字体无粗体面，远端 SGR 1（粗体）视觉无效果
+            // （用户同板对照截图：ifconfig 数值在 MobaXterm 为细体）。
+            // Consolas 有粗体面，若照实渲染会画成粗字，与 MobaXterm 不一致，
+            // 故默认关闭粗体面渲染（BoldFont=true 可回退原行为）。
+            BoldFont = false,
             FontFamily = TerminalFontFamily(),
             FontSize = _terminalFontSize,
             Background = new SolidColorBrush(Color.Parse(TerminalTheme.Background)),
@@ -8162,6 +8173,135 @@ public static class ClipCheck {
             AppLog.Error("[SelfTest] r55: 自检异常", ex);
             (Application.Current?.ApplicationLifetime
                 as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
+        }
+    }
+
+    /// <summary>
+    /// <c>--selftest-r56</c>：实机自检 r56 两项。
+    /// ① SGR 粗体渲染对齐 MobaXterm（其字体无粗体面，SGR 1 视觉无效果）：
+    ///    写 SGR 1 / SGR 1;35 探测行，走查真实 GlyphRun——不得出现粗体面，
+    ///    粗体品红段按普通品红 #ff36ff 绘制（不提亮为 #ff80ff）；
+    /// ② EWS 方案 MAC 规则（复刻用户 MobaXterm 个人高亮）：启用
+    ///    error_warning 方案后写 ifconfig ether 行，MAC 格子前景=调色板
+    ///    索引 5（品红），验证后恢复原方案。落盘 r56-terminal.png 供目检。
+    /// </summary>
+    private async Task RunR56SelfTestAsync()
+    {
+        var boldOk = false;
+        var macOk = false;
+        try
+        {
+            AppLog.Info("[SelfTest] r56: 等主窗稳定 1.5s 后开始两项自检");
+            await Task.Delay(1500);
+            if (DataContext is not MainViewModel viewModel)
+            {
+                throw new InvalidOperationException("MainViewModel 未就绪");
+            }
+
+            var terminal = CreateTerminal();
+            viewModel.AddTab(new TerminalTab
+            {
+                Title = "r56-selftest",
+                SessionId = "local:r56selftest",
+                Kind = SessionKind.Local,
+                Content = terminal,
+                Terminal = terminal,
+                IsAlive = true,
+                CloseAction = () => { },
+            });
+            await Task.Delay(500);
+            UpdateLayout();
+
+            var view = terminal.GetVisualDescendants()
+                .OfType<Iciclecreek.Terminal.TerminalView>().FirstOrDefault();
+            if (view is null || terminal.Terminal is null)
+            {
+                throw new InvalidOperationException("TerminalView/XTerm 未就绪");
+            }
+
+            // 本终端不接 pty（不走 AttachTerminal 路径），需显式挂高亮着色器，
+            // 否则 _highlighters 无此终端条目，下面 SetSyntaxHighlightScheme 不生效。
+            AttachTerminalHighlighter(terminal);
+
+            // ── ① SGR 粗体：无粗体面、不提亮 ──
+            terminal.Terminal.Write("\x1b[1mBOLDVAL\x1b[0m \x1b[1;35mBMAG\x1b[0m\r\n");
+            await Task.Delay(300);
+            UpdateLayout();
+
+            var runs = new List<(string Text, FontWeight Weight, Color Color)>();
+            var group = new DrawingGroup();
+            using (var ctx = group.Open())
+            {
+                view.Render(ctx);
+            }
+            WalkR56Runs(group, runs);
+            var hasBoldFace = runs.Any(r => r.Weight.Equals(FontWeight.Bold)
+                || r.Weight.Equals(FontWeight.ExtraBold) || r.Weight.Equals(FontWeight.Black));
+            var magRun = runs.FirstOrDefault(r => r.Text.Contains("BMAG", StringComparison.Ordinal));
+            boldOk = runs.Count > 0 && !hasBoldFace
+                && magRun.Text.Length > 0
+                && magRun.Color == Color.Parse("#ff36ff");
+            AppLog.Info($"[SelfTest] r56: ① SGR粗体 glyphrun={runs.Count} 粗体面={hasBoldFace} " +
+                $"BMAG色=#{(magRun.Color.R << 16) | (magRun.Color.G << 8) | magRun.Color.B:X6}（期望 FF36FF）=> {(boldOk ? "OK" : "FAILED")}");
+
+            // ── ② EWS 方案 MAC 地址→品红（验证后恢复原方案）──
+            var prevScheme = _config?.Config.Terminal.SyntaxHighlight ?? "default";
+            SetSyntaxHighlightScheme("error_warning");
+            terminal.Terminal.Write("      ether 82:37:a3:fe:87:0b   txqueuelen 1000  (Ethernet)\r\n");
+            await Task.Delay(300);
+            UpdateLayout();
+
+            const string mac = "82:37:a3:fe:87:0b";
+            var lineNo = -1;
+            for (var row = 0; row < terminal.Terminal.Rows && lineNo < 0; row++)
+            {
+                var text = terminal.Terminal.Buffer.GetLine(row)?.TranslateToString(true, 0);
+                if (text is null || !text.Contains(mac, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+                lineNo = row;
+                var line = terminal.Terminal.Buffer.GetLine(row)!;
+                var col = text.IndexOf(mac, StringComparison.Ordinal);
+                macOk = true;
+                for (var x = col; x < col + mac.Length && macOk; x++)
+                {
+                    macOk = line[x].Attributes.GetFgColorMode() == 0
+                        && line[x].Attributes.GetFgColor() == 5; // 5=品红
+                }
+            }
+            SetSyntaxHighlightScheme(prevScheme);
+            AppLog.Info($"[SelfTest] r56: ② EWS MAC 行={lineNo} MAC 17 格全品红(index5)={(macOk ? "OK" : "FAILED")}（方案已恢复 {prevScheme}）");
+
+            UpdateLayout();
+            SaveVisualPng(Content as Visual, "r56-terminal.png");
+
+            var ok = boldOk && macOk;
+            AppLog.Info($"[SelfTest] r56: 自检完成，SGR粗体对齐={(boldOk ? "OK" : "失败")}，EWS MAC品红={(macOk ? "OK" : "失败")}，退出");
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(ok ? 0 : 2);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("[SelfTest] r56: 自检异常", ex);
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
+        }
+    }
+
+    private static void WalkR56Runs(Avalonia.Media.Drawing d, List<(string Text, FontWeight Weight, Color Color)> list)
+    {
+        if (d is Avalonia.Media.GlyphRunDrawing grd && grd.GlyphRun is not null)
+        {
+            var color = grd.Foreground is ISolidColorBrush s ? s.Color : default;
+            list.Add((grd.GlyphRun.Characters.ToString(), grd.GlyphRun.GlyphTypeface.Weight, color));
+        }
+        else if (d is Avalonia.Media.DrawingGroup dg)
+        {
+            foreach (var c in dg.Children)
+            {
+                WalkR56Runs(c, list);
+            }
         }
     }
 
