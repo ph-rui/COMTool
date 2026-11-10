@@ -11,6 +11,9 @@
   <SolidColorBrush x:Key="TitleBarBackgroundBrush" Color="#ffffff" />
   <SolidColorBrush x:Key="TitleBarForegroundBrush" Color="#000000" />
   <SolidColorBrush x:Key="TitleBarHoverBrush" Color="#e5e5e5" />
+  <!-- r55: 1px divider under the title bar band (sampled from the
+       MobaXterm reference screenshot, white area at y=91). -->
+  <SolidColorBrush x:Key="TitleBarBorderBrush" Color="#b4b4b4" />
   <SolidColorBrush x:Key="MinimizeHoverBrush" Color="#e5e5e5" />
   <SolidColorBrush x:Key="MaximizeHoverBrush" Color="#e5e5e5" />
   <SolidColorBrush x:Key="CloseHoverBrush" Color="#e81123" />

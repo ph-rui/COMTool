@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
+using Avalonia.Media;
 using Avalonia.Threading;
 using COMTool.App.ViewModels;
 using COMTool.App.Views;
@@ -122,6 +123,76 @@ public sealed class TitleBarTests
                 Path.Combine(env.AvaloniaConfigDir, "config.json"));
             Assert.NotNull(loaded.Window);
             Assert.True(loaded.Window.Maximized);
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public void UI01_TitleBarHasBottomDivider()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                window = new MainWindow { DataContext = new MainViewModel() };
+                window.Show();
+                RunJobs(window);
+
+                var titleBar = window.FindControl<Border>("TitleBar");
+                Assert.True(titleBar is not null, "TitleBar border not found");
+
+                // r55: 用户反馈"顶部栏与下面内容分层不明显"——标题栏下沿加
+                // 1px 分隔线（仅底边，其余三边保持 0，不改变 35px 高度布局）。
+                Assert.Equal(1, titleBar.BorderThickness.Bottom);
+                Assert.Equal(0, titleBar.BorderThickness.Top);
+                Assert.Equal(0, titleBar.BorderThickness.Left);
+                Assert.Equal(0, titleBar.BorderThickness.Right);
+
+                // 线色走主题资源（浅色 #b4b4b4 / 深色 #3a3a3a），断言渲染刷
+                // 与资源值一致，颜色调整时测试自动跟随。
+                Assert.True(titleBar.TryFindResource("TitleBarBorderBrush", out var resource));
+                var expected = Assert.IsAssignableFrom<ISolidColorBrush>(resource);
+                var actual = Assert.IsAssignableFrom<ISolidColorBrush>(titleBar.BorderBrush);
+                Assert.Equal(expected.Color, actual.Color);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public void UI01_TitleBarHasNoSessionsButton()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                window = new MainWindow { DataContext = new MainViewModel() };
+                window.Show();
+                RunJobs(window);
+
+                // r55: 用户要求去掉标题栏"会话"按钮（MobaXterm 标题栏无此
+                // 按钮），折叠/展开侧栏改由侧栏 rail 的会话图标承担。
+                Assert.Null(window.FindControl<Button>("SessionsButton"));
+                var sidebar = window.FindControl<SessionSidebar>("Sidebar");
+                Assert.True(sidebar is not null, "Sidebar not found");
+                Assert.True(
+                    sidebar.FindControl<Button>("RailSessionsButton") is not null,
+                    "rail sessions icon is the replacement entry point");
+            });
         }
         finally
         {

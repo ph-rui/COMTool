@@ -213,7 +213,9 @@ public sealed class SidebarRailTests
                 window = CreateWindow(env);
                 var sidebar = Sidebar(window);
                 var body = window.FindControl<Grid>("BodyGrid")!;
-                var toggle = window.FindControl<Button>("SessionsButton")!;
+                // r55: the title-bar sessions button was removed; collapse via
+                // the rail sessions icon instead.
+                var toggle = sidebar.FindControl<Button>("RailSessionsButton")!;
 
                 Assert.NotNull(sidebar.FindControl<Border>("SidebarRail"));
                 Click(window, toggle);

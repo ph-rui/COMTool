@@ -12,8 +12,9 @@ namespace COMTool.App.Tests;
 
 /// <summary>
 /// The sessions panel is a fixed MobaXterm-style dock: it never appears or
-/// disappears because of pointer movement, only the title-bar sessions button
-/// toggles it, and a collapsed dock leaves no floating handle on the left edge.
+/// disappears because of pointer movement, only the rail sessions icon
+/// toggles it (r55: the title-bar sessions button was removed per user
+/// feedback), and a collapsed dock leaves no floating handle on the left edge.
 /// </summary>
 public sealed class SidebarDockTests
 {
@@ -63,7 +64,7 @@ public sealed class SidebarDockTests
     }
 
     [AvaloniaFact]
-    public void UI02_TitleBarButtonTogglesDockedSidebar()
+    public void UI02_RailSessionsButtonTogglesDockedSidebar()
     {
         using var env = new TestEnvironment();
         MainWindow? window = null;
@@ -75,7 +76,9 @@ public sealed class SidebarDockTests
 
                 var body = window.FindControl<Grid>("BodyGrid")!;
                 var sidebar = window.FindControl<SessionSidebar>("Sidebar")!;
-                var toggle = window.FindControl<Button>("SessionsButton")!;
+                // r55: the title-bar sessions button is gone; the rail icon is
+                // the (only) entry that collapses/expands the docked panel.
+                var toggle = sidebar.FindControl<Button>("RailSessionsButton")!;
 
                 Click(window, toggle);
 
@@ -119,7 +122,9 @@ public sealed class SidebarDockTests
             env.Run(() =>
             {
                 first = ShowWindow(env, visible: true, width: 260);
-                Click(first, first.FindControl<Button>("SessionsButton")!);
+                // r55: collapse through the rail sessions icon (title-bar
+                // button removed).
+                Click(first, first.FindControl<SessionSidebar>("Sidebar")!.FindControl<Button>("RailSessionsButton")!);
                 Assert.Equal(
                     40,
                     first.FindControl<Grid>("BodyGrid")!.ColumnDefinitions[0].ActualWidth,

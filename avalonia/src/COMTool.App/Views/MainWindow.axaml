@@ -62,10 +62,16 @@
   <Grid Name="RootGrid"
         RowDefinitions="35,*"
         Background="{DynamicResource WindowBackgroundBrush}">
-    <!-- Custom title bar: logo, title, pin, session toggle, window buttons. -->
+    <!-- Custom title bar: logo, title, pin, window buttons.
+         r55: the sessions toggle button was removed from the title bar per
+         user feedback (MobaXterm has no such button); the docked sidebar is
+         toggled through the rail sessions icon instead. A 1px bottom divider
+         (TitleBarBorderBrush) separates the title bar band from the content. -->
     <Border Grid.Row="0"
             Name="TitleBar"
             Background="{DynamicResource TitleBarBackgroundBrush}"
+            BorderBrush="{DynamicResource TitleBarBorderBrush}"
+            BorderThickness="0,0,0,1"
             PointerPressed="OnTitleBarPointerPressed"
             DoubleTapped="OnTitleBarDoubleTapped">
       <Border.ContextMenu>
@@ -76,7 +82,7 @@
           <MenuItem Header="About COMTool" Click="OnAboutClick" />
         </ContextMenu>
       </Border.ContextMenu>
-      <Grid ColumnDefinitions="40,104,40,35,*,35,35,35">
+      <Grid ColumnDefinitions="40,104,40,*,35,35,35">
         <Image Grid.Column="0"
                Name="TitleBarLogo"
                Source="/Assets/logo.png"
@@ -102,18 +108,7 @@
                      FontSize="16"
                      Foreground="{DynamicResource TitleBarForegroundBrush}" />
         </Button>
-        <Button Grid.Column="3"
-                Name="SessionsButton"
-                Classes="TitleBarButton"
-                ToolTip.Tip="Show/hide sessions"
-                Click="OnSessionsToggle">
-          <TextBlock Text="&#xf03a;"
-                     FontFamily="{DynamicResource IconFontAwesome}"
-                     FontSize="18"
-                     Foreground="{DynamicResource TitleBarForegroundBrush}" />
-        </Button>
-
-        <Button Grid.Column="5"
+        <Button Grid.Column="4"
                 Classes="TitleBarButton WindowMinButton"
                 ToolTip.Tip="Minimize"
                 Click="OnMinimizeClick">
@@ -122,7 +117,7 @@
                      FontSize="13"
                      Foreground="{DynamicResource TitleBarForegroundBrush}" />
         </Button>
-        <Button Grid.Column="6"
+        <Button Grid.Column="5"
                 Name="MaximizeButton"
                 Classes="TitleBarButton WindowMaxButton"
                 ToolTip.Tip="Maximize"
@@ -133,7 +128,7 @@
                      FontSize="13"
                      Foreground="{DynamicResource TitleBarForegroundBrush}" />
         </Button>
-        <Button Grid.Column="7"
+        <Button Grid.Column="6"
                 Classes="TitleBarButton WindowCloseButton"
                 ToolTip.Tip="Close"
                 Click="OnCloseClick">

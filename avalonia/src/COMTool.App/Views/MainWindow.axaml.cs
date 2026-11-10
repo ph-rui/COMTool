@@ -370,6 +370,12 @@ public partial class MainWindow : Window
         {
             _ = RunR54SelfTestAsync();
         }
+        // --selftest-r55：实机自检 r55 三项（标题栏下沿 1px 分隔线 / 标题栏会话按钮已移除 /
+        // rail 会话图标折叠与展开侧栏），落盘 r55-titlebar.png。
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r55"))
+        {
+            _ = RunR55SelfTestAsync();
+        }
     }
 
     private volatile bool _portScanBusy;
@@ -3514,11 +3520,6 @@ public partial class MainWindow : Window
         // Covers the case where the content host attaches synchronously before
         // the event subscription; the attach handler is then a no-op.
         Dispatcher.UIThread.Post(FocusIfStillSelected, DispatcherPriority.Loaded);
-    }
-
-    private void OnSessionsToggle(object? sender, RoutedEventArgs e)
-    {
-        SetSidebarVisible(!_sidebarVisible);
     }
 
     private void SetSidebarVisible(bool visible, bool persist = true)
@@ -8065,6 +8066,100 @@ public static class ClipCheck {
         catch (Exception ex)
         {
             AppLog.Error("[SelfTest] r54: 自检异常", ex);
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
+        }
+    }
+
+    /// <summary>
+    /// <c>--selftest-r55</c>：实机自检 r55 三项。
+    /// ① 标题栏下沿 1px 分隔线（BorderThickness=0,0,0,1，线色=TitleBarBorderBrush 资源，
+    ///    浅色 #b4b4b4，与参照图白底区 y=91 实测一致）；
+    /// ② 标题栏会话按钮（SessionsButton）已按用户反馈移除，rail 会话图标存在；
+    /// ③ rail 会话图标可折叠/展开侧栏（折叠列宽 40px，恢复至原宽度）。
+    /// 落盘 r55-titlebar.png 供目检分层效果。
+    /// </summary>
+    private async Task RunR55SelfTestAsync()
+    {
+        var dividerOk = false;
+        var buttonRemovedOk = false;
+        var railToggleOk = false;
+        try
+        {
+            AppLog.Info("[SelfTest] r55: 等主窗稳定 1.5s 后开始三项自检");
+            await Task.Delay(1500);
+
+            var titleBar = this.FindControl<Border>("TitleBar");
+            var body = this.FindControl<Grid>("BodyGrid");
+            var sidebar = this.FindControl<SessionSidebar>("Sidebar");
+            if (titleBar is null || body is null || sidebar is null)
+            {
+                throw new InvalidOperationException("TitleBar/BodyGrid/Sidebar 未找到");
+            }
+
+            // ── ① 标题栏下沿 1px 分隔线 ──
+            var dividerColor = BrushColor(titleBar.BorderBrush);
+            var resourceColor = BrushColor(titleBar.TryFindResource("TitleBarBorderBrush", out var dividerResource)
+                ? dividerResource as IBrush : null);
+            dividerOk = titleBar.BorderThickness.Bottom == 1
+                && titleBar.BorderThickness.Top == 0
+                && titleBar.BorderThickness.Left == 0
+                && titleBar.BorderThickness.Right == 0
+                && dividerColor == resourceColor;
+            AppLog.Info($"[SelfTest] r55: ① 标题栏下沿线 thickness={titleBar.BorderThickness.Bottom} " +
+                $"线色=#{dividerColor.R:X2}{dividerColor.G:X2}{dividerColor.B:X2} " +
+                $"资源=#{resourceColor.R:X2}{resourceColor.G:X2}{resourceColor.B:X2} => {(dividerOk ? "OK" : "FAILED")}");
+
+            // ── ② 标题栏会话按钮已移除，rail 会话图标为替代入口 ──
+            var sessionsBtn = this.FindControl<Button>("SessionsButton");
+            var railBtn = sidebar.FindControl<Button>("RailSessionsButton");
+            buttonRemovedOk = sessionsBtn is null && railBtn is not null;
+            AppLog.Info($"[SelfTest] r55: ② SessionsButton={(sessionsBtn is null ? "已移除" : "仍存在")} " +
+                $"RailSessionsButton={(railBtn is not null ? "存在" : "缺失")} => {(buttonRemovedOk ? "OK" : "FAILED")}");
+
+            // ── ③ rail 会话图标折叠/展开侧栏 ──
+            // 不假设初始方向：VM 配置可能恢复为展开（配置宽度）或折叠（40px），
+            // 两次点击必须完成"状态翻转 + 原样恢复"，且两态宽度分别落在
+            // rail 40px 与配置宽度（>40px）。
+            if (railBtn is not null)
+            {
+                // 若当前不在 Sessions 页（如 SshBrowser），第一次点击会切页
+                // （折叠态下还会展开），先补齐一次切页再继续。
+                if (DataContext is MainViewModel vm && vm.SidebarTab != SidebarTab.Sessions)
+                {
+                    railBtn.RaiseEvent(new RoutedEventArgs(Button.ClickEvent, railBtn));
+                    await Task.Delay(300);
+                    UpdateLayout();
+                }
+                var initialWidth = body.ColumnDefinitions[0].ActualWidth;
+                railBtn.RaiseEvent(new RoutedEventArgs(Button.ClickEvent, railBtn));
+                await Task.Delay(300);
+                UpdateLayout();
+                var toggledWidth = body.ColumnDefinitions[0].ActualWidth;
+                railBtn.RaiseEvent(new RoutedEventArgs(Button.ClickEvent, railBtn));
+                await Task.Delay(300);
+                UpdateLayout();
+                var restoredWidth = body.ColumnDefinitions[0].ActualWidth;
+                railToggleOk = Math.Abs(toggledWidth - initialWidth) > 5.0
+                    && Math.Abs(restoredWidth - initialWidth) < 1.0
+                    && Math.Abs(Math.Min(initialWidth, toggledWidth) - 40.0) < 1.0
+                    && Math.Max(initialWidth, toggledWidth) > 41.0;
+                AppLog.Info($"[SelfTest] r55: ③ rail 会话图标 初始宽={initialWidth:0.#} " +
+                    $"一次点击后={toggledWidth:0.#} 二次点击后={restoredWidth:0.#} => {(railToggleOk ? "OK" : "FAILED")}");
+            }
+
+            UpdateLayout();
+            SaveVisualPng(Content as Visual, "r55-titlebar.png");
+
+            var ok = dividerOk && buttonRemovedOk && railToggleOk;
+            AppLog.Info($"[SelfTest] r55: 自检完成，下沿分隔线={(dividerOk ? "OK" : "失败")}，" +
+                $"按钮移除={(buttonRemovedOk ? "OK" : "失败")}，rail 折叠展开={(railToggleOk ? "OK" : "失败")}，退出");
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(ok ? 0 : 2);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("[SelfTest] r55: 自检异常", ex);
             (Application.Current?.ApplicationLifetime
                 as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
         }

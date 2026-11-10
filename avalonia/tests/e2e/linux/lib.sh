@@ -59,8 +59,11 @@ SIDEBAR_SESSION_Y="${SIDEBAR_SESSION_Y:-118}"
 FIRST_TAB_X="${FIRST_TAB_X:-96}"
 SECOND_TAB_X="${SECOND_TAB_X:-208}"
 TAB_STRIP_Y="${TAB_STRIP_Y:-53}"
-SESSIONS_TOGGLE_X="${SESSIONS_TOGGLE_X:-201}"
-SESSIONS_TOGGLE_Y="${SESSIONS_TOGGLE_Y:-18}"
+# r55: the title-bar sessions button was removed; the docked sidebar is now
+# toggled by the rail sessions icon (first rail cell, 40x44px, y=40..84 below
+# the 35px title bar -> center ~ (20, 60)).
+RAIL_SESSIONS_X="${RAIL_SESSIONS_X:-20}"
+RAIL_SESSIONS_Y="${RAIL_SESSIONS_Y:-60}"
 # Calibration probe: this point is the white sidebar list when the panel is
 # expanded and the dark terminal background when it is collapsed to the rail.
 SIDEBAR_PROBE_X="${SIDEBAR_PROBE_X:-200}"
@@ -1147,10 +1150,12 @@ wait_for_sftp_browser_visible() {
 }
 
 # The sidebar is docked and shifts the whole tab strip 247px while expanded.
-# Collapse it explicitly through the title-bar sessions button so tab
-# coordinates are deterministic. The probe tolerates the panel already being
-# collapsed (a prior click or a restored preference) and retries a missed
-# button click.
+# Collapse it explicitly through the rail sessions icon (r55: the title-bar
+# sessions button was removed) so tab coordinates are deterministic. The probe
+# tolerates the panel already being collapsed (a prior click or a restored
+# preference) and retries missed clicks. If another sidebar tab is active
+# (e.g. the SFTP browser after an SSH connect), one click only switches to
+# the Sessions panel, so a second click may be needed to collapse.
 collapse_sidebar_for_tabs() {
     local attempt
     local probe_status
@@ -1168,7 +1173,7 @@ collapse_sidebar_for_tabs() {
             log "Could not calibrate sidebar state from a screenshot"
             return 1
         fi
-        click_window "$SESSIONS_TOGGLE_X" "$SESSIONS_TOGGLE_Y" || return 1
+        click_window "$RAIL_SESSIONS_X" "$RAIL_SESSIONS_Y" || return 1
         sleep 0.3
     done
 

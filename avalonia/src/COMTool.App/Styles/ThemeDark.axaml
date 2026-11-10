@@ -8,6 +8,8 @@
   <SolidColorBrush x:Key="TitleBarBackgroundBrush" Color="#212121" />
   <SolidColorBrush x:Key="TitleBarForegroundBrush" Color="#ffffff" />
   <SolidColorBrush x:Key="TitleBarHoverBrush" Color="#273b4e" />
+  <!-- r55: 1px divider under the title bar band (dark theme companion). -->
+  <SolidColorBrush x:Key="TitleBarBorderBrush" Color="#3a3a3a" />
   <SolidColorBrush x:Key="MinimizeHoverBrush" Color="#2ba13e" />
   <SolidColorBrush x:Key="MaximizeHoverBrush" Color="#cf9001" />
   <SolidColorBrush x:Key="CloseHoverBrush" Color="#df2f25" />

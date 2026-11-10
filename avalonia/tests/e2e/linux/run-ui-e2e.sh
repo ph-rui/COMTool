@@ -403,18 +403,28 @@ run_ui02_sidebar_stays_docked() {
         fail "$test_id" "sidebar changed state after the pointer visited the left edge"
     fi
 
-    # The title-bar sessions button is the only way to collapse it.
-    click_window "$SESSIONS_TOGGLE_X" "$SESSIONS_TOGGLE_Y" || fail "$test_id" "could not click the sessions button"
-    if ! wait_for_sidebar_hidden 5; then
-        fail "$test_id" "sessions button did not collapse the dock"
+    # r55: the title-bar sessions button was removed; the rail sessions icon
+    # is the only way to collapse the dock. If another sidebar tab is active
+    # (e.g. the SFTP browser after an SSH connect), one click only switches to
+    # the Sessions panel, so retry a few clicks to converge.
+    local i
+    for ((i = 0; i < 3; i++)); do
+        click_window "$RAIL_SESSIONS_X" "$RAIL_SESSIONS_Y" || fail "$test_id" "could not click the rail sessions icon"
+        wait_for_sidebar_hidden 2 && break
+    done
+    if ! window_region_is_dark "$SIDEBAR_PROBE_X" "$SIDEBAR_PROBE_Y"; then
+        fail "$test_id" "rail sessions icon did not collapse the dock"
     fi
     if ! window_pixel_is_dark "$SIDEBAR_PROBE_X" "$SIDEBAR_PROBE_Y"; then
         fail "$test_id" "content did not expand into the collapsed dock area"
     fi
 
-    click_window "$SESSIONS_TOGGLE_X" "$SESSIONS_TOGGLE_Y" || fail "$test_id" "could not click the sessions button again"
+    for ((i = 0; i < 3; i++)); do
+        click_window "$RAIL_SESSIONS_X" "$RAIL_SESSIONS_Y" || fail "$test_id" "could not click the rail sessions icon again"
+        wait_for_sidebar_visible 2 && break
+    done
     if ! wait_for_sidebar_visible 5; then
-        fail "$test_id" "sessions button did not restore the dock"
+        fail "$test_id" "rail sessions icon did not restore the dock"
     fi
     pass "$test_id"
 }
