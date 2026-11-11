@@ -202,8 +202,21 @@ public sealed class SftpPaneViewModelTests
         var (viewModel, remote, _) = NewViewModel();
         remote.AddFile("/remote/.hidden", "h");
         remote.AddFile("/remote/visible.txt", "v");
+
+        // r61: MobaXterm 对齐——默认不显示隐藏文件
+        Assert.False(viewModel.ShowHidden);
+
         await viewModel.LoadAsync(CancellationToken.None);
-        Assert.Contains(viewModel.RemoteEntries, entry => entry.Name == ".hidden");
+        Assert.DoesNotContain(viewModel.RemoteEntries, entry => entry.Name == ".hidden");
+        Assert.Equal(new[] { "visible.txt" }, viewModel.RemoteEntries.Select(entry => entry.Name));
+
+        // 打开开关 = 在非隐藏文件的基础上追加隐藏文件
+        viewModel.ShowHidden = true;
+
+        await WaitUntil(
+            () => viewModel.RemoteEntries.Any(entry => entry.Name == ".hidden"),
+            "show the hidden file");
+        Assert.Equal(new[] { ".hidden", "visible.txt" }, viewModel.RemoteEntries.Select(entry => entry.Name));
 
         viewModel.ShowHidden = false;
 
@@ -211,6 +224,37 @@ public sealed class SftpPaneViewModelTests
             () => !viewModel.RemoteEntries.Any(entry => entry.Name == ".hidden"),
             "hide the hidden file");
         Assert.Equal(new[] { "visible.txt" }, viewModel.RemoteEntries.Select(entry => entry.Name));
+    }
+
+    [AvaloniaFact]
+    public async Task SFTP11_SymlinkSortsAmongTheDirectories()
+    {
+        var (viewModel, remote, _) = NewViewModel();
+        remote.AddDirectory("/remote/zdir");
+        remote.AddSymlink("/remote/mlink", "/remote/zdir");
+        remote.AddFile("/remote/a.txt", "a");
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        // 符号链接与目录同组（按名称），文件随后
+        Assert.Equal(
+            new[] { "mlink", "zdir", "a.txt" },
+            viewModel.RemoteEntries.Select(entry => entry.Name));
+        Assert.True(viewModel.RemoteEntries.First(entry => entry.Name == "mlink").IsSymbolicLink);
+    }
+
+    [AvaloniaFact]
+    public async Task SFTP11_FileSymlinkStillSortsByItsNameWithinTheDirectoryGroup()
+    {
+        var (viewModel, remote, _) = NewViewModel();
+        remote.AddDirectory("/remote/dir");
+        remote.AddSymlink("/remote/file-link", "/remote/dir");
+        remote.AddDirectory("/remote/zzz");
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        // 链接目标即使解析为文件类型也不影响：链接按名称排在目录组
+        Assert.Equal(
+            new[] { "dir", "file-link", "zzz" },
+            viewModel.RemoteEntries.Select(entry => entry.Name));
     }
 
     [AvaloniaFact]

@@ -64,7 +64,7 @@ public sealed partial class SftpPaneViewModel : ObservableObject
     private bool _followSymbolicLinks = true;
 
     [ObservableProperty]
-    private bool _showHidden = true;
+    private bool _showHidden = false;
 
     [ObservableProperty]
     private string _conflictRenameText = string.Empty;
@@ -843,7 +843,11 @@ public sealed partial class SftpPaneViewModel : ObservableObject
 
     private int CompareEntries(SftpEntry left, SftpEntry right)
     {
-        var byKind = right.IsDirectory.CompareTo(left.IsDirectory);
+        // r61: symbolic links sort with the directory group (MobaXterm
+        // lists links to directories alongside the folders), files after.
+        var leftGroup = left.IsDirectory || left.IsSymbolicLink ? 1 : 0;
+        var rightGroup = right.IsDirectory || right.IsSymbolicLink ? 1 : 0;
+        var byKind = rightGroup.CompareTo(leftGroup);
         if (byKind != 0)
         {
             return byKind;

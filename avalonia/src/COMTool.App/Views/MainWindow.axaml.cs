@@ -408,6 +408,13 @@ public partial class MainWindow : Window
         {
             _ = RunR60SelfTestAsync();
         }
+        // --selftest-r61：实机自检 r61 SFTP 浏览器列表修复：
+        // ① 隐藏文件默认关闭（MobaXterm 对齐）② 打开开关后追加显示隐藏文件
+        // ③ 符号链接排在目录组（不再沉底），落盘 r61-browser.png。
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r61"))
+        {
+            _ = RunR61SelfTestAsync();
+        }
     }
 
     private volatile bool _portScanBusy;
@@ -8847,6 +8854,132 @@ public static class ClipCheck {
         catch (Exception ex)
         {
             AppLog.Error("[SelfTest] r60: 自检异常", ex);
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
+        }
+    }
+
+    /// <summary>
+    /// <c>--selftest-r61</c>：实机自检 r61 SFTP 浏览器列表修复。
+    /// 连上配置里第一个 SSH 会话后：① 隐藏文件默认关闭，列表无点开头条目；
+    /// ② 打开「显示隐藏文件」后点开头条目追加出现，再关闭恢复；
+    /// ③ 符号链接（如 tftp_dir）排在目录组而非文件区末尾。
+    /// 落盘 r61-browser.png。
+    /// </summary>
+    private async Task RunR61SelfTestAsync()
+    {
+        var hiddenDefaultOk = false;
+        var toggleOk = false;
+        var toggleSkipped = false;
+        var linkOk = false;
+        var linkSkipped = false;
+        try
+        {
+            AppLog.Info("[SelfTest] r61: 等主窗稳定 1.5s 后开始");
+            await Task.Delay(1500);
+            if (DataContext is not MainViewModel viewModel)
+            {
+                throw new InvalidOperationException("MainViewModel 未就绪");
+            }
+
+            var firstKey = _config?.SshSessions.Sessions.FirstOrDefault()?.Key;
+            if (string.IsNullOrEmpty(firstKey))
+            {
+                throw new InvalidOperationException("config 中没有 SSH 会话，无法跑 r61 自检");
+            }
+
+            AppLog.Info($"[SelfTest] r61: 打开 SSH 会话 {firstKey}");
+            var openTask = OpenSshSessionAsync(firstKey!);
+            TerminalTab? sshTab = null;
+            var deadline = DateTime.UtcNow.AddSeconds(90);
+            while (!(openTask.IsCompleted && sshTab is not null && sshTab.IsAlive))
+            {
+                if (DateTime.UtcNow > deadline)
+                {
+                    throw new TimeoutException("SSH 会话 90s 内未连接成功");
+                }
+
+                sshTab = viewModel.Tabs.FirstOrDefault(t => t.SessionId == firstKey);
+                await Task.Delay(250);
+            }
+
+            await openTask;
+            await Task.Delay(800);
+            UpdateLayout();
+
+            var paneVm = sshTab.SftpPane;
+            if (paneVm is null)
+            {
+                throw new InvalidOperationException("SFTP 面板未创建");
+            }
+
+            var dl = DateTime.UtcNow.AddSeconds(30);
+            while (paneVm.RemoteEntries.Count == 0 && DateTime.UtcNow < dl)
+            {
+                await Task.Delay(200);
+                UpdateLayout();
+            }
+            AppLog.Info($"[SelfTest] r61: SFTP 列表 {paneVm.RemoteEntries.Count} 项 @ {paneVm.RemotePath}");
+            if (paneVm.RemoteEntries.Count == 0)
+            {
+                throw new TimeoutException("SFTP 列表 30s 内未加载");
+            }
+
+            var sftpPane = this.FindControl<SessionSidebar>("Sidebar")
+                ?.FindControl<SshBrowserPanel>("SshBrowserPanel")?.SftpPaneControl;
+            UpdateLayout();
+
+            // ① 默认不显示隐藏文件（MobaXterm 对齐）
+            var dotCount = paneVm.RemoteEntries.Count(e => e.Name.StartsWith("."));
+            hiddenDefaultOk = !paneVm.ShowHidden && dotCount == 0;
+            AppLog.Info($"[SelfTest] r61: ① ShowHidden={paneVm.ShowHidden} 点开头条目={dotCount} => {(hiddenDefaultOk ? "OK" : "FAILED")}");
+
+            // ② 打开开关后追加显示隐藏文件，再关闭恢复
+            paneVm.ShowHidden = true;
+            UpdateLayout();
+            var shownDots = paneVm.RemoteEntries.Count(e => e.Name.StartsWith("."));
+            paneVm.ShowHidden = false;
+            UpdateLayout();
+            if (shownDots == 0)
+            {
+                toggleSkipped = true;
+                toggleOk = true;
+                AppLog.Info("[SelfTest] r61: ② SKIP 当前目录没有隐藏文件");
+            }
+            else
+            {
+                toggleOk = shownDots > 0
+                    && paneVm.RemoteEntries.All(e => !e.Name.StartsWith("."));
+                AppLog.Info($"[SelfTest] r61: ② 开=显示 {shownDots} 个隐藏条目、关=恢复 => {(toggleOk ? "OK" : "FAILED")}");
+            }
+
+            // ③ 符号链接排在目录组（首个普通文件之前）
+            var entriesList = paneVm.RemoteEntries.ToList();
+            var linkEntry = entriesList.FirstOrDefault(e => e.IsSymbolicLink);
+            var firstFileIndex = entriesList.FindIndex(e => !e.IsDirectory && !e.IsSymbolicLink);
+            if (linkEntry is null)
+            {
+                linkSkipped = true;
+                linkOk = true;
+                AppLog.Info("[SelfTest] r61: ③ SKIP 当前目录没有符号链接");
+            }
+            else
+            {
+                var linkIndex = entriesList.IndexOf(linkEntry);
+                linkOk = firstFileIndex < 0 || linkIndex < firstFileIndex;
+                AppLog.Info($"[SelfTest] r61: ③ 符号链接 {linkEntry.Name} @ 行{linkIndex + 1}/共{paneVm.RemoteEntries.Count}，首个文件 @ 行{firstFileIndex + 1} => {(linkOk ? "OK" : "FAILED")}");
+            }
+
+            SaveVisualPng(Content as Visual, "r61-browser.png");
+
+            var ok = hiddenDefaultOk && toggleOk && linkOk;
+            AppLog.Info($"[SelfTest] r61: 自检完成，默认隐藏={(hiddenDefaultOk ? "OK" : "失败")} 开关={(toggleSkipped ? "SKIP" : toggleOk ? "OK" : "失败")} 链接排序={(linkSkipped ? "SKIP" : linkOk ? "OK" : "失败")}，退出");
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(ok ? 0 : 2);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("[SelfTest] r61: 自检异常", ex);
             (Application.Current?.ApplicationLifetime
                 as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
         }
