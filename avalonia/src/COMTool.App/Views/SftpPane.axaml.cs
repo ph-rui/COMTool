@@ -37,6 +37,7 @@ public sealed partial class SftpPane : UserControl
     {
         None,
         NewFolder,
+        NewFile,
         Rename,
     }
 
@@ -267,6 +268,19 @@ public sealed partial class SftpPane : UserControl
 
     internal MenuItem MenuPermissionsControl => MenuPermissions;
 
+    /// <summary>
+    /// r62: 空白处（目录级）右键菜单项。
+    /// </summary>
+    internal MenuItem MenuBlankUpControl => MenuBlankUp;
+
+    internal MenuItem MenuBlankNewFolderControl => MenuBlankNewFolder;
+
+    internal MenuItem MenuBlankNewFileControl => MenuBlankNewFile;
+
+    internal MenuItem MenuBlankRefreshControl => MenuBlankRefresh;
+
+    internal MenuItem MenuBlankUploadControl => MenuBlankUpload;
+
     internal SftpPropertiesWindow? PropertiesWindow => _propertiesWindow;
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -284,17 +298,13 @@ public sealed partial class SftpPane : UserControl
     private void UpdateCommandState()
     {
         var entry = _viewModel?.SelectedRemoteEntry;
-        var isFile = entry is not null && !entry.IsDirectory;
 
         DeleteButton.IsEnabled = entry is not null;
         RenameButton.IsEnabled = entry is not null;
         ChmodButton.IsEnabled = entry is not null;
 
-        // r60: 右键菜单项随选中条目启用/隐藏（目录无「打开*」文件项）
+        // r60: 右键菜单项随选中条目启用/禁用
         MenuOpen.IsEnabled = entry is not null;
-        MenuOpenTextEditor.IsVisible = isFile;
-        MenuOpenWith.IsVisible = isFile;
-        MenuOpenSystem.IsVisible = isFile;
         MenuDownload.IsEnabled = entry is not null;
         MenuDelete.IsEnabled = entry is not null;
         MenuRename.IsEnabled = entry is not null;
@@ -302,7 +312,57 @@ public sealed partial class SftpPane : UserControl
         MenuSendPath.IsEnabled = entry is not null && _viewModel?.PathToTerminal is not null;
         MenuProperties.IsEnabled = entry is not null;
         MenuPermissions.IsEnabled = entry is not null;
+
+        // r62: 空白处（目录级）菜单项的可用性
+        var pathOk = _viewModel is { RemotePath.Length: > 0 };
+        var idle = pathOk && _viewModel!.IsTransferring == false;
+        MenuBlankUp.IsEnabled = pathOk && _viewModel!.RemotePath != SftpPath.Root;
+        MenuBlankNewFolder.IsEnabled = idle;
+        MenuBlankNewFile.IsEnabled = idle;
+        MenuBlankRefresh.IsEnabled = pathOk;
+        MenuBlankUpload.IsEnabled = idle;
+
+        ApplyMenuVariant();
     }
+
+    /// <summary>
+    /// r62: 切换右键菜单变体（对齐 MobaXterm）。无选中条目时（空白处右键）
+    /// 显示目录级 5 项菜单；有选中条目时显示 11 项条目菜单，目录隐藏
+    /// 三个「打开*」文件项。
+    /// </summary>
+    private void ApplyMenuVariant()
+    {
+        var entry = _viewModel?.SelectedRemoteEntry;
+        var showEntryMenu = entry is not null;
+        var isFile = entry is not null && !entry.IsDirectory;
+
+        MenuBlankUp.IsVisible = !showEntryMenu;
+        MenuBlankNewFolder.IsVisible = !showEntryMenu;
+        MenuBlankNewFile.IsVisible = !showEntryMenu;
+        MenuBlankRefresh.IsVisible = !showEntryMenu;
+        MenuBlankUpload.IsVisible = !showEntryMenu;
+
+        MenuOpen.IsVisible = showEntryMenu;
+        MenuOpenTextEditor.IsVisible = isFile;
+        MenuOpenWith.IsVisible = isFile;
+        MenuOpenSystem.IsVisible = isFile;
+        MenuDownload.IsVisible = showEntryMenu;
+        MenuSep1.IsVisible = showEntryMenu;
+        MenuDelete.IsVisible = showEntryMenu;
+        MenuRename.IsVisible = showEntryMenu;
+        MenuSep2.IsVisible = showEntryMenu;
+        MenuCopyPath.IsVisible = showEntryMenu;
+        MenuSendPath.IsVisible = showEntryMenu;
+        MenuSep3.IsVisible = showEntryMenu;
+        MenuProperties.IsVisible = showEntryMenu;
+        MenuPermissions.IsVisible = showEntryMenu;
+    }
+
+    /// <summary>
+    /// r62: 菜单打开时重申一次变体（选中变化时已设置，此处兜底）。
+    /// </summary>
+    private void OnRemoteContextMenuOpened(object? sender, RoutedEventArgs e)
+        => ApplyMenuVariant();
 
     private void OnUpClick(object? sender, RoutedEventArgs e)
     {
@@ -591,6 +651,28 @@ public sealed partial class SftpPane : UserControl
         await viewModel.DeleteRemoteAsync();
     }
 
+    // ───────────────── r62：空白处右键菜单（目录级操作，对齐 MobaXterm 图1） ─────────────────
+
+    private void OnMenuBlankUpClick(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel is { } viewModel)
+        {
+            _ = viewModel.GoUpRemoteAsync();
+        }
+    }
+
+    private void OnMenuBlankNewFolderClick(object? sender, RoutedEventArgs e)
+        => ShowPrompt(PromptMode.NewFolder, "新建文件夹", string.Empty);
+
+    private void OnMenuBlankNewFileClick(object? sender, RoutedEventArgs e)
+        => ShowPrompt(PromptMode.NewFile, "新建文件", string.Empty);
+
+    private void OnMenuBlankRefreshClick(object? sender, RoutedEventArgs e)
+        => OnRefreshClick(sender, e);
+
+    private void OnMenuBlankUploadClick(object? sender, RoutedEventArgs e)
+        => OnUploadClick(sender, e);
+
     private void OnMenuRenameClick(object? sender, RoutedEventArgs e)
         => OnRenameClick(sender, e);
 
@@ -731,6 +813,14 @@ public sealed partial class SftpPane : UserControl
             return;
         }
 
+        // r62: 新建文件（空白处右键菜单）
+        if (_promptMode == PromptMode.NewFile)
+        {
+            HidePrompt();
+            await viewModel.NewRemoteFileAsync(name);
+            return;
+        }
+
         if (_promptMode == PromptMode.Rename)
         {
             var entry = viewModel.SelectedRemoteEntry;
@@ -814,7 +904,12 @@ public sealed partial class SftpPane : UserControl
             return;
         }
 
-        var window = new SftpPermissionsWindow { Permission = entry.Permission };
+        // r62: 标题带条目名（MobaXterm: Permissions for "name"）
+        var window = new SftpPermissionsWindow
+        {
+            Permission = entry.Permission,
+            TargetName = entry.Name,
+        };
         window.PermissionApplied += permission =>
         {
             _ = viewModel.SetRemotePermissionsAsync(permission.ToOctal());

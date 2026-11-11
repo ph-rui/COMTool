@@ -82,6 +82,114 @@ public sealed class SftpFileManagementTests
         });
     }
 
+    // ───────────────── r62：权限窗对齐 MobaXterm（rwx 字符串 + 标题 + 取消按钮） ─────────────────
+
+    [AvaloniaFact]
+    public void SFTP12_PermissionsWindowSyncsRwxStringWithBoxesAndOctal()
+    {
+        using var env = new TestEnvironment();
+        env.Run(() =>
+        {
+            var window = new SftpPermissionsWindow
+            {
+                Permission = SftpPermission.FromOctalText("644"),
+                TargetName = "a.txt",
+            };
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.Equal("rw-r--r--", window.RwxText);
+            Assert.Equal("644", window.OctalText);
+
+            // 输入完整 rwx 串 → 复选框与八进制跟随
+            window.RwxBoxControl.Text = "rwxr-xr-x";
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.Equal("755", window.OctalText);
+            Assert.True(window.OwnerExecuteBoxControl.IsChecked == true);
+            Assert.True(window.GroupExecuteBoxControl.IsChecked == true);
+            Assert.True(window.OthersExecuteBoxControl.IsChecked == true);
+
+            // 取消勾选 → rwx 串与八进制跟随
+            window.GroupExecuteBoxControl.IsChecked = false;
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.Equal("rwxr--r-x", window.RwxText);
+            Assert.Equal("745", window.OctalText);
+
+            window.Close();
+        });
+    }
+
+    [AvaloniaFact]
+    public void SFTP12_PermissionsWindowTitleShowsTheEntryName()
+    {
+        using var env = new TestEnvironment();
+        env.Run(() =>
+        {
+            var window = new SftpPermissionsWindow();
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal("Permissions", window.Title);
+
+            window.TargetName = "screen.jpg";
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal("Permissions for \"screen.jpg\"", window.Title);
+
+            window.Close();
+        });
+    }
+
+    [AvaloniaFact]
+    public void SFTP12_PermissionsWindowCancelClosesWithoutApplying()
+    {
+        using var env = new TestEnvironment();
+        var applied = 0;
+        env.Run(() =>
+        {
+            var window = new SftpPermissionsWindow
+            {
+                Permission = SftpPermission.FromOctalText("644"),
+            };
+            window.PermissionApplied += _ => applied++;
+            var closed = false;
+            window.Closed += (_, _) => closed = true;
+            window.Show();
+
+            window.CancelButtonControl.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.True(closed);
+        });
+        Assert.Equal(0, applied);
+    }
+
+    [AvaloniaFact]
+    public void SFTP12_PermissionsWindowIgnoresInvalidRwxText()
+    {
+        using var env = new TestEnvironment();
+        env.Run(() =>
+        {
+            var window = new SftpPermissionsWindow
+            {
+                Permission = SftpPermission.FromOctalText("644"),
+            };
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+
+            window.RwxBoxControl.Text = "abc";
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(SftpPermission.FromOctalText("644"), window.Permission);
+            Assert.Equal("644", window.OctalText);
+
+            window.RwxBoxControl.Text = "rw-r--r-";
+            Dispatcher.UIThread.RunJobs();
+            Assert.Equal(SftpPermission.FromOctalText("644"), window.Permission);
+
+            window.Close();
+        });
+    }
+
     [AvaloniaFact]
     public async Task NewFolderButtonCreatesTheRemoteDirectory()
     {

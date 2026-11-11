@@ -2,40 +2,57 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="COMTool.App.Views.SftpPermissionsWindow"
         Title="Permissions"
-        Width="260"
+        Width="320"
         SizeToContent="Height"
         CanResize="False"
         WindowStartupLocation="CenterOwner">
+  <!-- r62: 对齐 MobaXterm 权限对话框（图4）：
+       标题 Permissions for "name" / rwx 字符串框 / 用户/群组/其他 × 读取/写入/执行 /
+       八进制模式 / 应用+取消 按钮 -->
   <StackPanel Margin="12" Spacing="10">
-    <Grid ColumnDefinitions="70,Auto,Auto,Auto"
-          RowDefinitions="Auto,Auto,Auto,Auto">
-      <TextBlock Grid.Row="0" Grid.Column="1" Text="Read" />
-      <TextBlock Grid.Row="0" Grid.Column="2" Text="Write" />
-      <TextBlock Grid.Row="0" Grid.Column="3" Text="Execute" />
+    <Grid ColumnDefinitions="64,Auto" RowDefinitions="Auto">
+      <TextBlock Text="权限" VerticalAlignment="Center" Margin="0,0,8,0" />
+      <TextBox Name="RwxBox"
+               FontFamily="Consolas, 'Courier New', monospace"
+               FontSize="12"
+               TextChanged="OnRwxTextChanged" />
+    </Grid>
 
-      <TextBlock Grid.Row="1" Grid.Column="0" Text="Owner" VerticalAlignment="Center" />
-      <CheckBox Name="OwnerReadBox" Grid.Row="1" Grid.Column="1" IsCheckedChanged="OnBoxChanged" />
-      <CheckBox Name="OwnerWriteBox" Grid.Row="1" Grid.Column="2" IsCheckedChanged="OnBoxChanged" />
-      <CheckBox Name="OwnerExecuteBox" Grid.Row="1" Grid.Column="3" IsCheckedChanged="OnBoxChanged" />
+    <Grid ColumnDefinitions="64,Auto,Auto,Auto"
+          RowDefinitions="Auto,Auto,Auto">
+      <TextBlock Grid.Row="0" Grid.Column="0" Text="用户" VerticalAlignment="Center" />
+      <CheckBox Name="OwnerReadBox" Grid.Row="0" Grid.Column="1"
+                Content="读取" IsCheckedChanged="OnBoxChanged" />
+      <CheckBox Name="OwnerWriteBox" Grid.Row="0" Grid.Column="2"
+                Content="写入" IsCheckedChanged="OnBoxChanged" />
+      <CheckBox Name="OwnerExecuteBox" Grid.Row="0" Grid.Column="3"
+                Content="执行" IsCheckedChanged="OnBoxChanged" />
 
-      <TextBlock Grid.Row="2" Grid.Column="0" Text="Group" VerticalAlignment="Center" />
-      <CheckBox Name="GroupReadBox" Grid.Row="2" Grid.Column="1" IsCheckedChanged="OnBoxChanged" />
-      <CheckBox Name="GroupWriteBox" Grid.Row="2" Grid.Column="2" IsCheckedChanged="OnBoxChanged" />
-      <CheckBox Name="GroupExecuteBox" Grid.Row="2" Grid.Column="3" IsCheckedChanged="OnBoxChanged" />
+      <TextBlock Grid.Row="1" Grid.Column="0" Text="群组" VerticalAlignment="Center" />
+      <CheckBox Name="GroupReadBox" Grid.Row="1" Grid.Column="1"
+                Content="读取" IsCheckedChanged="OnBoxChanged" />
+      <CheckBox Name="GroupWriteBox" Grid.Row="1" Grid.Column="2"
+                Content="写入" IsCheckedChanged="OnBoxChanged" />
+      <CheckBox Name="GroupExecuteBox" Grid.Row="1" Grid.Column="3"
+                Content="执行" IsCheckedChanged="OnBoxChanged" />
 
-      <TextBlock Grid.Row="3" Grid.Column="0" Text="Others" VerticalAlignment="Center" />
-      <CheckBox Name="OthersReadBox" Grid.Row="3" Grid.Column="1" IsCheckedChanged="OnBoxChanged" />
-      <CheckBox Name="OthersWriteBox" Grid.Row="3" Grid.Column="2" IsCheckedChanged="OnBoxChanged" />
-      <CheckBox Name="OthersExecuteBox" Grid.Row="3" Grid.Column="3" IsCheckedChanged="OnBoxChanged" />
+      <TextBlock Grid.Row="2" Grid.Column="0" Text="其他" VerticalAlignment="Center" />
+      <CheckBox Name="OthersReadBox" Grid.Row="2" Grid.Column="1"
+                Content="读取" IsCheckedChanged="OnBoxChanged" />
+      <CheckBox Name="OthersWriteBox" Grid.Row="2" Grid.Column="2"
+                Content="写入" IsCheckedChanged="OnBoxChanged" />
+      <CheckBox Name="OthersExecuteBox" Grid.Row="2" Grid.Column="3"
+                Content="执行" IsCheckedChanged="OnBoxChanged" />
     </Grid>
 
     <StackPanel Orientation="Horizontal" Spacing="8">
-      <TextBlock Text="Mode" VerticalAlignment="Center" />
+      <TextBlock Text="八进制模式" VerticalAlignment="Center" />
       <TextBox Name="OctalBox" Width="70" TextChanged="OnOctalTextChanged" />
     </StackPanel>
 
     <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-      <Button Name="ApplyButton" Content="Apply" Click="OnApplyClick" />
+      <Button Name="ApplyButton" Content="应用" Click="OnApplyClick" />
+      <Button Name="CancelButton" Content="取消" Click="OnCancelClick" IsCancel="True" />
     </StackPanel>
   </StackPanel>
 </Window>

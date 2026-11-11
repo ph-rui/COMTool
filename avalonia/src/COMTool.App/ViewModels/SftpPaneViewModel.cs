@@ -495,6 +495,46 @@ public sealed partial class SftpPaneViewModel : ObservableObject
     }
 
     /// <summary>
+    /// r62: Creates an empty (zero-byte) file in the current directory from
+    /// the blank-area context menu "New file". Refuses a name that is
+    /// already present and any call while a transfer is running.
+    /// </summary>
+    public async Task<bool> NewRemoteFileAsync(string name)
+    {
+        var remote = _remote;
+        if (remote is null || string.IsNullOrWhiteSpace(name))
+        {
+            return false;
+        }
+
+        if (IsTransferring)
+        {
+            StatusMessage = "A transfer is running, please wait";
+            return false;
+        }
+
+        try
+        {
+            var target = SftpPath.Combine(RemotePath, name);
+            if (await remote.ExistsAsync(target, CancellationToken.None))
+            {
+                StatusMessage = "The name already exists";
+                return false;
+            }
+
+            using var stream = await remote.OpenWriteAsync(target, CancellationToken.None);
+            await RefreshRemoteAsync();
+            StatusMessage = $"Created file {name}";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Create file failed: {ex.Message}";
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Renames the selected remote entry.
     /// </summary>
     public async Task RenameRemoteAsync(string newName)

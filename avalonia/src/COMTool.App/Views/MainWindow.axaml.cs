@@ -415,6 +415,13 @@ public partial class MainWindow : Window
         {
             _ = RunR61SelfTestAsync();
         }
+        // --selftest-r62：实机自检 r62 SFTP 右键菜单与权限窗（对齐 MobaXterm 截图）：
+        // ① 菜单 16 项+3 分隔线 ② 空白区/条目菜单变体 ③ 新建文件（创建后清理）
+        // ④ 权限窗标题+rwx/八进制同步 ⑤ 符号链接目录组回归，落盘 r62-browser.png。
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r62"))
+        {
+            _ = RunR62SelfTestAsync();
+        }
     }
 
     private volatile bool _portScanBusy;
@@ -8758,7 +8765,7 @@ public static class ClipCheck {
                 ?.FindControl<SshBrowserPanel>("SshBrowserPanel")?.SftpPaneControl;
             UpdateLayout();
 
-            // ① 右键菜单：11 项按 MobaXterm 顺序 + 3 条分隔线
+            // ① 右键菜单：16 项按 MobaXterm 顺序（5 空白区 + 11 条目）+ 3 条分隔线
             var menu = sftpPane?.RemoteContextMenuControl;
             var headers = menu is null
                 ? new List<string>()
@@ -8766,12 +8773,13 @@ public static class ClipCheck {
             var separators = menu?.Items.OfType<Separator>().Count() ?? 0;
             var expected = new[]
             {
-                "打开", "使用默认文本文编辑器打开", "打开方式", "使用默认程序打开",
+                "上一级目录", "新建文件夹", "新建文件", "刷新当前文件夹列表", "上传到当前文件夹",
+                "打开", "使用默认文本文编辑器打开", "打开方式...", "使用默认程序打开...",
                 "下载", "删除", "重命名", "复制文件路径",
                 "将文件路径复制到终端（鼠标中键单击）", "属性", "权限",
             };
             menuOk = menu is not null && separators == 3 && headers.SequenceEqual(expected);
-            AppLog.Info($"[SelfTest] r60: ① 右键菜单 {headers.Count}/11 项、{separators}/3 分隔线 => {(menuOk ? "OK" : "FAILED")}");
+            AppLog.Info($"[SelfTest] r60: ① 右键菜单 {headers.Count}/16 项、{separators}/3 分隔线 => {(menuOk ? "OK" : "FAILED")}");
 
             SaveVisualPng(Content as Visual, "r60-browser.png");
 
@@ -8980,6 +8988,213 @@ public static class ClipCheck {
         catch (Exception ex)
         {
             AppLog.Error("[SelfTest] r61: 自检异常", ex);
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
+        }
+    }
+
+    /// <summary>
+    /// <c>--selftest-r62</c>：实机自检 r62 SFTP 右键菜单与权限窗（对齐 MobaXterm 截图）。
+    /// 连上配置里第一个 SSH 会话后：① 菜单 16 项（5 空白区 + 11 条目）+ 3 分隔线；
+    /// ② 菜单变体（无选中=空白区菜单 / 选中文件=条目菜单）；③ 新建文件（创建→
+    /// 校验 0 字节→删除清理）；④ 权限窗标题含文件名且 rwx 串与八进制同步
+    /// （只读检查，不写回远程）；⑤ 符号链接目录组排序（r61 回归）。落盘 r62-browser.png。
+    /// </summary>
+    private async Task RunR62SelfTestAsync()
+    {
+        var structureOk = false;
+        var variantOk = false;
+        var newFileOk = false;
+        var permOk = false;
+        var linkOk = false;
+        var linkSkipped = false;
+        try
+        {
+            AppLog.Info("[SelfTest] r62: 等主窗稳定 1.5s 后开始");
+            await Task.Delay(1500);
+            if (DataContext is not MainViewModel viewModel)
+            {
+                throw new InvalidOperationException("MainViewModel 未就绪");
+            }
+
+            var firstKey = _config?.SshSessions.Sessions.FirstOrDefault()?.Key;
+            if (string.IsNullOrEmpty(firstKey))
+            {
+                throw new InvalidOperationException("config 中没有 SSH 会话，无法跑 r62 自检");
+            }
+
+            AppLog.Info($"[SelfTest] r62: 打开 SSH 会话 {firstKey}");
+            var openTask = OpenSshSessionAsync(firstKey!);
+            TerminalTab? sshTab = null;
+            var deadline = DateTime.UtcNow.AddSeconds(90);
+            while (!(openTask.IsCompleted && sshTab is not null && sshTab.IsAlive))
+            {
+                if (DateTime.UtcNow > deadline)
+                {
+                    throw new TimeoutException("SSH 会话 90s 内未连接成功");
+                }
+
+                sshTab = viewModel.Tabs.FirstOrDefault(t => t.SessionId == firstKey);
+                await Task.Delay(250);
+            }
+
+            await openTask;
+            await Task.Delay(800);
+            UpdateLayout();
+
+            var paneVm = sshTab.SftpPane;
+            if (paneVm is null)
+            {
+                throw new InvalidOperationException("SFTP 面板未创建");
+            }
+
+            var dl = DateTime.UtcNow.AddSeconds(30);
+            while (paneVm.RemoteEntries.Count == 0 && DateTime.UtcNow < dl)
+            {
+                await Task.Delay(200);
+                UpdateLayout();
+            }
+            AppLog.Info($"[SelfTest] r62: SFTP 列表 {paneVm.RemoteEntries.Count} 项 @ {paneVm.RemotePath}");
+            if (paneVm.RemoteEntries.Count == 0)
+            {
+                throw new TimeoutException("SFTP 列表 30s 内未加载");
+            }
+
+            var sftpPane = this.FindControl<SessionSidebar>("Sidebar")
+                ?.FindControl<SshBrowserPanel>("SshBrowserPanel")?.SftpPaneControl;
+            UpdateLayout();
+
+            // ① 菜单结构：16 项（5 空白区 + 11 条目）+ 3 条分隔线
+            var menu = sftpPane?.RemoteContextMenuControl;
+            var itemLabels = menu is null
+                ? Array.Empty<string>()
+                : menu.Items.OfType<MenuItem>().Select(m => m.Header?.ToString() ?? "").ToArray();
+            var separatorCount = menu?.Items.OfType<Separator>().Count() ?? 0;
+            var expected = new[]
+            {
+                "上一级目录", "新建文件夹", "新建文件", "刷新当前文件夹列表", "上传到当前文件夹",
+                "打开", "使用默认文本文编辑器打开", "打开方式...", "使用默认程序打开...",
+                "下载", "删除", "重命名", "复制文件路径",
+                "将文件路径复制到终端（鼠标中键单击）", "属性", "权限",
+            };
+            structureOk = menu is not null && separatorCount == 3 && itemLabels.SequenceEqual(expected);
+            AppLog.Info($"[SelfTest] r62: ① 右键菜单 {itemLabels.Length}/16 项、{separatorCount}/3 分隔线 => {(structureOk ? "OK" : "FAILED")}");
+
+            // ② 菜单变体：无选中=空白区菜单；选中文件=条目菜单
+            var variantDetail = "";
+            if (sftpPane is not null && menu is not null)
+            {
+                paneVm.SelectedRemoteEntry = null;
+                UpdateLayout();
+                var blankVisible = sftpPane.MenuBlankUpControl.IsVisible
+                    && sftpPane.MenuBlankNewFolderControl.IsVisible
+                    && sftpPane.MenuBlankNewFileControl.IsVisible
+                    && sftpPane.MenuBlankRefreshControl.IsVisible
+                    && sftpPane.MenuBlankUploadControl.IsVisible;
+                var entryHidden = !menu.Items.OfType<MenuItem>().Skip(5).Any(m => m.IsVisible);
+
+                var fileEntry = paneVm.RemoteEntries.FirstOrDefault(e => !e.IsDirectory && !e.IsSymbolicLink);
+                if (fileEntry is not null)
+                {
+                    paneVm.SelectedRemoteEntry = fileEntry;
+                    UpdateLayout();
+                }
+
+                var entryVisible = fileEntry is not null
+                    && sftpPane.MenuOpenControl.IsVisible
+                    && sftpPane.MenuDownloadControl.IsVisible
+                    && sftpPane.MenuDeleteControl.IsVisible
+                    && sftpPane.MenuCopyPathControl.IsVisible
+                    && sftpPane.MenuPropertiesControl.IsVisible
+                    && sftpPane.MenuPermissionsControl.IsVisible;
+                variantOk = blankVisible && entryHidden && entryVisible;
+                variantDetail = $"blankVisible={blankVisible} entryHidden={entryHidden} entryVisible={entryVisible}";
+            }
+            else
+            {
+                variantOk = false;
+                variantDetail = "未取到面板/菜单";
+            }
+            AppLog.Info($"[SelfTest] r62: ② 菜单变体切换 => {(variantOk ? "OK" : "FAILED")}（{variantDetail}）");
+
+            // ③ 新建文件：创建 → 校验 0 字节 → 删除清理
+            const string probeName = "comtool_r62_probe.txt";
+            var probeCreated = false;
+            var probeDeleted = false;
+            try
+            {
+                probeCreated = await paneVm.NewRemoteFileAsync(probeName);
+                if (probeCreated)
+                {
+                    var probe = paneVm.RemoteEntries.FirstOrDefault(e => e.Name == probeName);
+                    if (probe is not null && probe.Size == 0)
+                    {
+                        paneVm.SelectedRemoteEntry = probe;
+                        await paneVm.DeleteRemoteAsync();
+                        await paneVm.RefreshRemoteAsync();
+                        probeDeleted = !paneVm.RemoteEntries.Any(e => e.Name == probeName);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                AppLog.Error("[SelfTest] r62: ③ 新建文件探测异常", ex);
+            }
+            newFileOk = probeCreated && probeDeleted;
+            AppLog.Info($"[SelfTest] r62: ③ 新建文件 创建/清理 {probeName} => {(newFileOk ? "OK" : "FAILED")}（created={probeCreated} deleted={probeDeleted}）");
+
+            // ④ 权限窗：标题含文件名 + rwx 串与八进制同步（不写回远程）
+            SftpPermissionsWindow? permWin = null;
+            try
+            {
+                var permEntry = paneVm.RemoteEntries.First(e => !e.IsDirectory && !e.IsSymbolicLink);
+                permWin = new SftpPermissionsWindow
+                {
+                    Permission = permEntry.Permission,
+                    TargetName = permEntry.Name,
+                };
+                permWin.Show();
+                UpdateLayout();
+                var titleOk = permWin.Title == $"Permissions for \"{permEntry.Name}\"";
+                permWin.OctalText = "755";
+                UpdateLayout();
+                var syncOk = permWin.RwxText == "rwxr-xr-x"
+                    && permWin.OwnerExecuteBoxControl.IsChecked == true;
+                permOk = titleOk && syncOk;
+                AppLog.Info($"[SelfTest] r62: ④ 权限窗 标题/rwx 同步 => {(permOk ? "OK" : "FAILED")}（titleOk={titleOk} syncOk={syncOk}）");
+            }
+            finally
+            {
+                permWin?.Close();
+            }
+
+            // ⑤ 符号链接位于目录组（r61 回归检查）
+            var linkEntry = paneVm.RemoteEntries.FirstOrDefault(e => e.IsSymbolicLink);
+            if (linkEntry is null)
+            {
+                linkSkipped = true;
+                linkOk = true;
+                AppLog.Info("[SelfTest] r62: ⑤ SKIP 当前目录没有符号链接");
+            }
+            else
+            {
+                var entriesList = paneVm.RemoteEntries.ToList();
+                var linkIndex = entriesList.IndexOf(linkEntry);
+                var firstFileIndex = entriesList.FindIndex(e => !e.IsDirectory && !e.IsSymbolicLink);
+                linkOk = firstFileIndex < 0 || linkIndex < firstFileIndex;
+                AppLog.Info($"[SelfTest] r62: ⑤ 符号链接 {linkEntry.Name} @ 行{linkIndex + 1}/共{entriesList.Count}，首个普通文件 @ 行{firstFileIndex + 1} => {(linkOk ? "OK" : "FAILED")}");
+            }
+
+            SaveVisualPng(Content as Visual, "r62-browser.png");
+
+            var ok = structureOk && variantOk && newFileOk && permOk && linkOk;
+            AppLog.Info($"[SelfTest] r62: 自检完成，菜单={(structureOk ? "OK" : "失败")} 变体={(variantOk ? "OK" : "失败")} 新建文件={(newFileOk ? "OK" : "失败")} 权限窗={(permOk ? "OK" : "失败")} 链接={(linkSkipped ? "SKIP" : linkOk ? "OK" : "失败")}，退出");
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(ok ? 0 : 2);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("[SelfTest] r62: 自检异常", ex);
             (Application.Current?.ApplicationLifetime
                 as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
         }

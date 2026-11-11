@@ -13,6 +13,7 @@ namespace COMTool.App.Views;
 public sealed partial class SftpPermissionsWindow : Window
 {
     private SftpPermission _permission = SftpPermission.FromOctalText("644");
+    private string _targetName = string.Empty;
     private bool _updating;
 
     public SftpPermissionsWindow()
@@ -42,6 +43,40 @@ public sealed partial class SftpPermissionsWindow : Window
 
             _permission = value;
             ApplyPermission(value);
+        }
+    }
+
+    /// <summary>
+    /// r62: the entry this window edits. Sets the MobaXterm-style title:
+    /// Permissions for "name".
+    /// </summary>
+    public string TargetName
+    {
+        get => _targetName;
+        set
+        {
+            _targetName = value ?? string.Empty;
+            Title = string.IsNullOrEmpty(_targetName)
+                ? "Permissions"
+                : $"Permissions for \"{_targetName}\"";
+        }
+    }
+
+    /// <summary>
+    /// The mode as an rwx string, for example "rw-r--r--".
+    /// </summary>
+    public string RwxText
+    {
+        get => RwxBox.Text ?? string.Empty;
+        set
+        {
+            var text = value ?? string.Empty;
+            if (string.Equals(RwxBox.Text, text, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            RwxBox.Text = text;
         }
     }
 
@@ -81,9 +116,13 @@ public sealed partial class SftpPermissionsWindow : Window
 
     internal CheckBox OthersExecuteBoxControl => OthersExecuteBox;
 
+    internal TextBox RwxBoxControl => RwxBox;
+
     internal TextBox OctalBoxControl => OctalBox;
 
     internal Button ApplyButtonControl => ApplyButton;
+
+    internal Button CancelButtonControl => CancelButton;
 
     private void OnBoxChanged(object? sender, RoutedEventArgs e)
     {
@@ -92,18 +131,19 @@ public sealed partial class SftpPermissionsWindow : Window
             return;
         }
 
-        var permission = ReadBoxes();
-        _permission = permission;
+        _permission = ReadBoxes();
+        ApplyPermission(_permission);
+    }
 
-        _updating = true;
-        try
+    private void OnRwxTextChanged(object? sender, TextChangedEventArgs e)
+    {
+        if (_updating || !TryReadRwx(RwxBox.Text, out var permission))
         {
-            OctalBox.Text = permission.ToOctalText();
+            return;
         }
-        finally
-        {
-            _updating = false;
-        }
+
+        _permission = permission;
+        ApplyPermission(permission);
     }
 
     private void OnOctalTextChanged(object? sender, TextChangedEventArgs e)
@@ -120,6 +160,14 @@ public sealed partial class SftpPermissionsWindow : Window
     private void OnApplyClick(object? sender, RoutedEventArgs e)
     {
         PermissionApplied?.Invoke(_permission);
+        Close();
+    }
+
+    /// <summary>
+    /// r62: 取消——不写回权限，直接关闭窗口。
+    /// </summary>
+    private void OnCancelClick(object? sender, RoutedEventArgs e)
+    {
         Close();
     }
 
@@ -141,6 +189,7 @@ public sealed partial class SftpPermissionsWindow : Window
             OthersWriteBox.IsChecked = permission.OthersWrite;
             OthersExecuteBox.IsChecked = permission.OthersExecute;
 
+            RwxBox.Text = permission.ToRwxString();
             OctalBox.Text = permission.ToOctalText();
         }
         finally
@@ -186,6 +235,43 @@ public sealed partial class SftpPermissionsWindow : Window
         }
 
         permission = SftpPermission.FromOctalText(digits);
+        return true;
+    }
+
+    /// <summary>
+    /// r62: reads a 9-character rwx string like "rw-r--r--". Anything else
+    /// is ignored so the boxes keep the last valid mode.
+    /// </summary>
+    private static bool TryReadRwx(string? text, out SftpPermission permission)
+    {
+        permission = default;
+
+        var source = text ?? string.Empty;
+        if (source.Length != 9)
+        {
+            return false;
+        }
+
+        for (var group = 0; group < 3; group++)
+        {
+            var i = group * 3;
+            if (source[i] is not ('r' or '-'))
+            {
+                return false;
+            }
+
+            if (source[i + 1] is not ('w' or '-'))
+            {
+                return false;
+            }
+
+            if (source[i + 2] is not ('x' or '-'))
+            {
+                return false;
+            }
+        }
+
+        permission = SftpPermission.FromRwxString(source);
         return true;
     }
 }

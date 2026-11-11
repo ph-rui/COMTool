@@ -158,15 +158,20 @@ public sealed class SftpContextMenuTests
                 var menu = view.RemoteContextMenuControl;
                 Assert.NotNull(menu);
 
-                var headers = menu!.Items.OfType<MenuItem>()
-                    .Select(item => item.Header?.ToString())
-                    .ToArray();
+                // r62: 16 items = 5 blank-area (directory) items + 11 entry items
+                // (MobaXterm order), 3 separators in the entry part.
+                var items = menu!.Items.OfType<MenuItem>().ToList();
+                Assert.Equal(16, items.Count);
+                Assert.Equal(3, menu.Items.OfType<Separator>().Count());
+
+                var headers = items.Select(item => item.Header?.ToString()).ToArray();
                 Assert.Equal(new object?[]
                 {
+                    "上一级目录", "新建文件夹", "新建文件", "刷新当前文件夹列表", "上传到当前文件夹",
                     "打开",
                     "使用默认文本文编辑器打开",
-                    "打开方式",
-                    "使用默认程序打开",
+                    "打开方式...",
+                    "使用默认程序打开...",
                     "下载",
                     "删除",
                     "重命名",
@@ -176,7 +181,31 @@ public sealed class SftpContextMenuTests
                     "权限",
                 },
                 headers);
-                Assert.Equal(3, menu.Items.OfType<Separator>().Count());
+
+                // No selection: the blank-area menu is shown, entry menu hidden.
+                foreach (var item in items.Take(5))
+                {
+                    Assert.True(item.IsVisible);
+                }
+
+                foreach (var item in items.Skip(5))
+                {
+                    Assert.False(item.IsVisible);
+                }
+
+                // Mark a file: the entry menu is shown, blank-area menu hidden.
+                pane.SelectedRemoteEntry = pane.RemoteEntries.Single(entry => entry.Name == "a.txt");
+                Dispatcher.UIThread.RunJobs();
+
+                foreach (var item in items.Take(5))
+                {
+                    Assert.False(item.IsVisible);
+                }
+
+                foreach (var item in items.Skip(5))
+                {
+                    Assert.True(item.IsVisible);
+                }
             });
         }
         finally
@@ -206,6 +235,10 @@ public sealed class SftpContextMenuTests
                 pane.SelectedRemoteEntry = pane.RemoteEntries.Single(entry => entry.Name == "dir");
                 Dispatcher.UIThread.RunJobs();
 
+                // r62: entry menu active -> blank-area items hidden as well
+                Assert.False(view.MenuBlankNewFileControl.IsVisible);
+                Assert.False(view.MenuBlankRefreshControl.IsVisible);
+
                 Assert.False(view.MenuOpenTextEditorControl.IsVisible);
                 Assert.False(view.MenuOpenWithControl.IsVisible);
                 Assert.False(view.MenuOpenSystemControl.IsVisible);
@@ -223,6 +256,8 @@ public sealed class SftpContextMenuTests
                 Assert.True(view.MenuOpenTextEditorControl.IsVisible);
                 Assert.True(view.MenuOpenWithControl.IsVisible);
                 Assert.True(view.MenuOpenSystemControl.IsVisible);
+                Assert.False(view.MenuBlankNewFileControl.IsVisible);
+                Assert.True(view.MenuOpenControl.IsVisible);
             });
         }
         finally
@@ -630,5 +665,99 @@ public sealed class SftpContextMenuTests
             window.Close();
             Dispatcher.UIThread.RunJobs();
         });
+    }
+
+    [AvaloniaFact]
+    public async Task SFTP12_BlankAreaRightClickShowsTheDirectoryMenu()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            await env.RunAsync(async () =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                (window, var pane, _, _, var view) = await Setup(remote =>
+                {
+                    remote.AddFile("/remote/a.txt", "a");
+                    remote.AddFile("/remote/b.txt", "b");
+                });
+                await pane.EnsureLoadedAsync(CancellationToken.None);
+
+                // 模拟空白区右键：直接向 ListBox 本身发出 PointerPressed
+                // （事件源是列表而非 ListBoxItem，FindAncestor 找不到条目，
+                // 走"空白处"分支）。比按几何坐标找空白更确定。
+                var list = view.RemoteListControl;
+                var pointer = new Pointer(Pointer.GetNextFreeId(), PointerType.Mouse, isPrimary: true);
+                var windowPoint = list.TranslatePoint(
+                    new Point(list.Bounds.Width / 2, list.Bounds.Height / 2), window) ?? new Point(10, 10);
+                list.RaiseEvent(new PointerPressedEventArgs(
+                    list,
+                    pointer,
+                    window,
+                    windowPoint,
+                    0,
+                    new PointerPointProperties(RawInputModifiers.RightMouseButton, PointerUpdateKind.Other),
+                    KeyModifiers.None,
+                    clickCount: 1));
+                Dispatcher.UIThread.RunJobs();
+
+                // Nothing got selected and the directory (blank-area) menu is shown.
+                Assert.Null(pane.SelectedRemoteEntry);
+                Assert.True(view.MenuBlankUpControl.IsVisible);
+                Assert.True(view.MenuBlankNewFolderControl.IsVisible);
+                Assert.True(view.MenuBlankNewFileControl.IsVisible);
+                Assert.True(view.MenuBlankRefreshControl.IsVisible);
+                Assert.True(view.MenuBlankUploadControl.IsVisible);
+                Assert.False(view.MenuOpenControl.IsVisible);
+                Assert.False(view.MenuDeleteControl.IsVisible);
+                Assert.False(view.MenuPermissionsControl.IsVisible);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task SFTP12_NewFilePromptCreatesAnEmptyRemoteFile()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            await env.RunAsync(async () =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                (window, var pane, var remote, _, var view) = await Setup(fs =>
+                {
+                    fs.AddFile("/remote/a.txt", "a");
+                });
+                await pane.EnsureLoadedAsync(CancellationToken.None);
+
+                // No selection -> the blank-area menu is active.
+                view.MenuBlankNewFileControl.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+                Dispatcher.UIThread.RunJobs();
+
+                Assert.True(view.PromptRowControl.IsVisible);
+                Assert.Equal("新建文件", view.PromptLabelControl.Text);
+
+                view.PromptBoxControl.Text = "new.txt";
+                view.PromptOkButtonControl.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                await WaitUntil(() => remote.HasEntry("/remote/new.txt"), "create the empty file");
+
+                var entry = pane.RemoteEntries.Single(e => e.Name == "new.txt");
+                Assert.Equal(0, entry.Size);
+                Assert.False(view.PromptRowControl.IsVisible);
+                Assert.Contains("new.txt", pane.StatusMessage);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
     }
 }
