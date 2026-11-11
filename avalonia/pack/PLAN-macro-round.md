@@ -2224,6 +2224,64 @@ r56-terminal.png。
 - 文件链接目标类型解析 + 文件链接双击走内建查看器（可选增强）；
 - r60 遗留：Compare file with、查看器编辑回存、图像缩放。
 
+### 62 SFTP 右键菜单完善 + 权限窗对齐 MobaXterm（2026-11-11，用户 4 张 MobaXterm 截图）
+
+**用户指认（MobaXterm 截图）**：
+- 图1：空白处（无选中条目）右键 = 目录级 5 项：上一级目录/新建文件夹/新建文件/
+  刷新当前文件夹列表/上传到当前文件夹（无分隔线）；
+- 图2：点中文件右键 = 11 项（打开/使用默认文本文编辑器打开/打开方式.../使用默认程序打开.../
+  下载/删除/重命名/复制文件路径/将文件路径复制到终端（鼠标中键单击）/属性/权限，3 条分隔线）；
+  Compare file with... 用户确认继续不做（已知偏差）；
+- 图3：点中文件夹右键 = 8 项（打开/下载/删除/重命名/复制文件路径/将文件路径复制到终端（鼠标中键单击）/
+  属性/权限）——r60 已实现，本轮回归确认；
+- 图4：权限窗 = 标题 `Permissions for "<文件名>"`、权限 rwx 字符串框（rw-r--r--）、
+  用户/群组/其他 × 读取/写入/执行 九宫格、八进制模式框（644）、应用/取消按钮。
+
+**实现**：
+- `SftpPane.axaml/.cs`：ContextMenu 扩为 16 项（5 空白区 + 11 条目）+ 3 分隔线；
+  `ApplyMenuVariant()` 按 `SelectedRemoteEntry` 切换两种变体（选中变化/右键隧道/
+  菜单 Opened 兜底三处触发）；「打开方式」「使用默认程序打开」补省略号；
+  空白区 5 项复用现有动作（GoUp/NewFolder/Refresh/Upload）；
+- 新建文件：`PromptMode.NewFile` + VM `NewRemoteFileAsync`（OpenWrite 0 字节，
+  重名 ExistsAsync 拒绝，传输进行中拒绝）；
+- `SftpPermissionsWindow` 重建对齐图4：`TargetName`→标题、`RwxText` 框与九宫格/
+  八进制三方同步（`TryReadRwx` 严格 9 字符校验，非法输入忽略）、中文标签、
+  应用（写回并关窗）/取消（不写回关窗）；
+- MainWindow `--selftest-r62` 五项实机自检；r60 自检菜单期望同步更新为 16 项。
+
+**测试**（TDD 先红后绿，9 项新 SFTP12 全绿）：
+- `SftpContextMenuTests.SFTP12_BlankAreaRightClickShowsTheDirectoryMenu`（直接向 ListBox
+  发 PointerPressed 模拟空白区右键，几何法在 headless 下列表高度贴内容不可靠）；
+- `SftpContextMenuTests.SFTP12_NewFilePromptCreatesAnEmptyRemoteFile`（提示行→创建 0 字节）；
+- `SftpPaneViewModelTests.SFTP12_NewRemoteFile*` 3 项（创建/重名拒绝/传输中拒绝）；
+- `SftpFileManagementTests.SFTP12_PermissionsWindow*` 4 项（rwx 三方同步/标题/取消不应用/
+  非法 rwx 忽略）；
+- SFTP10 菜单结构测试更新为 16 项断言（名称不变，矩阵引用不受影响）。
+
+**已知偏差**：
+- 菜单未含「Compare file with...」（用户确认不做，同 r60 遗留）；
+- 权限窗「正在修改权限...」应用过程中的瞬态标题未复刻（应用为单次 SFTP 调用，窗口立即关闭，不可见）；
+- r60/r61 遗留（Compare、查看器编辑回存、图像缩放、文件链接目标类型解析）不变。
+
+**验证**：
+- 全量 gate：2026-11-11T10:35:11Z 全绿（r62-gate）：restore/build PASS，
+  unit 411 / app 323 / e2e PASS / TestGate PASS，共 734 项
+- VM win-x64 AOT 部署（仅更新 AOT 目录）：
+  - `C:\Users\devuser\COMTool-Avalonia-AOT\COMTool.App.exe`
+    SHA256 = `78549d5f3b36e13e9dc01b627d841aff967462609a1fb8d9638d97e735d5d5f3`
+  - AOT 包 `C:\Users\devuser\COMTool-Avalonia-AOT-r62.zip`
+    SHA256 = `a51cb36e4d4307e9065db17d431f137cf514bdbe40423a4c9353ac552ee6c61d`（78,397,342 B，用户 SFTP 拉取）
+- `--selftest-r62` 实机（VM，真实 SSH 会话 devuser@192.0.2.48，wall 3.6s，退出码 0）：
+  - ① 菜单 16 项 + 3 分隔线：OK（16/16 项、3/3 分隔线）
+  - ② 菜单变体切换（空白区/条目）：OK（blankVisible=True entryHidden=True entryVisible=True）
+  - ③ 新建文件 创建/清理：OK（comtool_r62_probe.txt created=True deleted=True，0 字节）
+  - ④ 权限窗 标题+rwx 同步：OK（titleOk=True syncOk=True，标题 Permissions for "<文件名>"）
+  - ⑤ 符号链接目录组回归：OK（tftp_dir @ 行17/共42，首个普通文件 @ 行33，r61 行为保持）
+  - r62-browser.png 目检：通过（1038x782；42 项默认隐藏开启时仅非隐藏条目，tftp_dir@ 位于目录组第 17 行带 @ 标记，状态栏 "Deleted comtool_r62_probe.txt" 证明探测文件已清理，终端会话正常）
+
+**遗留**：
+- Compare file with（文件对比视图）、内建查看器编辑回存、图像缩放、文件链接双击走查看器，待后续轮次。
+
 ## 已知偏差（已写入 spec 附录）
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
 2. 热键 .mxtmacros 编码未实测：导出恒 0，导入非 0 忽略+警告
