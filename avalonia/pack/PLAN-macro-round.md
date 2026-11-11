@@ -2107,6 +2107,74 @@ r56-terminal.png。
   水印不清旧色。
 - 库仓库 Iciclecreek.Avalonia.Terminal main 本地领先 origin 6 提交未 push（待用户确认）。
 
+### 60 SFTP 浏览器：右键菜单 + 双击打开 + 中键送终端（2026-11-11，用户指认 MobaXterm 右键菜单截图）
+
+**范围**（用户选定 B：内建查看器；Compare file with 不做，记偏差）：
+- 文件列表右键菜单 11 项，顺序与 MobaXterm 一致：打开 / 使用默认文本文编辑器打开 /
+  打开方式 / 使用默认程序打开 / 下载 / ─ / 删除 / 重命名 / ─ / 复制文件路径 /
+  将文件路径复制到终端（鼠标中键单击） / ─ / 属性 / 权限。
+- 右键先选中被点行（Avalonia ListBox 右键不改选中），再弹菜单；目录选中时隐藏
+  三个「打开*」文件项。
+- 双击文件 = 「打开」：图片（10MB 内）/ 文本（1MB 内）走内建查看器窗口
+  （只读 TextBox / 等比缩放 Image，解码失败显示提示）；其余类型先下载到缓存
+  再用系统默认程序打开。双击目录 = 进入（原行为）。
+- 「使用默认文本文编辑器打开」= 下载缓存 + notepad；「打开方式」= 文件选择器
+  选程序后下载缓存 + 启动；「使用默认程序打开」= 下载缓存 + ShellExecute。
+- 鼠标中键单击文件（及菜单同名项）= 把远程路径注入同会话终端（SendInputAsync，
+  不带回车，MobaXterm 中键粘贴语义）；「复制文件路径」= 剪贴板。
+- 「属性」= 只读小窗：名称/路径/类型/大小/最后修改/权限（rwx+八进制）/属主。
+- 缓存目录：%APPDATA%\COMTool-Avalonia\remote-cache，保留相对远端主目录结构，
+  路径非法字符替换为 `_`，同名覆盖；传输进行中拒绝下载/读取。
+
+**实现**：
+- `COMTool.Sftp.RemoteFileClassifier`（Image/Text/Other，按扩展名+无扩展名特例，
+  纯逻辑）；`COMTool.Sftp.SftpPathCache`（缓存路径映射+清洗，纯逻辑）。
+- `SftpPaneViewModel` 新增 `PathToTerminal` 回调、`CacheRoot`、`DownloadToCacheAsync`、
+  `ReadEntryBytesAsync`、`SendSelectedPathToTerminal`、`ReportOpenFailed`、
+  `ReportPathCopied`。
+- `SftpPane.axaml/.cs`：ContextMenu、右键选中/中键送路径（隧道阶段 PointerPressed）、
+  双击分流、打开流程（`OpenEntryAsync` + `ILocalFileLauncher` 可注入）、查看器窗口
+  跟踪；`MainWindow` 把 `PathToTerminal` 接到本标签 `TerminalControl.SendInputAsync`
+  （重启复用同一终端实例，无需重接）。
+- 新窗口：`SftpTextViewerWindow`、`SftpImageViewerWindow`、`SftpPropertiesWindow`。
+
+**测试**（TDD 先红后绿；先红为编译期红：`ILocalFileLauncher` 等类型不存在）：
+- `RemoteFileClassifierTests` 5 项、`SftpPathCacheTests` 5 项（Sftp 库，纯逻辑）
+- `SftpPaneViewModelTests.SFTP10_*` 5 项（缓存落盘/回退文件名/传输中拒绝/送终端回调/
+  读取上限）
+- `SftpContextMenuTests.SFTP10_*` 14 项（菜单 11 项顺序+3 分隔线、目录隐藏文件项、
+  右键选中被点行、双击文件开内建查看器、双击目录仍进入、中键送路径、打开→默认
+  程序/文本编辑器/打开方式 三条链路含缓存断言、复制路径、送终端菜单项、属性窗内容、
+  文本查看器只读、图像查看器位图+坏数据提示）
+
+**已知偏差**：
+- 菜单未含「Compare file with...」（MobaXterm 文件对比视图，独立功能，另立一轮）。
+- 内建查看器为只读（MobaXterm 可编辑并回存远程），无缩放/翻页，文本上限 1MB。
+- 「打开方式」用文件选择器选 .exe 代替 MobaXterm 的已注册程序列表。
+- 缓存文件不清理（依赖系统临时策略/用户手动清理）。
+
+**验证**：
+- 全量 gate：第 3 次复跑全绿（2026-11-11T08:42:23Z，r60-gatec）：restore/build/
+  unit-tests 411/app-tests 312/e2e 15/testgate 全 PASS，共 723 项。前两次遇
+  已知 e2e 环境偶发（TELNET01 输入送达失败 ×1、app 进程 UI02 处中途退出 ×1），
+  同代码复跑转绿；另第 1 次 TestGate 因 [Theory] 参数化名称带后缀报 4 条
+  SFTP-10 引用缺失，分类器测试改 [Fact] 后消失。
+- VM win-x64 AOT 部署（仅更新 AOT 目录）：
+  - `C:\Users\devuser\COMTool-Avalonia-AOT\COMTool.App.exe`
+    SHA256 = `310d22cc5364db11dbf092acb3192a928dab296a0130439c20b6326adb356a0a`
+  - AOT 包 `C:\Users\devuser\COMTool-Avalonia-AOT-r60.zip`
+    SHA256 = `4ca9fac6df0c9a975336d60fcc46c5f31432fffa6dce8b8a44241fe5d1591c8d`（78,377,662 B，用户 SFTP 拉取）
+- `--selftest-r60` 实机（VM，真实 SSH 会话，wall 7.1s，退出码 0）：
+  - ① 右键菜单 11 项+3 分隔线：OK（11/11 项、3/3 分隔线）
+  - ② 双击文本文件开内建查看器：OK（双击 `.aw_spoof.log` 开内建文本查看器，2516 字符）
+  - ③ 路径注入终端回读：OK（`/home/devuser/.aw_spoof.log` 注入终端并回读缓冲确认）
+  - r60-browser.png / r60-viewer.png 目检：通过——browser 截图为真实 SFTP 列表（/home/devuser 114 项+工具栏+监控条）；viewer 截图为等宽只读文本+状态栏 `.aw_spoof.log 2528 B`
+
+**遗留**：
+- Compare file with（文件对比）、内建查看器编辑回存、图像缩放，待后续轮次。
+- 库仓库 Iciclecreek.Avalonia.Terminal main 本地领先 origin 6 提交未 push（沿惯例，
+  待用户确认）。
+
 ## 已知偏差（已写入 spec 附录）
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
 2. 热键 .mxtmacros 编码未实测：导出恒 0，导入非 0 忽略+警告
