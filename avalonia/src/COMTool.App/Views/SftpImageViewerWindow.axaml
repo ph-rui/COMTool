@@ -1,0 +1,25 @@
+<Window x:CompileBindings="True" xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="COMTool.App.Views.SftpImageViewerWindow"
+        Title="Remote Image Viewer"
+        Width="900" Height="680"
+        WindowStartupLocation="CenterOwner"
+        CanResize="True">
+  <DockPanel>
+    <Border DockPanel.Dock="Bottom"
+            Background="#f0f0f0"
+            BorderBrush="#b4b4b4"
+            BorderThickness="0,1,0,0"
+            Padding="8,4">
+      <TextBlock Name="StatusText"
+                 FontSize="11"
+                 Foreground="#333333"
+                 TextTrimming="CharacterEllipsis" />
+    </Border>
+    <Grid Background="#2b2b2b">
+      <Image Name="ImageHost"
+             Stretch="Uniform"
+             Margin="8" />
+    </Grid>
+  </DockPanel>
+</Window>

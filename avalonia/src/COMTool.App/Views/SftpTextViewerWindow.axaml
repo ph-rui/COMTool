@@ -1,0 +1,31 @@
+<Window x:CompileBindings="True" xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="COMTool.App.Views.SftpTextViewerWindow"
+        Title="Remote Text Viewer"
+        Width="900" Height="640"
+        WindowStartupLocation="CenterOwner"
+        CanResize="True">
+  <DockPanel>
+    <Border DockPanel.Dock="Bottom"
+            Background="#f0f0f0"
+            BorderBrush="#b4b4b4"
+            BorderThickness="0,1,0,0"
+            Padding="8,4">
+      <TextBlock Name="StatusText"
+                 FontSize="11"
+                 Foreground="#333333"
+                 TextTrimming="CharacterEllipsis" />
+    </Border>
+    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+      <TextBox Name="TextHost"
+               AcceptsReturn="True"
+               TextWrapping="NoWrap"
+               IsReadOnly="True"
+               FontFamily="Consolas, 'Courier New', monospace"
+               FontSize="12"
+               Padding="6"
+               BorderThickness="0"
+               Background="Transparent" />
+    </ScrollViewer>
+  </DockPanel>
+</Window>

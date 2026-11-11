@@ -579,6 +579,143 @@ public sealed partial class SftpPaneViewModel : ObservableObject
     }
 
     /// <summary>
+    /// r60: 右键菜单「将文件路径复制到终端」与鼠标中键单击的回调。
+    /// 由主窗口接到本会话终端（SendInputAsync，不带回车，MobaXterm 中键
+    /// 粘贴语义）。未接线时为 null，对应菜单项禁用。
+    /// </summary>
+    public Action<string>? PathToTerminal { get; set; }
+
+    /// <summary>
+    /// r60: 打开远程文件时的本地缓存根目录。留空则用
+    /// ConfigPaths.AvaloniaConfigDirectory() 下的 remote-cache。
+    /// </summary>
+    public string CacheRoot { get; set; } = string.Empty;
+
+    /// <summary>
+    /// r60: 把选中条目的远程路径送入本会话终端。无选中或回调未接线时静默。
+    /// </summary>
+    public void SendSelectedPathToTerminal()
+    {
+        var entry = SelectedRemoteEntry;
+        if (entry is null || PathToTerminal is null)
+        {
+            return;
+        }
+
+        PathToTerminal(entry.Path);
+        StatusMessage = $"Path sent to terminal: {entry.Path}";
+    }
+
+    /// <summary>
+    /// r60: 把（选中）远程文件下载到本地缓存，返回本地路径；失败或传输
+    /// 进行中返回 null。缓存路径保留相对远端主目录的结构（SftpPathCache）。
+    /// </summary>
+    public async Task<string?> DownloadToCacheAsync(SftpEntry? entry = null)
+    {
+        entry ??= SelectedRemoteEntry;
+        var remote = _remote;
+        if (remote is null || entry is null || entry.IsDirectory)
+        {
+            return null;
+        }
+
+        if (IsTransferring)
+        {
+            StatusMessage = "A transfer is running, please wait";
+            return null;
+        }
+
+        var root = string.IsNullOrEmpty(CacheRoot)
+            ? Path.Combine(COMTool.Core.Config.ConfigPaths.AvaloniaConfigDirectory(), "remote-cache")
+            : CacheRoot;
+        var localPath = SftpPathCache.BuildCachePath(root, remote.HomeDirectory, entry.Path);
+
+        try
+        {
+            var parent = Path.GetDirectoryName(localPath);
+            if (!string.IsNullOrEmpty(parent) && !await _local.ExistsAsync(parent, CancellationToken.None))
+            {
+                await _local.CreateDirectoryAsync(parent, CancellationToken.None);
+            }
+
+            using var source = await remote.OpenReadAsync(entry.Path, CancellationToken.None);
+            using var target = await _local.OpenWriteAsync(localPath, CancellationToken.None);
+            await source.CopyToAsync(target);
+
+            StatusMessage = $"Cached: {entry.Name}";
+            return localPath;
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Cache failed: {ex.Message}";
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// r60: 读取（选中）远程文件到内存，供内建查看器使用。maxBytes 大于 0
+    /// 且文件超过该大小时返回 null（查看器有大小上限）。
+    /// </summary>
+    public async Task<byte[]?> ReadEntryBytesAsync(SftpEntry? entry = null, int maxBytes = 0)
+    {
+        entry ??= SelectedRemoteEntry;
+        var remote = _remote;
+        if (remote is null || entry is null || entry.IsDirectory)
+        {
+            return null;
+        }
+
+        if (IsTransferring)
+        {
+            StatusMessage = "A transfer is running, please wait";
+            return null;
+        }
+
+        try
+        {
+            using var source = await remote.OpenReadAsync(entry.Path, CancellationToken.None);
+            using var buffer = new MemoryStream();
+            var chunk = new byte[8192];
+            long total = 0;
+            int read;
+            while ((read = await source.ReadAsync(chunk, CancellationToken.None)) > 0)
+            {
+                total += read;
+                if (maxBytes > 0 && total > maxBytes)
+                {
+                    StatusMessage = $"Too large for the built-in viewer: {entry.Name}";
+                    return null;
+                }
+
+                buffer.Write(chunk, 0, read);
+            }
+
+            return buffer.ToArray();
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Read failed: {ex.Message}";
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// r60: 系统程序打开缓存文件失败时的状态提示。
+    /// </summary>
+    public void ReportOpenFailed(string localPath)
+    {
+        StatusMessage = $"Could not open: {localPath}";
+    }
+
+    /// <summary>
+    /// r60: 「复制文件路径」成功后的状态提示。
+    /// </summary>
+    public void ReportPathCopied(string path)
+    {
+        StatusMessage = $"Path copied: {path}";
+    }
+
+    /// <summary>
     /// Sends the given local files into the directory that the panel
     /// shows. The files come from the system dialog of the upload button.
     /// </summary>

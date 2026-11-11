@@ -1,13 +1,29 @@
 using System.ComponentModel;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media.Imaging;
+using Avalonia.VisualTree;
 using COMTool.App.Services;
 using COMTool.App.ViewModels;
 using COMTool.Sftp;
 
 namespace COMTool.App.Views;
+
+/// <summary>
+/// r60: 打开远程文件的方式。Auto 为「打开」/双击：图片与文本用内建查看器，
+/// 其余类型回退系统默认程序；TextEditor 用系统默认文本编辑器；WithProgram
+/// 由用户选择程序；SystemDefault 一律用系统默认程序。
+/// </summary>
+internal enum SftpOpenMode
+{
+    Auto,
+    TextEditor,
+    WithProgram,
+    SystemDefault,
+}
 
 /// <summary>
 /// The panel of an SSH session: the entries of the remote directory, the
@@ -26,7 +42,11 @@ public sealed partial class SftpPane : UserControl
 
     private SftpPaneViewModel? _viewModel;
     private SftpPermissionsWindow? _permissionsWindow;
+    private SftpPropertiesWindow? _propertiesWindow;
+    private SftpTextViewerWindow? _textViewerWindow;
+    private SftpImageViewerWindow? _imageViewerWindow;
     private ILocalPickers? _pickers;
+    private ILocalFileLauncher? _fileLauncher;
     private PromptMode _promptMode;
     private bool _deleteArmed;
 
@@ -44,6 +64,14 @@ public sealed partial class SftpPane : UserControl
         MonitorToggleButton.AddHandler(
             InputElement.PointerPressedEvent,
             OnMonitorTogglePressed,
+            RoutingStrategies.Tunnel);
+
+        // r60: 隧道阶段处理列表指针按下——右键先选中被点行（保证右键菜单作用于
+        // 被点的那一行，Avalonia 的 ListBox 右键不自动改选中）；中键把选中路径
+        // 送入本会话终端（MobaXterm 中键粘贴语义）。
+        RemoteList.AddHandler(
+            InputElement.PointerPressedEvent,
+            OnRemoteListPointerPressed,
             RoutingStrategies.Tunnel);
     }
 
@@ -111,6 +139,20 @@ public sealed partial class SftpPane : UserControl
         get => _pickers;
         set => _pickers = value;
     }
+
+    /// <summary>
+    /// r60: 本地文件启动器。测试注入记录器；缺省首次使用时创建系统实现。
+    /// </summary>
+    public ILocalFileLauncher? FileLauncher
+    {
+        get => _fileLauncher;
+        set => _fileLauncher = value;
+    }
+
+    /// <summary>
+    /// r60: 最近一次「复制文件路径」复制到的路径（剪贴板写入的镜像，供断言）。
+    /// </summary>
+    internal string? LastCopiedPath { get; private set; }
 
     internal ListBox RemoteListControl => RemoteList;
 
@@ -191,6 +233,42 @@ public sealed partial class SftpPane : UserControl
     /// </summary>
     internal SftpPermissionsWindow? PermissionsWindow => _permissionsWindow;
 
+    /// <summary>
+    /// r60: currently open viewer windows (null when closed).
+    /// </summary>
+    internal SftpTextViewerWindow? TextViewerWindowControl => _textViewerWindow;
+
+    internal SftpImageViewerWindow? ImageViewerWindowControl => _imageViewerWindow;
+
+    /// <summary>
+    /// r60: 右键菜单及其条目（供 headless 测试与实机自检）。
+    /// </summary>
+    internal ContextMenu RemoteContextMenuControl => RemoteContextMenu;
+
+    internal MenuItem MenuOpenControl => MenuOpen;
+
+    internal MenuItem MenuOpenTextEditorControl => MenuOpenTextEditor;
+
+    internal MenuItem MenuOpenWithControl => MenuOpenWith;
+
+    internal MenuItem MenuOpenSystemControl => MenuOpenSystem;
+
+    internal MenuItem MenuDownloadControl => MenuDownload;
+
+    internal MenuItem MenuDeleteControl => MenuDelete;
+
+    internal MenuItem MenuRenameControl => MenuRename;
+
+    internal MenuItem MenuCopyPathControl => MenuCopyPath;
+
+    internal MenuItem MenuSendPathControl => MenuSendPath;
+
+    internal MenuItem MenuPropertiesControl => MenuProperties;
+
+    internal MenuItem MenuPermissionsControl => MenuPermissions;
+
+    internal SftpPropertiesWindow? PropertiesWindow => _propertiesWindow;
+
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(SftpPaneViewModel.SelectedRemoteEntry))
@@ -206,10 +284,24 @@ public sealed partial class SftpPane : UserControl
     private void UpdateCommandState()
     {
         var entry = _viewModel?.SelectedRemoteEntry;
+        var isFile = entry is not null && !entry.IsDirectory;
 
         DeleteButton.IsEnabled = entry is not null;
         RenameButton.IsEnabled = entry is not null;
         ChmodButton.IsEnabled = entry is not null;
+
+        // r60: 右键菜单项随选中条目启用/隐藏（目录无「打开*」文件项）
+        MenuOpen.IsEnabled = entry is not null;
+        MenuOpenTextEditor.IsVisible = isFile;
+        MenuOpenWith.IsVisible = isFile;
+        MenuOpenSystem.IsVisible = isFile;
+        MenuDownload.IsEnabled = entry is not null;
+        MenuDelete.IsEnabled = entry is not null;
+        MenuRename.IsEnabled = entry is not null;
+        MenuCopyPath.IsEnabled = entry is not null;
+        MenuSendPath.IsEnabled = entry is not null && _viewModel?.PathToTerminal is not null;
+        MenuProperties.IsEnabled = entry is not null;
+        MenuPermissions.IsEnabled = entry is not null;
     }
 
     private void OnUpClick(object? sender, RoutedEventArgs e)
@@ -236,6 +328,10 @@ public sealed partial class SftpPane : UserControl
         }
     }
 
+    /// <summary>
+    /// r60: 双击目录/符号链接进入（原有行为）；双击文件 = 「打开」
+    /// （图片/文本用内建查看器，其余走系统默认程序，对齐 MobaXterm）。
+    /// </summary>
     private async void OnRemoteListDoubleTapped(object? sender, TappedEventArgs e)
     {
         var viewModel = ViewModel;
@@ -245,8 +341,299 @@ public sealed partial class SftpPane : UserControl
             return;
         }
 
-        await viewModel.EnterRemoteAsync(entry);
+        if (entry.IsDirectory || entry.IsSymbolicLink)
+        {
+            await viewModel.EnterRemoteAsync(entry);
+            return;
+        }
+
+        await OpenEntryAsync(entry, SftpOpenMode.Auto);
     }
+
+    /// <summary>
+    /// r60: 隧道阶段处理列表指针按下。右键先选中被点行，使上下文菜单作用于
+    /// 被点的那一行（Avalonia ListBox 右键不自动改选中）；中键把选中条目的
+    /// 远程路径送入本会话终端（MobaXterm 中键粘贴语义），并标记已处理。
+    /// </summary>
+    private void OnRemoteListPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        var point = e.GetCurrentPoint(RemoteList);
+        if (point.Properties.IsMiddleButtonPressed)
+        {
+            var viewModel = ViewModel;
+            if (viewModel?.SelectedRemoteEntry is not null
+                && RemoteList.Bounds.Contains(point.Position))
+            {
+                viewModel.SendSelectedPathToTerminal();
+                e.Handled = true;
+            }
+        }
+        else if (point.Properties.IsRightButtonPressed)
+        {
+            var item = (e.Source as Visual)?.FindAncestorOfType<ListBoxItem>();
+            if (item is not null)
+            {
+                var index = RemoteList.IndexFromContainer(item);
+                if (index >= 0 && index != RemoteList.SelectedIndex)
+                {
+                    RemoteList.SelectedIndex = index;
+                }
+            }
+        }
+    }
+
+    // ───────────────── r60：右键菜单「打开」系列 ─────────────────
+
+    private const int MaxTextViewerBytes = 1024 * 1024;
+    private const int MaxImageViewerBytes = 10 * 1024 * 1024;
+
+    /// <summary>
+    /// r60: 打开指定条目。目录/符号链接进入；文件按 mode 决定打开方式。
+    /// </summary>
+    internal async Task OpenEntryAsync(SftpEntry entry, SftpOpenMode mode)
+    {
+        var viewModel = ViewModel;
+        if (viewModel is null)
+        {
+            return;
+        }
+
+        if (entry.IsDirectory || entry.IsSymbolicLink)
+        {
+            await viewModel.EnterRemoteAsync(entry);
+            return;
+        }
+
+        var launcher = FileLauncher ??= new SystemLocalFileLauncher();
+        var kind = RemoteFileClassifier.Classify(entry.Name);
+
+        switch (mode)
+        {
+            case SftpOpenMode.TextEditor:
+            {
+                var local = await viewModel.DownloadToCacheAsync(entry);
+                if (local is null)
+                {
+                    return;
+                }
+
+                if (!launcher.OpenWithProgram(SystemLocalFileLauncher.TextEditorProgram, local))
+                {
+                    viewModel.ReportOpenFailed(local);
+                }
+                break;
+            }
+
+            case SftpOpenMode.WithProgram:
+            {
+                var pickers = Pickers ?? LocalPickers.Create(this);
+                if (pickers is null)
+                {
+                    return;
+                }
+
+                var programs = await pickers.PickFilesAsync("选择用于打开文件的程序");
+                if (programs.Count == 0)
+                {
+                    return;
+                }
+
+                var local = await viewModel.DownloadToCacheAsync(entry);
+                if (local is null)
+                {
+                    return;
+                }
+
+                if (!launcher.OpenWithProgram(programs[0], local))
+                {
+                    viewModel.ReportOpenFailed(local);
+                }
+                break;
+            }
+
+            case SftpOpenMode.SystemDefault:
+            {
+                await OpenWithSystemDefaultAsync(viewModel, entry, launcher);
+                break;
+            }
+
+            default:
+            {
+                // Auto：MobaXterm 式内建查看器，图片/文本优先
+                if (kind == RemoteFileKind.Image)
+                {
+                    var bytes = await viewModel.ReadEntryBytesAsync(entry, MaxImageViewerBytes);
+                    if (bytes is null)
+                    {
+                        await OpenWithSystemDefaultAsync(viewModel, entry, launcher);
+                        break;
+                    }
+
+                    var window = new SftpImageViewerWindow();
+                    try
+                    {
+                        using var stream = new MemoryStream(bytes);
+                        window.SetImage(entry.Name, new Bitmap(stream), bytes.Length);
+                    }
+                    catch
+                    {
+                        window.SetError(entry.Name, "无法解码图像，文件可能不是有效图像");
+                    }
+
+                    TrackImageViewer(window);
+                    window.Show(TopLevel.GetTopLevel(this) as Window);
+                    break;
+                }
+
+                if (kind == RemoteFileKind.Text)
+                {
+                    var bytes = await viewModel.ReadEntryBytesAsync(entry, MaxTextViewerBytes);
+                    if (bytes is null)
+                    {
+                        await OpenWithSystemDefaultAsync(viewModel, entry, launcher);
+                        break;
+                    }
+
+                    var window = new SftpTextViewerWindow();
+                    window.SetContent(entry.Name, bytes);
+                    TrackTextViewer(window);
+                    window.Show(TopLevel.GetTopLevel(this) as Window);
+                    break;
+                }
+
+                await OpenWithSystemDefaultAsync(viewModel, entry, launcher);
+                break;
+            }
+        }
+    }
+
+    private static async Task OpenWithSystemDefaultAsync(
+        SftpPaneViewModel viewModel, SftpEntry entry, ILocalFileLauncher launcher)
+    {
+        var local = await viewModel.DownloadToCacheAsync(entry);
+        if (local is null)
+        {
+            return;
+        }
+
+        if (!launcher.OpenWithDefaultProgram(local))
+        {
+            viewModel.ReportOpenFailed(local);
+        }
+    }
+
+    /// <summary>
+    /// r60: 记住当前打开的文本查看器窗口；窗口关闭时清空引用。
+    /// </summary>
+    private void TrackTextViewer(SftpTextViewerWindow window)
+    {
+        _textViewerWindow = window;
+        window.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_textViewerWindow, window))
+            {
+                _textViewerWindow = null;
+            }
+        };
+    }
+
+    /// <summary>
+    /// r60: 记住当前打开的图像查看器窗口；窗口关闭时清空引用。
+    /// </summary>
+    private void TrackImageViewer(SftpImageViewerWindow window)
+    {
+        _imageViewerWindow = window;
+        window.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_imageViewerWindow, window))
+            {
+                _imageViewerWindow = null;
+            }
+        };
+    }
+
+    private Task OpenSelectedEntryAsync(SftpOpenMode mode)
+    {
+        var entry = ViewModel?.SelectedRemoteEntry;
+        if (entry is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        return OpenEntryAsync(entry, mode);
+    }
+
+    private async void OnMenuOpenClick(object? sender, RoutedEventArgs e)
+        => await OpenSelectedEntryAsync(SftpOpenMode.Auto);
+
+    private async void OnMenuOpenTextEditorClick(object? sender, RoutedEventArgs e)
+        => await OpenSelectedEntryAsync(SftpOpenMode.TextEditor);
+
+    private async void OnMenuOpenWithClick(object? sender, RoutedEventArgs e)
+        => await OpenSelectedEntryAsync(SftpOpenMode.WithProgram);
+
+    private async void OnMenuOpenSystemClick(object? sender, RoutedEventArgs e)
+        => await OpenSelectedEntryAsync(SftpOpenMode.SystemDefault);
+
+    private void OnMenuDownloadClick(object? sender, RoutedEventArgs e)
+        => OnDownloadClick(sender, e);
+
+    private async void OnMenuDeleteClick(object? sender, RoutedEventArgs e)
+    {
+        var viewModel = ViewModel;
+        if (viewModel?.SelectedRemoteEntry is null)
+        {
+            return;
+        }
+
+        // 右键菜单是明确动作，无需工具栏的两次确认
+        DisarmDelete();
+        await viewModel.DeleteRemoteAsync();
+    }
+
+    private void OnMenuRenameClick(object? sender, RoutedEventArgs e)
+        => OnRenameClick(sender, e);
+
+    private void OnMenuCopyPathClick(object? sender, RoutedEventArgs e)
+    {
+        var viewModel = ViewModel;
+        var entry = viewModel?.SelectedRemoteEntry;
+        if (viewModel is null || entry is null)
+        {
+            return;
+        }
+
+        LastCopiedPath = entry.Path;
+        if (TopLevel.GetTopLevel(this) is { } topLevel)
+        {
+            var data = new DataTransfer();
+            data.Add(DataTransferItem.CreateText(entry.Path));
+            _ = topLevel.Clipboard.SetDataAsync(data);
+        }
+
+        viewModel.ReportPathCopied(entry.Path);
+    }
+
+    private void OnMenuSendPathClick(object? sender, RoutedEventArgs e)
+        => ViewModel?.SendSelectedPathToTerminal();
+
+    private void OnMenuPropertiesClick(object? sender, RoutedEventArgs e)
+    {
+        var entry = ViewModel?.SelectedRemoteEntry;
+        if (entry is null)
+        {
+            return;
+        }
+
+        var window = new SftpPropertiesWindow();
+        window.SetEntry(entry);
+        _propertiesWindow = window;
+        window.Closed += (_, _) => _propertiesWindow = null;
+        window.Show(TopLevel.GetTopLevel(this) as Window);
+    }
+
+    private void OnMenuPermissionsClick(object? sender, RoutedEventArgs e)
+        => OnChmodClick(sender, e);
 
     private async void OnRemotePathKeyDown(object? sender, KeyEventArgs e)
     {

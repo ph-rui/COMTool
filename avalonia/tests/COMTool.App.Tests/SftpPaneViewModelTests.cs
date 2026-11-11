@@ -290,6 +290,103 @@ public sealed class SftpPaneViewModelTests
         Assert.Contains("1 downloaded", viewModel.StatusMessage);
     }
 
+    // ───────────────── r60：打开/缓存/送终端 ─────────────────
+
+    [AvaloniaFact]
+    public async Task SFTP10_DownloadToCacheWritesTheFileUnderTheCacheRoot()
+    {
+        var (viewModel, remote, local) = NewViewModel();
+        remote.AddDirectory("/remote/sub");
+        remote.AddFile("/remote/sub/a.txt", "cache-content");
+        viewModel.CacheRoot = "/local-cache";
+        await viewModel.LoadAsync(CancellationToken.None);
+        await viewModel.EnterRemoteAsync(viewModel.RemoteEntries.Single(entry => entry.Name == "sub"));
+        viewModel.SelectedRemoteEntry = viewModel.RemoteEntries.Single(entry => entry.Name == "a.txt");
+
+        var path = await viewModel.DownloadToCacheAsync();
+
+        Assert.Equal("/local-cache/sub/a.txt", path);
+        Assert.Equal("cache-content", local.ReadFile("/local-cache/sub/a.txt"));
+        Assert.Contains("a.txt", viewModel.StatusMessage);
+    }
+
+    [AvaloniaFact]
+    public async Task SFTP10_DownloadToCacheFallsBackToTheFileNameOutsideTheHome()
+    {
+        var (viewModel, remote, local) = NewViewModel();
+        remote.AddFile("/elsewhere/deep/f.txt", "outside");
+        viewModel.CacheRoot = "/local-cache";
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        var entry = (await remote.ListAsync("/elsewhere/deep", CancellationToken.None)).Single();
+        var path = await viewModel.DownloadToCacheAsync(entry);
+
+        Assert.Equal("/local-cache/f.txt", path);
+        Assert.Equal("outside", local.ReadFile("/local-cache/f.txt"));
+    }
+
+    [AvaloniaFact]
+    public async Task SFTP10_DownloadToCacheIsRejectedWhileATransferRuns()
+    {
+        var (viewModel, remote, local) = NewViewModel();
+        remote.AddFile("/remote/a.txt", "old");
+        local.AddFile("/local/a.txt", "new");
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        viewModel.SelectedRemoteEntry = viewModel.RemoteEntries.Single(entry => entry.Name == "a.txt");
+        var upload = viewModel.UploadAsync(new[] { "/local/a.txt" });
+        await WaitUntil(() => viewModel.IsConflictVisible, "ask about the conflict");
+
+        var cachePath = await viewModel.DownloadToCacheAsync();
+
+        Assert.Null(cachePath);
+        Assert.Contains("transfer", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
+
+        viewModel.ResolveConflict(SftpConflictAction.Overwrite);
+        await upload.WaitAsync(TimeSpan.FromSeconds(10));
+    }
+
+    [AvaloniaFact]
+    public async Task SFTP10_SendSelectedPathToTerminalInvokesTheCallback()
+    {
+        var (viewModel, remote, _) = NewViewModel();
+        remote.AddFile("/remote/a.txt", "a");
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        var sent = new List<string>();
+        viewModel.PathToTerminal = sent.Add;
+        viewModel.SelectedRemoteEntry = viewModel.RemoteEntries.Single(entry => entry.Name == "a.txt");
+
+        viewModel.SendSelectedPathToTerminal();
+
+        Assert.Equal("/remote/a.txt", sent.Single());
+        Assert.Contains("/remote/a.txt", viewModel.StatusMessage);
+
+        // No marked entry: the callback must not fire.
+        viewModel.SelectedRemoteEntry = null;
+        viewModel.SendSelectedPathToTerminal();
+        Assert.Single(sent);
+    }
+
+    [AvaloniaFact]
+    public async Task SFTP10_ReadEntryBytesReturnsTheContentAndRejectsOversized()
+    {
+        var (viewModel, remote, _) = NewViewModel();
+        remote.AddFile("/remote/big.txt", new string('x', 2048));
+        await viewModel.LoadAsync(CancellationToken.None);
+        var entry = viewModel.RemoteEntries.Single();
+
+        var bytes = await viewModel.ReadEntryBytesAsync(entry, 1024 * 1024);
+
+        Assert.NotNull(bytes);
+        Assert.Equal(2048, bytes!.Length);
+
+        var tooSmall = await viewModel.ReadEntryBytesAsync(entry, 100);
+
+        Assert.Null(tooSmall);
+        Assert.Contains("Too large", viewModel.StatusMessage);
+    }
+
     [AvaloniaFact]
     public async Task UploadNeedsNoSelectionButDownloadDoes()
     {

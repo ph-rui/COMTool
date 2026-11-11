@@ -1,0 +1,37 @@
+<Window x:CompileBindings="True" xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="COMTool.App.Views.SftpPropertiesWindow"
+        Title="文件属性"
+        Width="380"
+        SizeToContent="Height"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner">
+  <StackPanel Margin="12" Spacing="8">
+    <Grid ColumnDefinitions="70,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+      <TextBlock Grid.Row="0" Grid.Column="0" Text="名称" VerticalAlignment="Center" />
+      <TextBlock Grid.Row="0" Grid.Column="1" Name="NameText" TextTrimming="CharacterEllipsis" />
+
+      <TextBlock Grid.Row="1" Grid.Column="0" Text="路径" VerticalAlignment="Center" />
+      <TextBlock Grid.Row="1" Grid.Column="1" Name="PathText" TextTrimming="CharacterEllipsis" />
+
+      <TextBlock Grid.Row="2" Grid.Column="0" Text="类型" VerticalAlignment="Center" />
+      <TextBlock Grid.Row="2" Grid.Column="1" Name="TypeText" />
+
+      <TextBlock Grid.Row="3" Grid.Column="0" Text="大小" VerticalAlignment="Center" />
+      <TextBlock Grid.Row="3" Grid.Column="1" Name="SizeText" />
+
+      <TextBlock Grid.Row="4" Grid.Column="0" Text="最后修改" VerticalAlignment="Center" />
+      <TextBlock Grid.Row="4" Grid.Column="1" Name="ModifiedText" />
+
+      <TextBlock Grid.Row="5" Grid.Column="0" Text="权限" VerticalAlignment="Center" />
+      <TextBlock Grid.Row="5" Grid.Column="1" Name="PermissionText" />
+
+      <TextBlock Grid.Row="6" Grid.Column="0" Text="属主" VerticalAlignment="Center" />
+      <TextBlock Grid.Row="6" Grid.Column="1" Name="OwnerText" />
+    </Grid>
+
+    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+      <Button Name="OkButton" Content="确定" Click="OnOkClick" />
+    </StackPanel>
+  </StackPanel>
+</Window>

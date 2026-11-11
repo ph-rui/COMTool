@@ -387,6 +387,24 @@
              ItemsSource="{Binding RemoteEntries}"
              SelectedItem="{Binding SelectedRemoteEntry}"
              DoubleTapped="OnRemoteListDoubleTapped">
+      <ListBox.ContextMenu>
+        <ContextMenu Name="RemoteContextMenu">
+          <MenuItem Name="MenuOpen" Header="打开" Click="OnMenuOpenClick" />
+          <MenuItem Name="MenuOpenTextEditor" Header="使用默认文本文编辑器打开" Click="OnMenuOpenTextEditorClick" />
+          <MenuItem Name="MenuOpenWith" Header="打开方式" Click="OnMenuOpenWithClick" />
+          <MenuItem Name="MenuOpenSystem" Header="使用默认程序打开" Click="OnMenuOpenSystemClick" />
+          <MenuItem Name="MenuDownload" Header="下载" Click="OnMenuDownloadClick" />
+          <Separator />
+          <MenuItem Name="MenuDelete" Header="删除" Click="OnMenuDeleteClick" />
+          <MenuItem Name="MenuRename" Header="重命名" Click="OnMenuRenameClick" />
+          <Separator />
+          <MenuItem Name="MenuCopyPath" Header="复制文件路径" Click="OnMenuCopyPathClick" />
+          <MenuItem Name="MenuSendPath" Header="将文件路径复制到终端（鼠标中键单击）" Click="OnMenuSendPathClick" />
+          <Separator />
+          <MenuItem Name="MenuProperties" Header="属性" Click="OnMenuPropertiesClick" />
+          <MenuItem Name="MenuPermissions" Header="权限" Click="OnMenuPermissionsClick" />
+        </ContextMenu>
+      </ListBox.ContextMenu>
       <ListBox.ItemTemplate>
         <DataTemplate x:DataType="sftp:SftpEntry">
           <Grid ColumnDefinitions="18,*,58,98,54,70" MinHeight="18">

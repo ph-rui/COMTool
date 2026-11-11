@@ -401,6 +401,13 @@ public partial class MainWindow : Window
         {
             _ = RunR59SelfTestAsync();
         }
+        // --selftest-r60：实机自检 r60 SFTP 浏览器右键菜单与打开行为：
+        // ① 右键菜单 11 项（MobaXterm 顺序）② 双击文本文件开内建查看器
+        // ③ 路径送入终端（中键语义），落盘 r60-browser.png / r60-viewer.png。
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r60"))
+        {
+            _ = RunR60SelfTestAsync();
+        }
     }
 
     private volatile bool _portScanBusy;
@@ -1074,6 +1081,16 @@ public partial class MainWindow : Window
             viewModel.SetMonitorEnabled(tab, v);
             _config.SshSessions.SetMonitor(session.Key, v);
             _config.Save();
+        };
+
+        // r60: SFTP 浏览器右键「将文件路径复制到终端」与鼠标中键单击：
+        // 把远程路径文本注入本标签终端（不带回车，MobaXterm 中键粘贴语义）。
+        pane.PathToTerminal = path =>
+        {
+            if (tab.Terminal is { } term)
+            {
+                _ = term.SendInputAsync(path);
+            }
         };
 
         var stoppedBehavior = new SessionStoppedBehavior(
@@ -8662,6 +8679,176 @@ public static class ClipCheck {
             {
                 _config.Config.Terminal.SyntaxHighlight = prevScheme;
             }
+        }
+    }
+
+    /// <summary>
+    /// <c>--selftest-r60</c>：实机自检 r60 SFTP 浏览器右键菜单与打开行为。
+    /// 连上配置里第一个 SSH 会话后：① 右键菜单 11 项按 MobaXterm 顺序齐全
+    /// （含 3 条分隔线）；② 双击文本文件打开内建文本查看器（截图
+    /// r60-viewer.png）；③ 把远程路径送入终端（中键粘贴语义，不带回车），
+    /// 回读终端缓冲验证路径文本已出现。落盘 r60-browser.png。
+    /// </summary>
+    private async Task RunR60SelfTestAsync()
+    {
+        var menuOk = false;
+        var viewerOk = false;
+        var viewerSkipped = false;
+        var termOk = false;
+        try
+        {
+            AppLog.Info("[SelfTest] r60: 等主窗稳定 1.5s 后开始");
+            await Task.Delay(1500);
+            if (DataContext is not MainViewModel viewModel)
+            {
+                throw new InvalidOperationException("MainViewModel 未就绪");
+            }
+
+            var firstKey = _config?.SshSessions.Sessions.FirstOrDefault()?.Key;
+            if (string.IsNullOrEmpty(firstKey))
+            {
+                throw new InvalidOperationException("config 中没有 SSH 会话，无法跑 r60 自检");
+            }
+
+            AppLog.Info($"[SelfTest] r60: 打开 SSH 会话 {firstKey}");
+            var openTask = OpenSshSessionAsync(firstKey!);
+            TerminalTab? sshTab = null;
+            var deadline = DateTime.UtcNow.AddSeconds(90);
+            while (!(openTask.IsCompleted && sshTab is not null && sshTab.IsAlive))
+            {
+                if (DateTime.UtcNow > deadline)
+                {
+                    throw new TimeoutException("SSH 会话 90s 内未连接成功");
+                }
+
+                sshTab = viewModel.Tabs.FirstOrDefault(t => t.SessionId == firstKey);
+                await Task.Delay(250);
+            }
+
+            await openTask;
+            await Task.Delay(800);
+            UpdateLayout();
+
+            var paneVm = sshTab.SftpPane;
+            if (paneVm is null)
+            {
+                throw new InvalidOperationException("SFTP 面板未创建");
+            }
+
+            var dl = DateTime.UtcNow.AddSeconds(30);
+            while (paneVm.RemoteEntries.Count == 0 && DateTime.UtcNow < dl)
+            {
+                await Task.Delay(200);
+                UpdateLayout();
+            }
+            AppLog.Info($"[SelfTest] r60: SFTP 列表 {paneVm.RemoteEntries.Count} 项 @ {paneVm.RemotePath}");
+            if (paneVm.RemoteEntries.Count == 0)
+            {
+                throw new TimeoutException("SFTP 列表 30s 内未加载");
+            }
+
+            var sftpPane = this.FindControl<SessionSidebar>("Sidebar")
+                ?.FindControl<SshBrowserPanel>("SshBrowserPanel")?.SftpPaneControl;
+            UpdateLayout();
+
+            // ① 右键菜单：11 项按 MobaXterm 顺序 + 3 条分隔线
+            var menu = sftpPane?.RemoteContextMenuControl;
+            var headers = menu is null
+                ? new List<string>()
+                : menu.Items.OfType<MenuItem>().Select(m => m.Header?.ToString() ?? "").ToList();
+            var separators = menu?.Items.OfType<Separator>().Count() ?? 0;
+            var expected = new[]
+            {
+                "打开", "使用默认文本文编辑器打开", "打开方式", "使用默认程序打开",
+                "下载", "删除", "重命名", "复制文件路径",
+                "将文件路径复制到终端（鼠标中键单击）", "属性", "权限",
+            };
+            menuOk = menu is not null && separators == 3 && headers.SequenceEqual(expected);
+            AppLog.Info($"[SelfTest] r60: ① 右键菜单 {headers.Count}/11 项、{separators}/3 分隔线 => {(menuOk ? "OK" : "FAILED")}");
+
+            SaveVisualPng(Content as Visual, "r60-browser.png");
+
+            // ② 双击文本文件 → 内建文本查看器
+            var textEntry = paneVm.RemoteEntries
+                .FirstOrDefault(e => !e.IsDirectory && !e.IsSymbolicLink
+                    && RemoteFileClassifier.Classify(e.Name) == RemoteFileKind.Text);
+            SftpTextViewerWindow? textWin = null;
+            if (textEntry is null)
+            {
+                viewerSkipped = true;
+                AppLog.Info("[SelfTest] r60: ② SKIP 当前目录没有文本文件");
+            }
+            else
+            {
+                paneVm.SelectedRemoteEntry = textEntry;
+                if (sftpPane is not null)
+                {
+                    await sftpPane.OpenEntryAsync(textEntry, SftpOpenMode.Auto);
+                }
+
+                var dl2 = DateTime.UtcNow.AddSeconds(30);
+                var lifetime = Application.Current?.ApplicationLifetime
+                    as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime;
+                while (textWin is null && DateTime.UtcNow < dl2)
+                {
+                    textWin = lifetime?.Windows.OfType<SftpTextViewerWindow>().FirstOrDefault();
+                    await Task.Delay(100);
+                    UpdateLayout();
+                }
+
+                if (textWin is not null)
+                {
+                    viewerOk = textWin.TextHostControl.Text.Length > 0;
+                    AppLog.Info($"[SelfTest] r60: ② 双击 {textEntry.Name} 打开内建文本查看器 => {(viewerOk ? "OK" : "FAILED")}（{textWin.TextHostControl.Text.Length} 字符）");
+                    UpdateLayout();
+                    SaveVisualPng(textWin, "r60-viewer.png");
+                }
+                else
+                {
+                    AppLog.Info($"[SelfTest] r60: ② FAILED 未出现文本查看器窗口（{textEntry.Name}）");
+                }
+            }
+
+            // ③ 路径送入终端（中键/菜单同一路径），回读终端缓冲验证
+            var fileEntry = textEntry ?? paneVm.RemoteEntries.FirstOrDefault(e => !e.IsDirectory && !e.IsSymbolicLink);
+            if (fileEntry is not null && sshTab.Terminal?.Terminal is not null)
+            {
+                paneVm.SelectedRemoteEntry = fileEntry;
+                paneVm.SendSelectedPathToTerminal();
+                await Task.Delay(2000);
+
+                var term = sshTab.Terminal.Terminal;
+                var sb = new System.Text.StringBuilder();
+                for (var row = 0; row < term.Buffer.Length; row++)
+                {
+                    var line = term.Buffer.GetLine(row);
+                    if (line is not null)
+                    {
+                        sb.Append(line.TranslateToString(true, 0));
+                    }
+                }
+
+                var flat = sb.ToString().Replace("\r", "").Replace("\n", "");
+                termOk = flat.Contains(fileEntry.Path, StringComparison.Ordinal);
+                AppLog.Info($"[SelfTest] r60: ③ 路径送入终端 {fileEntry.Path} => {(termOk ? "OK" : "FAILED")}");
+            }
+            else
+            {
+                termOk = true;
+                AppLog.Info("[SelfTest] r60: ③ SKIP 无可发送的文件条目或终端未就绪");
+            }
+
+            textWin?.Close();
+            var ok = menuOk && (viewerOk || viewerSkipped) && termOk;
+            AppLog.Info($"[SelfTest] r60: 自检完成，菜单={(menuOk ? "OK" : "失败")} 查看器={(viewerOk ? "OK" : viewerSkipped ? "SKIP" : "失败")} 送终端={(termOk ? "OK" : "失败")}，退出");
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(ok ? 0 : 2);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("[SelfTest] r60: 自检异常", ex);
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
         }
     }
 
