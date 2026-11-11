@@ -2175,6 +2175,55 @@ r56-terminal.png。
 - 库仓库 Iciclecreek.Avalonia.Terminal main 本地领先 origin 6 提交未 push（沿惯例，
   待用户确认）。
 
+### 61 SFTP 浏览器：隐藏文件默认关闭 + 符号链接归入目录组（2026-11-11，用户反馈截图）
+
+**问题（用户反馈 + 实证）**：
+1. 「显示隐藏文件」开关默认是开——`_showHidden` 自初版提交（65562a2）起默认 true，
+   与 MobaXterm（默认隐藏点开头文件）不符；
+2. 符号链接"不显示"。实证定位：开发板 /home/devuser 唯一链接
+   `tftp_dir -> /media/sangfor/vdb/tftp_dir`（指向目录）。SSH.NET 原始列表里有它
+   （探针实测 114 项中 links=1），但 lstat 报 IsDirectory=false，
+   CompareEntries 只按 IsDirectory 分"目录组/文件组"，链接被排进文件组、
+   沉到 114 行列表的第 113 行，目录区里看不到，表现为"链接消失"。
+
+**修复**：
+- `SftpPaneViewModel`：`_showHidden` 默认 true→false；开关语义不变
+  （开 = 非隐藏基础上追加隐藏文件，关 = 移除）；
+- `CompareEntries`：`IsDirectory || IsSymbolicLink` 视为目录组（恒置顶、按名称排），
+  文件其后；链接图标/颜色仍由转换器区分（f0c1 蓝色），双击进入逻辑不变；
+- 新增 `--selftest-r61` 实机自检三项：① 默认 ShowHidden=false 且列表无点开头条目；
+  ② 开关打开后点开头条目追加出现、关闭后恢复；③ 符号链接位于首个普通文件之前
+  （目录组内）。落盘 r61-browser.png。
+
+**测试**（TDD 先红后绿，红=3 失败 0 通过）：
+- 重写 `HidesHiddenFilesWhenTheToggleIsOff`：默认关 → 开（追加，排序 .hidden 在前）
+  → 关（恢复）三段断言（名称不变，矩阵引用不受影响）；
+- 新增 `SFTP11_SymlinkSortsAmongTheDirectories`、
+  `SFTP11_FileSymlinkStillSortsByItsNameWithinTheDirectoryGroup`。
+
+**已知偏差**：指向文件的链接同样归入目录组（列表不为每个链接多发 stat 解析
+目标类型）；双击文件链接走 EnterRemoteAsync 会报"Listing failed"而非打开目标
+文件——后续轮次可做目标类型解析 + 文件链接走内建查看器。
+
+**验证**：
+- 全量 gate：2026-11-11T09:38:07Z 全绿（r61-gate）：restore/build PASS，
+  unit 411（Core 90/Sftp 52/Terminal 38/Connections 150/Zmodem 32/TestGate 49），
+  app 314，e2e 15/15 PASS，testgate PASS，共 725 项。
+- VM win-x64 AOT 部署（仅更新 AOT 目录）：
+  - `C:\Users\devuser\COMTool-Avalonia-AOT\COMTool.App.exe`
+    SHA256 = `a757b5044b7a93d17de2e4b2f8143420e3d8cb4aa3e2c1b83c59d0372f22b977`
+  - AOT 包 `C:\Users\devuser\COMTool-Avalonia-AOT-r61.zip`
+    SHA256 = `093d2672ae98aace9e7fb5ee5e456372292eec6a7ec882bc2d09136883fac67d`（78,381,725 B，用户 SFTP 拉取）
+- `--selftest-r61` 实机（VM，真实 SSH 会话 devuser@192.0.2.48，wall 3.9s，退出码 0（重跑验证 RC=0））：
+  - ① 默认 ShowHidden=false 且无点开头条目：OK（列表 42 项、点开头条目=0）
+  - ② 开关打开追加/关闭恢复：OK（开=追加 72 个隐藏条目、关=恢复 42 项）
+  - ③ 符号链接 tftp_dir 位于目录组：OK（tftp_dir @ 行17/共42，首个普通文件 @ 行33）
+  - r61-browser.png 目检：通过（默认无 dot 文件、tftp_dir@ 带链接图标位于目录组）
+
+**遗留**：
+- 文件链接目标类型解析 + 文件链接双击走内建查看器（可选增强）；
+- r60 遗留：Compare file with、查看器编辑回存、图像缩放。
+
 ## 已知偏差（已写入 spec 附录）
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
 2. 热键 .mxtmacros 编码未实测：导出恒 0，导入非 0 忽略+警告
