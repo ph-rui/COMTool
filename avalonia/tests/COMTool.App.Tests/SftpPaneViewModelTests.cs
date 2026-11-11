@@ -257,6 +257,58 @@ public sealed class SftpPaneViewModelTests
             viewModel.RemoteEntries.Select(entry => entry.Name));
     }
 
+    // ───────────────── r62：新建文件（空白区右键菜单「新建文件」） ─────────────────
+
+    [AvaloniaFact]
+    public async Task SFTP12_NewRemoteFileCreatesAnEmptyFile()
+    {
+        var (viewModel, remote, _) = NewViewModel();
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        var created = await viewModel.NewRemoteFileAsync("new.txt");
+
+        Assert.True(created);
+        Assert.True(remote.HasEntry("/remote/new.txt"));
+        Assert.Equal(0, remote.ReadFile("/remote/new.txt")!.Length);
+        Assert.Contains("new.txt", viewModel.StatusMessage);
+    }
+
+    [AvaloniaFact]
+    public async Task SFTP12_NewRemoteFileRefusesAnExistingName()
+    {
+        var (viewModel, remote, _) = NewViewModel();
+        remote.AddFile("/remote/a.txt", "old");
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        var created = await viewModel.NewRemoteFileAsync("a.txt");
+
+        Assert.False(created);
+        Assert.Equal("old", remote.ReadFile("/remote/a.txt"));
+        Assert.Contains("exists", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [AvaloniaFact]
+    public async Task SFTP12_NewRemoteFileIsRejectedWhileATransferRuns()
+    {
+        var (viewModel, remote, local) = NewViewModel();
+        remote.AddFile("/remote/a.txt", "old");
+        local.AddFile("/local/a.txt", "new");
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        viewModel.SelectedRemoteEntry = viewModel.RemoteEntries.Single(entry => entry.Name == "a.txt");
+        var upload = viewModel.UploadAsync(new[] { "/local/a.txt" });
+        await WaitUntil(() => viewModel.IsConflictVisible, "ask about the conflict");
+
+        var created = await viewModel.NewRemoteFileAsync("b.txt");
+
+        Assert.False(created);
+        Assert.False(remote.HasEntry("/remote/b.txt"));
+        Assert.Contains("transfer", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
+
+        viewModel.ResolveConflict(SftpConflictAction.Overwrite);
+        await upload.WaitAsync(TimeSpan.FromSeconds(10));
+    }
+
     [AvaloniaFact]
     public async Task CreatesRenamesAndDeletesOnTheRemote()
     {
