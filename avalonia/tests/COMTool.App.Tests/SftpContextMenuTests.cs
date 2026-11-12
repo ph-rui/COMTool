@@ -722,6 +722,102 @@ public sealed class SftpContextMenuTests
     }
 
     [AvaloniaFact]
+    public async Task SFTP14_BlankAreaLeftClickClearsSelection()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            await env.RunAsync(async () =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                (window, var pane, _, _, var view) = await Setup(remote =>
+                {
+                    remote.AddDirectory("/remote/dir");
+                    remote.AddFile("/remote/a.txt", "a");
+                    remote.AddFile("/remote/b.txt", "b");
+                });
+                await pane.EnsureLoadedAsync(CancellationToken.None);
+
+                // 先选中一个文件
+                pane.SelectedRemoteEntry = pane.RemoteEntries.Single(entry => entry.Name == "a.txt");
+                Dispatcher.UIThread.RunJobs();
+                Assert.True(view.RemoteListControl.SelectedIndex >= 0);
+
+                // 模拟空白区左键单击：直接向 ListBox 本身发 PointerPressed
+                // （事件源是列表而非 ListBoxItem，走"空白处"分支）。
+                var list = view.RemoteListControl;
+                var pointer = new Pointer(Pointer.GetNextFreeId(), PointerType.Mouse, isPrimary: true);
+                var windowPoint = list.TranslatePoint(
+                    new Point(list.Bounds.Width / 2, list.Bounds.Height / 2), window) ?? new Point(10, 10);
+                list.RaiseEvent(new PointerPressedEventArgs(
+                    list,
+                    pointer,
+                    window,
+                    windowPoint,
+                    0,
+                    new PointerPointProperties(RawInputModifiers.LeftMouseButton, PointerUpdateKind.Other),
+                    KeyModifiers.None,
+                    clickCount: 1));
+                Dispatcher.UIThread.RunJobs();
+
+                // r64: 左键单击空白区 → 清除选中（MobaXterm 行为）
+                Assert.Equal(-1, view.RemoteListControl.SelectedIndex);
+                Assert.Null(pane.SelectedRemoteEntry);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task SFTP14_RowLeftClickStillSelectsTheRow()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            await env.RunAsync(async () =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                (window, var pane, _, _, var view) = await Setup(remote =>
+                {
+                    remote.AddDirectory("/remote/dir");
+                    remote.AddFile("/remote/a.txt", "a");
+                    remote.AddFile("/remote/b.txt", "b");
+                });
+                await pane.EnsureLoadedAsync(CancellationToken.None);
+
+                var list = view.RemoteListControl;
+                var target = pane.RemoteEntries.Single(entry => entry.Name == "b.txt");
+                var index = pane.RemoteEntries.ToList().IndexOf(target);
+                var container = (Control)list.ContainerFromIndex(index)!;
+
+                // 模拟对该行的真实左键单击（完整输入管线：命中→隧道→选中→冒泡→Tap）
+                var windowPoint = container.TranslatePoint(
+                    new Point(container.Bounds.Width / 2, container.Bounds.Height / 2), window);
+                Assert.NotNull(windowPoint);
+                window.MouseDown(windowPoint!.Value, MouseButton.Left);
+                window.MouseUp(windowPoint.Value, MouseButton.Left);
+                Dispatcher.UIThread.RunJobs();
+
+                // r64: 行上的左键单击仍正常选中该行，不受空白区逻辑影响
+                Assert.NotNull(pane.SelectedRemoteEntry);
+                Assert.Equal("b.txt", pane.SelectedRemoteEntry!.Name);
+                Assert.True(view.MenuOpenControl.IsVisible);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
     public async Task SFTP12_NewFilePromptCreatesAnEmptyRemoteFile()
     {
         using var env = new TestEnvironment();

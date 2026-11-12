@@ -414,6 +414,8 @@ public sealed partial class SftpPane : UserControl
     /// r60: 隧道阶段处理列表指针按下。右键先选中被点行，使上下文菜单作用于
     /// 被点的那一行（Avalonia ListBox 右键不自动改选中）；中键把选中条目的
     /// 远程路径送入本会话终端（MobaXterm 中键粘贴语义），并标记已处理。
+    /// r64: 左键单击空白区（不在任何行上、也不在滚动条上）清除选中
+    /// （MobaXterm 行为）；行上的左键单击走 ListBox 默认选中，不受影响。
     /// </summary>
     private void OnRemoteListPointerPressed(object? sender, PointerPressedEventArgs e)
     {
@@ -438,6 +440,35 @@ public sealed partial class SftpPane : UserControl
                 {
                     RemoteList.SelectedIndex = index;
                 }
+            }
+        }
+        else if (point.Properties.IsLeftButtonPressed)
+        {
+            // 从事件源向上走到列表为止：途中遇到 ListBoxItem 说明点在行上，
+            // 遇到 ScrollBar 说明点在滚动条上——两者都保持默认行为。
+            // 否则是空白区：清除选中（SelectedIndex=-1 经双向绑定同步 VM）。
+            var onItem = false;
+            var onScrollBar = false;
+            for (var v = e.Source as Visual;
+                 v is not null && !ReferenceEquals(v, RemoteList);
+                 v = v.GetVisualParent())
+            {
+                if (v is ListBoxItem)
+                {
+                    onItem = true;
+                    break;
+                }
+                if (v is ScrollBar)
+                {
+                    onScrollBar = true;
+                    break;
+                }
+            }
+
+            if (!onItem && !onScrollBar)
+            {
+                RemoteList.SelectedIndex = -1;
+                e.Handled = true;
             }
         }
     }
