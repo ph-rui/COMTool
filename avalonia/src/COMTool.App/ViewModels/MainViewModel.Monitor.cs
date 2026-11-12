@@ -496,6 +496,11 @@ public partial class MainViewModel
     {
         if (tab.Connection is not IExecRunner runner)
         {
+            // r66: 此前该分支静默返回——用户看到「按钮是绿的但永远没有数据」
+            // 且日志无任何痕迹。现在显式告警，便于区分「没启动」与「启动后失败」。
+            AppLog.Warn(
+                $"Remote monitor start skipped: tab {tab.SessionId} connection " +
+                $"is not an IExecRunner (monitor stays off in practice)");
             return;
         }
 
@@ -513,12 +518,18 @@ public partial class MainViewModel
             Dispatcher.UIThread.Post(() => ApplyMonitorFailed(reason));
         _remoteMonitor = monitor;
         monitor.Start();
+        AppLog.Info($"Remote monitor polling started: {tab.SessionId}");
     }
 
     private void StopMonitorPolling()
     {
         // 引擎事件在停止后不会再触发（循环退出前检查 running 标志），
         // 无订阅需要解除；对象随停止被回收。
+        if (_remoteMonitor is not null)
+        {
+            AppLog.Info(
+                $"Remote monitor polling stopped: {_monitoredTab?.SessionId ?? "?"}");
+        }
         _remoteMonitor?.Dispose();
         _remoteMonitor = null;
         _monitoredTab = null;

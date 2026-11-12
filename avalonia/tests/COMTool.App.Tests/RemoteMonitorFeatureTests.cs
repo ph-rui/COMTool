@@ -463,6 +463,65 @@ public sealed class RemoteMonitorFeatureTests
         }
     }
 
+    [AvaloniaFact]
+    public void RM07_MonitorButtonInternalToggleCannotCorruptViewModel()
+    {
+        // r66：按钮内部翻转（Toggle 的本地 IsChecked 写回）不得污染视图模型。
+        // 背景：实机上按钮内部翻转与隧道翻转叠加时，TwoWay 绑定把内部翻转
+        // 写回 VM → 一次物理点击两次翻转净归零：按钮颜色不变、"点击远程
+        // 监控没效果"（2026-11-12 用户反馈，同 IP 双会话场景；run.log
+        // 出现同秒 on/off 对）。
+        // 修复后 AXAML 绑定为 OneWay（按钮只读显示，永不回写 VM），唯一用户
+        // 翻转入口是 SftpPane 隧道处理器（handledEventsToo，按下必翻转）。
+        // 本测试用独立窗体（无隧道处理器）+ 与生产一致的 OneWay 绑定，
+        // 直接模拟内部翻转路径的最坏情况——本地 IsChecked 写入（等价
+        // Toggle()），验证：IsMonitorOn 与 MonitorToggled 回调保持不变。
+        using var env = new TestEnvironment();
+        Window? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                var pane = new SftpPaneViewModel(() => new InMemoryFileSystem("/remote"));
+                var events = new List<bool>();
+                pane.MonitorToggled = v => events.Add(v);
+
+                var button = new ToggleButton
+                {
+                    DataContext = pane,
+                    Width = 300,
+                    Height = 40,
+                    ClickMode = ClickMode.Press,
+                };
+                // OneWay 绑定与生产 AXAML 完全一致：VM→视图，永不回写
+                button.Bind(ToggleButton.IsCheckedProperty,
+                    new Avalonia.Data.Binding("IsMonitorOn")
+                    { Mode = Avalonia.Data.BindingMode.OneWay });
+                window = new Window { Content = button, Width = 400, Height = 200 };
+                window.Show();
+                window.UpdateLayout();
+                Dispatcher.UIThread.RunJobs();
+
+                Assert.False(pane.IsMonitorOn);
+                Assert.False(button.IsChecked);
+
+                // 模拟内部翻转路径的最坏情况：Toggle() 即 IsChecked = !IsChecked
+                button.IsChecked = true;
+                Dispatcher.UIThread.RunJobs();
+
+                // 视图模型不得被本地翻转污染：回调未触发、状态未变
+                Assert.True(button.IsChecked);
+                Assert.Empty(events);
+                Assert.False(pane.IsMonitorOn);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
     [Fact]
     public void RM04_MenuStateMapsToConfigRoundTrip()
     {

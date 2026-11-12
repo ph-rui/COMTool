@@ -563,17 +563,26 @@
             Background="#f1f1f1"
             BorderBrush="#d4d4d4"
             BorderThickness="0,1,0,0">
+      <!-- r66: 状态唯一来源是 VM.IsMonitorOn，按钮视觉纯由 OneWay 绑定驱动。
+           翻转唯一入口 = SftpPane 隧道阶段处理器（handledEventsToo，按下必翻转，
+           杜绝"点击无效果"：即使上游把事件标记为已处理也不会丢翻）。
+           历史问题（2026-11-12 用户反馈，同 IP 双会话）：TwoWay 绑定 + 按钮
+           内部点击路径（ClickMode=Press 按下即 OnClick→Toggle）与隧道翻转叠加
+           时，一次物理点击可能两次翻转净归零 → 按钮颜色不变、看似"点击没效果"。
+           故绑定改 OneWay（内部翻转无法回写 VM）。不用子类 ToggleButton：
+           Avalonia 类型选择器精确匹配，子类会丢失主题模板与本文件
+           ToggleButton.MonitorToggle 样式（颜色/尺寸全失效）。
+           Focusable=False：屏蔽键盘（Tab+空格）触发的本地翻转，避免视觉与
+           轮询状态漂移（该按钮是底栏通栏开关，MobaXterm 中亦非键盘焦点目标）。 -->
       <ToggleButton Name="MonitorToggleButton"
                     Classes="MonitorToggle"
                     ToolTip.Tip="远程监控"
-                    IsChecked="{Binding IsMonitorOn, Mode=TwoWay}"
+                    IsChecked="{Binding IsMonitorOn, Mode=OneWay}"
                     ClickMode="Press"
+                    Focusable="False"
                     HorizontalAlignment="Stretch"
                     HorizontalContentAlignment="Center"
                     VerticalAlignment="Stretch">
-        <!-- ClickMode=Press：按下即切换。默认 Release 要等抬起时指针仍在按钮上，
-             窗口激活/布局抖动/按下缩放都会让首击丢失（用户反馈 2026-10-30：
-             刚连上 SSH 后第一下无效，第二下才变灰）。 -->
         <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
           <TextBlock Text="&#xe163;"
                      FontFamily="{DynamicResource IconFontAwesome}"

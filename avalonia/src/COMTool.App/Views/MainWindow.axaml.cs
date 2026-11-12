@@ -445,6 +445,13 @@ public partial class MainWindow : Window
         {
             _ = RunR65SelfTestAsync();
         }
+        // --selftest-r66：实机自检 r66 远程监控开关（同 IP 双会话点击失效修复）：
+        // ② 隧道按下翻转一次且按钮视觉同步 ③ 轮询数据 MonitorText 出现
+        // ④ 按钮内部翻转路径不污染 VM（OneWay 绑定屏蔽）。落盘 r66-monitor.png。
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r66"))
+        {
+            _ = RunR66SelfTestAsync();
+        }
     }
 
     private volatile bool _portScanBusy;
@@ -1104,6 +1111,10 @@ public partial class MainWindow : Window
             MonitorEnabled = session.Monitor,
             StatusMessage = $"Connected {SshSessionRules.Detail(session)}",
         };
+        // r66: 新标签按钮初态必须与其运行态标志一致。IsMonitorOn 默认为 false，
+        // 而同 Key 的第二个标签会从共享配置恢复 MonitorEnabled=true——若不在这里
+        // 同步，按钮显示与轮询意图不一致（选中该标签前一直是灰的）。
+        pane.SyncMonitorOn(session.Monitor);
         AttachSshTransport(tab, terminal, connection);
 
         // The "远程监控" toggle of the SFTP pane drives the per-tab monitor flag
@@ -9636,6 +9647,151 @@ public static class ClipCheck {
         catch (Exception ex)
         {
             AppLog.Error("[SelfTest] r65: 自检异常", ex);
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
+        }
+    }
+
+    /// <summary>
+    /// <c>--selftest-r66</c>：实机自检 r66 远程监控按钮切换（同 IP 双会话点击失效修复）。
+    /// 验证：② 隧道按下翻转一次且按钮视觉同步 ③ 轮询数据 MonitorText 出现
+    /// ④ 直接触发按钮内部翻转路径不污染 VM（OneWay 绑定屏蔽）。
+    /// 落盘 r66-monitor.png。
+    /// </summary>
+    private async Task RunR66SelfTestAsync()
+    {
+        var ok = false;
+        try
+        {
+            AppLog.Info("[SelfTest] r66: 等主窗稳定 1.5s 后开始");
+            await Task.Delay(1500);
+            if (DataContext is not MainViewModel viewModel)
+            {
+                throw new InvalidOperationException("MainViewModel 未就绪");
+            }
+
+            var firstKey = _config?.SshSessions.Sessions.FirstOrDefault()?.Key;
+            if (string.IsNullOrEmpty(firstKey))
+            {
+                throw new InvalidOperationException("config 中没有 SSH 会话，无法跑 r66 自检");
+            }
+
+            AppLog.Info($"[SelfTest] r66: 打开 SSH 会话 {firstKey}");
+            var openTask = OpenSshSessionAsync(firstKey!);
+            TerminalTab? sshTab = null;
+            var deadline = DateTime.UtcNow.AddSeconds(90);
+            while (!(openTask.IsCompleted && sshTab is not null && sshTab.IsAlive))
+            {
+                if (openTask.IsCompleted && openTask.IsFaulted)
+                {
+                    throw new InvalidOperationException("SSH 会话连接失败", openTask.Exception);
+                }
+
+                if (DateTime.UtcNow > deadline)
+                {
+                    throw new TimeoutException("SSH 会话 90s 内未连接成功");
+                }
+
+                sshTab = viewModel.Tabs.FirstOrDefault(t => t.SessionId == firstKey);
+                await Task.Delay(250);
+            }
+
+            await openTask;
+            await Task.Delay(800);
+            UpdateLayout();
+
+            var paneVm = sshTab!.SftpPane;
+            if (paneVm is null)
+            {
+                throw new InvalidOperationException("SFTP 面板未创建");
+            }
+
+            var sftpPane = this.FindControl<SessionSidebar>("Sidebar")
+                ?.FindControl<SshBrowserPanel>("SshBrowserPanel")?.SftpPaneControl;
+            if (sftpPane is null)
+            {
+                throw new InvalidOperationException("未找到 SFTP 面板控件");
+            }
+
+            UpdateLayout();
+
+            var button = sftpPane.FindControl<Avalonia.Controls.Primitives.ToggleButton>("MonitorToggleButton");
+            if (button is null)
+            {
+                throw new InvalidOperationException("未找到 MonitorToggleButton");
+            }
+
+            // ① 记录初始状态
+            var initialOn = paneVm.IsMonitorOn;
+            AppLog.Info($"[SelfTest] r66: 初始状态 IsMonitorOn={initialOn} IsChecked={button.IsChecked}");
+
+            // ② 通过隧道处理器模拟一次左键按下（真实用户操作路径）
+            var pointer = new Pointer(Pointer.GetNextFreeId(), PointerType.Mouse, isPrimary: true);
+            var btnPoint = button.TranslatePoint(
+                new Point(button.Bounds.Width / 2, button.Bounds.Height / 2), this) ?? new Point(10, 10);
+            button.RaiseEvent(new Avalonia.Input.PointerPressedEventArgs(
+                button, pointer, this, btnPoint, 0,
+                new Avalonia.Input.PointerPointProperties(Avalonia.Input.RawInputModifiers.LeftMouseButton,
+                    Avalonia.Input.PointerUpdateKind.LeftButtonPressed),
+                Avalonia.Input.KeyModifiers.None,
+                clickCount: 1));
+            await Task.Delay(500);
+            UpdateLayout();
+
+            var afterFlip = paneVm.IsMonitorOn;
+            var flipOk = afterFlip != initialOn;
+            var visualOk = button.IsChecked == afterFlip;
+            AppLog.Info($"[SelfTest] r66: ② 翻转 {initialOn}→{afterFlip} visual同步={visualOk} => {(flipOk && visualOk ? "OK" : "FAILED")}");
+
+            // ③ 验证 MonitorText（若刚开为 on）
+            var dataOk = true;
+            if (afterFlip)
+            {
+                dataOk = false;
+                var dl2 = DateTime.UtcNow.AddSeconds(30);
+                while (DateTime.UtcNow < dl2)
+                {
+                    if (viewModel.MonitorText is { Length: > 0 })
+                    {
+                        dataOk = true;
+                        break;
+                    }
+                    await Task.Delay(200);
+                    UpdateLayout();
+                }
+            }
+
+            AppLog.Info($"[SelfTest] r66: ③ 轮询数据 MonitorText={(dataOk ? "非空 OK" : "为空 FAIL/SKIP")}");
+
+            // ④ 模拟按钮内部翻转路径的最坏情况（Toggle() 语义即本地写
+            // IsChecked = !IsChecked）：验证 OneWay 绑定屏蔽 VM，视图模型不被污染
+            var beforeDirect = paneVm.IsMonitorOn;
+            button.IsChecked = !beforeDirect;
+            await Task.Delay(200);
+            UpdateLayout();
+            var directNoop = paneVm.IsMonitorOn == beforeDirect;
+            // 内部路径只改本地 IsChecked；恢复视觉态跟随 VM，保证截图一致
+            button.IsChecked = beforeDirect;
+            await Task.Delay(100);
+            UpdateLayout();
+            AppLog.Info($"[SelfTest] r66: ④ 内部翻转不污染VM(OneWay)={(directNoop ? "OK" : "FAILED")}");
+
+            // ⑤ 恢复自检前的监控状态（避免改动用户已保存的开关）
+            if (paneVm.IsMonitorOn != initialOn)
+            {
+                paneVm.IsMonitorOn = initialOn;
+                await Task.Delay(300);
+            }
+
+            ok = flipOk && visualOk && dataOk && directNoop;
+            SaveVisualPng(Content as Visual, "r66-monitor.png");
+            AppLog.Info($"[SelfTest] r66: 自检完成 翻转={(flipOk ? "OK" : "FAIL")} 视觉同步={(visualOk ? "OK" : "FAIL")} 数据={((dataOk) ? "OK" : "SKIP/FAIL")} 内部路径隔离={(directNoop ? "OK" : "FAIL")}，退出");
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(ok ? 0 : 2);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("[SelfTest] r66: 自检异常", ex);
             (Application.Current?.ApplicationLifetime
                 as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
         }

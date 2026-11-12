@@ -62,10 +62,15 @@ public sealed partial class SftpPane : UserControl
         // pointer-over 状态，而首按下该状态可能尚未建立，ClickMode=Press 仍会吞掉
         // 第一击。因此在隧道阶段（早于按钮自身逻辑）直接翻转视图模型，并把这次按下
         // 标记为已处理，顺带抑制按钮内部点击，保证状态恰好翻转一次。
+        // r66: handledEventsToo=True——即使上游（如窗口边缘缩放守卫）已把事件标记为
+        // 已处理，本处理器仍会翻转，从机制上杜绝"点击无效果"（用户 2026-11-12：
+        // 同 IP 双会话时灰色按钮点击不变色）。按钮视觉纯由 OneWay 绑定跟随 VM，
+        // 内部点击路径即使发生也无法污染 VM（AXAML 绑定已改 OneWay）。
         MonitorToggleButton.AddHandler(
             InputElement.PointerPressedEvent,
             OnMonitorTogglePressed,
-            RoutingStrategies.Tunnel);
+            RoutingStrategies.Tunnel,
+            handledEventsToo: true);
 
         // r60: 隧道阶段处理列表指针按下——右键先选中被点行（保证右键菜单作用于
         // 被点的那一行，Avalonia 的 ListBox 右键不自动改选中）；中键把选中路径
