@@ -2260,7 +2260,7 @@ r56-terminal.png。
 
 **已知偏差**：
 - 菜单未含「Compare file with...」（用户确认不做，同 r60 遗留）；
-- 权限窗「正在修改权限...」应用过程中的瞬态标题未复刻（应用为单次 SFTP 调用，窗口立即关闭，不可见）；
+- 权限窗「正在修改权限...」应用过程中的瞬态标题未复刻（应用为单次 SFTP 调用，窗口立即关闭，不可见）——r63 已实现（见 §63）；
 - r60/r61 遗留（Compare、查看器编辑回存、图像缩放、文件链接目标类型解析）不变。
 
 **验证**：
@@ -2278,6 +2278,62 @@ r56-terminal.png。
   - ④ 权限窗 标题+rwx 同步：OK（titleOk=True syncOk=True，标题 Permissions for "<文件名>"）
   - ⑤ 符号链接目录组回归：OK（tftp_dir @ 行17/共42，首个普通文件 @ 行33，r61 行为保持）
   - r62-browser.png 目检：通过（1038x782；42 项默认隐藏开启时仅非隐藏条目，tftp_dir@ 位于目录组第 17 行带 @ 标记，状态栏 "Deleted comtool_r62_probe.txt" 证明探测文件已清理，终端会话正常）
+
+**遗留**：
+- Compare file with（文件对比视图）、内建查看器编辑回存、图像缩放、文件链接双击走查看器，待后续轮次。
+
+### 63 SFTP 权限窗版式对齐 MobaXterm（2026-11-12，用户 2 张截图）
+
+**用户指认（截图）**：
+- 图1（r62 现状）：权限窗"糊成一团"——窗宽仅 320、无抬头、标签左贴、复选框挤在一起、按钮右对齐、
+  长文件名在标题栏被截断（"proxy.s..."）；
+- 图2（MobaXterm 参照）：窗体内居中粗体抬头 `Permissions for "Image"`；标签右对齐带冒号
+  （权限:/用户:/群组:/其他:/八进制模式:）且 用户/群组/其他 加粗；读取/写入/执行 三等分列均匀排布；
+  八进制模式框；底部居中 应用（绿✓）/取消（红✕）；应用期间标题栏显示"正在修改权限..."。
+
+**实现**：
+- `SftpPermissionsWindow.axaml` 重排：窗宽 320→440；新增居中粗体抬头 `Heading`；
+  主 Grid 列 `90,*`，标签右对齐带冒号（用户/群组/其他 Bold）；复选框改每行嵌套 `*,*,*` 三等分列；
+  八进制模式行；按钮行 `HorizontalAlignment=Center`，应用=绿✓+应用、取消=红✕+取消；
+- `SftpPermissionsWindow.axaml.cs`：`TargetName` 同时写标题栏与抬头（长文件名不再截断）；
+  `HeadingText` 属性 + 7 个版式访问器；`PermissionApplied` 事件改 `Func<SftpPermission, Task>`，
+  `OnApplyClick` 改 async：标题切「正在修改权限...」+ 禁用两按钮 → await 写回 → 关窗（失败亦关窗，
+  错误入 SFTP 状态栏）；
+- `SftpPane.axaml.cs` OnChmodClick 接线适配新事件签名；
+- MainWindow：新增 `--selftest-r63` 四项实机自检（抬头/版式/应用瞬态标题+写回关窗/写回后状态栏+权限值不变），
+  落盘 r63-perm.png（权限窗本体）/ r63-browser.png；r62 自检 ④ 增加抬头断言（回归）；
+  自检 ④ 两轮修复：910d491 补 `SelectedRemoteEntry` 选中（未选中时 `SetRemotePermissionsAsync`
+  提前返回、chmod 未执行、状态栏为空）；fab86eb 状态栏等待由固定 300ms 改轮询 ≤5s
+  （chmod+刷新列表两次网络往返偶发竞态，实机首测 ④ 一次失败即此因）。
+
+**测试**（TDD 先红后绿，4 项新 SFTP13 全绿）：
+- `SftpFileManagementTests.SFTP13_PermissionsWindowShowsCenteredBoldHeading`（抬头文本/粗体/居中 + 标题栏保持）；
+- `SFTP13_PermissionsWindowLayoutUsesMobaXtermLabels`（5 个冒号标签、三行粗体、按钮行居中、窗宽≥400）；
+- `SFTP13_PermissionsWindowApplyShowsTransientTitleThenCloses`（应用期间标题=正在修改权限...+按钮禁用+窗口未关，
+  handler 完成后窗口关闭且收到正确 mode）；
+- `SFTP13_PermissionsWindowApplyClosesEvenOnFailure`（handler 抛异常仍关窗，不崩）；
+- SFTP12 权限窗 4 项 + 同步测试回归通过（事件签名变更后 `+=` lambda 自动适配 Func 返回类型，仅 Cancel 测试改 Task.CompletedTask）。
+
+**已知偏差**：
+- 应用/取消按钮图标用 Unicode ✔(U+2714)/✖(U+2716) 着色近似 MobaXterm 系统图标（绿色对勾/红色叉），
+  非 Windows SHSTOCK 图标；
+- 「正在修改权限...」仅存在于 SFTP 写回往返期间，连接快时一闪而过（与 MobaXterm 同行为）；
+- r62 遗留（Compare file with、查看器编辑回存、图像缩放、文件链接双击走查看器）不变。
+
+**验证**：
+- 全量 gate：2026-11-12T02:28:30Z 全绿（r63-gate-final）：restore/build PASS，unit 411 / app 327 / e2e PASS / TestGate PASS，共 738 项
+- VM win-x64 AOT 部署（仅更新 AOT 目录）：
+  - `C:\Users\devuser\COMTool-Avalonia-AOT\COMTool.App.exe`
+    SHA256 = `4038a28616ead62b27496ed942429ae82018c6c31ef7971356cb857423bd32e2`
+  - AOT 包 `C:\Users\devuser\COMTool-Avalonia-AOT-r63.zip`
+    SHA256 = `9ad6c076ae7d6c1b2ccaa507aa401e07d47abde4024c4f11e19505352e404a36`（78,405,259 B，用户 SFTP 拉取）
+- `--selftest-r63` 实机（VM，真实 SSH 会话 devuser@192.0.2.48，wall 3.7s，退出码 0）：
+  - ① 抬头 Permissions for "<name>"（居中粗体）：OK（"Permissions for \"console.sh\""，居中粗体）
+  - ② 标签/版式（冒号/右对齐/粗体/按钮居中/窗宽 440）：OK
+  - ③ 应用→「正在修改权限...」→写回→自动关窗：OK（transientOk=True closed=True）
+  - ④ 写回后状态栏 + 权限值不变（同值回写）：OK（状态栏 "Permissions set to 755"，console.sh 权限保持 755）
+  - r63-perm.png（440x516，权限窗本体，与 MobaXterm 图2 一致：居中粗体抬头/右对齐冒号标签/用户群组其他加粗/三等分复选框/居中 ✔应用 ✖取消）/ r63-browser.png（1024x768 浏览器整体）目检：通过
+- r62 自检回归（最终构建上 --selftest-r62，含新增抬头断言）：5/5 OK（菜单 16/16+3/3、变体切换、新建文件创建/清理、权限窗标题+抬头+rwx 同步、链接 tftp_dir 行17/共42）
 
 **遗留**：
 - Compare file with（文件对比视图）、内建查看器编辑回存、图像缩放、文件链接双击走查看器，待后续轮次。
