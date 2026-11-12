@@ -9334,8 +9334,12 @@ public static class ClipCheck {
             applyOk = transientOk && closed;
             AppLog.Info($"[SelfTest] r63: ③ 应用瞬态标题 \"{transientTitle}\" + 写回后自动关窗 => {(applyOk ? "OK" : "FAILED")}（transientOk={transientOk} closed={closed}）");
 
-            // ④ 写回结果：状态栏 + 权限值不变
-            await Task.Delay(300);
+            // ④ 写回结果：轮询等状态栏（chmod+刷新列表有网络往返，固定延时易竞态）
+            var pollDeadline = DateTime.UtcNow.AddSeconds(5);
+            while (DateTime.UtcNow < pollDeadline && !paneVm.StatusMessage.Contains("Permissions set to"))
+            {
+                await Task.Delay(100);
+            }
             var refreshed = paneVm.RemoteEntries.FirstOrDefault(e => e.Name == fileEntry.Name);
             statusOk = paneVm.StatusMessage.Contains("Permissions set to")
                 && refreshed is not null
