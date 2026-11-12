@@ -430,6 +430,13 @@ public partial class MainWindow : Window
         {
             _ = RunR63SelfTestAsync();
         }
+        // --selftest-r64：实机自检 r64 SFTP 列表空白区左键清除选中（MobaXterm 行为）：
+        // ① 选中文件→模拟空白区左键→选中清除 ② 行左键仍可选中（回归），
+        // 落盘 r64-browser.png。
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r64"))
+        {
+            _ = RunR64SelfTestAsync();
+        }
     }
 
     private volatile bool _portScanBusy;
@@ -9356,6 +9363,138 @@ public static class ClipCheck {
         catch (Exception ex)
         {
             AppLog.Error("[SelfTest] r63: 自检异常", ex);
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
+        }
+    }
+
+    /// <summary>
+    /// <c>--selftest-r64</c>：实机自检 r64 SFTP 列表空白区左键清除选中（MobaXterm 行为）。
+    /// 连上配置里第一个 SSH 会话后：① 选中一个文件→模拟空白区左键单击（向列表
+    /// 直接发 PointerPressed，事件源非行容器）→选中清除（SelectedIndex==-1、VM 选中
+    /// 为空）；② 行左键单击仍正常选中该行（回归）。落盘 r64-browser.png。
+    /// </summary>
+    private async Task RunR64SelfTestAsync()
+    {
+        var clearOk = false;
+        var rowOk = false;
+        try
+        {
+            AppLog.Info("[SelfTest] r64: 等主窗稳定 1.5s 后开始");
+            await Task.Delay(1500);
+            if (DataContext is not MainViewModel viewModel)
+            {
+                throw new InvalidOperationException("MainViewModel 未就绪");
+            }
+
+            var firstKey = _config?.SshSessions.Sessions.FirstOrDefault()?.Key;
+            if (string.IsNullOrEmpty(firstKey))
+            {
+                throw new InvalidOperationException("config 中没有 SSH 会话，无法跑 r64 自检");
+            }
+
+            AppLog.Info($"[SelfTest] r64: 打开 SSH 会话 {firstKey}");
+            var openTask = OpenSshSessionAsync(firstKey!);
+            TerminalTab? sshTab = null;
+            var deadline = DateTime.UtcNow.AddSeconds(90);
+            while (!(openTask.IsCompleted && sshTab is not null && sshTab.IsAlive))
+            {
+                if (DateTime.UtcNow > deadline)
+                {
+                    throw new TimeoutException("SSH 会话 90s 内未连接成功");
+                }
+
+                sshTab = viewModel.Tabs.FirstOrDefault(t => t.SessionId == firstKey);
+                await Task.Delay(250);
+            }
+
+            await openTask;
+            await Task.Delay(800);
+            UpdateLayout();
+
+            var paneVm = sshTab.SftpPane;
+            if (paneVm is null)
+            {
+                throw new InvalidOperationException("SFTP 面板未创建");
+            }
+
+            var dl = DateTime.UtcNow.AddSeconds(30);
+            while (paneVm.RemoteEntries.Count == 0 && DateTime.UtcNow < dl)
+            {
+                await Task.Delay(200);
+                UpdateLayout();
+            }
+            AppLog.Info($"[SelfTest] r64: SFTP 列表 {paneVm.RemoteEntries.Count} 项 @ {paneVm.RemotePath}");
+            if (paneVm.RemoteEntries.Count == 0)
+            {
+                throw new TimeoutException("SFTP 列表 30s 内未加载");
+            }
+
+            var sftpPane = this.FindControl<SessionSidebar>("Sidebar")
+                ?.FindControl<SshBrowserPanel>("SshBrowserPanel")?.SftpPaneControl;
+            var list = sftpPane?.RemoteListControl;
+            if (list is null)
+            {
+                throw new InvalidOperationException("未找到 SFTP 列表控件");
+            }
+
+            UpdateLayout();
+            var fileEntry = paneVm.RemoteEntries.FirstOrDefault(e => !e.IsDirectory && !e.IsSymbolicLink);
+            if (fileEntry is null)
+            {
+                throw new InvalidOperationException("当前目录没有普通文件，无法跑 r64 自检");
+            }
+
+            // ① 选中文件 → 模拟空白区左键单击 → 选中被清除
+            paneVm.SelectedRemoteEntry = fileEntry;
+            UpdateLayout();
+            var selectedBefore = list.SelectedIndex;
+            var pointer = new Pointer(Pointer.GetNextFreeId(), PointerType.Mouse, isPrimary: true);
+            var windowPoint = list.TranslatePoint(
+                new Point(list.Bounds.Width / 2, list.Bounds.Height / 2), this) ?? new Point(10, 10);
+            list.RaiseEvent(new PointerPressedEventArgs(
+                list,
+                pointer,
+                this,
+                windowPoint,
+                0,
+                new PointerPointProperties(RawInputModifiers.LeftMouseButton, PointerUpdateKind.Other),
+                KeyModifiers.None,
+                clickCount: 1));
+            UpdateLayout();
+            clearOk = selectedBefore >= 0
+                && list.SelectedIndex == -1
+                && paneVm.SelectedRemoteEntry is null;
+            var vmSel = paneVm.SelectedRemoteEntry is null ? "空" : "非空";
+            AppLog.Info($"[SelfTest] r64: ① 空白区左键清除选中（{fileEntry.Name}：SelectedIndex {selectedBefore} → {list.SelectedIndex}，VM 选中={vmSel}）=> {(clearOk ? "OK" : "FAILED")}");
+
+            // ② 行左键单击仍正常选中（回归）
+            var lastIndex = list.Items.Count - 1;
+            var container = (Control)list.ContainerFromIndex(lastIndex)!;
+            var rowPoint = container.TranslatePoint(
+                new Point(container.Bounds.Width / 2, container.Bounds.Height / 2), this);
+            if (rowPoint is null)
+            {
+                throw new InvalidOperationException("行坐标换算失败");
+            }
+            this.MouseDown(rowPoint.Value, MouseButton.Left);
+            this.MouseUp(rowPoint.Value, MouseButton.Left);
+            UpdateLayout();
+            var lastEntry = paneVm.RemoteEntries[lastIndex];
+            rowOk = paneVm.SelectedRemoteEntry is not null
+                && paneVm.SelectedRemoteEntry!.Name == lastEntry.Name;
+            AppLog.Info($"[SelfTest] r64: ② 行左键选中（selected={paneVm.SelectedRemoteEntry?.Name ?? "null"}）=> {(rowOk ? "OK" : "FAILED")}");
+
+            SaveVisualPng(Content as Visual, "r64-browser.png");
+
+            var ok = clearOk && rowOk;
+            AppLog.Info($"[SelfTest] r64: 自检完成，空白区清选={(clearOk ? "OK" : "失败")} 行选中={(rowOk ? "OK" : "失败")}，退出");
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(ok ? 0 : 2);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("[SelfTest] r64: 自检异常", ex);
             (Application.Current?.ApplicationLifetime
                 as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
         }
