@@ -2394,6 +2394,55 @@ SFTP14_RowLeftClickStillSelectsTheRow（完整输入管线）覆盖。
 **遗留**：
 - 无新增（r62/r63 遗留不变）。
 
+### 65 SFTP 空白右键菜单启用态首连过期（2026-11-12，用户截图：「第一次连上ssh，空白地方鼠标右键」）
+
+**用户指认（截图）**：首次 SSH 连接、目录列表已加载后，空白处右键菜单中
+「刷新当前文件夹列表」「上传到当前文件夹」灰显不可点（MobaXterm 中已连接目录
+下列表操作应全部可用）。
+
+**根因**：`UpdateCommandState()` 只在「ViewModel 赋值」与「选中项变化」两个时刻
+调用。首次连接时 SftpPane 视图先绑定 ViewModel（此时 `RemotePath` 为空 →
+`pathOk=false` → 空白菜单项全部禁用），目录加载完成才置上路径，但路径变化不
+触发任何刷新 → 菜单项停留在构造期的过期禁用态，直到用户点选某一行才恢复。
+
+**实现**（`SftpPane.axaml.cs`）：
+- `OnViewModelPropertyChanged` 增加分支：`RemotePath` / `IsTransferring` /
+  `HasRemoteError` 变化 → `UpdateCommandState()`（加载完成/目录切换/传输起止
+  都会即时刷新工具栏与菜单启用态）；
+- `OnRemoteContextMenuOpened` 由「仅切可见性」改为 `UpdateCommandState()`——
+  右键打开那一刻是用户判断可用性的时刻，以 ViewModel 实时状态重算，兜住一切
+  此前漏掉的过期状态。
+
+**测试**（TDD 先红后绿，1 项新 SFTP15）：
+- `SftpContextMenuTests.SFTP15_BlankMenuItemsEnabledAfterFirstLoad`：确定性
+  复现首连时序——用全新未加载 VM 重新绑定视图（断言绑定时刻项为禁用），
+  `EnsureLoadedAsync` 加载完成后断言空白菜单 5 项全部启用且可见、条目菜单项
+  隐藏。修复前红（「上一级目录 should be enabled」失败），修复后绿；
+- SFTP 全组 96/96 通过（含 r60-r64 全部既有项）。
+
+**已知偏差**：无新增。
+
+**验证**：
+- 全量 gate：2026-11-12T08:48:16Z 全绿：742 项（unit 411 / app 331 含 SFTP15 / e2e 15 / TestGate PASS）
+- VM win-x64 AOT 部署（仅更新 AOT 目录）：
+  - `C:\Users\devuser\COMTool-Avalonia-AOT\COMTool.App.exe`
+    SHA256 = `99c219d7cf0d79d7fa1f027681bc5743e06d19fff77de8c3d65a1a5c6eee589e`
+  - AOT 包 `C:\Users\devuser\COMTool-Avalonia-AOT-r65.zip`
+    SHA256 = `3d5d68546f00f779fec77e799ba224364e01db8157785b89b2e90055256bf924`（78418842 bytes ≈ 74.8 MB（首次 zip 因 taskkill 句柄延迟报占用，稍候重跑即绿，已知 VM 环境问题），用户 SFTP 拉取）
+- `--selftest-r65` 实机（VM，真实 SSH 会话 devuser@192.0.2.48，wall 16.7 s（r65/r64/r63/r62 四连自检），退出码 0（单独复跑 --selftest-r65 确认））：
+  - ① 列表加载完成后空白菜单 5 项（上一级/新建夹/新建文/刷新/上传）全启用可见：OK（43 项 @ /home/devuser：上一级/新建夹/新建文/刷新/上传 全部启用可见）
+  - ② 无选中时条目菜单项隐藏（变体正确）：OK（条目菜单项隐藏，变体正确）
+  - r64 空白区左键清选两项自检回归：2/2 OK（① 空白区左键清选 console.sh 32→-1；② 行按下不清选 wg_verify.sh）
+  - r63 权限窗四项自检回归：4/4 OK（抬头/版式 440/瞬态标题+自动关窗/状态栏 755）
+  - r62 菜单/新建文件/链接五项自检回归：5/5 OK（菜单 16 项 3 分隔线/变体切换/新建文件创建+清理/权限窗同步/符号链接行 17/43）
+  - r65-browser.png 目检：（1024×768）列表 43 项全载、无选中高亮（自检末态）、SSH 会话正常（Connected devuser@192.0.2.48:22）、远程监控栏未勾选
+
+**遗留**：
+- 新收到 r66 用户反馈：同一 SSH IP 连两个会话时，有时点击「远程监控」没效果。
+  只读排查线索：`StartMonitorPolling` 在 `tab.Connection is not IExecRunner`
+  时静默返回（无日志无提示），双标签共享 `session.Key`（host+port+user）配置
+  记忆位；需实机复现 + run.log 的 "Remote monitor toggle" 行定位。
+
 ## 已知偏差（已写入 spec 附录）
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
 2. 热键 .mxtmacros 编码未实测：导出恒 0，导入非 0 忽略+警告
