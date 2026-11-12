@@ -2338,6 +2338,62 @@ r56-terminal.png。
 **遗留**：
 - Compare file with（文件对比视图）、内建查看器编辑回存、图像缩放、文件链接双击走查看器，待后续轮次。
 
+### 64 SFTP 列表空白区左键单击清除选中（2026-11-12，用户截图 + 描述：「单击空白页还是会选中文件」）
+
+**用户指认（截图）**：SFTP 列表左键单击空白区后，之前选中的行（rined.sh）仍保持高亮；
+MobaXterm 的行为是单击空白区清除选中。
+
+**根因**：Avalonia ListBox 默认点空白区（行外）不改选中态；隧道处理器
+`OnRemoteListPointerPressed` 原本只处理右键（选中被点行）与中键（送路径），
+左键空白区点击无任何处理 → 旧选中保留。
+
+**实现**：
+- `SftpPane.axaml.cs` `OnRemoteListPointerPressed` 增加左键分支：从事件源沿可视树
+  向上走到列表为止——途中遇 ListBoxItem（点在行上）或 ScrollBar（点在滚动条上）保持
+  默认行为；否则为空白区 → `SelectedIndex=-1` + `e.Handled`，双向绑定同步
+  `SelectedRemoteEntry=null`（工具栏启用态/右键菜单变体自动回空白区态）。
+
+**测试**（TDD 先红后绿，3 项新 SFTP14）：
+- `SftpContextMenuTests.SFTP14_BlankAreaLeftClickClearsSelection`（先选中一行，向 ListBox
+  直接发空白区 PointerPressed → SelectedIndex==-1 且 VM 选中为空）；
+- `SftpContextMenuTests.SFTP14_RowLeftClickStillSelectsTheRow`（行上真实左键单击仍选中该行，
+  完整输入管线，回归守卫）；
+- `SftpContextMenuTests.SFTP14_RowClickDoesNotClearSelection`（行上左键按下合成事件不清除
+  已有选中——onItem 守卫；与 --selftest-r64 ② 同一模拟方式）；
+- SFTP 既有 94 项全过（含 r60 右键选行、r62 空白区右键菜单）。
+
+**实机自检实现说明**：App 工程不引用 Avalonia.Headless（仅测试工程引用），而 Headless 的
+`MouseDown/MouseUp` 扩展方法不在 App 可用 API 面内——实机自检若使用，AOT 构建报 CS1061
+（r64 首轮 AOT 构建 publish rc=1 即此因，本地增量编译曾掩盖）。故 --selftest-r64 ② 改用
+合成 PointerPressed 守卫式断言（验证新分支不误清行上选中），真实点击的选中链路由
+SFTP14_RowLeftClickStillSelectsTheRow（完整输入管线）覆盖。
+
+**e2e 环境修复（顺带，d9ee382）**：本 gate 期间 e2e TELNET01「input did not reach the server」
+连挂 4 次（gate2–gate5）。深查现场：fixture 已收到自动登录用户名（login marker 通过、失败截图
+中终端渲染正常），仅 xdotool 模拟键入的 PING 丢失——根因是 e2e 脚本 click→type 之间无焦点
+安定等待（其他 SFTP/UI 序列均有 sleep 0.5，唯 TELNET01/02/SSH11 四处缺失），负载下应用焦点
+处理延迟导致首批击键丢失。修复：四处补 0.5s 焦点安定等待（仅测试基建，断言不变）。
+另 gate6 复现已知 App.AccessViolation（进程退出期，216/216 已过）环境抖动，gate7 同码复跑全绿。
+
+**已知偏差**：无新增。
+
+**验证**：
+- 全量 gate：2026-11-12T04:13:23Z 全绿：741 项（unit 411 / app 330 / e2e 15 / TestGate PASS，r64-gate7）。期间 e2e TELNET01 焦点竞态已修复（d9ee382，见上）；gate6 另复现已知 App.AccessViolation 退出期抖动（216/216 已过、进程退出时崩），同码复跑即绿
+- VM win-x64 AOT 部署（仅更新 AOT 目录）：
+  - `C:\Users\devuser\COMTool-Avalonia-AOT\COMTool.App.exe`
+    SHA256 = `15d2e110ba87e653b42b10f3124ce91b6399a46bb602c3aec5dc3c177d7a4680`
+  - AOT 包 `C:\Users\devuser\COMTool-Avalonia-AOT-r64.zip`
+    SHA256 = `24e30c888eb1acfcb3058f7d9531639492248be91ca66fa64df2d99917908bf8`（78414072 bytes ≈ 74.8 MB，用户 SFTP 拉取）
+- `--selftest-r64` 实机（VM，真实 SSH 会话 devuser@192.0.2.48，wall 10.8 s（r64/r63/r62 三连自检；r64 单独复跑确认退出码），退出码 0）：
+  - ① 选中文件后空白区左键清除选中：OK（console.sh：SelectedIndex 32 → -1，VM 选中=空，12:14:07）
+  - ② 行上左键按下不清除已有选中（回归守卫）：OK（末行 wg_verify.sh：行按下后选中保留，onItem 守卫生效，虚拟化重试取容器正常）
+  - r63 权限窗四项自检回归：4/4 OK（抬头/版式 440/瞬态标题+写回自动关窗/状态栏 755）
+  - r62 菜单/新建文件/链接五项自检回归：5/5 OK（菜单 16 项 3 分隔线/变体切换/新建文件创建+清理/权限窗同步/符号链接行 17/42）
+  - r64-browser.png 目检：（1024×768）列表 42 项全载，末行选中高亮为自检②残留（预期），空白区无高亮残留，浏览器/工具栏状态正常
+
+**遗留**：
+- 无新增（r62/r63 遗留不变）。
+
 ## 已知偏差（已写入 spec 附录）
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
 2. 热键 .mxtmacros 编码未实测：导出恒 0，导入非 0 忽略+警告
