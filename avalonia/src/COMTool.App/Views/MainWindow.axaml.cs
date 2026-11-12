@@ -431,7 +431,7 @@ public partial class MainWindow : Window
             _ = RunR63SelfTestAsync();
         }
         // --selftest-r64：实机自检 r64 SFTP 列表空白区左键清除选中（MobaXterm 行为）：
-        // ① 选中文件→模拟空白区左键→选中清除 ② 行左键仍可选中（回归），
+        // ① 选中文件→模拟空白区左键→选中清除 ② 行上左键按下不清除选中（回归），
         // 落盘 r64-browser.png。
         if (Environment.GetCommandLineArgs().Contains("--selftest-r64"))
         {
@@ -9372,7 +9372,8 @@ public static class ClipCheck {
     /// <c>--selftest-r64</c>：实机自检 r64 SFTP 列表空白区左键清除选中（MobaXterm 行为）。
     /// 连上配置里第一个 SSH 会话后：① 选中一个文件→模拟空白区左键单击（向列表
     /// 直接发 PointerPressed，事件源非行容器）→选中清除（SelectedIndex==-1、VM 选中
-    /// 为空）；② 行左键单击仍正常选中该行（回归）。落盘 r64-browser.png。
+    /// 为空）；② 行上左键按下不清除已有选中（回归守卫，与单测同一合成事件方式，
+    /// App 工程不引用 Avalonia.Headless 故不用 MouseDown）。落盘 r64-browser.png。
     /// </summary>
     private async Task RunR64SelfTestAsync()
     {
@@ -9468,8 +9469,15 @@ public static class ClipCheck {
             var vmSel = paneVm.SelectedRemoteEntry is null ? "空" : "非空";
             AppLog.Info($"[SelfTest] r64: ① 空白区左键清除选中（{fileEntry.Name}：SelectedIndex {selectedBefore} → {list.SelectedIndex}，VM 选中={vmSel}）=> {(clearOk ? "OK" : "FAILED")}");
 
-            // ② 行左键单击仍正常选中（回归）
+            // ② 行上的左键按下不清除已有选中（回归守卫：空白区新逻辑的 onItem
+            // 分支不得误清行上选中）。与单测 SFTP14_RowClickDoesNotClearSelection
+            // 同一合成事件方式（App 工程不引用 Avalonia.Headless，实机自检无法用
+            // MouseDown 扩展方法；真实点击的选中链路由该单测在完整输入管线覆盖）。
             var lastIndex = list.Items.Count - 1;
+            var lastEntry = paneVm.RemoteEntries[lastIndex];
+            paneVm.SelectedRemoteEntry = lastEntry;
+            UpdateLayout();
+            selectedBefore = list.SelectedIndex;
             var container = (Control)list.ContainerFromIndex(lastIndex)!;
             var rowPoint = container.TranslatePoint(
                 new Point(container.Bounds.Width / 2, container.Bounds.Height / 2), this);
@@ -9477,13 +9485,22 @@ public static class ClipCheck {
             {
                 throw new InvalidOperationException("行坐标换算失败");
             }
-            this.MouseDown(rowPoint.Value, MouseButton.Left);
-            this.MouseUp(rowPoint.Value, MouseButton.Left);
+            var rowPointer = new Pointer(Pointer.GetNextFreeId(), PointerType.Mouse, isPrimary: true);
+            container.RaiseEvent(new PointerPressedEventArgs(
+                container,
+                rowPointer,
+                this,
+                rowPoint.Value,
+                0,
+                new PointerPointProperties(RawInputModifiers.LeftMouseButton, PointerUpdateKind.Other),
+                KeyModifiers.None,
+                clickCount: 1));
             UpdateLayout();
-            var lastEntry = paneVm.RemoteEntries[lastIndex];
-            rowOk = paneVm.SelectedRemoteEntry is not null
+            rowOk = selectedBefore >= 0
+                && list.SelectedIndex == selectedBefore
+                && paneVm.SelectedRemoteEntry is not null
                 && paneVm.SelectedRemoteEntry!.Name == lastEntry.Name;
-            AppLog.Info($"[SelfTest] r64: ② 行左键选中（selected={paneVm.SelectedRemoteEntry?.Name ?? "null"}）=> {(rowOk ? "OK" : "FAILED")}");
+            AppLog.Info($"[SelfTest] r64: ② 行按下不清选中（selected={paneVm.SelectedRemoteEntry?.Name ?? "null"}）=> {(rowOk ? "OK" : "FAILED")}");
 
             SaveVisualPng(Content as Visual, "r64-browser.png");
 

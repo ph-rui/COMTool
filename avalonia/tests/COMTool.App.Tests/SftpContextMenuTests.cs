@@ -818,6 +818,63 @@ public sealed class SftpContextMenuTests
     }
 
     [AvaloniaFact]
+    public async Task SFTP14_RowClickDoesNotClearSelection()
+    {
+        // r64 守卫：行上的左键按下（合成事件，源在行容器内）不得清除已有选中。
+        // 这是 --selftest-r64 ② 在同一模拟方式下的可移植版本（App 工程不引用
+        // Avalonia.Headless，实机自检无法用 MouseDown 扩展方法）。
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            await env.RunAsync(async () =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                (window, var pane, _, _, var view) = await Setup(remote =>
+                {
+                    remote.AddDirectory("/remote/dir");
+                    remote.AddFile("/remote/a.txt", "a");
+                    remote.AddFile("/remote/b.txt", "b");
+                });
+                await pane.EnsureLoadedAsync(CancellationToken.None);
+
+                // 先选中 b.txt（经 VM，双向绑定同步到 ListBox）
+                pane.SelectedRemoteEntry = pane.RemoteEntries.Single(entry => entry.Name == "b.txt");
+                Dispatcher.UIThread.RunJobs();
+                var list = view.RemoteListControl;
+                Assert.True(list.SelectedIndex >= 0);
+
+                var index = pane.RemoteEntries.ToList().IndexOf(pane.RemoteEntries.Single(e => e.Name == "b.txt"));
+                var container = (Control)list.ContainerFromIndex(index)!;
+                var pointer = new Pointer(Pointer.GetNextFreeId(), PointerType.Mouse, isPrimary: true);
+                var windowPoint = container.TranslatePoint(
+                    new Point(container.Bounds.Width / 2, container.Bounds.Height / 2), window) ?? new Point(10, 10);
+                container.RaiseEvent(new PointerPressedEventArgs(
+                    container,
+                    pointer,
+                    window,
+                    windowPoint,
+                    0,
+                    new PointerPointProperties(RawInputModifiers.LeftMouseButton, PointerUpdateKind.Other),
+                    KeyModifiers.None,
+                    clickCount: 1));
+                Dispatcher.UIThread.RunJobs();
+
+                // 行上的按下不清除选中（空白区分支的 onItem 守卫生效）
+                Assert.NotNull(pane.SelectedRemoteEntry);
+                Assert.Equal("b.txt", pane.SelectedRemoteEntry!.Name);
+                Assert.True(list.SelectedIndex >= 0);
+                Assert.True(view.MenuOpenControl.IsVisible);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
     public async Task SFTP12_NewFilePromptCreatesAnEmptyRemoteFile()
     {
         using var env = new TestEnvironment();
