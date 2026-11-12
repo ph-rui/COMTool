@@ -466,6 +466,7 @@ run_telnet01_auto_login() {
     # Telnet transport. The server only writes this marker after receiving
     # PING through the terminal.
     click_window 600 300 || fail "$test_id" "could not focus the Telnet terminal"
+    sleep 0.5
     type_text "PING" || fail "$test_id" "could not type into the Telnet terminal"
     press_enter || fail "$test_id" "could not submit the Telnet terminal input"
     if ! wait_for_file_content "$input_marker" "TELNET_INPUT_READY" 15; then
@@ -496,6 +497,7 @@ run_telnet02_restart_stopped_session() {
     # The fixture hangs up on DROP. The tab has to stay open with the
     # MobaXterm-style stopped screen instead of closing the app.
     click_window 600 300 || fail "$test_id" "could not focus the Telnet terminal"
+    sleep 0.5
     type_text "DROP" || fail "$test_id" "could not type DROP into the Telnet terminal"
     press_enter || fail "$test_id" "could not submit the Telnet terminal input"
     if ! wait_for_file_content "$dropped_marker" "TELNET_DROPPED" 15; then
@@ -506,6 +508,7 @@ run_telnet02_restart_stopped_session() {
     # the stopped-screen handler is missing this is delivered to the dead PTY
     # and no second connection appears.
     click_window 600 300 || fail "$test_id" "could not focus the stopped Telnet terminal"
+    sleep 0.5
     type_text "r" || fail "$test_id" "could not press R"
 
     if ! wait_for_file_content "$reconnect_marker" "TELNET_RECONNECT_READY" 20; then
@@ -546,6 +549,7 @@ run_ssh11_restart_stopped_session() {
     # the stopped-screen handler is missing this is delivered to the dead PTY
     # and no new shell appears.
     click_window 600 300 || fail "$test_id" "could not focus the stopped terminal"
+    sleep 0.5
     type_text "r" || fail "$test_id" "could not press R"
 
     new_pid="$(run_pid_command_until_pid_file "$SHELL_A_PID_FILE" 20)" \
