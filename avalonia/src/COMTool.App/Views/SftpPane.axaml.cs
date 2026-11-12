@@ -910,10 +910,11 @@ public sealed partial class SftpPane : UserControl
             Permission = entry.Permission,
             TargetName = entry.Name,
         };
-        window.PermissionApplied += permission =>
-        {
-            _ = viewModel.SetRemotePermissionsAsync(permission.ToOctal());
-        };
+
+        // r63: 事件为 Func<SftpPermission, Task>——窗口 await 期间标题栏显示
+        // 「正在修改权限...」，SFTP 写回完成后由窗口自动关闭（MobaXterm 图2）
+        window.PermissionApplied = permission =>
+            viewModel.SetRemotePermissionsAsync(permission.ToOctal());
 
         _permissionsWindow = window;
         window.Closed += (_, _) => _permissionsWindow = null;

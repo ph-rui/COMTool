@@ -2,6 +2,8 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using COMTool.App.ViewModels;
@@ -151,7 +153,12 @@ public sealed class SftpFileManagementTests
             {
                 Permission = SftpPermission.FromOctalText("644"),
             };
-            window.PermissionApplied += _ => applied++;
+            // r63: 事件签名改为 Func<SftpPermission, Task>（窗口 await 期间显示瞬态标题）
+            window.PermissionApplied += _ =>
+            {
+                applied++;
+                return Task.CompletedTask;
+            };
             var closed = false;
             window.Closed += (_, _) => closed = true;
             window.Show();
@@ -187,6 +194,119 @@ public sealed class SftpFileManagementTests
             Assert.Equal(SftpPermission.FromOctalText("644"), window.Permission);
 
             window.Close();
+        });
+    }
+
+    // ───────────── r63：权限窗版式对齐 MobaXterm（抬头/右对齐标签/居中按钮/瞬态标题） ─────────────
+
+    [AvaloniaFact]
+    public void SFTP13_PermissionsWindowShowsCenteredBoldHeading()
+    {
+        using var env = new TestEnvironment();
+        env.Run(() =>
+        {
+            var window = new SftpPermissionsWindow { TargetName = "Image" };
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+
+            // MobaXterm：窗口体内有居中粗体抬头 Permissions for "name"
+            Assert.Equal("Permissions for \"Image\"", window.HeadingText);
+            Assert.Equal(FontWeight.Bold, window.HeadingControl.FontWeight);
+            Assert.Equal(HorizontalAlignment.Center, window.HeadingControl.HorizontalAlignment);
+            // 标题栏保持 r62 行为
+            Assert.Equal("Permissions for \"Image\"", window.Title);
+
+            window.Close();
+            Dispatcher.UIThread.RunJobs();
+        });
+    }
+
+    [AvaloniaFact]
+    public void SFTP13_PermissionsWindowLayoutUsesMobaXtermLabels()
+    {
+        using var env = new TestEnvironment();
+        env.Run(() =>
+        {
+            var window = new SftpPermissionsWindow { TargetName = "a.txt" };
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.Equal("权限:", window.RwxLabelControl.Text);
+            Assert.Equal("用户:", window.OwnerLabelControl.Text);
+            Assert.Equal("群组:", window.GroupLabelControl.Text);
+            Assert.Equal("其他:", window.OthersLabelControl.Text);
+            Assert.Equal("八进制模式:", window.OctalLabelControl.Text);
+            Assert.Equal(FontWeight.Bold, window.OwnerLabelControl.FontWeight);
+            Assert.Equal(FontWeight.Bold, window.GroupLabelControl.FontWeight);
+            Assert.Equal(FontWeight.Bold, window.OthersLabelControl.FontWeight);
+            Assert.Equal(HorizontalAlignment.Right, window.RwxLabelControl.HorizontalAlignment);
+            Assert.Equal(HorizontalAlignment.Center, window.ButtonRowControl.HorizontalAlignment);
+            Assert.True(window.Width >= 400, "r63: 窗口应比 r62 的 320px 更宽");
+
+            window.Close();
+            Dispatcher.UIThread.RunJobs();
+        });
+    }
+
+    [AvaloniaFact]
+    public async Task SFTP13_PermissionsWindowApplyShowsTransientTitleThenCloses()
+    {
+        using var env = new TestEnvironment();
+        SftpPermission? applied = null;
+        var started = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        await env.RunAsync(async () =>
+        {
+            var window = new SftpPermissionsWindow
+            {
+                Permission = SftpPermission.FromOctalText("644"),
+                TargetName = "Image",
+            };
+            window.PermissionApplied = permission =>
+            {
+                applied = permission;
+                started.TrySetResult(true);
+                return Task.Delay(250);
+            };
+            var closed = false;
+            window.Closed += (_, _) => closed = true;
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+
+            window.ApplyButtonControl.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Dispatcher.UIThread.RunJobs();
+
+            // 应用期间：标题变「正在修改权限...」，按钮禁用，窗口保持打开
+            Assert.Equal("正在修改权限...", window.Title);
+            Assert.False(window.ApplyButtonControl.IsEnabled);
+            Assert.False(window.CancelButtonControl.IsEnabled);
+
+            await started.Task;
+            await Task.Delay(400);
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(closed);
+        });
+        Assert.Equal("644", applied?.ToOctalText());
+    }
+
+    [AvaloniaFact]
+    public async Task SFTP13_PermissionsWindowApplyClosesEvenOnFailure()
+    {
+        using var env = new TestEnvironment();
+        await env.RunAsync(async () =>
+        {
+            var window = new SftpPermissionsWindow { TargetName = "x" };
+            window.PermissionApplied = _ => Task.FromException(new InvalidOperationException("chmod failed"));
+            var closed = false;
+            window.Closed += (_, _) => closed = true;
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+
+            window.ApplyButtonControl.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            await Task.Delay(200);
+            Dispatcher.UIThread.RunJobs();
+
+            // 写回失败不崩溃：窗口照常关闭（错误已由 VM 写入 SFTP 状态栏）
+            Assert.True(closed);
         });
     }
 

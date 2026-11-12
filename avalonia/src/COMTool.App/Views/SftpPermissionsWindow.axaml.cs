@@ -15,6 +15,7 @@ public sealed partial class SftpPermissionsWindow : Window
     private SftpPermission _permission = SftpPermission.FromOctalText("644");
     private string _targetName = string.Empty;
     private bool _updating;
+    private bool _applying;
 
     public SftpPermissionsWindow()
     {
@@ -25,8 +26,11 @@ public sealed partial class SftpPermissionsWindow : Window
 
     /// <summary>
     /// Raised when the user applies a mode.
+    /// r63: 签名改为 <c>Func&lt;SftpPermission, Task&gt;</c>——窗口 await 该任务期间
+    /// 标题栏显示「正在修改权限...」并禁用按钮，SFTP 写回完成后自动关窗
+    /// （MobaXterm 图2 行为）。
     /// </summary>
-    public event Action<SftpPermission>? PermissionApplied;
+    public Func<SftpPermission, Task>? PermissionApplied;
 
     /// <summary>
     /// The mode that the window shows.
@@ -56,11 +60,24 @@ public sealed partial class SftpPermissionsWindow : Window
         set
         {
             _targetName = value ?? string.Empty;
-            Title = string.IsNullOrEmpty(_targetName)
+            var text = string.IsNullOrEmpty(_targetName)
                 ? "Permissions"
                 : $"Permissions for \"{_targetName}\"";
+            Title = text;
+
+            // r63: 窗口体内的居中抬头同步显示（长文件名不再被标题栏截断）
+            if (Heading is not null)
+            {
+                Heading.Text = text;
+            }
         }
     }
+
+    /// <summary>
+    /// r63: the centered bold heading shown in the dialog body,
+    /// Permissions for "name" (MobaXterm 图2).
+    /// </summary>
+    public string HeadingText => Heading.Text ?? string.Empty;
 
     /// <summary>
     /// The mode as an rwx string, for example "rw-r--r--".
@@ -124,6 +141,21 @@ public sealed partial class SftpPermissionsWindow : Window
 
     internal Button CancelButtonControl => CancelButton;
 
+    // r63: 版式元素（抬头/标签/按钮行），供测试与实机自检断言
+    internal TextBlock HeadingControl => Heading;
+
+    internal TextBlock RwxLabelControl => RwxLabel;
+
+    internal TextBlock OwnerLabelControl => OwnerLabel;
+
+    internal TextBlock GroupLabelControl => GroupLabel;
+
+    internal TextBlock OthersLabelControl => OthersLabel;
+
+    internal TextBlock OctalLabelControl => OctalLabel;
+
+    internal StackPanel ButtonRowControl => ButtonRow;
+
     private void OnBoxChanged(object? sender, RoutedEventArgs e)
     {
         if (_updating)
@@ -157,10 +189,34 @@ public sealed partial class SftpPermissionsWindow : Window
         ApplyPermission(permission);
     }
 
-    private void OnApplyClick(object? sender, RoutedEventArgs e)
+    private async void OnApplyClick(object? sender, RoutedEventArgs e)
     {
-        PermissionApplied?.Invoke(_permission);
-        Close();
+        if (_applying)
+        {
+            return;
+        }
+
+        _applying = true;
+        ApplyButton.IsEnabled = false;
+        CancelButton.IsEnabled = false;
+
+        // r63: 写回期间标题栏显示「正在修改权限...」（MobaXterm 图2）
+        Title = "正在修改权限...";
+        try
+        {
+            if (PermissionApplied is { } apply)
+            {
+                await apply(_permission);
+            }
+        }
+        catch
+        {
+            // 写回失败：错误已由 VM 写入 SFTP 状态栏，窗口照常关闭
+        }
+        finally
+        {
+            Close();
+        }
     }
 
     /// <summary>

@@ -422,6 +422,14 @@ public partial class MainWindow : Window
         {
             _ = RunR62SelfTestAsync();
         }
+        // --selftest-r63：实机自检 r63 权限窗版式（对齐 MobaXterm 图2）：
+        // ① 居中粗体抬头 ② 标签/版式（冒号/右对齐/粗体/按钮居中/窗宽≥400）
+        // ③ 应用→「正在修改权限...」→SFTP 同值写回→自动关窗 ④ 写回后状态栏
+        // 落盘 r63-perm.png（权限窗）/ r63-browser.png。
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r63"))
+        {
+            _ = RunR63SelfTestAsync();
+        }
     }
 
     private volatile bool _portScanBusy;
@@ -9156,12 +9164,13 @@ public static class ClipCheck {
                 permWin.Show();
                 UpdateLayout();
                 var titleOk = permWin.Title == $"Permissions for \"{permEntry.Name}\"";
+                var headingOk = permWin.HeadingText == $"Permissions for \"{permEntry.Name}\"";
                 permWin.OctalText = "755";
                 UpdateLayout();
                 var syncOk = permWin.RwxText == "rwxr-xr-x"
                     && permWin.OwnerExecuteBoxControl.IsChecked == true;
-                permOk = titleOk && syncOk;
-                AppLog.Info($"[SelfTest] r62: ④ 权限窗 标题/rwx 同步 => {(permOk ? "OK" : "FAILED")}（titleOk={titleOk} syncOk={syncOk}）");
+                permOk = titleOk && headingOk && syncOk;
+                AppLog.Info($"[SelfTest] r62: ④ 权限窗 标题/抬头/rwx 同步 => {(permOk ? "OK" : "FAILED")}（titleOk={titleOk} headingOk={headingOk} syncOk={syncOk}）");
             }
             finally
             {
@@ -9195,6 +9204,151 @@ public static class ClipCheck {
         catch (Exception ex)
         {
             AppLog.Error("[SelfTest] r62: 自检异常", ex);
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
+        }
+    }
+
+    /// <summary>
+    /// <c>--selftest-r63</c>：实机自检 r63 权限窗版式（对齐 MobaXterm 图2）。
+    /// 连上配置里第一个 SSH 会话后：① 居中粗体抬头 Permissions for "name"；
+    /// ② 标签/版式（权限:/用户:/群组:/其他:/八进制模式:，用户群组其他粗体，
+    /// 按钮行居中，窗口宽 ≥400）；③ 应用→标题栏瞬态「正在修改权限...」→SFTP
+    /// 写回（同值回写，无害）→自动关窗；④ 状态栏 "Permissions set to" 且权限值不变。
+    /// 落盘 r63-perm.png（权限窗本体）/ r63-browser.png。
+    /// </summary>
+    private async Task RunR63SelfTestAsync()
+    {
+        var headingOk = false;
+        var layoutOk = false;
+        var applyOk = false;
+        var statusOk = false;
+        try
+        {
+            AppLog.Info("[SelfTest] r63: 等主窗稳定 1.5s 后开始");
+            await Task.Delay(1500);
+            if (DataContext is not MainViewModel viewModel)
+            {
+                throw new InvalidOperationException("MainViewModel 未就绪");
+            }
+
+            var firstKey = _config?.SshSessions.Sessions.FirstOrDefault()?.Key;
+            if (string.IsNullOrEmpty(firstKey))
+            {
+                throw new InvalidOperationException("config 中没有 SSH 会话，无法跑 r63 自检");
+            }
+
+            AppLog.Info($"[SelfTest] r63: 打开 SSH 会话 {firstKey}");
+            var openTask = OpenSshSessionAsync(firstKey!);
+            TerminalTab? sshTab = null;
+            var deadline = DateTime.UtcNow.AddSeconds(90);
+            while (!(openTask.IsCompleted && sshTab is not null && sshTab.IsAlive))
+            {
+                if (DateTime.UtcNow > deadline)
+                {
+                    throw new TimeoutException("SSH 会话 90s 内未连接成功");
+                }
+
+                sshTab = viewModel.Tabs.FirstOrDefault(t => t.SessionId == firstKey);
+                await Task.Delay(250);
+            }
+
+            await openTask;
+            await Task.Delay(800);
+            UpdateLayout();
+
+            var paneVm = sshTab.SftpPane;
+            if (paneVm is null)
+            {
+                throw new InvalidOperationException("SFTP 面板未创建");
+            }
+
+            var dl = DateTime.UtcNow.AddSeconds(30);
+            while (paneVm.RemoteEntries.Count == 0 && DateTime.UtcNow < dl)
+            {
+                await Task.Delay(200);
+                UpdateLayout();
+            }
+            AppLog.Info($"[SelfTest] r63: SFTP 列表 {paneVm.RemoteEntries.Count} 项 @ {paneVm.RemotePath}");
+            if (paneVm.RemoteEntries.Count == 0)
+            {
+                throw new TimeoutException("SFTP 列表 30s 内未加载");
+            }
+
+            var fileEntry = paneVm.RemoteEntries.FirstOrDefault(e => !e.IsDirectory && !e.IsSymbolicLink);
+            if (fileEntry is null)
+            {
+                throw new InvalidOperationException("当前目录没有普通文件，无法跑 r63 自检");
+            }
+
+            var permWin = new SftpPermissionsWindow
+            {
+                Permission = fileEntry.Permission,
+                TargetName = fileEntry.Name,
+            };
+            permWin.Show();
+            UpdateLayout();
+
+            // ① 抬头
+            var headingText = permWin.HeadingText;
+            headingOk = headingText == $"Permissions for \"{fileEntry.Name}\"";
+            AppLog.Info($"[SelfTest] r63: ① 抬头 \"{headingText}\" => {(headingOk ? "OK" : "FAILED")}");
+
+            // ② 标签/版式
+            layoutOk = permWin.RwxLabelControl.Text == "权限:"
+                && permWin.OwnerLabelControl.Text == "用户:"
+                && permWin.GroupLabelControl.Text == "群组:"
+                && permWin.OthersLabelControl.Text == "其他:"
+                && permWin.OctalLabelControl.Text == "八进制模式:"
+                && permWin.HeadingControl.FontWeight == FontWeight.Bold
+                && permWin.OwnerLabelControl.FontWeight == FontWeight.Bold
+                && permWin.GroupLabelControl.FontWeight == FontWeight.Bold
+                && permWin.OthersLabelControl.FontWeight == FontWeight.Bold
+                && permWin.HeadingControl.HorizontalAlignment == Avalonia.Layout.HorizontalAlignment.Center
+                && permWin.ButtonRowControl.HorizontalAlignment == Avalonia.Layout.HorizontalAlignment.Center
+                && permWin.Width >= 400;
+            AppLog.Info($"[SelfTest] r63: ② 标签/版式（粗体抬头/冒号标签/按钮居中/窗宽 {permWin.Width}）=> {(layoutOk ? "OK" : "FAILED")}");
+
+            SaveVisualPng(permWin, "r63-perm.png");
+
+            // ③ 应用：标题栏瞬态 → SFTP 写回（同值回写）→ 自动关窗
+            var origOctal = fileEntry.Permission.ToOctalText();
+            var closed = false;
+            permWin.Closed += (_, _) => closed = true;
+            permWin.PermissionApplied = permission =>
+                paneVm.SetRemotePermissionsAsync(permission.ToOctal());
+            permWin.ApplyButtonControl.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            UpdateLayout();
+            var transientTitle = permWin.Title;
+            var transientOk = transientTitle == "正在修改权限...";
+
+            var closeDeadline = DateTime.UtcNow.AddSeconds(15);
+            while (!closed && DateTime.UtcNow < closeDeadline)
+            {
+                await Task.Delay(50);
+                UpdateLayout();
+            }
+            applyOk = transientOk && closed;
+            AppLog.Info($"[SelfTest] r63: ③ 应用瞬态标题 \"{transientTitle}\" + 写回后自动关窗 => {(applyOk ? "OK" : "FAILED")}（transientOk={transientOk} closed={closed}）");
+
+            // ④ 写回结果：状态栏 + 权限值不变
+            await Task.Delay(300);
+            var refreshed = paneVm.RemoteEntries.FirstOrDefault(e => e.Name == fileEntry.Name);
+            statusOk = paneVm.StatusMessage.Contains("Permissions set to")
+                && refreshed is not null
+                && refreshed.Permission.ToOctalText() == origOctal;
+            AppLog.Info($"[SelfTest] r63: ④ 状态栏 \"{paneVm.StatusMessage}\" + 权限仍为 {origOctal} => {(statusOk ? "OK" : "FAILED")}");
+
+            SaveVisualPng(Content as Visual, "r63-browser.png");
+
+            var ok = headingOk && layoutOk && applyOk && statusOk;
+            AppLog.Info($"[SelfTest] r63: 自检完成，抬头={(headingOk ? "OK" : "失败")} 版式={(layoutOk ? "OK" : "失败")} 应用/关窗={(applyOk ? "OK" : "失败")} 写回={(statusOk ? "OK" : "失败")}，退出");
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(ok ? 0 : 2);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("[SelfTest] r63: 自检异常", ex);
             (Application.Current?.ApplicationLifetime
                 as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
         }
