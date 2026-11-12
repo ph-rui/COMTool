@@ -2443,6 +2443,88 @@ SFTP14_RowLeftClickStillSelectsTheRow（完整输入管线）覆盖。
   时静默返回（无日志无提示），双标签共享 `session.Key`（host+port+user）配置
   记忆位；需实机复现 + run.log 的 "Remote monitor toggle" 行定位。
 
+### 66 「远程监控」按钮点击无效果（同 IP 双会话场景）（2026-11-12，用户反馈）
+
+**用户指认**：同一 SSH IP 开两个标签时，SFTP 底栏「远程监控」按钮有时点击后颜色
+不变（灰色态点了没反应；绿色态时轮询数据消失又出现）；第二标签的终端本身可用。
+
+**run.log 证据**（从 VM 取回，2026-11-12）：
+- 16:28–16:31 用户连点约 25 次，每次点击恰好 1 行日志（on/off 交替）——点击事件
+  全部被记录，不是"事件丢失"；
+- 17:36:42 `key -> on` 与 17:36:59 `key -> on` 之间无 off：日志只记 host:port:user，
+  两个同 IP 标签共享同一 Key，两条 on 是**两个标签各自** off→on——共享配置记忆位
+  与按钮初态漂移是混乱主因；
+- 全程无 `Remote monitor stopped:` 错误：轮询一旦启动即不失败。
+
+**根因**（三层，对照 Avalonia 12.1.4 源码确认）：
+1. **双翻转净归零（"颜色不变"直接原因）**：按钮为 `ToggleButton(ClickMode=Press)`
+   且 `IsChecked` 以 **TwoWay** 绑定 `VM.IsMonitorOn`。实机上按钮内部点击路径
+   （按下→`OnClick→Toggle`→翻转 `IsChecked`→TwoWay 写回 VM）与隧道阶段处理器
+   （翻转 `IsMonitorOn` + `e.Handled=True`）可能叠加触发；一次物理点击两次翻转
+   净归零 → 按钮颜色不变、同秒 on/off 成对出现。
+2. **上游 Handled 死点击（"灰色点了没反应"直接原因）**：隧道处理器默认
+   `handledEventsToo=False`；上游（如窗口边缘缩放守卫 `BeginResizeDrag`）已置
+   `e.Handled=True` 时，隧道翻转被整体跳过、按钮内部路径同样被抑制 → 该次点击
+   零翻转。
+3. **第二标签初态漂移**：同 IP 第二标签创建时 `MonitorEnabled = session.Monitor`
+   （共享记忆位），但按钮 `IsMonitorOn` 仅在标签选中时同步，此前显示与轮询意图
+   不一致。
+
+**修复**（唯一翻转器原则 + 视觉纯跟随 VM）：
+- `SftpPane.axaml`：`IsChecked="{Binding IsMonitorOn, Mode=OneWay}"`（按钮只读
+  显示，内部翻转永不回写 VM）；`Focusable="False"`（屏蔽键盘触发的本地翻转，
+  MobaXterm 中该控件亦非键盘焦点目标）。
+- `SftpPane.axaml.cs`：隧道处理器加 `handledEventsToo: True`——按下必翻转，
+  上游已处理也不丢点击。
+- `MainWindow.axaml.cs`：`OpenSshSessionAsync` 建标签后立即
+  `pane.SyncMonitorOn(session.Monitor)`——第二标签按钮初态与记忆位同步。
+- `MainViewModel.Monitor.cs`：`StartMonitorPolling` 的
+  `Connection is not IExecRunner` 分支由静默返回改为显式 `AppLog.Warn`；
+  启动/停止各补一条 Info——"没启动/启动/停止"全程可追溯。
+- **刻意不采用 `ToggleButton` 子类**（首版方案，已否决）：Avalonia 样式/主题
+  类型选择器精确匹配类型，子类会丢失 FluentTheme 模板（无命中区域、无配色）
+  与 `ToggleButton.MonitorToggle` 样式；headless 验证子类版使
+  RM04/RM06 回归失败（点击不生效、颜色回退默认值）。原生控件 + 上述两机制
+  覆盖同一不变量且零样式风险。
+
+**测试**（TDD 先红后绿）：
+- `RemoteMonitorFeatureTests.RM07_MonitorButtonInternalToggleCannotCorruptViewModel`
+  （新）：独立窗体 + 原生按钮 + 与生产一致的 OneWay 绑定，直接模拟内部路径的
+  最坏情况（本地 `IsChecked` 翻转）——断言 `IsMonitorOn` 不变、`MonitorToggled`
+  回调未触发（OneWay 屏蔽生效）。测试号取 RM07：RM05 已被 e2e
+  `RM05_MonitorMemoryAcrossRestartE2E` 占用。
+- 回归：`RM04_MonitorToggleFirstRealClickTurnsOffTheRunningMonitor`、
+  `RM04_MonitorToggleFirstPressAfterConnectTogglesOnceNoDoubleFire`（首击恰一次
+  翻转、不双触发）、`RM06_MonitorButtonIsFullWidthBandWithDisplayIcon`（通栏
+  样式/配色）全部通过。
+
+**验证**：
+- 全量 gate：2026-11-12T11:06:49Z 全绿，743 项（unit 411 / app 332 含 RM07 /
+  e2e 15 含 RM01_MonitorBarShowsMetricsE2E、RM05_MonitorMemoryAcrossRestartE2E /
+  TestGate PASS）
+- VM win-x64 AOT 部署（自动覆盖、免确认）：
+  - `C:\Users\devuser\COMTool-Avalonia-AOT\COMTool.App.exe`
+    SHA256 = `e56c70a508c6abb11b924763e7da436e1974e3eeb7e41a166ba0b628ef0a3a5b`
+  - AOT 包 `C:\Users\devuser\COMTool-Avalonia-AOT-r66.zip`
+    SHA256 = `664dc5c56be99ebbe6c3e6bc063f2315c17f8a7d170697c4cc50656a5a045e28`（78422636 bytes ≈ 74.8 MB，用户 SFTP 拉取）
+- `--selftest-r66` 实机（真实 SSH devuser@192.0.2.48，RC=0）：
+  - 初始态 IsMonitorOn=True IsChecked=True（该会话记忆位为开，初态同步生效）
+  - ② 隧道按下翻转 True→False，视觉同步 OK（"toggle: -> off" + "polling stopped" 成对）
+  - ③ 轮询数据：初始 on 态 polling started 正常，状态栏出数（截图可见
+    RAM/uptime/磁盘活数据）；出数链路另有 e2e RM01_MonitorBarShowsMetricsE2E 覆盖
+  - ④ 直接内部翻转不污染 VM（OneWay）OK
+  - 收尾恢复初始态（on）："toggle: -> on" + "polling started" 再次出现，轮询正常
+- 回归自检（同一部署，5 连 RC=0，合计 18.1 s）：r65=空白菜单 5 项启用 OK、
+  r64=2/2（空白区清选/行不清选）、r63=4/4（权限窗抬头/版式/瞬态标题/写回 755）、
+  r62=5/5（菜单 16 项/变体/新建文件/权限同步/符号链接行 17）
+- 截图 `r66-monitor.png`（1024×768，像素级核验）：监控通栏带区（y≈735–757）
+  背景 (232,245,238)=#e8f5ee = :checked 绿色态，与 VM 恢复后的 IsMonitorOn=True
+  一致；SFTP 列表 43 项、终端 devuser@192.0.2.48 会话正常。
+
+**遗留**：
+- 需用户在实机以同 IP 双标签复测：每次点击按钮颜色必须同步变化（机制上双翻转/
+  零翻转两条路径均已封死，待实机确认闭环）。
+
 ## 已知偏差（已写入 spec 附录）
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
 2. 热键 .mxtmacros 编码未实测：导出恒 0，导入非 0 忽略+警告
