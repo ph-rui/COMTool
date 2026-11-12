@@ -9281,6 +9281,9 @@ public static class ClipCheck {
                 throw new InvalidOperationException("当前目录没有普通文件，无法跑 r63 自检");
             }
 
+            // SetRemotePermissionsAsync 以 SelectedRemoteEntry 为操作对象，先选中目标文件
+            paneVm.SelectedRemoteEntry = fileEntry;
+
             var permWin = new SftpPermissionsWindow
             {
                 Permission = fileEntry.Permission,
