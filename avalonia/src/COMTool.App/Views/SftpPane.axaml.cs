@@ -290,6 +290,15 @@ public sealed partial class SftpPane : UserControl
             DisarmDelete();
             UpdateCommandState();
         }
+        else if (e.PropertyName is nameof(SftpPaneViewModel.RemotePath)
+            or nameof(SftpPaneViewModel.IsTransferring)
+            or nameof(SftpPaneViewModel.HasRemoteError))
+        {
+            // r65: 首次连接时视图先绑定 ViewModel（RemotePath 为空 → 空白菜单
+            // 项被禁用），目录加载完成才置上路径。路径/传输态变化必须刷新
+            // 启用态，否则菜单项停留在构造期的过期禁用状态。
+            UpdateCommandState();
+        }
     }
 
     /// <summary>
@@ -360,9 +369,11 @@ public sealed partial class SftpPane : UserControl
 
     /// <summary>
     /// r62: 菜单打开时重申一次变体（选中变化时已设置，此处兜底）。
+    /// r65: 打开时同时重算启用态——右键那一刻是用户判断菜单可用性的时刻，
+    /// 以 ViewModel 的实时状态为准，兜住一切此前漏掉的过期状态。
     /// </summary>
     private void OnRemoteContextMenuOpened(object? sender, RoutedEventArgs e)
-        => ApplyMenuVariant();
+        => UpdateCommandState();
 
     private void OnUpClick(object? sender, RoutedEventArgs e)
     {

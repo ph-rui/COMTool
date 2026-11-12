@@ -437,6 +437,14 @@ public partial class MainWindow : Window
         {
             _ = RunR64SelfTestAsync();
         }
+        // --selftest-r65：实机自检 r65 SFTP 空白菜单启用态刷新（首连修复）：
+        // SSH 会话连接、SFTP 列表加载完成后（无选中条目），空白区右键菜单
+        // 5 项（上一级/新建文件夹/新建文件/刷新/上传）必须全部启用且可见，
+        // 条目菜单项必须隐藏。落盘 r65-browser.png。
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r65"))
+        {
+            _ = RunR65SelfTestAsync();
+        }
     }
 
     private volatile bool _portScanBusy;
@@ -9526,6 +9534,108 @@ public static class ClipCheck {
         catch (Exception ex)
         {
             AppLog.Error("[SelfTest] r64: 自检异常", ex);
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
+        }
+    }
+
+    /// <summary>
+    /// <c>--selftest-r65</c>：实机自检 r65 SFTP 空白菜单启用态刷新（首连修复）。
+    /// 首次 SSH 连接后、SFTP 列表加载完成且无选中条目时，空白区右键菜单 5 项
+    /// （上一级/新建文件夹/新建文件/刷新/上传）必须全部启用且可见，条目菜单项
+    /// 必须隐藏。落盘 r65-browser.png。
+    /// </summary>
+    private async Task RunR65SelfTestAsync()
+    {
+        var ok = false;
+        try
+        {
+            AppLog.Info("[SelfTest] r65: 等主窗稳定 1.5s 后开始");
+            await Task.Delay(1500);
+            if (DataContext is not MainViewModel viewModel)
+            {
+                throw new InvalidOperationException("MainViewModel 未就绪");
+            }
+
+            var firstKey = _config?.SshSessions.Sessions.FirstOrDefault()?.Key;
+            if (string.IsNullOrEmpty(firstKey))
+            {
+                throw new InvalidOperationException("config 中没有 SSH 会话，无法跑 r65 自检");
+            }
+
+            AppLog.Info($"[SelfTest] r65: 打开 SSH 会话 {firstKey}");
+            var openTask = OpenSshSessionAsync(firstKey!);
+            TerminalTab? sshTab = null;
+            var deadline = DateTime.UtcNow.AddSeconds(90);
+            while (!(openTask.IsCompleted && sshTab is not null && sshTab.IsAlive))
+            {
+                if (DateTime.UtcNow > deadline)
+                {
+                    throw new TimeoutException("SSH 会话 90s 内未连接成功");
+                }
+
+                sshTab = viewModel.Tabs.FirstOrDefault(t => t.SessionId == firstKey);
+                await Task.Delay(250);
+            }
+
+            await openTask;
+            await Task.Delay(800);
+            UpdateLayout();
+
+            var paneVm = sshTab.SftpPane;
+            if (paneVm is null)
+            {
+                throw new InvalidOperationException("SFTP 面板未创建");
+            }
+
+            var dl = DateTime.UtcNow.AddSeconds(30);
+            while (paneVm.RemoteEntries.Count == 0 && DateTime.UtcNow < dl)
+            {
+                await Task.Delay(200);
+                UpdateLayout();
+            }
+            AppLog.Info($"[SelfTest] r65: SFTP 列表 {paneVm.RemoteEntries.Count} 项 @ {paneVm.RemotePath}");
+            if (paneVm.RemoteEntries.Count == 0)
+            {
+                throw new TimeoutException("SFTP 列表 30s 内未加载");
+            }
+
+            var sftpPane = this.FindControl<SessionSidebar>("Sidebar")
+                ?.FindControl<SshBrowserPanel>("SshBrowserPanel")?.SftpPaneControl;
+            if (sftpPane is null)
+            {
+                throw new InvalidOperationException("未找到 SFTP 面板控件");
+            }
+            UpdateLayout();
+
+            // 无选中条目 → 空白区右键菜单变体；加载完成后 5 项必须全部启用+可见。
+            var up = sftpPane.MenuBlankUpControl;
+            var nf = sftpPane.MenuBlankNewFolderControl;
+            var nfo = sftpPane.MenuBlankNewFileControl;
+            var refi = sftpPane.MenuBlankRefreshControl;
+            var upl = sftpPane.MenuBlankUploadControl;
+            var upOk = up.IsVisible && up.IsEnabled;
+            var nfOk = nf.IsVisible && nf.IsEnabled;
+            var nfoOk = nfo.IsVisible && nfo.IsEnabled;
+            var refOk = refi.IsVisible && refi.IsEnabled;
+            var uplOk = upl.IsVisible && upl.IsEnabled;
+            var entryHidden = !sftpPane.MenuOpenControl.IsVisible
+                && !sftpPane.MenuDeleteControl.IsVisible;
+            ok = upOk && nfOk && nfoOk && refOk && uplOk && entryHidden;
+            AppLog.Info($"[SelfTest] r65: 空白菜单启用态 上一级={(upOk ? "OK" : "FAIL")} " +
+                $"新建夹={(nfOk ? "OK" : "FAIL")} 新建文={(nfoOk ? "OK" : "FAIL")} " +
+                $"刷新={(refOk ? "OK" : "FAIL")} 上传={(uplOk ? "OK" : "FAIL")} " +
+                $"条目项隐藏={(entryHidden ? "OK" : "FAIL")} => {(ok ? "OK" : "FAILED")}");
+
+            SaveVisualPng(Content as Visual, "r65-browser.png");
+
+            AppLog.Info($"[SelfTest] r65: 自检完成，空白菜单启用态刷新={(ok ? "OK" : "失败")}，退出");
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(ok ? 0 : 2);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("[SelfTest] r65: 自检异常", ex);
             (Application.Current?.ApplicationLifetime
                 as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
         }

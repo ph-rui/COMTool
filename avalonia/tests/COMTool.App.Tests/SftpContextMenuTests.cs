@@ -875,6 +875,65 @@ public sealed class SftpContextMenuTests
     }
 
     [AvaloniaFact]
+    public async Task SFTP15_BlankMenuItemsEnabledAfterFirstLoad()
+    {
+        // r65: 复现「首次 SSH 连接」时序——SftpPane 视图先绑定 ViewModel
+        // （此时 RemotePath 为空），目录列表之后才加载完成。加载完成后空白区
+        // 右键菜单 5 项必须全部启用（MobaXterm 行为）。
+        // 回归缺陷：UpdateCommandState 只在 ViewModel 赋值 / 选中变化时调用，
+        // 加载完成（RemotePath 变化）不触发刷新 → 菜单项停留在构造期
+        // 「路径为空」的过期禁用态，首连后「刷新当前文件夹列表/上传到当前
+        // 文件夹」等灰显不可点。
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            await env.RunAsync(async () =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                (window, var _, var remote, var local, var view) = await Setup(remote =>
+                {
+                    remote.AddDirectory("/remote/dir");
+                    remote.AddFile("/remote/a.txt", "a");
+                    remote.AddFile("/remote/b.txt", "b");
+                });
+
+                // 用一个全新（未加载）的 VM 重新绑定视图，确定性地复现
+                // 「绑定早于加载完成」的首次连接时序。
+                var fresh = new SftpPaneViewModel(() => remote, local) { CacheRoot = CacheRoot };
+                view.ViewModel = fresh;
+                Dispatcher.UIThread.RunJobs();
+
+                // 绑定时刻路径未加载：空白菜单项处于禁用态（前提确认）。
+                Assert.False(view.MenuBlankRefreshControl.IsEnabled);
+                Assert.False(view.MenuBlankUploadControl.IsEnabled);
+
+                await fresh.EnsureLoadedAsync(CancellationToken.None);
+                Dispatcher.UIThread.RunJobs();
+                Assert.True(fresh.RemoteEntries.Count > 0, "the remote listing did not load");
+                Assert.True(fresh.RemotePath.Length > 0);
+                Assert.Null(fresh.SelectedRemoteEntry);
+
+                // 加载完成后（无选中条目）：5 个空白区项全部启用且可见，
+                // 条目项保持隐藏。
+                Assert.True(view.MenuBlankUpControl.IsEnabled, "上一级目录 should be enabled");
+                Assert.True(view.MenuBlankNewFolderControl.IsEnabled, "新建文件夹 should be enabled");
+                Assert.True(view.MenuBlankNewFileControl.IsEnabled, "新建文件 should be enabled");
+                Assert.True(view.MenuBlankRefreshControl.IsEnabled, "刷新 should be enabled");
+                Assert.True(view.MenuBlankUploadControl.IsEnabled, "上传 should be enabled");
+                Assert.True(view.MenuBlankRefreshControl.IsVisible);
+                Assert.True(view.MenuBlankUploadControl.IsVisible);
+                Assert.False(view.MenuOpenControl.IsVisible);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    [AvaloniaFact]
     public async Task SFTP12_NewFilePromptCreatesAnEmptyRemoteFile()
     {
         using var env = new TestEnvironment();
