@@ -9478,19 +9478,33 @@ public static class ClipCheck {
             paneVm.SelectedRemoteEntry = lastEntry;
             UpdateLayout();
             selectedBefore = list.SelectedIndex;
-            var container = (Control)list.ContainerFromIndex(lastIndex)!;
-            var rowPoint = container.TranslatePoint(
-                new Point(container.Bounds.Width / 2, container.Bounds.Height / 2), this);
-            if (rowPoint is null)
+
+            // 列表为虚拟化面板，末行容器可能尚未生成：先滚动到可视区再重试取容器
+            var container = (Control)list.ContainerFromIndex(lastIndex);
+            for (var attempt = 0; container is null && attempt < 30; attempt++)
             {
-                throw new InvalidOperationException("行坐标换算失败");
+                list.ScrollIntoView(lastIndex);
+                UpdateLayout();
+                await Task.Delay(50);
+                container = (Control)list.ContainerFromIndex(lastIndex);
             }
+            if (container is null)
+            {
+                throw new InvalidOperationException("无法获取行容器（index=" + lastIndex + "）");
+            }
+
+            // 事件在行的子控件上发出：隧道阶段经过列表，真实触发
+            // OnRemoteListPointerPressed 的 onItem 守卫分支
+            var target = container.GetVisualDescendants().OfType<Control>().FirstOrDefault() ?? container;
+            var rowPoint = target.TranslatePoint(
+                new Point(target.Bounds.Width / 2, target.Bounds.Height / 2), this)
+                ?? new Point(10, 10);
             var rowPointer = new Pointer(Pointer.GetNextFreeId(), PointerType.Mouse, isPrimary: true);
-            container.RaiseEvent(new PointerPressedEventArgs(
-                container,
+            target.RaiseEvent(new PointerPressedEventArgs(
+                target,
                 rowPointer,
                 this,
-                rowPoint.Value,
+                rowPoint,
                 0,
                 new PointerPointProperties(RawInputModifiers.LeftMouseButton, PointerUpdateKind.Other),
                 KeyModifiers.None,
