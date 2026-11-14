@@ -5,6 +5,9 @@ E2E harness selects a free display at `100+` and never uses `:99`. The early
 images use an 850x500 client area; the 1176x552 images are the Python reference
 geometry. These are functional evidence images, not final pixel baselines.
 
+> The evidence images are kept locally and are not published with this
+> repository; the filenames below refer to the local copies.
+
 | File | What it proves |
 | --- | --- |
 | `ui-chrome-fixed-850x500.png` | Borderless custom window: no native white strip above the title bar, Material Design minimize/maximize/close icons, and no 6px gap below the title bar. |

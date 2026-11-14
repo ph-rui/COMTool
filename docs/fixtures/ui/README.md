@@ -4,6 +4,9 @@ These PNGs are 850x500 client-area crops captured at 100% scaling on Xvfb
 (1280x800, light theme, English locale). They are comparison fixtures only;
 fonts and DPI may differ on other machines.
 
+> The baseline images are kept locally and are not published with this
+> repository; the filenames below refer to the local copies.
+
 - `python-empty-850x500.png`: current Python UI at baseline commit `7ae55a5`,
   no remembered sessions.
 - `avalonia-empty-850x500.png`: Phase 0 Avalonia shell, no sessions.

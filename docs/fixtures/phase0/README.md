@@ -4,6 +4,9 @@ Captured on Xvfb `:99` at 100% scaling while running the Avalonia app from
 `avalonia/` on Linux. These are functional evidence, not pixel baselines; the
 850x500 UI baselines live in `docs/fixtures/ui/`.
 
+> The evidence images are kept locally and are not published with this
+> repository; the filenames below refer to the local copies.
+
 | File | What it proves |
 | --- | --- |
 | `avalonia-terminal-clear.png` | Terminal tab opens and accepts a clear/echo command. |
