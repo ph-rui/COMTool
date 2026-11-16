@@ -2525,6 +2525,50 @@ SFTP14_RowLeftClickStillSelectsTheRow（完整输入管线）覆盖。
 - 需用户在实机以同 IP 双标签复测：每次点击按钮颜色必须同步变化（机制上双翻转/
   零翻转两条路径均已封死，待实机确认闭环）。
 
+### 67 标签条拖动换位（实时换位）（2026-11-16，用户截图：三个标签（两个 SSH 会话 + COM99 串口）标红箭头「这些标签鼠标无法进行拖动，设置顺序」）
+
+**用户指认**：主窗口标签条不能鼠标拖动调整标签顺序；要求对齐 MobaXterm/Chrome 的
+拖动换位行为。
+
+**实现**（实时换位，按住移动 ≥5px 开拖，指针越过相邻标签中线即插入其前）：
+- 新增 `src/COMTool.App/Services/TabReorderIndex.cs`：纯函数 `Resolve(pointerX, tabCenters)`，
+  插入到指针越过中线的第一标签之前，越过全部则排末尾（索引语义=完整列表最终位置）。
+- `MainViewModel.MoveTab(tab, targetIndex)`：`Tabs.Move(from, to)`；越界自动夹紧，
+  同位置无操作，选中项引用保持不变（拖动不切页）。
+- `MainWindow.axaml`：标签条容器 Grid 命名 `TabStripGrid`，挂
+  `PointerMoved/PointerReleased/PointerCaptureLost` 三个处理器；
+  条目 ItemsControl 命名 `TabItemsControl`。
+- `MainWindow.axaml.cs` 拖动状态机（按指针 id 隔离，多指针互不干扰）：
+  - 标签上左键按下（✕ 关闭按钮上按下除外）→ 记录候选，保留原「单击选中+聚焦终端」；
+  - 移动超 5px 阈值 → 正式开拖：指针捕获挂在 `TabStripGrid`（稳定容器）而非被拖
+    Border——`ObservableCollection.Move` 会重排 ItemsControl 容器，捕获在被拖标签
+    自身上会随容器重建丢失；
+  - 开拖后光标 `↔`、被拖标签加 `dragging` 类（Opacity 0.6 半透明）；
+  - 每次移动按其余标签 Border 的 X 排序取中线（`TransformToVisual(strip)`），
+    纯函数算目标索引 → `MoveTab` 实时换位 + `UpdateLayout`；
+  - `PointerReleased`/`PointerCaptureLost` → 清半透明、复位状态；
+  - 无位移的单击不换位；双击脱离为独立窗口（DoubleTapped）路径不受影响。
+- `AppStyles.axaml`：`Border.TabItemBorder.dragging { Opacity: 0.6 }`。
+
+**测试（TDD 先红后绿，8 项全过）**：
+- 纯函数 3 项：UI13_Resolve_InsertsBeforeTabWhoseCenterIsPassed /
+  UI13_Resolve_AppendsPastLastCenter / UI13_Resolve_EmptyCenters_ReturnsZero
+- VM 3 项：UI13_MoveTab_ReordersWithoutChangingSelection /
+  UI13_MoveTab_ClampsOutOfRangeTarget / UI13_MoveTab_SamePositionIsNoOp
+- headless UI 2 项：UI13_DragTabReordersTabsLive（下压→5px 内不动不换位→
+  越过阈值→c 插入 b 前→再拖过 a 中线排到最前→松开，顺序 [c,a,b]、选中不变、
+  标签数不变）、UI13_ClickWithoutMoveDoesNotReorder（单击只选中不换位）
+- 踩坑：Avalonia 12.1.4 中 `PointerEventArgs` 无 `PointerId`（用 `e.Pointer.Id`）；
+  捕获 API 是 `e.Pointer.Capture(strip)`/`Capture(null)`（无 CapturePointer）；
+  `VisualExtensions.TranslatePoint` 返回 `Point?`（用 `?.Value`/`HasValue`）。
+
+**gate**：全量 verify.sh 2026-11-16T06:11:27Z 全 PASS（build / 411 单测 / 340 App
+（含本轮 8 项）/ 15 项 Xvfb E2E / TestGate，共 751 项，结果 /tmp/opencode/r67-gate）。
+
+**遗留**：
+- 真实桌面拖动手感（光标形状、跟手延迟、DPI 缩放）需 WIN-20 核对；
+- VM 实机部署验证待补。
+
 ## 已知偏差（已写入 spec 附录）
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
 2. 热键 .mxtmacros 编码未实测：导出恒 0，导入非 0 忽略+警告
