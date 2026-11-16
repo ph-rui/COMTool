@@ -2672,6 +2672,71 @@ SFTP14_RowLeftClickStillSelectsTheRow（完整输入管线）覆盖。
 - 用户取用包 `C:\Users\zhangrui\COMTool-Avalonia-AOT-r67.zip`
   （78456225 bytes，SHA256 `CD06F71230A46FA59CAC7D1F41A6913EFD9B6AB2100090AC568D66BA3E4D60BB`）
 
+### 67.3 修复「拖过去就消失」的两个真因（2026-11-16，用户实机录屏 1.mp4 vs MobaXterm 2.mp4）
+
+**用户指认**：拖标签换位/拖动时，标签移过去就不见了；录屏（1.mp4，20.9s）里可见
+①被拖标签被裁成只剩图标的窄条（39px）、②拖动越出标签条后整条标签条变空白且
+不再恢复。参照 MobaXterm 录屏（2.mp4）：被拖标签始终完整浮在标签条之上跟手。
+
+**逐帧取证**（24fps 全帧 + 像素列分类，脚本分析）：
+- t=2.75s 起稳定出现「白色空槽 + 39px 黑色窄条（只有图标）」；
+- 窄条右沿恒为 306 = 标签条自身的宽度（两个标签槽位之和）→ 判定为**裁剪**；
+- t≈10.8s 后标签条彻底空白（内容区仍在、HasTab 仍为真）→ 判定为位移卡死。
+
+**根因（两个，均 headless 复现）**：
+1. **标签条裁剪跟手标签**：Avalonia 12 的 `ItemsControl` 默认 `ClipToBounds=True`
+   （`Panel` 已无 `ClipToBounds` 默认值语义需重查，实测实例属性为 True），把标签条
+   裁到「所有标签槽位总和」那么宽。被拖标签靠 `RenderTransform` 跟手，一旦移出该
+   矩形就被裁成一条缝（`diag`: 拖最右标签向右 200px 后可见宽度仅剩 39px）——
+   这正是用户第一轮截图的「白色空槽 + 标签消失」。
+2. **落位计时器自停后不再启动**：`OnTabSlideTimerTick` 在队列清空时只
+   `_tabSlideTimer.Stop()`（对象仍非 null），而 `EnsureTabSlideTimer` 只判 null 就
+   return → **第一次落位动画跑完后，后续每次拖动都不再推进**。表现为松手位移永不
+   清零，被拖标签停在释放点（`diag`: 第二次拖动松手后 `RenderTransform` 卡在
+   X=-300），叠加裁剪即「整条标签消失且不再恢复」。松手点落在窗口外（只收到
+   `PointerCaptureLost`）时同样走这条路径。
+
+**修复**：
+- `TabItemsControl` 增加 `ClipToBounds="False"`（跟手标签可浮在标签条之外，
+  MobaXterm 同行为；位移只有 X 分量，不会溢到内容区）。
+- `EnsureTabSlideTimer`：计时器存在但 `!IsEnabled` 时 `Start()` 重启（复用同一实例，
+  不重复订阅 Tick）。
+
+**测试（14 项全过，含 r67/r67.1/r67.2 原 12 项）**：
+- 新增 `UI13_TabStripDoesNotClipDraggedTab`：标签条不裁剪；拖最右标签向右 200px
+  时跟手位移 200、标签右沿超出标签条宽度。
+- 新增 `UI13_SecondDragSettlesBackAndClearsTransforms`：先完成一次落位动画
+  （让计时器自停），再拖最左标签到窗口外松手（仅捕获丢失路径），两次都必须
+  位移归零、顺序不变。修复前该用例卡在 X=-300（已实测复现）。
+
+**gate**：2026-11-16T09:59Z 全绿（`/tmp/opencode/r673-gate4`）：restore/build PASS、
+unit 411 项（Core 90 / Sftp 52 / Terminal 38 / Connections 150 / Zmodem 32 / TestGate 49）、
+**app 346 项全 PASS**（`test-list` 346、e2e 15/15、testgate PASS），合计 757 项
+RESULT PASS。同代码前三次跑遇环境性偶发：① `r673-gate` app 测试进程第 295/346 项后
+`Catastrophic failure ... exit code 139`（295 项 0 失败，`dmesg` 为 `.NET TP Worker`
+在 `libc-2.31.so` memcpy 段错——与 r37/r39/r58/r64 记录的宿主偶发崩溃同型，非本轮
+回归；单独复跑 346/346、`--blame-crash` 复跑 346/346 均全绿）；② `r673-gate3`
+restore 阶段 MSBuild 子节点早退（MSB4166，同一环境的原生崩溃族）。清理残留
+MSBuild 节点服务器后重跑即全绿。
+
+**VM 实机部署验证**（2026-11-16，AOT win-x64，VM 172.16.66.163）：
+- 增量 bundle `27c5c74..bd6e010` 同步到 `D:\Users\zhangrui\comtool-aot-r67`，
+  `vm-aot-build-r67.ps1` 重建 100s `publish rc=0 === DONE ===`；
+  `COMTool.App.exe` SHA256 `ba93baba0813b66d9dd3e99fdb1119ca64c62f192bdd1a890cdda219897cb225`
+  （72331264 B），robocopy 镜像到 `C:\Users\zhangrui\COMTool-Avalonia-AOT`
+- `--selftest-r67` 全绿（wall ≈4s）：① 单击无位移 ② 3px 不换/10px 开拖
+  ③④ 实时换位 ④.5 跟手 X=-43、被挤开滑动 X=-41.4、**被拖容器 Z=100**
+  ⑤ 松开落位 ⑤.5 位移清零+Z 序恢复 **⑥ 拖出标签条不裁剪 + 二次拖动落位清零 OK**
+- 拖动中截图 `r67-drag-out.png`（1024x768）：被拖标签 `devuser@192.0.2.48`
+  以半透明态完整浮在标签条内容之外（右沿约 x=840，远超槽位总和），不再被裁成
+  39px 窄条——即用户所指「拖过去就消失」的直接反证
+- 回归 `--selftest-r66` PASS
+- 用户取用包 `C:\Users\zhangrui\COMTool-Avalonia-AOT-r67.zip`
+  （78460586 bytes，SHA256 `D03BF4843D970FA883BD72A6F43DCAA603B4FA5FF694ADB9C147DCEAA391BBC2`）
+- 部署过程小插曲（均已处理）：首次 bundle 基线误用 `cfd97a4`（VM clone 停在
+  `27c5c74`，fetch 报缺前置提交，实际未更新）；改用 `27c5c74..HEAD` 后 AOT
+  构建完成，但 SSH 会话被重置，改用续跑脚本从镜像步骤继续。
+
 ## 已知偏差（已写入 spec 附录）
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
 2. 热键 .mxtmacros 编码未实测：导出恒 0，导入非 0 忽略+警告
