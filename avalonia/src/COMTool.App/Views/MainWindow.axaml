@@ -245,11 +245,17 @@
                   PointerMoved="OnTabStripPointerMoved"
                   PointerReleased="OnTabStripPointerReleased"
                   PointerCaptureLost="OnTabStripPointerCaptureLost">
+              <!-- r67.3：Avalonia 12 的 ItemsControl 默认 ClipToBounds=True，把标签条
+                   裁到「所有标签槽位的总和」那么宽。拖动中被拖标签靠 RenderTransform
+                   跟手，一旦移出这个矩形（拖最右标签继续向右 / 最左标签向左）就被
+                   裁成一条缝甚至完全不可见——用户看到的就是「拖过去就消失」。
+                   关闭裁剪让跟手标签恒可见（MobaXterm 同样让它浮在标签条之外）。 -->
               <ItemsControl Grid.Column="0"
                             Name="TabItemsControl"
                             ItemsSource="{Binding Tabs}"
                             VerticalAlignment="Top"
-                            HorizontalAlignment="Left">
+                            HorizontalAlignment="Left"
+                            ClipToBounds="False">
                 <ItemsControl.ItemsPanel>
                   <ItemsPanelTemplate>
                     <StackPanel Orientation="Horizontal" />

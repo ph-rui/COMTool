@@ -2622,6 +2622,14 @@ public partial class MainWindow : Window
     {
         if (_tabSlideTimer is not null)
         {
+            // r67.3：动画全部落位后计时器只是 Stop（对象仍存活）。只判 null 就返回
+            // 会让此后的每次拖动都不再推进——松手位移永远清不掉，被拖标签就停在
+            // 屏外的偏移上（被标签条裁剪后看起来「整条标签消失」）。停用则重启。
+            if (!_tabSlideTimer.IsEnabled)
+            {
+                _tabSlideTimer.Start();
+            }
+
             return;
         }
 
@@ -10567,8 +10575,69 @@ public static class ClipCheck {
             }
             AppLog.Info("[SelfTest] r67: ⑤.5 落位动画完成，全部位移清零、Z 序恢复 OK");
 
+            // ⑥ r67.3：两个「拖过去就消失」的真因回归。
+            //   ① 标签条不得裁剪跟手标签：Avalonia 12 的 ItemsControl 默认
+            //      ClipToBounds=True，把标签条裁到「所有槽位总和」那么宽，被拖标签
+            //      一移出这个矩形就被裁成一条缝甚至完全不可见；
+            //   ② 二次拖动必须落位：落位动画结束会把计时器 Stop（对象仍存活），
+            //      若 Ensure 只判 null 就返回，此后拖动位移永不清零，标签停在屏外。
+            var items = this.FindControl<ItemsControl>("TabItemsControl")
+                ?? throw new InvalidOperationException("⑥ 找不到 TabItemsControl");
+            if (items.ClipToBounds)
+            {
+                throw new InvalidOperationException("⑥ 标签条不应裁剪跟手标签（ClipToBounds 应为 false）");
+            }
+
+            var firstTab = viewModel.Tabs[0];
+            var fCenter = CenterPt(firstTab);
+            FindTab(firstTab).RaiseEvent(new PointerPressedEventArgs(
+                FindTab(firstTab), pointer, win, fCenter, 0,
+                new PointerPointProperties(RawInputModifiers.LeftMouseButton, PointerUpdateKind.LeftButtonPressed),
+                KeyModifiers.None, clickCount: 1)
+            {
+                RoutedEvent = InputElement.PointerPressedEvent,
+            });
+            await Task.Delay(60);
+            var farX = fCenter.X + 260;
+            MoveTo(farX, fCenter.Y);
+            await Task.Delay(120);
+            if (FindTab(firstTab).RenderTransform is not Avalonia.Media.TranslateTransform ft
+                || Math.Abs(ft.X) <= 50)
+            {
+                throw new InvalidOperationException(
+                    $"⑥ 跟手位移应把标签拖出标签条，实际 {FindTab(firstTab).RenderTransform}");
+            }
+            var farB = FindTab(firstTab);
+            var farRight = farB.TranslatePoint(new Point(farB.Bounds.Width, 0), items)?.X ?? 0;
+            if (farRight <= items.Bounds.Width)
+            {
+                throw new InvalidOperationException(
+                    $"⑥ 被拖标签右沿({farRight:0}) 应越出标签条宽({items.Bounds.Width:0})");
+            }
+
+            // 拖动中取证：标签越出标签条也完整可见（裁剪修复的实机凭据）。
+            SaveVisualPng(Content as Visual, "r67-drag-out.png");
+
+            strip.RaiseEvent(new PointerReleasedEventArgs(
+                strip, pointer, win, new Point(farX, fCenter.Y), 0,
+                new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.LeftButtonReleased),
+                KeyModifiers.None, MouseButton.Left)
+            {
+                RoutedEvent = InputElement.PointerReleasedEvent,
+            });
+            await Task.Delay(600);
+            foreach (var t in viewModel.Tabs.ToList())
+            {
+                if (FindTab(t).RenderTransform is not null)
+                {
+                    throw new InvalidOperationException(
+                        $"⑥ 二次拖动松手后位移应清零，{t.Title} 仍为 {FindTab(t).RenderTransform}");
+                }
+            }
+            AppLog.Info($"[SelfTest] r67: ⑥ 拖出标签条不裁剪 + 二次拖动落位清零 OK");
+
             SaveVisualPng(Content as Visual, "r67-tabs.png");
-            AppLog.Info("[SelfTest] r67: 自检完成 单击不换=OK 阈值内不换=OK 开拖=OK 实时换位(a,c,b→c,a,b)=OK 选中不变=OK 样式恢复=OK 动画(跟手+滑动+落位清零)=OK，退出");
+            AppLog.Info("[SelfTest] r67: 自检完成 单击不换=OK 阈值内不换=OK 开拖=OK 实时换位(a,c,b→c,a,b)=OK 选中不变=OK 样式恢复=OK 动画(跟手+滑动+落位清零)=OK 不裁剪+二次拖动落位=OK，退出");
             (Application.Current?.ApplicationLifetime
                 as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(0);
         }
