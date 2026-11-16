@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using COMTool.App.Services;
@@ -203,6 +204,132 @@ public sealed class TabDragReorderTests
 
                 Assert.Equal(new[] { a.Tab, b.Tab, c.Tab }, viewModel.Tabs);
                 Assert.Same(b.Tab, viewModel.SelectedTab);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+            a?.Dispose();
+            b?.Dispose();
+            c?.Dispose();
+        }
+    }
+
+    // ---- r67.1：换位动画（MobaXterm 式：被拖跟手 + 其余滑动 + 松手落位） ----
+
+    [AvaloniaFact]
+    public async Task UI13_DragTransformsFollowAndSettle()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        TestTerminal? a = null;
+        TestTerminal? b = null;
+        TestTerminal? c = null;
+        try
+        {
+            await env.RunAsync(async () =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                window = CreateWindow();
+                var viewModel = (MainViewModel)window.DataContext!;
+                a = OpenTab(window, "a");
+                b = OpenTab(window, "b");
+                c = OpenTab(window, "c");
+                RunJobs(window);
+
+                var start = Center(window, FindTabBorder(window, c.Tab));
+                var aCenter = Center(window, FindTabBorder(window, a.Tab));
+                var bCenter = Center(window, FindTabBorder(window, b.Tab));
+
+                window.MouseDown(start, MouseButton.Left);
+                // 拖到 a、b 之间：c 换位到 b 之前，拖动未结束。
+                window.MouseMove(new Point((aCenter.X + bCenter.X) / 2, start.Y), RawInputModifiers.LeftMouseButton);
+                RunJobs(window);
+
+                Assert.Equal(new[] { a.Tab, c.Tab, b.Tab }, viewModel.Tabs);
+
+                // 换位会重排 ItemsControl 容器，Border 引用需重新获取。
+                var cBorder = FindTabBorder(window, c.Tab);
+                var bBorder = FindTabBorder(window, b.Tab);
+
+                // 被拖标签跟手：RenderTransform 位移非零（标签中心停在指针 X 下）。
+                Assert.IsType<TranslateTransform>(cBorder.RenderTransform);
+                Assert.True(
+                    Math.Abs(((TranslateTransform)cBorder.RenderTransform).X) > 1,
+                    "被拖标签应带跟手位移");
+
+                // 被挤开的标签带滑动位移（120ms ease-out 刚开始，偏移≈整槽位宽）。
+                Assert.IsType<TranslateTransform>(bBorder.RenderTransform);
+                Assert.True(
+                    Math.Abs(((TranslateTransform)bBorder.RenderTransform).X) > 1,
+                    "被挤开的标签应带滑动位移");
+
+                window.MouseUp(new Point((aCenter.X + bCenter.X) / 2, start.Y), MouseButton.Left);
+                RunJobs(window);
+
+                // 松手后被拖标签滑回槽位；等 120ms 动画结束，位移全部清零。
+                for (var i = 0; i < 40; i++)
+                {
+                    await Task.Delay(50);
+                    RunJobs(window);
+                    if (cBorder.RenderTransform is null
+                        && bBorder.RenderTransform is null
+                        && FindTabBorder(window, a.Tab).RenderTransform is null)
+                    {
+                        break;
+                    }
+                }
+
+                Assert.Null(cBorder.RenderTransform);
+                Assert.Null(bBorder.RenderTransform);
+                Assert.Null(FindTabBorder(window, a.Tab).RenderTransform);
+                Assert.Equal(new[] { a.Tab, c.Tab, b.Tab }, viewModel.Tabs);
+                Assert.Same(c.Tab, viewModel.SelectedTab);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+            a?.Dispose();
+            b?.Dispose();
+            c?.Dispose();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task UI13_ClickWithoutMoveLeavesNoTransform()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        TestTerminal? a = null;
+        TestTerminal? b = null;
+        TestTerminal? c = null;
+        try
+        {
+            await env.RunAsync(async () =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                window = CreateWindow();
+                var viewModel = (MainViewModel)window.DataContext!;
+                a = OpenTab(window, "a");
+                b = OpenTab(window, "b");
+                c = OpenTab(window, "c");
+                RunJobs(window);
+
+                var p = Center(window, FindTabBorder(window, b.Tab));
+                window.MouseDown(p, MouseButton.Left);
+                window.MouseUp(p, MouseButton.Left);
+                RunJobs(window);
+                await Task.Delay(200);
+                RunJobs(window);
+
+                Assert.Equal(new[] { a.Tab, b.Tab, c.Tab }, viewModel.Tabs);
+                Assert.Same(b.Tab, viewModel.SelectedTab);
+                Assert.Null(FindTabBorder(window, a.Tab).RenderTransform);
+                Assert.Null(FindTabBorder(window, b.Tab).RenderTransform);
+                Assert.Null(FindTabBorder(window, c.Tab).RenderTransform);
             });
         }
         finally

@@ -65,6 +65,17 @@ public partial class MainWindow : Window
     private IPointer? _tabDragPointer;
     private TerminalTab? _tabDragCandidate;
     private TerminalTab? _tabDragTab;
+    // r67.1：MobaXterm 式换位动画——拖动中被拖标签直接跟手（不走计时器），
+    // 其余标签 120ms ease-out 滑入新槽位；计时器只在有活跃动画时运行。
+    private const int TabSlideDurationMs = 120;
+    private readonly Dictionary<TerminalTab, TabSlide> _tabSlides = new();
+    private DispatcherTimer? _tabSlideTimer;
+
+    private sealed class TabSlide
+    {
+        public required double FromX { get; init; }
+        public required DateTime Start { get; init; }
+    }
     private readonly HashSet<TerminalTab> _sshRestarts = new();
     private readonly HashSet<TerminalTab> _telnetRestarts = new();
 
@@ -2488,25 +2499,154 @@ public partial class MainWindow : Window
             Cursor = WestEastCursor;
         }
 
-        // 实时换位：指针越过相邻标签中线即插入其前（纯函数计算目标索引）。
-        // 用 TransformToVisual 取各标签在标签条坐标系中的中线，避免
-        // TranslatePoint 返回值可空性在不同 Avalonia 版本间的分歧。
-        var centers = new List<double>();
-        foreach (var border in strip.GetVisualDescendants()
-                     .OfType<Border>()
-                     .Where(b => b.Tag is TerminalTab t && !ReferenceEquals(t, tab) && b.IsVisible))
+        SetTabDragClass(strip, tab, true);
+
+        // r67.1：MobaXterm 式换位动画。
+        // ① 先量「当前视觉中线」（含正在滑动的位移）作为起点，再清掉所有
+        //    RenderTransform 回到布局位；
+        // ② 用视觉中线算目标索引（语义不变：越过相邻中线即插入其前）；
+        // ③ 换位后其余标签从「视觉位置」滑向「新布局槽位」（120ms ease-out），
+        //    连续换位时从当前滑动位置续接，不跳变；
+        // ④ 被拖标签不走计时器：直接设位移让标签中心停在指针 X 下（跟手零延迟）。
+        var visualOld = MeasureTabCenters(strip);
+        ClearTabRenderTransforms(strip);
+
+        var otherCenters = visualOld
+            .Where(kv => !ReferenceEquals(kv.Key, tab))
+            .Select(kv => kv.Value)
+            .OrderBy(x => x)
+            .ToList();
+        var target = TabReorderIndex.Resolve(pos.X, otherCenters);
+
+        var layoutOld = MeasureTabCenters(strip);
+        var layoutNew = layoutOld;
+        if (target != viewModel.Tabs.IndexOf(tab))
         {
-            var transform = border.TransformToVisual(strip);
-            if (transform.HasValue)
+            viewModel.MoveTab(tab, target);
+            strip.UpdateLayout();
+            layoutNew = MeasureTabCenters(strip);
+        }
+
+        foreach (var kv in layoutNew)
+        {
+            if (ReferenceEquals(kv.Key, tab))
             {
-                centers.Add(transform.Value.M31 + border.Bounds.Width / 2);
+                continue;
+            }
+
+            var fromX = visualOld.GetValueOrDefault(kv.Key) - kv.Value;
+            if (Math.Abs(fromX) > 0.5)
+            {
+                // 同步落初始位移（不等计时器首个 tick），随后计时器接管推进。
+                if (FindTabBorderInStrip(strip, kv.Key) is { } slideBorder)
+                {
+                    slideBorder.RenderTransform = new TranslateTransform { X = fromX };
+                }
+
+                _tabSlides[kv.Key] = new TabSlide { FromX = fromX, Start = DateTime.UtcNow };
+            }
+            else
+            {
+                _tabSlides.Remove(kv.Key);
             }
         }
 
-        centers.Sort();
-        viewModel.MoveTab(tab, TabReorderIndex.Resolve(pos.X, centers));
-        SetTabDragClass(strip, tab, true);
-        strip.UpdateLayout();
+        if (_tabSlides.Count > 0)
+        {
+            EnsureTabSlideTimer();
+        }
+
+        if (layoutNew.TryGetValue(tab, out var dragCenter))
+        {
+            var dragBorder = FindTabBorderInStrip(strip, tab);
+            if (dragBorder is not null)
+            {
+                dragBorder.RenderTransform = new TranslateTransform { X = pos.X - dragCenter };
+            }
+        }
+    }
+
+    /// <summary>量各标签在标签条坐标系中的视觉中线（含 RenderTransform 位移）。</summary>
+    private static Dictionary<TerminalTab, double> MeasureTabCenters(Grid strip)
+    {
+        var map = new Dictionary<TerminalTab, double>();
+        foreach (var border in strip.GetVisualDescendants().OfType<Border>())
+        {
+            if (border.Tag is not TerminalTab tab)
+            {
+                continue;
+            }
+
+            var transform = border.TransformToVisual(strip);
+            if (transform.HasValue)
+            {
+                map[tab] = transform.Value.M31 + border.Bounds.Width / 2;
+            }
+        }
+
+        return map;
+    }
+
+    private static void ClearTabRenderTransforms(Grid strip)
+    {
+        foreach (var border in strip.GetVisualDescendants().OfType<Border>())
+        {
+            if (border.Tag is TerminalTab && border.RenderTransform != null)
+            {
+                border.RenderTransform = null;
+            }
+        }
+    }
+
+    private static Border? FindTabBorderInStrip(Grid strip, TerminalTab tab) =>
+        strip.GetVisualDescendants().OfType<Border>()
+            .FirstOrDefault(b => ReferenceEquals(b.Tag, tab));
+
+    private void EnsureTabSlideTimer()
+    {
+        if (_tabSlideTimer is not null)
+        {
+            return;
+        }
+
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+        timer.Tick += OnTabSlideTimerTick;
+        _tabSlideTimer = timer;
+        timer.Start();
+    }
+
+    private void OnTabSlideTimerTick(object? sender, EventArgs e)
+    {
+        var now = DateTime.UtcNow;
+        var strip = this.FindControl<Grid>("TabStripGrid");
+        foreach (var kv in _tabSlides.ToList())
+        {
+            var slide = kv.Value;
+            var border = FindTabBorderInStrip(strip, kv.Key);
+            if (border is null || border.Parent is null)
+            {
+                // 标签已在动画中途被关闭/脱离：静默丢弃。
+                _tabSlides.Remove(kv.Key);
+                continue;
+            }
+
+            var p = (now - slide.Start).TotalMilliseconds / TabSlideDurationMs;
+            if (p >= 1)
+            {
+                border.RenderTransform = null;
+                _tabSlides.Remove(kv.Key);
+            }
+            else
+            {
+                var eased = 1 - Math.Pow(1 - p, 3);
+                border.RenderTransform = new TranslateTransform { X = slide.FromX * (1 - eased) };
+            }
+        }
+
+        if (_tabSlides.Count == 0)
+        {
+            _tabSlideTimer?.Stop();
+        }
     }
 
     private void OnTabStripPointerReleased(object? sender, PointerReleasedEventArgs e)
@@ -2529,6 +2669,18 @@ public partial class MainWindow : Window
         if (_tabDragTab is not null && strip is not null)
         {
             SetTabDragClass(strip, _tabDragTab, false);
+
+            // r67.1：松手时被拖标签从当前跟手偏移滑回槽位（与其余标签同款 120ms）。
+            var dragBorder = FindTabBorderInStrip(strip, _tabDragTab);
+            if (dragBorder?.RenderTransform is TranslateTransform tt && Math.Abs(tt.X) > 0.5)
+            {
+                _tabSlides[_tabDragTab] = new TabSlide { FromX = tt.X, Start = DateTime.UtcNow };
+            }
+        }
+
+        if (_tabSlides.Count > 0)
+        {
+            EnsureTabSlideTimer();
         }
 
         if (releaseCapture)
@@ -10278,6 +10430,19 @@ public static class ClipCheck {
             }
             AppLog.Info($"[SelfTest] r67: ④ 越过 a 中线实时换位: {Order()} OK");
 
+            // ④.5 r67.1：动画断言——被拖标签跟手位移非零，被挤开的标签 a 正在滑动。
+            var cB = FindTab(cTab);
+            var aB = FindTab(aTab);
+            if (cB.RenderTransform is not Avalonia.Media.TranslateTransform ct || Math.Abs(ct.X) <= 0.5)
+            {
+                throw new InvalidOperationException($"④.5 被拖标签应带跟手位移，实际 {cB.RenderTransform}");
+            }
+            if (aB.RenderTransform is not Avalonia.Media.TranslateTransform at2 || Math.Abs(at2.X) <= 0.5)
+            {
+                throw new InvalidOperationException($"④.5 被挤开标签应带滑动位移，实际 {aB.RenderTransform}");
+            }
+            AppLog.Info($"[SelfTest] r67: ④.5 动画: 被拖跟手 X={ct.X:0.#} 被挤开滑动 X={at2.X:0.#} OK");
+
             // ⑤ 松开：顺序保持、选中项不变（按下时已选 c）、dragging 样式清除。
             strip.RaiseEvent(new PointerReleasedEventArgs(
                 strip, pointer, win, new Point(aMid - 5, cCenter.Y), 0,
@@ -10305,8 +10470,20 @@ public static class ClipCheck {
             }
             AppLog.Info($"[SelfTest] r67: ⑤ 松开落位: 顺序={Order()} 选中={viewModel.SelectedTab?.Title} 样式已恢复 OK");
 
+            // ⑤.5 r67.1：等 120ms 落位动画结束，全部位移清零。
+            await Task.Delay(400);
+            foreach (var t in new[] { aTab, bTab, cTab })
+            {
+                var border = FindTab(t);
+                if (border.RenderTransform is not null)
+                {
+                    throw new InvalidOperationException($"⑤.5 落位后位移应清零，{t.Title} 仍为 {border.RenderTransform}");
+                }
+            }
+            AppLog.Info("[SelfTest] r67: ⑤.5 落位动画完成，全部位移清零 OK");
+
             SaveVisualPng(Content as Visual, "r67-tabs.png");
-            AppLog.Info("[SelfTest] r67: 自检完成 单击不换=OK 阈值内不换=OK 开拖=OK 实时换位(a,c,b→c,a,b)=OK 选中不变=OK 样式恢复=OK，退出");
+            AppLog.Info("[SelfTest] r67: 自检完成 单击不换=OK 阈值内不换=OK 开拖=OK 实时换位(a,c,b→c,a,b)=OK 选中不变=OK 样式恢复=OK 动画(跟手+滑动+落位清零)=OK，退出");
             (Application.Current?.ApplicationLifetime
                 as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(0);
         }
