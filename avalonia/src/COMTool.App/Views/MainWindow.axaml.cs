@@ -58,6 +58,13 @@ public partial class MainWindow : Window
     private WindowState _preFullScreenState = WindowState.Normal;
     private readonly Dictionary<TerminalTab, DetachedTabState> _detachedTabs = new();
     private readonly Dictionary<TerminalTab, SerialTabState> _serialTabs = new();
+    // r67：标签拖动换位状态（按指针 id 区分，防止多指针互相干扰）。
+    private const double TabDragThreshold = 5.0;
+    private Point _tabDragStart;
+    private int _tabDragPointerId = -1;
+    private IPointer? _tabDragPointer;
+    private TerminalTab? _tabDragCandidate;
+    private TerminalTab? _tabDragTab;
     private readonly HashSet<TerminalTab> _sshRestarts = new();
     private readonly HashSet<TerminalTab> _telnetRestarts = new();
 
@@ -2407,7 +2414,134 @@ public partial class MainWindow : Window
             {
                 FocusTerminalWhenSelected(tab, terminal);
             }
+
+            // r67：记录拖动换位候选。关闭按钮上的按下不进入拖动流程；
+            // 是否真正开拖由 TabStripGrid 的 PointerMoved 按 5px 阈值判定，
+            // 因此单击选中和双击脱离窗口均不受影响。
+            if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed
+                && e.Source is Control src
+                && src.FindAncestorOfType<Button>(includeSelf: true) is null
+                && this.FindControl<Grid>("TabStripGrid") is { } strip)
+            {
+                _tabDragCandidate = tab;
+                _tabDragTab = null;
+                _tabDragPointerId = e.Pointer.Id;
+                _tabDragStart = e.GetPosition(strip);
+            }
         }
+    }
+
+    // ---- r67：标签拖动换位（实时换位，MobaXterm/Chrome 手感）----
+    // 捕获挂在标签条容器（稳定元素）上而不是被拖的 Border 上：
+    // ObservableCollection.Move 会重排 ItemsControl 容器，若捕获在被拖
+    // 标签自身上，容器重建会丢失捕获。
+
+    private void OnTabStripPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (sender is not Grid strip || e.Pointer?.Id != _tabDragPointerId)
+        {
+            return;
+        }
+
+        if (_tabDragCandidate is not { } tab)
+        {
+            return;
+        }
+
+        if (DataContext is not MainViewModel viewModel || !viewModel.Tabs.Contains(tab))
+        {
+            _tabDragCandidate = null;
+            return;
+        }
+
+        // 松开后残留的候选要清理（例如按下后在标签条外松开，Released 不会冒泡到这里）。
+        if (!e.GetCurrentPoint(strip).Properties.IsLeftButtonPressed)
+        {
+            _tabDragCandidate = null;
+            return;
+        }
+
+        var pos = e.GetPosition(strip);
+        if (!ReferenceEquals(_tabDragTab, tab))
+        {
+            // 未开拖：先过阈值，避免普通点击误触发。
+            if (Math.Abs(pos.X - _tabDragStart.X) < TabDragThreshold
+                && Math.Abs(pos.Y - _tabDragStart.Y) < TabDragThreshold)
+            {
+                return;
+            }
+
+            _tabDragTab = tab;
+            // 捕获挂在稳定容器上：ObservableCollection.Move 会重排标签条目，
+            // 若捕获在被拖 Border 自身，容器重建会丢捕获。
+            e.Pointer.Capture(strip);
+            _tabDragPointer = e.Pointer;
+            Cursor = WestEastCursor;
+        }
+
+        // 实时换位：指针越过相邻标签中线即插入其前（纯函数计算目标索引）。
+        // 用 TransformToVisual 取各标签在标签条坐标系中的中线，避免
+        // TranslatePoint 返回值可空性在不同 Avalonia 版本间的分歧。
+        var centers = new List<double>();
+        foreach (var border in strip.GetVisualDescendants()
+                     .OfType<Border>()
+                     .Where(b => b.Tag is TerminalTab t && !ReferenceEquals(t, tab) && b.IsVisible))
+        {
+            var transform = border.TransformToVisual(strip);
+            if (transform.HasValue)
+            {
+                centers.Add(transform.Value.M31 + border.Bounds.Width / 2);
+            }
+        }
+
+        centers.Sort();
+        viewModel.MoveTab(tab, TabReorderIndex.Resolve(pos.X, centers));
+        SetTabDragClass(strip, tab, true);
+        strip.UpdateLayout();
+    }
+
+    private void OnTabStripPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        EndTabDrag(sender as Grid, e.Pointer?.Id, releaseCapture: true);
+    }
+
+    private void OnTabStripPointerCaptureLost(object? sender, PointerCaptureLostEventArgs e)
+    {
+        EndTabDrag(sender as Grid, e.Pointer?.Id, releaseCapture: false);
+    }
+
+    private void EndTabDrag(Grid? strip, int? pointerId, bool releaseCapture)
+    {
+        if (pointerId != _tabDragPointerId)
+        {
+            return;
+        }
+
+        if (_tabDragTab is not null && strip is not null)
+        {
+            SetTabDragClass(strip, _tabDragTab, false);
+        }
+
+        if (releaseCapture)
+        {
+            // 正常情况下 pointer-up 会自动释放捕获；这里显式兜底，
+            // 覆盖「按下后在标签条外松开」这类 Released 不冒泡回来的路径。
+            _tabDragPointer?.Capture(null);
+            _tabDragPointer = null;
+        }
+
+        Cursor = null;
+        _tabDragTab = null;
+        _tabDragCandidate = null;
+        _tabDragPointerId = -1;
+    }
+
+    private static void SetTabDragClass(Grid strip, TerminalTab tab, bool on)
+    {
+        var border = strip.GetVisualDescendants()
+            .OfType<Border>()
+            .FirstOrDefault(b => ReferenceEquals(b.Tag, tab));
+        border?.Classes.Set("dragging", on);
     }
 
     private static void OnSelectedTabChanging(TerminalTab? tab)

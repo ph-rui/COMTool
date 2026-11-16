@@ -240,8 +240,13 @@
           <Grid Name="TabHost"
                 IsVisible="{Binding HasTabs}"
                 RowDefinitions="36,*">
-            <Grid Grid.Row="0" Height="36" ColumnDefinitions="*">
+            <Grid Grid.Row="0" Height="36" ColumnDefinitions="*"
+                  Name="TabStripGrid"
+                  PointerMoved="OnTabStripPointerMoved"
+                  PointerReleased="OnTabStripPointerReleased"
+                  PointerCaptureLost="OnTabStripPointerCaptureLost">
               <ItemsControl Grid.Column="0"
+                            Name="TabItemsControl"
                             ItemsSource="{Binding Tabs}"
                             VerticalAlignment="Top"
                             HorizontalAlignment="Left">

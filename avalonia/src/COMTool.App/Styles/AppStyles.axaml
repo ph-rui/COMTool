@@ -254,6 +254,10 @@
     <Setter Property="Background" Value="{DynamicResource TabSelectedBrush}" />
     <Setter Property="BorderBrush" Value="{DynamicResource TabSelectedBorderBrush}" />
   </Style>
+  <!-- r67：拖动换位中的标签半透明提示 -->
+  <Style Selector="Border.TabItemBorder.dragging">
+    <Setter Property="Opacity" Value="0.6" />
+  </Style>
   <Style Selector="TextBlock.TabKindIcon">
     <Setter Property="FontSize" Value="13" />
     <Setter Property="VerticalAlignment" Value="Center" />

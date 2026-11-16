@@ -625,6 +625,27 @@ public partial class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasTabs));
     }
 
+    /// <summary>
+    /// r67：拖动标签换位。targetIndex 是目标位置（已按完整列表索引语义给出），
+    /// 越界自动夹紧；当前位置不变时不做任何操作。选中态保持不变。
+    /// </summary>
+    public void MoveTab(TerminalTab tab, int targetIndex)
+    {
+        var from = Tabs.IndexOf(tab);
+        if (from < 0)
+        {
+            return;
+        }
+
+        var to = Math.Clamp(targetIndex, 0, Tabs.Count - 1);
+        if (to == from)
+        {
+            return;
+        }
+
+        Tabs.Move(from, to);
+    }
+
     private int RemoveTab(TerminalTab tab)
     {
         var index = Tabs.IndexOf(tab);
