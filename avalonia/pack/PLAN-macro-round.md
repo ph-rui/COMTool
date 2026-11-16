@@ -2603,7 +2603,7 @@ SFTP14_RowLeftClickStillSelectsTheRow（完整输入管线）覆盖。
   `TranslateTransform`，不依赖新动画 API；滑动位移必须同步落初始值，否则 headless
   测试在首个 timer tick 前断言会拿到 null（已踩，复绿）。
 
-**测试（10 项全过，含 r67 原 8 项）**：
+**测试（12 项全过，含 r67 原 8 项 + r67.2 新增 2 项）**：
 - 新增 headless 2 项：UI13_DragTransformsFollowAndSettle（换位后拖动中：被拖标签
   RenderTransform 跟手位移非零 + 被挤开标签滑动位移非零；松手后轮询 ≤2s 全部
   位移清零、顺序 [a,c,b]、选中不变）、UI13_ClickWithoutMoveLeavesNoTransform
@@ -2622,6 +2622,47 @@ SFTP14_RowLeftClickStillSelectsTheRow（完整输入管线）覆盖。
 - 用户取用包 `C:\Users\zhangrui\COMTool-Avalonia-AOT-r67.zip`
   （78453311 bytes，SHA256 `81A24D6ACFE8371DB807A711C4C7BA73E9705F78459857FA38BB7180436D5815`）
 - 截图 `r67-tabs.png`（1024x768）已落 VM `%APPDATA%\COMTool-Avalonia\`（本地取证，不入库）
+
+### 67.2 修复拖动换位中被拖标签「消失」（2026-11-16，用户报告 + 截图）
+
+**用户指认**：拖动标签换位时，有时标签移过去就看不见了（截图：标签条中一个
+白色空槽，被拖标签不在原位）。
+
+**根因**（headless 诊断确认）：
+1. **Z 序问题（主因）**：实时换位 `MoveTab` 后树序改变，被拖标签按新树序渲染；
+   当它视觉上仍压在某个邻居上方（典型：向左拖，被拖标签树序在新位置先于被覆盖
+   的邻居）时，默认按树序渲染 → 被拖标签被邻居整块盖住「消失」，只留下空槽。
+2. **容器重建连带丢失**：headless 实测 `MoveTab` 重排会重建 ItemsControl 容器
+   （同一 tab 换位前后 Border/ContentPresenter 实例 id 均变化）。在重排前设置的
+   `dragging` 样式与 Z 序会随旧容器丢弃——跟手可见性同样依赖每次重排后重申。
+
+**修复**（`OnTabStripPointerMoved`）：
+- `MoveTab` + `UpdateLayout` 完成后（而非之前）对当前容器重申
+  `SetTabDragClass(..., true)` 与 `RaiseTabDragZIndex`（ZIndex=100 设在标签条
+  StackPanel 的直接子节点上；Avalonia 12 的 `ZIndex` 是 `Visual` 实例属性，
+  反射确认 `Panel.SetZIndex` 已移除，`Panel` 按子节点 ZIndex 排序渲染）。
+- 滑动起点防御：某标签在量测时短暂脱离视觉树（容器重建瞬态）则跳过该次
+  滑动初始化，不再从 0 造出巨大偏移把标签瞬移到屏外。
+- 松手 `EndTabDrag` 时 `ResetTabDragZIndexes` 将全部标签 Z 序归零。
+
+**机制验证**：反射读 Avalonia 12.1.4 源码逻辑——`Visual.ZIndexChanged` 在 ZIndex
+变非零时置父节点 `HasNonUniformZIndexChildren=true` 并调
+`Renderer.RecalculateChildren`；`ImmediateRenderer` 对 `HasNonUniformZIndexChildren`
+的 Panel 按 `ZIndexComparer` 升序绘制（大 Z 后画在上）。headless 像素级 RTB
+不 rasterize 填充（诊断确认位图内容不可靠），故 gate 内以状态级断言验证机制，
+视觉验证依赖 VM 实机截图。
+
+**测试（12 项全过，含 r67/r67.1 原 10 项）**：
+- 新增 UI13_DraggedTabRaisesZIndexAndResetsOnRelease：拖动中被拖标签容器
+  Z>0、其余=0；松手后全部归 0。
+- 新增 UI13_PanelFlagsZOrderResortOnZIndexChange：ZIndex 变非零后父 Panel
+  `HasNonUniformZIndexChildren=true`（框架 Z 序重排机制在本版本生效）。
+
+**gate**：全量 verify.sh 2026-11-16T08:32:14Z 全 PASS（build / 411 单测 / 344 App
+（含本轮 12 项）/ 15 项 Xvfb E2E / TestGate，共 755 项，结果 /tmp/opencode/r672-gate）。
+
+**VM 实机部署验证**：待补（AOT 重建 + `--selftest-r67` 新增 ④.5 拖动中
+Z 序断言 + `r67-drag-mid.png` 拖动中截图 + ⑤.5 Z 序归零 + r66 回归）。
 
 ## 已知偏差（已写入 spec 附录）
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告

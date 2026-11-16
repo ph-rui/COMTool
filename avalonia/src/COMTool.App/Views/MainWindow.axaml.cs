@@ -2499,8 +2499,6 @@ public partial class MainWindow : Window
             Cursor = WestEastCursor;
         }
 
-        SetTabDragClass(strip, tab, true);
-
         // r67.1：MobaXterm 式换位动画。
         // ① 先量「当前视觉中线」（含正在滑动的位移）作为起点，再清掉所有
         //    RenderTransform 回到布局位；
@@ -2527,6 +2525,16 @@ public partial class MainWindow : Window
             layoutNew = MeasureTabCenters(strip);
         }
 
+        // r67.2：MoveTab 重排会重建 ItemsControl 容器（旧容器上的 dragging 样式与
+        // Z 序随之丢弃），必须在重排完成后对新容器重新施加：
+        // ① dragging 半透明提示重新生效；
+        // ② 提升被拖标签 Z 序，修复「移动过去就消失」——实时换位后树序可能把
+        //    被拖标签排在被它视觉覆盖的相邻标签之前（典型：向左拖），默认按树序
+        //    渲染时跟手标签会被邻居整块盖住；置顶后跟手标签恒在最上层
+        //    （MobaXterm 同行为）。每次移动都重申，防止后续重排再次丢失。
+        SetTabDragClass(strip, tab, true);
+        RaiseTabDragZIndex(strip, tab);
+
         foreach (var kv in layoutNew)
         {
             if (ReferenceEquals(kv.Key, tab))
@@ -2534,7 +2542,15 @@ public partial class MainWindow : Window
                 continue;
             }
 
-            var fromX = visualOld.GetValueOrDefault(kv.Key) - kv.Value;
+            // r67.2：换位瞬态中若某标签容器短暂脱离视觉树（量不到），不能
+            // 从 0 造一个巨大偏移，否则该标签会被瞬移到屏外再滑回来。
+            if (!visualOld.TryGetValue(kv.Key, out var visX))
+            {
+                _tabSlides.Remove(kv.Key);
+                continue;
+            }
+
+            var fromX = visX - kv.Value;
             if (Math.Abs(fromX) > 0.5)
             {
                 // 同步落初始位移（不等计时器首个 tick），随后计时器接管推进。
@@ -2670,6 +2686,9 @@ public partial class MainWindow : Window
         {
             SetTabDragClass(strip, _tabDragTab, false);
 
+            // r67.2：恢复全部标签 Z 序（含被拖标签），避免残留置顶。
+            ResetTabDragZIndexes(strip);
+
             // r67.1：松手时被拖标签从当前跟手偏移滑回槽位（与其余标签同款 120ms）。
             var dragBorder = FindTabBorderInStrip(strip, _tabDragTab);
             if (dragBorder?.RenderTransform is TranslateTransform tt && Math.Abs(tt.X) > 0.5)
@@ -2703,6 +2722,59 @@ public partial class MainWindow : Window
             .OfType<Border>()
             .FirstOrDefault(b => ReferenceEquals(b.Tag, tab));
         border?.Classes.Set("dragging", on);
+    }
+
+    // r67.2：拖动中被拖标签置顶，防止被实时换位后的相邻标签按树序盖住。
+    // 实时换位只改 ObservableCollection 顺序，ItemsControl 重排容器后，被拖标签
+    // 可能排在邻居之前；当它视觉上与邻居重叠（跟手位移指向邻居一侧）时，默认
+    // 按树序渲染会被邻居整块盖住 →「移动过去就消失」。提升 Z 序后跟手标签恒在
+    // 最上层，落位动画期间也可见。
+    // 注意：Avalonia 12 中 ZIndex 是 Visual 实例属性（Panel.SetZIndex 已移除），
+    // 且只有 Panel 的直接子节点参与 Z 序排序 → 设值对象是标签条 StackPanel 的
+    // 直接子节点（标签容器），而不是 Border 本身。
+    private const int TabDragZIndex = 100;
+
+    /// <summary>沿视觉祖先向上找第一个「父节点是 Panel」的节点（即该 Panel 的直接子节点）。</summary>
+    private static Visual? FindPanelChildAncestor(Visual v)
+    {
+        var current = v;
+        while (current is not null)
+        {
+            var parent = current.GetVisualParent();
+            if (parent is Panel)
+            {
+                return current;
+            }
+
+            current = parent;
+        }
+
+        return null;
+    }
+
+    private static void RaiseTabDragZIndex(Grid strip, TerminalTab tab)
+    {
+        var border = FindTabBorderInStrip(strip, tab);
+        if (border is not null && FindPanelChildAncestor(border) is Visual container)
+        {
+            container.ZIndex = TabDragZIndex;
+        }
+    }
+
+    private static void ResetTabDragZIndexes(Grid strip)
+    {
+        foreach (var border in strip.GetVisualDescendants().OfType<Border>())
+        {
+            if (border.Tag is not TerminalTab)
+            {
+                continue;
+            }
+
+            if (FindPanelChildAncestor(border) is { ZIndex: not 0 } container)
+            {
+                container.ZIndex = 0;
+            }
+        }
     }
 
     private static void OnSelectedTabChanging(TerminalTab? tab)
@@ -10441,7 +10513,14 @@ public static class ClipCheck {
             {
                 throw new InvalidOperationException($"④.5 被挤开标签应带滑动位移，实际 {aB.RenderTransform}");
             }
-            AppLog.Info($"[SelfTest] r67: ④.5 动画: 被拖跟手 X={ct.X:0.#} 被挤开滑动 X={at2.X:0.#} OK");
+            // r67.2：拖动中被拖标签容器 Z 序应置顶（防止被换位后的邻居盖住「消失」）
+            var cCp = FindPanelChildAncestor(cB);
+            if (cCp is null || cCp.ZIndex != TabDragZIndex)
+            {
+                throw new InvalidOperationException($"④.5 被拖标签容器应 Z={TabDragZIndex}，实际 {cCp?.ZIndex}");
+            }
+            AppLog.Info($"[SelfTest] r67: ④.5 动画: 被拖跟手 X={ct.X:0.#} 被挤开滑动 X={at2.X:0.#} 被拖容器 Z={cCp.ZIndex} OK");
+            SaveVisualPng(Content as Visual, "r67-drag-mid.png");
 
             // ⑤ 松开：顺序保持、选中项不变（按下时已选 c）、dragging 样式清除。
             strip.RaiseEvent(new PointerReleasedEventArgs(
@@ -10479,8 +10558,14 @@ public static class ClipCheck {
                 {
                     throw new InvalidOperationException($"⑤.5 落位后位移应清零，{t.Title} 仍为 {border.RenderTransform}");
                 }
+                // r67.2：松手后 Z 序也应全部恢复 0
+                var cp = FindPanelChildAncestor(border);
+                if (cp is not null && cp.ZIndex != 0)
+                {
+                    throw new InvalidOperationException($"⑤.5 落位后 Z 序应清零，{t.Title} 容器 Z={cp.ZIndex}");
+                }
             }
-            AppLog.Info("[SelfTest] r67: ⑤.5 落位动画完成，全部位移清零 OK");
+            AppLog.Info("[SelfTest] r67: ⑤.5 落位动画完成，全部位移清零、Z 序恢复 OK");
 
             SaveVisualPng(Content as Visual, "r67-tabs.png");
             AppLog.Info("[SelfTest] r67: 自检完成 单击不换=OK 阈值内不换=OK 开拖=OK 实时换位(a,c,b→c,a,b)=OK 选中不变=OK 样式恢复=OK 动画(跟手+滑动+落位清零)=OK，退出");

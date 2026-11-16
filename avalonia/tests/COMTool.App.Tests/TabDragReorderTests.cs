@@ -1,3 +1,5 @@
+using System;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
@@ -11,6 +13,7 @@ using COMTool.App.ViewModels;
 using COMTool.App.Views;
 using COMTool.Core.Config;
 using Iciclecreek.Terminal;
+using Xunit;
 
 namespace COMTool.App.Tests;
 
@@ -342,6 +345,101 @@ public sealed class TabDragReorderTests
         }
     }
 
+    // ---- r67.2：被拖标签置顶（修复「移动过去就消失」） ----
+
+    [AvaloniaFact]
+    public async Task UI13_DraggedTabRaisesZIndexAndResetsOnRelease()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        TestTerminal? a = null;
+        TestTerminal? b = null;
+        TestTerminal? c = null;
+        try
+        {
+            await env.RunAsync(async () =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                window = CreateWindow();
+                var viewModel = (MainViewModel)window.DataContext!;
+                a = OpenTab(window, "a");
+                b = OpenTab(window, "b");
+                c = OpenTab(window, "c");
+                RunJobs(window);
+
+                var start = Center(window, FindTabBorder(window, c.Tab));
+                var aCenter = Center(window, FindTabBorder(window, a.Tab));
+                var bCenter = Center(window, FindTabBorder(window, b.Tab));
+
+                window.MouseDown(start, MouseButton.Left);
+                // 拖到 a、b 之间：c 换位到 b 之前，拖动未结束。
+                window.MouseMove(new Point((aCenter.X + bCenter.X) / 2, start.Y), RawInputModifiers.LeftMouseButton);
+                RunJobs(window);
+                Assert.Equal(new[] { a.Tab, c.Tab, b.Tab }, viewModel.Tabs);
+
+                // 拖动中被拖标签的容器节点 Z 序提升，其余保持 0。
+                Assert.True(FindTabContainer(window, c.Tab).ZIndex > 0, "被拖标签应提升 Z 序");
+                Assert.Equal(0, FindTabContainer(window, a.Tab).ZIndex);
+                Assert.Equal(0, FindTabContainer(window, b.Tab).ZIndex);
+
+                window.MouseUp(new Point((aCenter.X + bCenter.X) / 2, start.Y), MouseButton.Left);
+                RunJobs(window);
+                // 松手后 Z 序立即恢复（定时器只管位移，不管 Z 序）。
+                Assert.Equal(0, FindTabContainer(window, c.Tab).ZIndex);
+                Assert.Equal(0, FindTabContainer(window, a.Tab).ZIndex);
+                Assert.Equal(0, FindTabContainer(window, b.Tab).ZIndex);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+            a?.Dispose();
+            b?.Dispose();
+            c?.Dispose();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task UI13_PanelFlagsZOrderResortOnZIndexChange()
+    {
+        // 机制验证：子节点 ZIndex 变非零后，父 Panel 进入 Z 序排序状态
+        // （Avalonia 12：Visual.ZIndex 变更 → 父节点 HasNonUniformZIndexChildren
+        // + Renderer.RecalculateChildren，渲染层按 ZIndex 排序绘制顺序）——
+        // 这是「被拖标签盖在重叠邻居之上」的框架前提。
+        // headless 环境无像素级合成（RTB 不 rasterize 填充），故用状态级反射验证。
+        using var env = new TestEnvironment();
+        Window? window = null;
+        try
+        {
+            await env.RunAsync(async () =>
+            {
+                var red = new Border { Background = Brushes.Red, Width = 40, Height = 40 };
+                var blue = new Border { Background = Brushes.Blue, Width = 40, Height = 40 };
+                var grid = new Grid { Width = 100, Height = 100, Children = { red, blue } };
+                window = new Window { Content = grid, Width = 100, Height = 100 };
+                window.Show();
+                Dispatcher.UIThread.RunJobs();
+                grid.UpdateLayout();
+
+                red.ZIndex = 100;
+                Dispatcher.UIThread.RunJobs();
+
+                var flag = (bool)typeof(Visual)
+                    .GetProperty("HasNonUniformZIndexChildren",
+                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                    .GetValue(grid)!;
+                Assert.True(flag, "子节点 ZIndex 非零后父 Panel 应进入 Z 序排序状态");
+                Assert.Equal(100, red.ZIndex);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
     // ---- helpers（与 MainWindowHeadlessTests 同一套路） ----
 
     private static MainWindow CreateWindow()
@@ -382,6 +480,21 @@ public sealed class TabDragReorderTests
     {
         Dispatcher.UIThread.RunJobs();
         window.UpdateLayout();
+    }
+
+    /// <summary>找指定 tab 在标签条面板中的直接子节点（Z 序设在该节点上）。</summary>
+    private static Visual FindTabContainer(MainWindow window, TerminalTab tab)
+    {
+        var v = (Visual)FindTabBorder(window, tab);
+        while (true)
+        {
+            var parent = v.GetVisualParent();
+            if (parent is Panel)
+            {
+                return v;
+            }
+            v = parent!;
+        }
     }
 
     private sealed record TestTerminal(TerminalTab Tab, TerminalControl Terminal, InMemoryPty Pty)
