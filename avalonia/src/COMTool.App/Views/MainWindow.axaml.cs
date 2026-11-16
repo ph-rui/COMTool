@@ -459,6 +459,15 @@ public partial class MainWindow : Window
         {
             _ = RunR66SelfTestAsync();
         }
+        // --selftest-r67：实机自检 r67 标签拖动换位（实时换位）。开三个假 tab
+        // （本地终端/COM99 串口/devuser@192.0.2.48 SSH，即用户截图场景），在标签条上
+        // 模拟「按下→3px（阈值内不换）→10px（开拖）→越过相邻中线（实时换位）→松开」，
+        // 断言顺序 a,b,c→a,c,b→c,a,b、选中不变、dragging 样式随开拖/松开生效、
+        // 普通点击不换顺序。落盘 r67-tabs.png。
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r67"))
+        {
+            _ = RunR67SelfTestAsync();
+        }
     }
 
     private volatile bool _portScanBusy;
@@ -10100,6 +10109,213 @@ public static class ClipCheck {
     private sealed record DetachedTabState(Window Window, int Index)
     {
         public bool SuppressReattach { get; set; }
+    }
+
+    /// <summary>
+    /// <c>--selftest-r67</c>：实机自检 r67 标签拖动换位（实时换位，MobaXterm/Chrome 式）。
+    /// 开三个假 tab（本地终端/COM99 串口/devuser@192.0.2.48 SSH，即用户截图场景），
+    /// 在标签条上模拟「按下→3px 位移（阈值内不换位）→10px 位移（开拖）→越过 b 中线
+    /// （实时换位 a,c,b）→越过 a 中线（c,a,b）→松开」，断言顺序、选中项、
+    /// dragging 半透明样式与标签数。结果写 run.log，落盘 r67-tabs.png。
+    /// </summary>
+    private async Task RunR67SelfTestAsync()
+    {
+        try
+        {
+            AppLog.Info("[SelfTest] r67: 等主窗稳定 1.5s 后开 3 个 tab 验证拖动换位");
+            await Task.Delay(1500);
+            if (DataContext is not MainViewModel viewModel)
+            {
+                throw new InvalidOperationException("MainViewModel 未就绪");
+            }
+
+            var t1 = CreateTerminal();
+            var aTab = new TerminalTab
+            {
+                Title = "local-a",
+                SessionId = "local:r67a",
+                Kind = SessionKind.Local,
+                Content = t1,
+                Terminal = t1,
+                IsAlive = true,
+                CloseAction = () => { },
+            };
+            var t2 = CreateTerminal();
+            var bTab = new TerminalTab
+            {
+                Title = "COM99",
+                SessionId = "serial:r67b",
+                Kind = SessionKind.Serial,
+                Content = t2,
+                Terminal = t2,
+                IsAlive = true,
+                CloseAction = () => { },
+            };
+            var t3 = CreateTerminal();
+            var cTab = new TerminalTab
+            {
+                Title = "devuser@192.0.2.48",
+                SessionId = "ssh:r67c",
+                Kind = SessionKind.Ssh,
+                Content = t3,
+                Terminal = t3,
+                IsAlive = true,
+                CloseAction = () => { },
+            };
+            viewModel.AddTab(aTab);
+            viewModel.AddTab(bTab);
+            viewModel.AddTab(cTab);
+            await Task.Delay(500);
+            UpdateLayout();
+
+            var strip = this.FindControl<Grid>("TabStripGrid");
+            if (strip is null)
+            {
+                throw new InvalidOperationException("未找到 TabStripGrid");
+            }
+
+            Border FindTab(TerminalTab tab) =>
+                strip.GetVisualDescendants()
+                    .OfType<Border>()
+                    .First(b => ReferenceEquals(b.Tag, tab));
+
+            var win = TopLevel.GetTopLevel(this);
+            if (win is null)
+            {
+                throw new InvalidOperationException("TopLevel 未就绪");
+            }
+
+            Point CenterPt(TerminalTab tab)
+            {
+                var b = FindTab(tab);
+                var p = b.TranslatePoint(new Point(b.Bounds.Width / 2, b.Bounds.Height / 2), win);
+                return p ?? new Point(0, 0);
+            }
+
+            var pointer = new Pointer(Pointer.GetNextFreeId(), PointerType.Mouse, isPrimary: true);
+            string Order() => string.Join(",", viewModel.Tabs.Select(t => t.Title));
+            const string Oabc = "local-a,COM99,devuser@192.0.2.48";
+
+            // ① 普通点击（按下+原地松开，无位移）：只选中，不换顺序。
+            var aCenter = CenterPt(aTab);
+            var aBorder = FindTab(aTab);
+            aBorder.RaiseEvent(new PointerPressedEventArgs(
+                aBorder, pointer, win, aCenter, 0,
+                new PointerPointProperties(RawInputModifiers.LeftMouseButton, PointerUpdateKind.LeftButtonPressed),
+                KeyModifiers.None, clickCount: 1)
+            {
+                RoutedEvent = InputElement.PointerPressedEvent,
+            });
+            await Task.Delay(80);
+            aBorder.RaiseEvent(new PointerReleasedEventArgs(
+                aBorder, pointer, win, aCenter, 0,
+                new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.LeftButtonReleased),
+                KeyModifiers.None, MouseButton.Left)
+            {
+                RoutedEvent = InputElement.PointerReleasedEvent,
+            });
+            await Task.Delay(80);
+            if (Order() != Oabc)
+            {
+                throw new InvalidOperationException($"① 单击不应换位，实际 {Order()}");
+            }
+            AppLog.Info($"[SelfTest] r67: ① 单击无位移: 顺序={Order()} 选中={viewModel.SelectedTab?.Title} OK");
+
+            // ② 按下第 3 个 tab：3px 位移（阈值内）不开拖、不换顺序；10px 开拖但仍在自身区域。
+            var cCenter = CenterPt(cTab);
+            FindTab(cTab).RaiseEvent(new PointerPressedEventArgs(
+                FindTab(cTab), pointer, win, cCenter, 0,
+                new PointerPointProperties(RawInputModifiers.LeftMouseButton, PointerUpdateKind.LeftButtonPressed),
+                KeyModifiers.None, clickCount: 1)
+            {
+                RoutedEvent = InputElement.PointerPressedEvent,
+            });
+            await Task.Delay(60);
+
+            void MoveTo(double x, double y) => strip.RaiseEvent(new PointerEventArgs(
+                InputElement.PointerMovedEvent, strip, pointer, win,
+                new Point(x, y), 0,
+                new PointerPointProperties(RawInputModifiers.LeftMouseButton, PointerUpdateKind.Other),
+                KeyModifiers.None));
+
+            MoveTo(cCenter.X - 3, cCenter.Y);
+            await Task.Delay(60);
+            if (Order() != Oabc)
+            {
+                throw new InvalidOperationException($"② 阈值内不应换位，实际 {Order()}");
+            }
+
+            MoveTo(cCenter.X - 10, cCenter.Y);
+            await Task.Delay(60);
+            if (Order() != Oabc)
+            {
+                throw new InvalidOperationException($"② 开拖未越中线不应换位，实际 {Order()}");
+            }
+            if (!FindTab(cTab).Classes.Contains("dragging"))
+            {
+                throw new InvalidOperationException("② 开拖后被拖 tab 应带 dragging 半透明样式");
+            }
+            AppLog.Info($"[SelfTest] r67: ② 3px 内不换 OK；10px 开拖 OK（dragging 样式生效）顺序={Order()}");
+
+            // ③ 越过 b 中线：c 实时插入 b 之前。
+            var aMid = CenterPt(aTab).X;
+            var bMid = CenterPt(bTab).X;
+            MoveTo((aMid + bMid) / 2, cCenter.Y);
+            await Task.Delay(60);
+            if (Order() != "local-a,devuser@192.0.2.48,COM99")
+            {
+                throw new InvalidOperationException($"③ c 应插入 b 之前，实际 {Order()}");
+            }
+            AppLog.Info($"[SelfTest] r67: ③ 越过 b 中线实时换位: {Order()} OK");
+
+            // ④ 越过 a 中线：c 排到最前。
+            aMid = CenterPt(aTab).X;
+            MoveTo(aMid - 5, cCenter.Y);
+            await Task.Delay(60);
+            if (Order() != "devuser@192.0.2.48,local-a,COM99")
+            {
+                throw new InvalidOperationException($"④ c 应排最前，实际 {Order()}");
+            }
+            AppLog.Info($"[SelfTest] r67: ④ 越过 a 中线实时换位: {Order()} OK");
+
+            // ⑤ 松开：顺序保持、选中项不变（按下时已选 c）、dragging 样式清除。
+            strip.RaiseEvent(new PointerReleasedEventArgs(
+                strip, pointer, win, new Point(aMid - 5, cCenter.Y), 0,
+                new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.LeftButtonReleased),
+                KeyModifiers.None, MouseButton.Left)
+            {
+                RoutedEvent = InputElement.PointerReleasedEvent,
+            });
+            await Task.Delay(80);
+            if (Order() != "devuser@192.0.2.48,local-a,COM99")
+            {
+                throw new InvalidOperationException($"⑤ 松开后顺序应保持 c,a,b，实际 {Order()}");
+            }
+            if (viewModel.SelectedTab?.Title != "devuser@192.0.2.48")
+            {
+                throw new InvalidOperationException($"⑤ 拖动不应改变选中项，当前 {viewModel.SelectedTab?.Title}");
+            }
+            if (FindTab(cTab).Classes.Contains("dragging"))
+            {
+                throw new InvalidOperationException("⑤ 松开后 dragging 样式应清除");
+            }
+            if (viewModel.Tabs.Count != 3)
+            {
+                throw new InvalidOperationException($"⑤ tab 数应为 3，实际 {viewModel.Tabs.Count}");
+            }
+            AppLog.Info($"[SelfTest] r67: ⑤ 松开落位: 顺序={Order()} 选中={viewModel.SelectedTab?.Title} 样式已恢复 OK");
+
+            SaveVisualPng(Content as Visual, "r67-tabs.png");
+            AppLog.Info("[SelfTest] r67: 自检完成 单击不换=OK 阈值内不换=OK 开拖=OK 实时换位(a,c,b→c,a,b)=OK 选中不变=OK 样式恢复=OK，退出");
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(0);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("[SelfTest] r67: 自检失败", ex);
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
+        }
     }
 
     protected override void OnClosed(EventArgs e)
