@@ -2581,6 +2581,48 @@ SFTP14_RowLeftClickStillSelectsTheRow（完整输入管线）覆盖。
 **遗留**：
 - 真实桌面拖动手感（光标形状、跟手延迟、DPI 缩放）需 WIN-20 核对；
 
+### 67.1 换位动画对齐 MobaXterm（2026-11-16，用户 3 张 MobaXterm 截图：图1 未移动 / 图2 移动到一半（被拖标签半透明跟手、其余标签让位）/ 图3 移动过半（落位中））
+
+**用户指认**：r67 的换位是瞬移；MobaXterm 拖动时有动画——被拖标签跟随鼠标，
+其余标签平滑让位。要求对齐。
+
+**实现**（MobaXterm 式：跟手 + 滑动 + 落位，120ms ease-out `1-(1-t)³`）：
+- 拖动中（`OnTabStripPointerMoved` 每次移动）：
+  - 先量各标签「视觉中线」（含进行中的位移）→ 清掉全部 RenderTransform 回布局位
+    → 用视觉中线算目标索引（`TabReorderIndex` 语义不变）→ 换位 `MoveTab`；
+  - 其余标签：从「原视觉位置」滑向「新布局槽位」，同步落初始位移（不等计时器首
+    tick），由 16ms `DispatcherTimer` 按 ease-out 推进；连续换位从当前位置续接，
+    不跳变；
+  - 被拖标签：不走计时器，`RenderTransform.X = 指针X − 当前槽位中线`，标签中心恒停
+    指针下（跟手零延迟）。
+- 松手（`EndTabDrag`）：被拖标签从当前跟手偏移滑回槽位（同款 120ms）；计时器在
+  无活跃动画时自停。
+- 标签在动画中途被关闭/脱离：tick 里检测 Border 已脱离视觉树则静默丢弃。
+- 踩坑：Avalonia 12.1.4 移除了旧 `IAnimatable`/`Animate` API（反射确认不存在，
+  动画系统换成 `Avalonia.Animation.*` 组合式 API），故手驱 DispatcherTimer +
+  `TranslateTransform`，不依赖新动画 API；滑动位移必须同步落初始值，否则 headless
+  测试在首个 timer tick 前断言会拿到 null（已踩，复绿）。
+
+**测试（10 项全过，含 r67 原 8 项）**：
+- 新增 headless 2 项：UI13_DragTransformsFollowAndSettle（换位后拖动中：被拖标签
+  RenderTransform 跟手位移非零 + 被挤开标签滑动位移非零；松手后轮询 ≤2s 全部
+  位移清零、顺序 [a,c,b]、选中不变）、UI13_ClickWithoutMoveLeavesNoTransform
+  （单击不产生任何位移残留）
+
+**gate**：全量 verify.sh 2026-11-16T07:41:55Z 全 PASS（build / 411 单测 / 342 App
+（含本轮 10 项）/ 15 项 Xvfb E2E / TestGate，共 753 项，结果 /tmp/opencode/r671-gate）。
+
+**VM 实机部署验证**（2026-11-16 15:46，win-x64 AOT 重建 rc=0，wall 113s）：
+- 部署 `C:\Users\zhangrui\COMTool-Avalonia-AOT\COMTool.App.exe`
+  SHA256 = `37bb315ea562ba73c0c9746cc67b0e908deb76d6ded545ab6fe77a78b9edbff2`
+- `--selftest-r67` 全绿（含动画断言）：①②③④ 换位路径同 r67 →
+  ④.5 动画：被拖标签跟手偏移 X=-43、被挤开标签滑动偏移 X=-25.7（均非零）→
+  ⑤ 松开落位顺序/选中/样式 OK → ⑤.5 落位动画完成、全部位移清零
+- 回归 `--selftest-r66` PASS（翻转/视觉同步/轮询数据/内部路径隔离全 OK）
+- 用户取用包 `C:\Users\zhangrui\COMTool-Avalonia-AOT-r67.zip`
+  （78453311 bytes，SHA256 `81A24D6ACFE8371DB807A711C4C7BA73E9705F78459857FA38BB7180436D5815`）
+- 截图 `r67-tabs.png`（1024x768）已落 VM `%APPDATA%\COMTool-Avalonia\`（本地取证，不入库）
+
 ## 已知偏差（已写入 spec 附录）
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
 2. 热键 .mxtmacros 编码未实测：导出恒 0，导入非 0 忽略+警告
