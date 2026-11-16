@@ -2562,12 +2562,24 @@ SFTP14_RowLeftClickStillSelectsTheRow（完整输入管线）覆盖。
   捕获 API 是 `e.Pointer.Capture(strip)`/`Capture(null)`（无 CapturePointer）；
   `VisualExtensions.TranslatePoint` 返回 `Point?`（用 `?.Value`/`HasValue`）。
 
-**gate**：全量 verify.sh 2026-11-16T06:11:27Z 全 PASS（build / 411 单测 / 340 App
-（含本轮 8 项）/ 15 项 Xvfb E2E / TestGate，共 751 项，结果 /tmp/opencode/r67-gate）。
+**gate**：全量 verify.sh 2026-11-16T06:50:47Z（HEAD `085a942`，含本轮自检代码）全 PASS
+（build / 411 单测 / 340 App（含本轮 8 项）/ 15 项 Xvfb E2E / TestGate，共 751 项，
+结果 /tmp/opencode/r67-gate3）。
+
+**VM 实机部署验证**（2026-11-16 14:44，win-x64 AOT 重建 rc=0，wall 114s）：
+- 部署 `C:\Users\zhangrui\COMTool-Avalonia-AOT\COMTool.App.exe`
+  SHA256 = `e540cbe482f3118b863fd10a7c6e269ace92833000459b1b06473ba6a43de29b`
+- `--selftest-r67` 全绿：① 单击无位移不换（顺序 local-a,COM99,devuser@192.0.2.48）→
+  ② 3px 内不换、10px 开拖且 dragging 半透明生效 → ③ 越过 b 中线实时换位
+  `local-a,devuser@192.0.2.48,COM99` → ④ 越过 a 中线排最前
+  `devuser@192.0.2.48,local-a,COM99` → ⑤ 松开落位、选中项不变、样式恢复、标签数 3 不变
+- 回归 `--selftest-r66` PASS（翻转/视觉同步/轮询数据/内部路径隔离全 OK）
+- 用户取用包 `C:\Users\zhangrui\COMTool-Avalonia-AOT-r67.zip`
+  （78430379 bytes，SHA256 `39E500699E27FF2CFF64D4224A1C43168567A1B3A2FEC7BCA76EC1603742A405`）
+- 截图 `r67-tabs.png` 已落 VM `%APPDATA%\COMTool-Avalonia\`（本地取证，不入库）
 
 **遗留**：
 - 真实桌面拖动手感（光标形状、跟手延迟、DPI 缩放）需 WIN-20 核对；
-- VM 实机部署验证待补。
 
 ## 已知偏差（已写入 spec 附录）
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
