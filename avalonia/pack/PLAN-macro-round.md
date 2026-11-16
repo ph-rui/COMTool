@@ -2661,8 +2661,16 @@ SFTP14_RowLeftClickStillSelectsTheRow（完整输入管线）覆盖。
 **gate**：全量 verify.sh 2026-11-16T08:32:14Z 全 PASS（build / 411 单测 / 344 App
 （含本轮 12 项）/ 15 项 Xvfb E2E / TestGate，共 755 项，结果 /tmp/opencode/r672-gate）。
 
-**VM 实机部署验证**：待补（AOT 重建 + `--selftest-r67` 新增 ④.5 拖动中
-Z 序断言 + `r67-drag-mid.png` 拖动中截图 + ⑤.5 Z 序归零 + r66 回归）。
+**VM 实机部署验证**（2026-11-16 16:36，win-x64 AOT 增量重建 rc=0，wall 134s）：
+- 部署 `C:\Users\zhangrui\COMTool-Avalonia-AOT\COMTool.App.exe`
+  SHA256 = `d465b2aa4c2c78abcaf1f049cc9fdf0a6866339f407f24adaca3940769fe9e7b`
+- `--selftest-r67` 全绿：①②③④ 换位路径不变 → ④.5 被拖跟手 X=-43、被挤开滑动
+  X=-29.4、**被拖容器 Z=100** → ⑤ 松开落位 OK → ⑤.5 位移清零、**Z 序全部恢复 0**
+- 拖动中截图 `r67-drag-mid.png`（1024x768）视觉确认：被拖标签（半透明）压在
+  邻居之上完整可见，不再被盖住「消失」
+- 回归 `--selftest-r66` PASS
+- 用户取用包 `C:\Users\zhangrui\COMTool-Avalonia-AOT-r67.zip`
+  （78456225 bytes，SHA256 `CD06F71230A46FA59CAC7D1F41A6913EFD9B6AB2100090AC568D66BA3E4D60BB`）
 
 ## 已知偏差（已写入 spec 附录）
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
