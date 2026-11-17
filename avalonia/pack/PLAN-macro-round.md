@@ -2778,6 +2778,43 @@ unit 411 项、app 346 项全 PASS、e2e 15/15、testgate PASS，合计 757 项 
 - 用户取用包 `C:\Users\zhangrui\COMTool-Avalonia-AOT-r67.zip`
   （78460607 bytes，SHA256 `0538E770DEBCCDF00D43A4F155E86D8A42672587DBC4AA589F321D6CB5AFF265`）
 
+### 67.5 标题栏 logo 重绘为加粗提示符（2026-11-17，用户反馈「白色箭头还是发虚」）
+
+**用户反馈**：r67.4 放大居中后，logo 里白色 `>` 箭头在 30px 下仍然发虚，
+要求「设计几个 logo，挑一个」。
+
+**方案**（512px 母版统一几何：同款圆角深蓝渐变底，仅图形不同；对比表含
+512 细节 / 30px 实机 / 4x 放大三档）：
+- A 原样基准；B 加粗单箭头（去横线）；**C 加粗提示符 `>_`（保留原版构图）**；
+  D 字体粗体箭头+横条；E 实心三角+横条。
+- 用户选定 **C**：白色 `>` 描边 28→56@512（30px 下 ~1.4px→~3px 笔画），
+  浅蓝横条 26→48@512 并加圆端，整体与原版同构图、同配色
+  （白 #f8f8f8、蓝 #48b8f8、底 #123A64→#0C2A4A 渐变）。
+
+**资产**：
+- `Assets/logo.png` 替换为 C 母版（512×512，alpha bbox/圆角半径与原版一致，
+  边界无亮色像素——满足 `AssertNoBrightOuterFringe`）。
+- `Assets/logo.ico` 按同款母版重新生成 7 档 16/24/32/48/64/128/256
+  （窗口/任务栏图标同步更新，尺寸列表与原文件一致）。
+
+**测试**：`UI01_TitleBarUsesSquareTerminalIcon` 8 项全过（PNG 512×512、
+无亮外圈、ICO 头与 16/24/256 尺寸、30px/2.5 边距、渲染居中 ≤0.5px）。
+
+**gate**：`r675-gate-final` 全绿（2026-11-17T12:1xZ）：restore/build PASS、unit 411、
+**app 346 全 PASS**、test-list 346、e2e 15/15、testgate PASS，合计 757 项 RESULT PASS。
+（本环境被清理后重建 dotnet/Xvfb/openbox 依赖；首跑 e2e 因 e2e-deps 里的 openbox
+缺主题/库文件起不来，改回 `WM_BIN=mutter` 后一次通过。openbox 不再作为 e2e WM。）
+
+**VM 实机部署验证**（2026-11-17，AOT win-x64）：
+- 增量 bundle `a12ae56..634f0d2` 同步，AOT 重建 89s `publish rc=0`；
+  `COMTool.App.exe` SHA256 `88d419d411c21ccdd8933c5b32ddbcb73aba74696f4b26484f5d672828611574`
+- `--selftest-r67`（①–⑥ 含拖动/裁剪回归）与 `--selftest-r66` 全绿
+- 标题栏像素实测（r67-tabs.png，100% DPI）：新 logo 深色区 x=7..34 y=3..30，
+  **中心 (20.5,16.5) 与标题文字中心 16.5 完全对齐**（r67.4 时 logo 15.5 vs 文字 17.0）；
+  白色像素 730（加粗前 ~200 量级），`>` 与下划线在 30px 下笔画约 3px，边缘清晰
+- 用户取用包 `C:\Users\zhangrui\COMTool-Avalonia-AOT-r67.zip`
+  （SHA256 `49346AD4957B4E70569F6881F7B2A8B9D9A9EB1A14D0B831E7CBE16F631BAA36`）
+
 ## 已知偏差（已写入 spec 附录）
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
 2. 热键 .mxtmacros 编码未实测：导出恒 0，导入非 0 忽略+警告
