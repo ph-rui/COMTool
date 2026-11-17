@@ -83,11 +83,14 @@
         </ContextMenu>
       </Border.ContextMenu>
       <Grid ColumnDefinitions="40,104,40,*,35,35,35">
+        <!-- r67.4：28px → 30px（用户反馈图标偏小、边缘发虚：logo.png 内建 5.5%
+             透明边距，28px 槽内有效图形仅 ~24px），Margin 上下 2.5 精确居中，
+             与标题文字视觉中心（~17px @35px 栏高）对齐。 -->
         <Image Grid.Column="0"
                Name="TitleBarLogo"
                Source="/Assets/logo.png"
-               Width="28" Height="28"
-               Margin="6,3,0,4"
+               Width="30" Height="30"
+               Margin="6,2.5,0,2.5"
                HorizontalAlignment="Left"
                VerticalAlignment="Center"
                Stretch="Uniform" />

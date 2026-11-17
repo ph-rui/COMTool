@@ -59,12 +59,24 @@ public sealed class NewSessionMenuTests
 
                 var image = Assert.IsType<Image>(window.FindControl<Image>("TitleBarLogo"));
                 Assert.NotNull(image.Source);
-                Assert.Equal(28, image.Width);
-                Assert.Equal(28, image.Height);
+                // r67.4：30px 显示、上下边距相等（2.5）→ logo 在 35px 标题栏内精确垂直居中，
+                // 与标题文字视觉中心对齐（用户反馈 28px 偏小发虚、位置偏上）。
+                Assert.Equal(30, image.Width);
+                Assert.Equal(30, image.Height);
                 Assert.Equal(6, image.Margin.Left);
-                Assert.Equal(3, image.Margin.Top);
+                Assert.Equal(2.5, image.Margin.Top);
                 Assert.Equal(0, image.Margin.Right);
-                Assert.Equal(4, image.Margin.Bottom);
+                Assert.Equal(2.5, image.Margin.Bottom);
+
+                // 渲染几何回归：logo 盒子中心与标题栏中心偏差 ≤0.5px（防「太靠上」回潮）。
+                var titleBar = window.FindControl<Border>("TitleBar");
+                Assert.NotNull(titleBar);
+                Dispatcher.UIThread.RunJobs();
+                window.UpdateLayout();
+                var logoC = image.Bounds.Y + image.Bounds.Height / 2.0;
+                var barC = titleBar.Bounds.Y + titleBar.Bounds.Height / 2.0;
+                Assert.True(Math.Abs(logoC - barC) <= 0.5,
+                    $"logo 应垂直居中于标题栏：logo 中心 {logoC:0.##}，栏中心 {barC:0.##}");
 
                 using var png = AssetLoader.Open(
                     new Uri("avares://COMTool.App/Assets/logo.png"));
