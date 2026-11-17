@@ -2737,6 +2737,47 @@ MSBuild 节点服务器后重跑即全绿。
   `27c5c74`，fetch 报缺前置提交，实际未更新）；改用 `27c5c74..HEAD` 后 AOT
   构建完成，但 SSH 会话被重置，改用续跑脚本从镜像步骤继续。
 
+### 67.4 标题栏 logo 尺寸与垂直居中微调（2026-11-17，用户反馈截图）
+
+**用户反馈**：左上角 LOGO「太靠上了」，且「有点虚、感觉不清晰」，问是不是 DPI 问题。
+
+**排查**：
+- VM 100% DPI 实机截图（r67-tabs.png）像素测量：logo 深色区 y=4..27（中心 15.5）、
+  标题文字中心 y≈17.0、标题栏（35px）中心 17.5 → 当前布局 logo 仅偏上约 1~2px，
+  基本居中；
+- logo.png 为 512×512，内建约 5.5% 透明边距（alpha bbox 28..487），28px 槽内
+  有效图形仅 ~24px → 图标偏小、细节（`>` 笔画 ~2px）在屏幕上偏软，这是「虚」
+  的主因，与 DPI 缩放无关；
+- `app.manifest` 已声明 `PerMonitorV2` DPI 感知（此前轮次已修），缩放桌面上
+  不会被位图拉伸；
+- 用户截图为缩放后的局部裁剪，绝对几何与当前 XAML 不符，不排除其窗口位置
+  或截图缩放放大观感；按「略偏上 + 偏小」做保守修正。
+
+**修改**：
+- `MainWindow.axaml`：`TitleBarLogo` 显示尺寸 28px → 30px，`Margin` 由
+  `6,3,0,4` 改为 `6,2.5,0,2.5`（上下等距 → 盒子在 35px 栏内精确居中，
+  有效图形中心 ≈17.2px，与文字中心 17.0 对齐）。
+
+**测试**：
+- `NewSessionMenuTests.UI01_TitleBarUsesSquareTerminalIcon` 断言同步
+  （30/30、margin 6,2.5,0,2.5），并新增渲染几何回归：logo 盒子中心与
+  TitleBar 中心偏差 ≤0.5px（防「太靠上」回潮）。
+
+**gate**：2026-11-17T02:55Z 全绿（`/tmp/opencode/r674-gate`）：restore/build PASS、
+unit 411 项、app 346 项全 PASS、e2e 15/15、testgate PASS，合计 757 项 RESULT PASS
+（本次一次通过，未再遇宿主偶发崩溃）。
+
+**VM 实机部署验证**（2026-11-17，AOT win-x64）：
+- 增量 bundle `bd6e010..a12ae56` 同步，AOT 重建 119s `publish rc=0`；
+  `COMTool.App.exe` SHA256 `319cb7526304b24671f150034710f404b40db169ee4860e7bcbe24861323795d`
+- `--selftest-r67`（含 ⑥）与 `--selftest-r66` 回归全绿
+- 标题栏像素实测（r67-tabs.png，100% DPI）：
+  - 旧版（28px/margin 3,4）：logo 深色区 y=4..27 中心 15.5，文字中心 17.0 → 偏上 1.5px
+  - 新版（30px/margin 2.5,2.5）：logo 深色区 y=4..29 中心 16.5，文字中心 17.0 → 偏差 0.5px，
+    上下空隙 4px/5px 均衡，有效图形 24px→26px
+- 用户取用包 `C:\Users\zhangrui\COMTool-Avalonia-AOT-r67.zip`
+  （78460607 bytes，SHA256 `0538E770DEBCCDF00D43A4F155E86D8A42672587DBC4AA589F321D6CB5AFF265`）
+
 ## 已知偏差（已写入 spec 附录）
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
 2. 热键 .mxtmacros 编码未实测：导出恒 0，导入非 0 忽略+警告
