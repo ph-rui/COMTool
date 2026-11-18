@@ -2877,6 +2877,115 @@ publish（97s）后 robocopy /MIR 到运行目录。
 - `COMTool-Avalonia-AOT-r67.zip` 已刷新（78,432,985 字节；本次首跑
   Compress-Archive 因 robocopy 刚写完文件报「流不可读」，复跑 ZIP_OK）。
 
+### 67.7 标题栏小图标 + MobaXterm 式常显终端滚动条（2026-11-18，用户反馈「logo 太大」+ 录屏 `test.mp4`）
+
+**用户反馈**：
+1. 标题栏 logo 在 r67.4/r67.5 放大到 30px 后仍「太大」，希望是 MobaXterm 那种
+   小图标（用户确认方案 C 的像素预演：19px + 标题左移）。
+2. 终端右侧要有 MobaXterm 那样的滚动条：鼠标左键**按住**轨道空白处（滑块上方）
+   会持续向上翻页（参考录屏 `/home/zlgmcu/tftp_dir/test.mp4`）。
+
+**录屏实测**（1920×784、24fps、13.8s，逐帧取右缘 16px 列 + 鼠标红色像素定位）：
+- 滚动条贴窗口右缘，宽 **16px**：浅灰轨道 `#EDEDED`、上下箭头、滑块 `#BDBDBD`
+  高 33px（视口约占 1/10 时）；
+- 在滑块**上方**按住：不动约 0.3–0.7s，然后滑块 724→707→691→624→557→490→423，
+  **每 250ms 一步**（约 4 页/秒、每页 67px≈整屏），松手立即停；
+- 滑块下方按住同理向下；拖动滑块正常。
+
+**根因**：库模板（Iciclecreek 4.1.7）本来就有 `PART_ScrollBar`
+（`Grid ColumnDefinitions="*,Auto"`），并已实现「ScrollBar ↔ 回滚位置」双向同步，
+`PART_PageUpButton`/`PART_PageDownButton` 是 `RepeatButton`（按住自动重复）。
+但：
+1. 我们在 `MainWindow.CreateTerminal` 的 `HideTerminalScrollBars` 里把它
+   `IsVisible=false; Width=0`，所以永远看不见——这恰好违背库的设计意图
+   （库注释明确写「隐藏列会把终端拉宽并 resize PTY，全屏程序会画成空白」）；
+2. Fluent 的滚动条平时全透明（按钮/轨道 `Opacity=0`），悬停才浮现，
+   即使显示也不是 MobaXterm 的常显效果；
+3. 库只设 `Minimum/Maximum/ViewportSize`，`LargeChange` 是 RangeBase 默认 10 行，
+   点一次只滚 10 行而不是一整屏；按钮重复节奏是 300/100ms（按住会飞）。
+
+**修复（logo）**：
+- `MainWindow.axaml`：`Image` 30→**19px**、`Margin="6,8,0,8"`
+  （35-19=16，上下各 8 整数像素，垂直居中且不落半像素 → 不抗锯齿发虚）；
+  网格 `40,104,40,*,35,35,35` → `25,119,40,*,35,35,35`：标题文字起点 47→30
+  紧贴图标，pin/窗口按钮列起点仍是 144（位置不变）。素材不变。
+
+**修复（滚动条）**：
+- `AppStyles.axaml` 新增 `TerminalScrollBarTheme` / `TerminalScrollBarThumbTheme` /
+  `TerminalScrollBarButtonTheme`：16px 常显、行按钮 16px + 8px 箭头、
+  滑块满宽（不套 Fluent 的 0.5 缩放变换），颜色走 `DynamicResource`；
+  选择器 `terminal|TerminalControl ScrollBar` 只作用于终端模板内的滚动条。
+- `ThemeLight.axaml` / `ThemeDark.axaml` 各加 7 个 `TerminalScrollBar*Brush`：
+  浅色主题照录屏取色（轨道 `#EDEDED`、滑块 `#BDBDBD`、箭头 `#505050`），
+  深色主题配套深色（轨道 `#2D2D2D`、滑块 `#5A5A5A`）。
+- `CreateTerminal`：`HideTerminalScrollBars` → `ApplyTerminalScrollBar`；
+  `AttachedToVisualTree`（Loaded 优先级）+ `TemplateApplied` 各挂一次。
+- `ApplyTerminalScrollBar(ScrollBar)`：固定 16px；`LargeChange = ViewportSize`
+  并在 `ViewportSize` 变化时重算（一屏翻页随窗口尺寸自适应）；
+  上下翻页按钮 `Delay=300ms` / `Interval=250ms`（对齐录屏）；
+  用 `ConditionalWeakTable` 防重复订阅。
+- `ToggleTerminalScrollBar`（右键「切换终端滚动条」）保留：关掉时 `Width=0`
+  让终端重新分列（既有行为），再打开走同一 `ApplyTerminalScrollBar` 重新装配。
+
+**附带修复（配置损坏自愈）**：本轮首次 VM 自检暴露部署机 `%APPDATA%/COMTool-Avalonia/config.json`
+被清零（8,718 字节全 `0x00`；系统日志 Kernel-Power 41 + 6008：VM 于 15:47
+非正常断电重启），`AppConfigService.Load` 抛异常后 `_config` 置空，
+应用既不读也不写——会话列表永远为空、设置不再落盘（`--selftest-r68` 报
+「MainWindow 未就绪」的直接原因）。现 `Load` 捕获异常：坏文件改名
+`config.json.corrupt.<时间戳>` 留证，按默认配置继续并立刻写回一份可用配置。
+
+**测试**（先红后绿）：
+- `TERM36_ScrollBarAlwaysVisibleAtMobaWidth`：常显 16px、贴终端右缘、
+  `Opacity=1`、轨道 `#EDEDED`、滑块满宽 `#BDBDBD` 且无缩放变换、
+  上下箭头 16px 行高 + 8px 图标。
+- `TERM36_PageClickScrollsOneScreenWithMobaRepeat`：`LargeChange == ViewportSize`、
+  滑块与回滚位置同步、单击翻一整屏（上/下）、按钮 300/250。
+- `TERM36_ScrollBarReservesWidthWithoutScrollback`：无回滚→有回滚，宽度恒 16、
+  终端列数不变（不抖动）。
+- `TERM29_ScrollbarToggleFlipsVisibility` 加宽断言：默认可见 16px →
+  toggle 后 `IsVisible=false`/`Width=0` → 再 toggle 回到 16px 且重新装配。
+- `UI01_TitleBarUsesSquareTerminalIcon`：19px/`6,8,0,8`、≤60% 栏高、
+  上下留白 ≥6、整数像素、文字与图标间距 0–10px。
+- `CFG01_CorruptConfigIsQuarantinedAndReset`：全 0x00 的 config.json →
+  改名留证 + 默认配置可用 + 新文件可解析（坏文件字节保持原样）。
+- 红验证：临时把选择器改成不匹配 + `LargeChange` 写回 10，三条 TERM36 全失败；
+  还原后全绿（App 354 项）。
+
+**gate**（`pack/verify.sh --results /tmp/opencode/r677-gate3`，2026-11-18T08:31Z）：全绿。
+restore PASS、build PASS、unit-tests PASS（411 项 / 6 项目）、app-tests PASS
+（355 项，原 351 + 3 滚动条/logo + 1 配置自愈）、test-list PASS（App 355 项）、
+e2e PASS（15/15）、testgate PASS，合计 766 项检查全过。首跑 `r677-gate` 因
+App 宿主原生崩溃（exit 139，已知环境抖动）作废，复跑即绿。
+
+**VM 实机部署验证**（2026-11-18，`C:\Users\zhangrui\COMTool-Avalonia-AOT`）：
+bundle `comtool-r677.bundle`（`33db4f2..1539b07`）→ HEAD `1539b07`，随后
+`comtool-r677b.bundle`（`1539b07..03d375d`，配置自愈 + r69 断言放宽）→ HEAD
+`03d375d`；win-x64 AOT publish 129s `rc=0`，robocopy /MIR 到运行目录。
+- 运行目录 `COMTool.App.exe` SHA256
+  `173d3cd90dfb7d146bb9546bc87a2be450c5614f185f359c5300596e41ef2a0e`。
+- 首轮 `--selftest-r69` 失败点：`滑块未同步到底部：Value=279 MaxScrollback=281`
+  ——写缓冲区后仍有 1–2 行在排布阶段滚入回滚区，不是同步缺陷；断言改为
+  「`Value == ViewportY` 且距底部 ≤3 行」后通过。
+- `--selftest-r69`（864×514 窗口，22 行）：① 常显 16px、滑块同步、
+  `LargeChange=22`（一屏）；② 单击 `279→257`（正好一屏）；③ 在滑块上方按住
+  1.2s：`257,235,213,191,169` 连续上翻 **4 次**（每步 22 行 ≈250ms），
+  松手后停在 169 不再变化；`r69-scrollbar.png` 落盘。
+- `r69-scrollbar.png` 像素实测：滚动条 x=833..848（**16px**）、轨道 `#EDEDED`、
+  滑块 `#BDBDBD`、按住时翻页按钮按下态 `#D2D2D2`、上下 16px 行按钮 + 8px 箭头；
+  终端右缘（内容框 4px 白边 + 1px 边框）与 r67.6 一致，未被挤压异常。
+- `r67-tabs.png` 标题栏实测：logo 深蓝盒 x=7..23 / y=9..25（19px 图内 1px 透明边），
+  中心 y=17 vs 栏中心 17.5（≤0.5px），标题文字起点 x=30，pin 图标仍在 x≈170。
+- `--selftest-r67` 回归全过（单击不换/阈值/开拖/实时换位/选中不变/落位动画/
+  不裁剪+二次拖动）；`--selftest-r68` 用真实 COM2 回归全过
+  （断线上膛 → 2s 扫描自动重连 `Connected COM2`）。
+- **配置损坏（环境事件，非本轮代码）**：部署机 `config.json` 为 8,718 字节全
+  `0x00`（系统日志 Kernel-Power 41 + 6008：15:47 非正常断电重启，文件时间 15:41）。
+  自愈逻辑已把它改名为 `config.json.corrupt.2026-11-18_16-33-52` 留证，并写回
+  2,703 字节可用配置；代价是**用户原有会话列表随断电丢失**（本机只剩
+  `config.json.bak-round4` 旧备份，未覆盖），后续设置恢复正常落盘。
+- `COMTool-Avalonia-AOT-r67.zip` 已刷新：78,453,416 字节，
+  SHA256 `d8b6f4f608f70ac6638865d1ad52cdbad35f327b1711ce01adeded81ddf9f6ad`。
+
 ## 已知偏差（已写入 spec 附录）
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
 2. 热键 .mxtmacros 编码未实测：导出恒 0，导入非 0 忽略+警告
