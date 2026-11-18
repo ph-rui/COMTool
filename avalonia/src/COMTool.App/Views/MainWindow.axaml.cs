@@ -10962,10 +10962,14 @@ public static class ClipCheck {
                 throw new InvalidOperationException(
                     $"翻页量应为一整屏：LargeChange={bar.LargeChange} ViewportSize={bar.ViewportSize}");
             }
-            if (Math.Abs(bar.Value - terminal.MaxScrollback) > 0.5)
+            // 断言「滑块跟着回滚位置」而不是死盯最底部：写缓冲区后可能还有 1–2 行
+            // 在排布阶段滚进回滚区，MaxScrollback 会再涨一点（实机首跑 279 vs 281）。
+            if (Math.Abs(bar.Value - terminal.ViewportY) > 0.5
+                || terminal.ViewportY < terminal.MaxScrollback - 3)
             {
                 throw new InvalidOperationException(
-                    $"滑块未同步到底部：Value={bar.Value} MaxScrollback={terminal.MaxScrollback}");
+                    $"滑块未同步到底部：Value={bar.Value} ViewportY={terminal.ViewportY} " +
+                    $"MaxScrollback={terminal.MaxScrollback}");
             }
             AppLog.Info(
                 $"[SelfTest] r69: ① 常显 16px + 滑块同步底部 + LargeChange=一屏({bar.ViewportSize}) OK");

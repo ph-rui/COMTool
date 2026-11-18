@@ -7,6 +7,35 @@ namespace COMTool.App.Tests;
 
 public sealed class SerialHotplugTests
 {
+    /// <summary>r67.7：配置文件损坏（2026-11-18 实机断电后 8.7KB 全 0x00）不能让应用
+    /// 「无配置运行」——坏文件改名留证，按默认配置继续并立刻写回一份可用配置，
+    /// 否则会话列表永远为空、后续设置也不落盘。</summary>
+    [Fact]
+    public void CFG01_CorruptConfigIsQuarantinedAndReset()
+    {
+        using var env = new TestEnvironment();
+        Directory.CreateDirectory(env.AvaloniaConfigDir);
+        var path = Path.Combine(env.AvaloniaConfigDir, "config.json");
+        File.WriteAllBytes(path, new byte[256]);
+
+        var service = AppConfigService.Load();
+
+        Assert.Equal(path, service.ConfigPath);
+        Assert.NotNull(service.Config);
+        Assert.Equal(3, service.Config.Version);
+        Assert.Empty(service.Config.SerialSessions);
+
+        // 坏文件改名留证（含时间戳），原路径已是可解析的新配置。
+        var quarantined = Directory.GetFiles(env.AvaloniaConfigDir, "config.json.corrupt.*");
+        Assert.Single(quarantined);
+        // 取证文件保持原字节（全 0x00），便于事后确认损坏形态。
+        Assert.All(File.ReadAllBytes(quarantined[0]), b => Assert.Equal(0, b));
+
+        var rewritten = ComtoolConfig.Load(path);
+        Assert.Equal(3, rewritten.Version);
+        Assert.Empty(rewritten.SerialSessions);
+    }
+
     [Fact]
     public void SER03_MissingPortDoesNotDeleteRememberedSerialSession()
     {

@@ -75,7 +75,42 @@ public sealed class AppConfigService
     {
         var import = PythonConfigImporter.ImportIfMissing();
         var path = ConfigPaths.AvaloniaConfigFile();
-        var config = ComtoolConfig.Load(path);
+        ComtoolConfig config;
+        try
+        {
+            config = ComtoolConfig.Load(path);
+        }
+        catch (Exception ex)
+        {
+            // r67.7：配置读不出来（断电/强杀后文件被清零，实机 2026-11-18 遇到
+            // 8.7KB 全 0x00）时不能让应用「无配置运行」——_config 为 null 后既不读
+            // 也不写，用户看到的永远是空会话列表、之后改的设置也不落盘。
+            // 把坏文件改名留证，按默认配置继续并立刻写一份可用的配置。
+            AppLog.Error("Config unreadable; quarantining and resetting to defaults", ex);
+            var quarantine = $"{path}.corrupt.{DateTime.Now:yyyy-MM-dd_HH-mm-ss}";
+            try
+            {
+                if (File.Exists(path))
+                {
+                    File.Move(path, quarantine, overwrite: true);
+                }
+            }
+            catch (Exception moveEx)
+            {
+                AppLog.Error($"Failed to quarantine corrupt config to {quarantine}", moveEx);
+            }
+
+            config = new ComtoolConfig();
+            try
+            {
+                config.Save(path);
+            }
+            catch (Exception saveEx)
+            {
+                AppLog.Error("Failed to write default config after corruption", saveEx);
+            }
+        }
+
         var service = new AppConfigService(config, path)
         {
             ImportResult = import,
