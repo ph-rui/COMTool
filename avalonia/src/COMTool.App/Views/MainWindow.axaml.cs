@@ -488,9 +488,9 @@ public partial class MainWindow : Window
             _ = RunR68SelfTestAsync();
         }
         // --selftest-r69：实机自检 r69 终端滚动条（MobaXterm 式）：开本地终端灌满回滚，
-        // 断言滚动条常显 16px、滑块同步到底部、点一次翻一整屏；再在滑块上方按住左键
-        // 1.2s，断言回滚位置每 250ms 连续上翻（≥3 次）且松手后立刻停止。
-        // DispatcherTimer 的重复在 headless 不跑，必须实机验。落盘 r69-scrollbar.png。
+        // 断言滚动条常显 16px、滑块同步到底部、按下轨道空白立即翻一整屏（松开不重复）；
+        // 再按住 1.5s，断言 350ms 后逐行连续滚动（单次采样 ≤2 行、总计 ≥40 行）、
+        // 松手立刻停。DispatcherTimer 在 headless 不跑，必须实机验。落盘 r69-scrollbar.png。
         if (Environment.GetCommandLineArgs().Contains("--selftest-r69"))
         {
             _ = RunR69SelfTestAsync();
@@ -2227,10 +2227,11 @@ public partial class MainWindow : Window
     /// r67.7：把库模板里的滚动条变成 MobaXterm 式的常显滚动条。
     /// 宽度/配色由 AppStyles 的 TerminalScrollBarTheme 负责；这里只补两件样式
     /// 表达不了的事：
-    /// 1) <c>LargeChange = ViewportSize</c>——点一下/按住重复一次滚一整屏
+    /// 1) <c>LargeChange = ViewportSize</c>——点一下翻一整屏
     ///    （库只设了 Minimum/Maximum/ViewportSize，LargeChange 是 RangeBase 默认 10 行）；
-    /// 2) 上下翻页按钮的重复节奏 300ms 首延迟 + 250ms 间隔，对齐 MobaXterm 实机
-    ///    （Avalonia 默认 300/100 太快，按住会飞）。
+    /// 2) r67.8：按住轨道空白区的连续滚动交给 <see cref="TerminalSmoothPager"/>
+    ///    （350ms 首延迟后每 16ms 一行；r67.7 的 300/250 整屏重复已被替换，用户反馈
+    ///    那样“一顿一顿”）。
     /// </summary>
     internal static void ApplyTerminalScrollBar(TerminalControl terminal)
     {
@@ -2258,13 +2259,12 @@ public partial class MainWindow : Window
             };
         }
 
-        foreach (var button in scrollBar.GetVisualDescendants().OfType<RepeatButton>())
+        // r67.8：按住翻页区 → 先翻一屏，350ms 后逐行连续滚动，松手即停。
+        // 翻页区按下手势由平滑滚动接管（隧道阶段 Handled），RepeatButton 自己的
+        // 300/250 整屏重复不会再触发，因此这里不再设置 Delay/Interval。
+        if (scrollBar.FindAncestorOfType<TerminalControl>() is { } terminal)
         {
-            if (button.Name is "PART_PageUpButton" or "PART_PageDownButton")
-            {
-                button.Delay = 300;
-                button.Interval = 250;
-            }
+            TerminalSmoothPager.Attach(terminal, scrollBar);
         }
     }
 
@@ -10944,6 +10944,11 @@ public static class ClipCheck {
             terminal.ViewportY = terminal.MaxScrollback;
             await Task.Delay(250);
             UpdateLayout();
+            // 排布/换列重排阶段可能继续把行滚进回滚区（实机 279→281、Xvfb 284→291），
+            // 最后一次贴底仍可能落后几行：这里只要求「贴底 12 行以内 + 滑块等于 ViewportY」。
+            terminal.ViewportY = terminal.MaxScrollback;
+            await Task.Delay(150);
+            UpdateLayout();
 
             var bar = terminal.GetVisualDescendants().OfType<ScrollBar>().SingleOrDefault()
                 ?? throw new InvalidOperationException("终端模板里没有 ScrollBar");
@@ -10965,7 +10970,7 @@ public static class ClipCheck {
             // 断言「滑块跟着回滚位置」而不是死盯最底部：写缓冲区后可能还有 1–2 行
             // 在排布阶段滚进回滚区，MaxScrollback 会再涨一点（实机首跑 279 vs 281）。
             if (Math.Abs(bar.Value - terminal.ViewportY) > 0.5
-                || terminal.ViewportY < terminal.MaxScrollback - 3)
+                || terminal.ViewportY < terminal.MaxScrollback - 12)
             {
                 throw new InvalidOperationException(
                     $"滑块未同步到底部：Value={bar.Value} ViewportY={terminal.ViewportY} " +
@@ -10979,11 +10984,8 @@ public static class ClipCheck {
                 ?? throw new InvalidOperationException("找不到 PART_PageUpButton");
             var thumb = bar.GetVisualDescendants().OfType<Thumb>().FirstOrDefault()
                 ?? throw new InvalidOperationException("找不到 Thumb");
-            if (pageUp.Delay != 300 || pageUp.Interval != 250)
-            {
-                throw new InvalidOperationException(
-                    $"按住节奏应为 300/250：{pageUp.Delay}/{pageUp.Interval}");
-            }
+            var pager = TerminalSmoothPager.ForTest(bar)
+                ?? throw new InvalidOperationException("平滑翻页未装配到滚动条");
 
             var root = (Visual)this;
             var win = TopLevel.GetTopLevel(this)
@@ -10992,76 +10994,97 @@ public static class ClipCheck {
             var thumbTop = thumb.TranslatePoint(new Point(0, 0), root)!.Value.Y;
             var pageUpTop = pageUp.TranslatePoint(new Point(0, 0), root)!.Value.Y;
             var press = new Point(barCenterX, Math.Max(pageUpTop + 4, thumbTop - 40));
+            var pointer = new Pointer(Pointer.GetNextFreeId(), PointerType.Mouse, isPrimary: true);
 
-            // ② 点一次 = 翻一整屏。
+            void PressPageUp()
+            {
+                pageUp.RaiseEvent(new PointerPressedEventArgs(
+                    pageUp, pointer, win, press, 0,
+                    new PointerPointProperties(
+                        RawInputModifiers.LeftMouseButton, PointerUpdateKind.LeftButtonPressed),
+                    KeyModifiers.None, clickCount: 1)
+                {
+                    RoutedEvent = InputElement.PointerPressedEvent,
+                });
+            }
+
+            void ReleasePageUp()
+            {
+                pageUp.RaiseEvent(new PointerReleasedEventArgs(
+                    pageUp, pointer, win, press, 0,
+                    new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.LeftButtonReleased),
+                    KeyModifiers.None, MouseButton.Left)
+                {
+                    RoutedEvent = InputElement.PointerReleasedEvent,
+                });
+            }
+
+            // ② 按下即翻一整屏，松开不再重复（r67.7 的 RepeatButton Click 已被接管）。
             var beforeClick = terminal.ViewportY;
-            pageUp.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            await Task.Delay(200);
+            PressPageUp();
+            await Task.Delay(120);
             var afterClick = terminal.ViewportY;
             if (beforeClick - afterClick != (int)bar.ViewportSize)
             {
                 throw new InvalidOperationException(
-                    $"点一次应翻一屏：{beforeClick} -> {afterClick}（屏 {bar.ViewportSize}）");
+                    $"按下应翻一屏：{beforeClick} -> {afterClick}（屏 {bar.ViewportSize}）");
+            }
+            ReleasePageUp();
+            await Task.Delay(150);
+            if (terminal.ViewportY != afterClick)
+            {
+                throw new InvalidOperationException(
+                    $"松开不应再翻一屏：{afterClick} -> {terminal.ViewportY}");
             }
             AppLog.Info(
-                $"[SelfTest] r69: ② 单击翻一整屏 {beforeClick}->{afterClick} OK");
+                $"[SelfTest] r69: ② 按下翻一整屏 {beforeClick}->{afterClick}，松开不重复 OK");
 
-            // ③ 按住滑块上方 1.2s：连续上翻（≥3 次），松手立即停。
-            var pointer = new Pointer(Pointer.GetNextFreeId(), PointerType.Mouse, isPrimary: true);
-            pageUp.RaiseEvent(new PointerPressedEventArgs(
-                pageUp, pointer, win, press, 0,
-                new PointerPointProperties(
-                    RawInputModifiers.LeftMouseButton, PointerUpdateKind.LeftButtonPressed),
-                KeyModifiers.None, clickCount: 1)
+            // ③ 按住 1.5s：350ms 后逐行连续滚动（每步 ≤2 行，不能出现整屏跳），松手立即停。
+            PressPageUp();
+            var holdStart = System.Diagnostics.Stopwatch.StartNew();
+            var holdFrom = terminal.ViewportY;
+            var last = holdFrom;
+            var sampleCount = 0;
+            var maxStep = 0;
+            while (holdStart.ElapsedMilliseconds < 1500)
             {
-                RoutedEvent = InputElement.PointerPressedEvent,
-            });
-
-            var steps = new List<int> { terminal.ViewportY };
-            var hold = System.Diagnostics.Stopwatch.StartNew();
-            while (hold.ElapsedMilliseconds < 1200)
-            {
-                await Task.Delay(40);
-                if (terminal.ViewportY != steps[^1])
+                await Task.Delay(10);
+                var current = terminal.ViewportY;
+                if (current != last)
                 {
-                    steps.Add(terminal.ViewportY);
+                    maxStep = Math.Max(maxStep, last - current);
+                    sampleCount++;
+                    last = current;
                 }
             }
+            var holdElapsed = holdStart.ElapsedMilliseconds;
+            var heldLines = holdFrom - last;
             SaveVisualPng(Content as Visual, "r69-scrollbar.png");
 
-            pageUp.RaiseEvent(new PointerReleasedEventArgs(
-                pageUp, pointer, win, press, 0,
-                new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.LeftButtonReleased),
-                KeyModifiers.None, MouseButton.Left)
-            {
-                RoutedEvent = InputElement.PointerReleasedEvent,
-            });
+            ReleasePageUp();
             await Task.Delay(150);
             var afterRelease = terminal.ViewportY;
             await Task.Delay(700);
             if (terminal.ViewportY != afterRelease)
             {
                 throw new InvalidOperationException(
-                    $"松手后应停止翻页：{afterRelease} -> {terminal.ViewportY}");
+                    $"松手后应停止滚动：{afterRelease} -> {terminal.ViewportY}");
             }
-            for (var i = 1; i < steps.Count; i++)
-            {
-                if (steps[i] >= steps[i - 1])
-                {
-                    throw new InvalidOperationException(
-                        $"按住应连续上翻，实际序列 {string.Join(",", steps)}");
-                }
-            }
-            if (steps.Count < 4)
+            if (heldLines < 40)
             {
                 throw new InvalidOperationException(
-                    $"按住 1.2s 应至少翻 3 次，实际 {steps.Count - 1} 次：{string.Join(",", steps)}");
+                    $"按住 {holdElapsed}ms 只滚动 {heldLines} 行，连续滚动未生效");
+            }
+            if (maxStep > 2)
+            {
+                throw new InvalidOperationException(
+                    $"出现整屏跳（单次采样 {maxStep} 行），不再是逐行平滑滚动");
             }
             AppLog.Info(
-                $"[SelfTest] r69: ③ 按住连续上翻 {steps.Count - 1} 次（{string.Join(",", steps)}），" +
-                $"松手停在 {afterRelease} OK");
+                $"[SelfTest] r69: ③ 按住 {holdElapsed}ms 逐行滚动 {sampleCount} 次采样/" +
+                $"{heldLines} 行（单次最大 {maxStep} 行），松手停在 {afterRelease} OK");
 
-            AppLog.Info("[SelfTest] r69: 自检完成 常显16px=OK 滑块同步=OK 单击一屏=OK 按住连续翻页=OK 松手即停=OK，退出");
+            AppLog.Info("[SelfTest] r69: 自检完成 常显16px=OK 滑块同步=OK 按下翻一屏=OK 按住逐行平滑=OK 松手即停=OK，退出");
             (Application.Current?.ApplicationLifetime
                 as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(0);
         }

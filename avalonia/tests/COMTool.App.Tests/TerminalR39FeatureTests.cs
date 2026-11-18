@@ -10,6 +10,7 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Iciclecreek.Terminal;
+using COMTool.App.Services;
 using COMTool.App.ViewModels;
 using COMTool.App.Views;
 using COMTool.Core.Config;
@@ -437,10 +438,11 @@ public sealed class TerminalR39FeatureTests
         }
     }
 
-    /// <summary>r67.7：点一次轨道空白 = 翻一整屏（LargeChange = ViewportSize），
-    /// 按住重复节奏对齐 MobaXterm 视频（首延迟 300ms、每 250ms 一页）。</summary>
+    /// <summary>r67.8：轨道空白区按住 = 按下先翻一整屏，350ms 后逐行连续滚动
+    /// （1 行 / 16ms ≈ 60 行/秒），松开立即停。r67.7 的 300/250 整屏重复被替换——
+    /// 实机就是 4 次/秒的整屏跳，用户反馈“一顿一顿”。</summary>
     [AvaloniaFact]
-    public void TERM36_PageClickScrollsOneScreenWithMobaRepeat()
+    public void TERM36_PagePressPagesOnceThenSmoothLines()
     {
         using var env = new TestEnvironment();
         MainWindow? window = null;
@@ -461,31 +463,149 @@ public sealed class TerminalR39FeatureTests
 
                 var bar = SingleScrollBar(terminal);
                 Assert.True(bar.ViewportSize > 2, $"视口行数应 >2，实际 {bar.ViewportSize}");
+                // 翻一整屏的语义仍在（自动化/无障碍与单击共用）。
                 Assert.Equal(bar.ViewportSize, bar.LargeChange);
                 // 库把滚动位置同步到滑块：灌满输出后滑块应在底部。
                 Assert.True(terminal.ViewportY > 20, $"应已回滚，viewportY={terminal.ViewportY}");
                 Assert.Equal(terminal.ViewportY, (int)bar.Value);
+                Assert.NotNull(TerminalSmoothPager.ForTest(bar));
 
                 var pageUp = bar.GetVisualDescendants().OfType<RepeatButton>()
                     .Single(b => b.Name == "PART_PageUpButton");
                 var pageDown = bar.GetVisualDescendants().OfType<RepeatButton>()
                     .Single(b => b.Name == "PART_PageDownButton");
-                Assert.Equal(300, pageUp.Delay);
-                Assert.Equal(250, pageUp.Interval);
-                Assert.Equal(300, pageDown.Delay);
-                Assert.Equal(250, pageDown.Interval);
-
+                var win = TopLevel.GetTopLevel(window)
+                    ?? throw new InvalidOperationException("TopLevel 未就绪");
                 var viewport = (int)bar.ViewportSize;
                 var before = terminal.ViewportY;
                 Assert.True(before >= viewport, $"回滚不足一屏：viewportY={before} viewport={viewport}");
 
-                pageUp.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                var pointer = new Pointer(Pointer.GetNextFreeId(), PointerType.Mouse, isPrimary: true);
+                var where = new Point(4, 4);
+                pageUp.RaiseEvent(new PointerPressedEventArgs(
+                    pageUp, pointer, win, where, 0,
+                    new PointerPointProperties(
+                        RawInputModifiers.LeftMouseButton, PointerUpdateKind.LeftButtonPressed),
+                    KeyModifiers.None, clickCount: 1)
+                {
+                    RoutedEvent = InputElement.PointerPressedEvent,
+                });
                 RunJobs(window);
+                // 按下即翻一屏（不是等松开才翻）。
                 Assert.Equal(before - viewport, terminal.ViewportY);
 
-                pageDown.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                pageUp.RaiseEvent(new PointerReleasedEventArgs(
+                    pageUp, pointer, win, where, 0,
+                    new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.LeftButtonReleased),
+                    KeyModifiers.None, MouseButton.Left)
+                {
+                    RoutedEvent = InputElement.PointerReleasedEvent,
+                });
                 RunJobs(window);
-                Assert.Equal(before, terminal.ViewportY);
+                // 松开不再重复一屏（r67.7 的 RepeatButton Click 被拦下）。
+                Assert.Equal(before - viewport, terminal.ViewportY);
+
+                // 再按下并“按住”：350ms 首延迟内不动，之后每 16ms 正好一行。
+                pageUp.RaiseEvent(new PointerPressedEventArgs(
+                    pageUp, pointer, win, where, 0,
+                    new PointerPointProperties(
+                        RawInputModifiers.LeftMouseButton, PointerUpdateKind.LeftButtonPressed),
+                    KeyModifiers.None, clickCount: 1)
+                {
+                    RoutedEvent = InputElement.PointerPressedEvent,
+                });
+                var pager = TerminalSmoothPager.ForTest(bar)!;
+                var afterPress = terminal.ViewportY;
+                Assert.Equal(before - 2 * viewport, afterPress);
+
+                pager.Advance(TimeSpan.FromMilliseconds(349));
+                Assert.Equal(afterPress, terminal.ViewportY);
+                pager.Advance(TimeSpan.FromMilliseconds(1));   // 正好走完首延迟
+                Assert.Equal(afterPress, terminal.ViewportY);
+                pager.Advance(TimeSpan.FromMilliseconds(16));  // 第一行
+                Assert.Equal(afterPress - 1, terminal.ViewportY);
+                pager.Advance(TimeSpan.FromMilliseconds(8));   // 8ms 不够一步
+                Assert.Equal(afterPress - 1, terminal.ViewportY);
+                pager.Advance(TimeSpan.FromMilliseconds(8));   // 凑满 16ms → 第二行
+                Assert.Equal(afterPress - 2, terminal.ViewportY);
+                Assert.Equal(terminal.ViewportY, (int)bar.Value);
+
+                // 松手立即停：再推进再多时间也不动。
+                pageUp.RaiseEvent(new PointerReleasedEventArgs(
+                    pageUp, pointer, win, where, 0,
+                    new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.LeftButtonReleased),
+                    KeyModifiers.None, MouseButton.Left)
+                {
+                    RoutedEvent = InputElement.PointerReleasedEvent,
+                });
+                pager.Advance(TimeSpan.FromMilliseconds(1000));
+                Assert.Equal(afterPress - 2, terminal.ViewportY);
+
+                // 向下翻页按钮走同一套（按下即一屏）。
+                var beforeDown = terminal.ViewportY;
+                pageDown.RaiseEvent(new PointerPressedEventArgs(
+                    pageDown, pointer, win, where, 0,
+                    new PointerPointProperties(
+                        RawInputModifiers.LeftMouseButton, PointerUpdateKind.LeftButtonPressed),
+                    KeyModifiers.None, clickCount: 1)
+                {
+                    RoutedEvent = InputElement.PointerPressedEvent,
+                });
+                RunJobs(window);
+                Assert.Equal(beforeDown + viewport, terminal.ViewportY);
+                pageDown.RaiseEvent(new PointerReleasedEventArgs(
+                    pageDown, pointer, win, where, 0,
+                    new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.LeftButtonReleased),
+                    KeyModifiers.None, MouseButton.Left)
+                {
+                    RoutedEvent = InputElement.PointerReleasedEvent,
+                });
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    /// <summary>r67.8：平滑翻页在顶部边界夹住，不会把 ViewportY 推成负数；
+    /// 松手后状态完全复位。</summary>
+    [AvaloniaFact]
+    public void TERM37_SmoothPagerClampsAndStops()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                window = new MainWindow { DataContext = new MainViewModel() };
+                window.Show();
+                window.StopPortTimerForTests();
+                RunJobs(window);
+
+                var (terminal, pty, _) = CreateTestTerminal(window, "term37-clamp");
+                PumpScrollback(pty, terminal);
+                window.UpdateLayout();
+                RunJobs(window);
+
+                var bar = SingleScrollBar(terminal);
+                var pager = TerminalSmoothPager.ForTest(bar);
+                Assert.NotNull(pager);
+                var viewport = (int)bar.ViewportSize;
+
+                terminal.ViewportY = Math.Max(0, viewport / 2);
+                RunJobs(window);
+                pager!.Press(-1);
+                Assert.Equal(0, terminal.ViewportY);
+                pager.Advance(TimeSpan.FromSeconds(1));
+                Assert.Equal(0, terminal.ViewportY);
+
+                pager.Release();
+                Assert.Equal(0, pager.Direction);
+                Assert.Equal(0, terminal.ViewportY);
             });
         }
         finally
