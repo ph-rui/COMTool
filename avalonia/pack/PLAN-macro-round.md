@@ -2999,3 +2999,74 @@ bundle `comtool-r677.bundle`（`33db4f2..1539b07`）→ HEAD `1539b07`，随后
 - Core：32 项宏测试（MacroModel 4/MacroFile 9/MacroRecorder 9/MacroRunner 8/Config 2）
 - App：173→193 项全绿（新增 MacroFeatureTests 23 项，含 MAC21；删除旧 MAC01 3 项）
 - 全量 gate：2026-10-28 06:53Z 第四轮全 PASS（build/328 单测/193 App/26 项 Xvfb E2E/TestGate，共 521 项）
+
+### 67.8 滚动条按住平滑逐行（用户反馈「一顿一顿」，2026-11-18）
+
+**用户反馈**：r67.7 实机按住滚动条轨道空白处翻页时「一顿一顿」，不是连续平滑。
+确认口径（用户答「改」）：指**按住轨道空白处**的翻页，不是拖滑块、也不是连续输出
+滚动；速度取 60 行/秒（16ms 一行）；单击翻一屏、滑块拖动、上下箭头全部保持原样。
+
+**根因**：r67.7 把 `PART_PageUpButton`/`PART_PageDownButton` 的 `Delay=300` /
+`Interval=250` 交给 `RepeatButton` 自己重复，而它每次 Click 由 ScrollBar 执行
+`LargeChange = ViewportSize`（实机 22 行、Xvfb 17 行）——实机就是 4 次/秒的
+**整屏跳动**。逐行平滑与 `LargeChange` 的整屏语义天然冲突，必须接管手势。
+
+**实现**（新 `src/COMTool.App/Services/TerminalSmoothPager.cs`）：
+- 装配：`ApplyTerminalScrollBar(ScrollBar)` 里
+  `scrollBar.FindAncestorOfType<TerminalControl>()` → `TerminalSmoothPager.Attach`；
+  `ConditionalWeakTable<ScrollBar, TerminalSmoothPager>` 保证幂等（TemplateApplied
+  与 AttachedToVisualTree 双挂、关掉再打开滚动条都只装一次）。
+- 手势：隧道阶段接 `PointerPressed`，`DirectionFrom(e.Source)` 命中
+  `PART_PageUpButton`(-1) / `PART_PageDownButton`(+1) 就 `e.Handled = true` +
+  `e.Pointer.Capture(scrollBar)` + `Press(dir)`——`RepeatButton` 自己的 300/250
+  整屏重复因此不再触发。
+- 节奏：`Press` 立即 `ScrollLines(dir * PageLines())`（翻一整屏，保留 MobaXterm
+  单击语义，`LargeChange` 也继续保留给自动化/无障碍），启动 16ms `DispatcherTimer`；
+  `Advance(delta)` 先消耗 `HoldDelayMs = 350`，之后每 `StepIntervalMs = 16` 滚
+  `LinesPerStep = 1` 行（≈60 行/秒），不足一步的余量累积到下一步（8+8ms 合并一行）。
+- 停：`Release`（松手）、`PointerCaptureLost`、`DetachedFromVisualTree` 三处都清零
+  方向并停表，标签切换/关窗不会留下后台改 `ViewportY` 的定时器。
+- 滑块跟手：滚动只写 `TerminalControl.ViewportY`，库属性变化时把 `ScrollBar.Value`
+  同步回来（`LargeChange = ViewportSize` 不变）。
+- 可测性：`Advance(TimeSpan)` 供 headless 手动推进时钟（`DispatcherTimer` 在
+  headless 不触发）；`ForTest(ScrollBar)` 取实例；`Direction` 暴露按住状态。
+
+**测试**（先红后绿）：
+- `TERM36_PagePressPagesOnceThenSmoothLines`（重写 r67.7 的 Click/300/250 用例）：
+  按下即翻一屏、松开不再重复；再按下 349ms 不动、350ms 走完首延迟仍不动、
+  再 16ms 前进 1 行、8ms 不动、再 8ms 又 1 行且 `bar.Value == ViewportY`；
+  松手后推进 1s 不动；`pageDown` 同套（按下即 +一屏）。
+- `TERM37_SmoothPagerClampsAndStops`（新增）：顶部边界 `Press(-1)` clamp 到 0、
+  推进 1s 仍 0、`Release` 后 `Direction == 0`。
+- 红验证：临时注释 `e.Handled = true` 并把 `LinesPerStep` 改成 5 → TERM36 失败
+  （Expected 69 / Actual 65），还原后 4 项全绿。
+- `--selftest-r69` 改写：① 常显 16px + 滑块同步 + `LargeChange=一屏`；
+  ② 按下翻一整屏、松开不重复（Xvfb 284→267）；③ 按住 1.5s 逐行滚动
+  （70 次采样 / 71 行、单次采样最大 2 行），松手停在 179 不再变化。
+- 顺带修贴底断言：Xvfb 下换列重排会把 7 行滚进回滚区（`ViewportY=284`、
+  `MaxScrollback=291`），`ViewportY = MaxScrollback` 被 `Buffer.ViewportY` 的
+  clamp 提前截断；断言由「距底 ≤3 行」放宽到「≤12 行 + `Value == ViewportY`」。
+
+**gate**（`pack/verify.sh --results /tmp/opencode/r678-gate1`，2026-11-18）：
+首跑全绿。restore PASS、build PASS、unit-tests PASS（411 项 / 6 项目）、
+app-tests PASS（356 项，原 355 + TERM37 1 项，TERM36 重写）、test-list PASS
+（App 356 项）、e2e PASS（15/15）、testgate PASS，合计 767 项检查全过。
+
+**VM 实机部署验证**（2026-11-18，`C:\Users\zhangrui\COMTool-Avalonia-AOT`）：
+bundle `comtool-r678.bundle`（`03d375d..2c770c9`）→ HEAD `2c770c9`；win-x64 AOT
+publish 158s `rc=0`，robocopy /MIR 到运行目录。
+- 运行目录 `COMTool.App.exe` SHA256
+  `c2fdb33f840245803c90eac9151dd304f10668b8fd14528b09e810a03201af6e`。
+- `--selftest-r69`（864×514，22 行）：① 常显 16px + 滑块同步 + `LargeChange=22`
+  （一屏）；② 按下 `279→257`（正好一屏），松开不再重复；③ 在滑块上方按住
+  1503ms：64 次采样共 **71 行**（单次采样最大 2 行），松手停在 164 不再变化
+  —— 逐行平滑生效，r67.7 的整屏跳不再出现；`r69-scrollbar.png` 落盘。
+- `r69-scrollbar.png` 像素实测：滚动条 x=833..848（**16px**）、轨道 `#EDEDED`、
+  滑块 `#BDBDBD`（高 26px）、上下 16px 行按钮 + 箭头；终端右缘与 r67.7 一致。
+- `--selftest-r67` 回归全过（单击不换/3px 阈值/10px 开拖/实时换位/落位动画/
+  不裁剪 + 二次拖动位移清零），`--selftest-r68` 用真实 COM2 回归全过
+  （断线上膛 → 2s 扫描自动重连 `Connected COM2`）。
+- `COMTool-Avalonia-AOT-r67.zip` 已刷新：78,455,901 字节，SHA256
+  `8aa83b86d22f12ec28d0cf9e423d782a5e2f338b5a018a9eacffcdb510d1bcb0`
+  （首轮 zip 脚本报「流不可读」`ZIP_ERR`，重跑即 `ZIP_OK`）。
+
