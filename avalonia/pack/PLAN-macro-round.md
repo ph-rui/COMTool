@@ -2815,6 +2815,68 @@ unit 411 项、app 346 项全 PASS、e2e 15/15、testgate PASS，合计 757 项 
 - 用户取用包 `C:\Users\zhangrui\COMTool-Avalonia-AOT-r67.zip`
   （SHA256 `49346AD4957B4E70569F6881F7B2A8B9D9A9EB1A14D0B831E7CBE16F631BAA36`）
 
+### 67.6 串口热插拔后自动重连恢复（2026-11-18，用户反馈「插入 COM 设备不会恢复」）
+
+**用户反馈**：设备拔掉后标签变成 `Connection lose`，重新插回同一个 COM 号，
+标签一直不恢复；观感是「没有硬件检测/探测功能」。截图取证：侧栏 COM80 在拔插
+过程中消失又出现，标签仍停在 `Process exited` + `Connection lose`。
+
+**根因（两处，缺一不可）**：
+1. **断线没有上膛**：串口读流结束（拔设备/驱动失效/重插后打不开）时
+   `ZmodemStream.Pump` 只把内部 `_completed` 置 true，**不会**触发
+   `PtyStreamConnection.ProcessExited`（该事件只在主动 `Close()` 时发）。
+   而自动重连状态机只由 `ProcessExited` 或「端口从扫描结果消失」两处
+   `AwaitingReconnect = true` 驱动。`UpdateConnectionStates` 看到
+   `IsTransportOpen == false` 只把状态画成 `Connection lose`，不上膛。
+   于是标签永久卡死、2s 扫描也永远不会再尝试重开。
+2. **重试过程不可见**：失败分支写的 `Reconnecting ...` 立刻被
+   `UpdateConnectionStates` 覆盖回 `Connection lose`，用户无法判断有没有在试。
+
+**修复**：
+- `UpdateConnectionStates`：串口标签传输已死且未关闭、未在上膛状态时，
+  调用 `MarkSerialDisconnected(state)` 统一上膛（与 `ProcessExited` 同一条路径），
+  之后由 `ApplyPortScan` 的重连循环接管。
+- `TryReconnectSerial`：记录 `ReconnectAttempts`，状态栏显示
+  `Reconnecting COMxx (attempt N)...`；前 5 次每 2s，之后 5s 退避；
+  成功清零。失败仍只记录一次不同错误（不刷日志）。
+- 串口标签右键菜单「Reconnect now」：绕开退避立即重开一次。
+- 连接设置对话框的端口下拉框：打开期间每 1s 跟随共享扫描结果刷新
+  （补齐 2026-10-17 热插拔设计 G1/G2；Avalonia 版此前只在构造时枚举一次），
+  保持已选端口、编辑离线会话时保留该端口条目、无端口时显示
+  `No serial ports` 占位。
+
+**测试**（先验证红后绿）：
+- `SER08_StreamEndWithoutProcessExitedStillReconnects`：读流 EOF（不触发
+  ProcessExited）后断线上膛 + 下次扫描自动重开。撤掉修复时该用例失败
+  （`IsAlive` 仍为 true），已确认能抓住回归。
+- `SER08_ReconnectFailureIsVisibleAndRetried`：幽灵端口（枚举在但打不开）
+  显示 `attempt 1`，退避窗口内不重复开端口。
+- `SER08_ManualReconnectIgnoresBackoff`：右键立即重连。
+- `SER03_PortComboPicksUpDeviceInsertedWhileOpen` /
+  `SER03_PortComboKeepsSelectionAndDropsRemovedPorts`：对话框热插拔刷新。
+- App 测试 351 项全 PASS（原 346 + 5）。
+
+**gate**（`pack/verify.sh --results /tmp/opencode/r676-gate2`）：全绿。
+restore PASS、build PASS、unit-tests PASS（411 项 / 6 项目）、app-tests PASS
+（351 项，原 346 + 5）、test-list PASS（App 351 项）、e2e PASS、testgate PASS，
+合计 762 项检查全过。首跑 `r676-gate` 因 App 宿主原生崩溃（exit 134，已知
+环境抖动）作废，复跑即绿。
+
+**VM 实机部署验证**（2026-11-18，`C:\Users\zhangrui\COMTool-Avalonia-AOT`）：
+bundle `comtool-r676.bundle`（`634f0d2..33db4f2`）推入 VM 克隆
+`D:\Users\zhangrui\comtool-aot-r67`，HEAD 到 `33db4f2`，win-x64 AOT
+publish（97s）后 robocopy /MIR 到运行目录。
+- 运行目录 `COMTool.App.exe` SHA256
+  `33e392e2a55c3d2e024365fefb45d6e44b1d95bfe07f3c2d1957eaa705fe07bf`。
+- `--selftest-r68` 用真实串口 COM2：① `标签已连接 IsAlive=True
+  IsTransportOpen=True`；② 模拟读流 EOF 断线后 `Connection lose` /
+  `IsAlive=False`；③ **不做任何操作**，2s 扫描后自动重连为
+  `Connected COM2` / `IsTransportOpen=True`，自检退出码 0。
+- `--selftest-r67` 回归全过：单击不换、阈值内不换、开拖样式、实时换位
+  （a,c,b→c,a,b）、选中不变、松开落位与动画清零、拖出标签条不裁剪。
+- `COMTool-Avalonia-AOT-r67.zip` 已刷新（78,432,985 字节；本次首跑
+  Compress-Archive 因 robocopy 刚写完文件报「流不可读」，复跑 ZIP_OK）。
+
 ## 已知偏差（已写入 spec 附录）
 1. wait 步骤导出 typeId=4 为 COMTool 自定（MobaXterm 真实编码未实测）；导入未知 typeId 跳过+警告
 2. 热键 .mxtmacros 编码未实测：导出恒 0，导入非 0 忽略+警告
