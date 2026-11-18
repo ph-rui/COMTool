@@ -273,6 +273,16 @@
                             DoubleTapped="OnTabDoubleTapped"
                             ToolTip.Tip="Double click to detach as a window"
                             Tag="{Binding}">
+                      <Border.ContextMenu>
+                        <ContextMenu>
+                          <!-- r67.6：断开的串口标签可手动立即重连，不等 2s/5s 退避。 -->
+                          <MenuItem Header="Reconnect now"
+                                    IsVisible="{Binding IsSerialTab}"
+                                    IsEnabled="{Binding !IsAlive}"
+                                    Tag="{Binding}"
+                                    Click="OnTabReconnectClick" />
+                        </ContextMenu>
+                      </Border.ContextMenu>
                       <StackPanel Orientation="Horizontal"
                                   VerticalAlignment="Center"
                                   Spacing="8">

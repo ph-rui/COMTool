@@ -479,6 +479,13 @@ public partial class MainWindow : Window
         {
             _ = RunR67SelfTestAsync();
         }
+        // --selftest-r68：实机自检 r68 串口断线自动重连（EOF/设备消失路径）。
+        // 用一个真实串口开标签 → 模拟断线（MarkSerialDisconnected，与读流 EOF 同一条
+        // 上膛路径）→ 不等任何操作，只靠 2s 端口扫描自动重开 → 断言标签恢复 Connected。
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r68"))
+        {
+            _ = RunR68SelfTestAsync();
+        }
     }
 
     private volatile bool _portScanBusy;
@@ -670,11 +677,27 @@ public partial class MainWindow : Window
                 // A disposed SSH client or serial port is simply disconnected.
             }
 
-            if (!connected && tab.StatusMessage != "Connection lose")
+            if (!connected)
             {
-                tab.StatusMessage = "Connection lose";
-                tab.StatusBrush = StatusWarningBrush;
-                tab.TabDotBrush = StatusWarningBrush;
+                // r67.6：串口读流结束（拔设备/驱动失效）时 ZmodemStream 只把
+                // _completed 置 true，不会触发 PtyStreamConnection.ProcessExited
+                // （那个事件只在主动 Close() 时发），所以重连状态机不会被上膛，
+                // 标签就永久停在 Connection lose、再也不重试。这里把「传输已死」
+                // 统一当作断线处理，交给 ApplyPortScan 的重连循环接管。
+                if (tab.Kind == SessionKind.Serial
+                    && _serialTabs.TryGetValue(tab, out var serialState)
+                    && !serialState.Closed
+                    && !serialState.AwaitingReconnect)
+                {
+                    MarkSerialDisconnected(serialState);
+                }
+
+                if (tab.StatusMessage != "Connection lose")
+                {
+                    tab.StatusMessage = "Connection lose";
+                    tab.StatusBrush = StatusWarningBrush;
+                    tab.TabDotBrush = StatusWarningBrush;
+                }
             }
         }
 
@@ -1021,9 +1044,14 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            state.NextReconnectAt = DateTime.UtcNow.AddSeconds(2);
+            // r67.6：重试过程要可见（用户反馈「插回设备后一直 Connection lose，
+            // 不知道有没有在重试」）。前 5 次每 2s 重试，之后降到 5s，避免一个
+            // 幽灵端口（驱动一直挂着、实际打不开）让 UI 每 2s 空转。
+            state.ReconnectAttempts++;
+            var delay = state.ReconnectAttempts <= 5 ? 2 : 5;
+            state.NextReconnectAt = DateTime.UtcNow.AddSeconds(delay);
             tab.IsAlive = false;
-            tab.StatusMessage = $"Reconnecting {state.Port}...";
+            tab.StatusMessage = $"Reconnecting {state.Port} (attempt {state.ReconnectAttempts})...";
             tab.StatusBrush = StatusWarningBrush;
             tab.TabDotBrush = StatusWarningBrush;
             if (!string.Equals(state.LastReconnectError, ex.Message, StringComparison.Ordinal))
@@ -1038,6 +1066,7 @@ public partial class MainWindow : Window
         state.AwaitingReconnect = false;
         state.NextReconnectAt = DateTime.MinValue;
         state.LastReconnectError = null;
+        state.ReconnectAttempts = 0;
         AttachSerialTransport(state, connection);
 
         tab.IsAlive = true;
@@ -2803,6 +2832,38 @@ public partial class MainWindow : Window
             e.Handled = true;
             CloseTab(tab);
         }
+    }
+
+    /// <summary>
+    /// r67.6：串口标签右键「Reconnect now」。绕开退避立即重开一次，
+    /// 让用户不必等 2s/5s 轮询，也给「幽灵端口」一个手动出口。
+    /// </summary>
+    private void OnTabReconnectClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { Tag: TerminalTab tab })
+        {
+            e.Handled = true;
+            ReconnectSerialNow(tab);
+        }
+    }
+
+    internal void ReconnectSerialNowForTests(TerminalTab tab) => ReconnectSerialNow(tab);
+
+    private void ReconnectSerialNow(TerminalTab tab)
+    {
+        if (!_serialTabs.TryGetValue(tab, out var state) || state.Closed)
+        {
+            return;
+        }
+
+        if (!state.AwaitingReconnect)
+        {
+            MarkSerialDisconnected(state);
+        }
+
+        state.NextReconnectAt = DateTime.MinValue;
+        TryReconnectSerial(state);
+        UpdateConnectionStates();
     }
 
     private void OnTabDoubleTapped(object? sender, TappedEventArgs e)
@@ -10332,6 +10393,7 @@ public static class ClipCheck {
         public bool AwaitingReconnect { get; set; }
         public bool Closed { get; set; }
         public DateTime NextReconnectAt { get; set; }
+        public int ReconnectAttempts { get; set; }
         public string? LastReconnectError { get; set; }
 
         public bool IsTransportOpen =>
@@ -10341,6 +10403,143 @@ public static class ClipCheck {
     private sealed record DetachedTabState(Window Window, int Index)
     {
         public bool SuppressReattach { get; set; }
+    }
+
+    /// <summary>
+    /// <c>--selftest-r68</c>：实机自检 r68 串口断线自动重连（EOF/设备消失路径）。
+    /// 取一个真实串口开标签，然后走与读流 EOF 相同的上膛路径（MarkSerialDisconnected）
+    /// 模拟断线；不做任何操作，只等 2s 端口扫描自动重开，断言标签恢复 Connected。
+    /// 结果写 run.log 后退出。
+    /// </summary>
+    private async Task RunR68SelfTestAsync()
+    {
+        string? tempPort = null;
+        TerminalTab? tab = null;
+        try
+        {
+            AppLog.Info("[SelfTest] r68: 等主窗稳定 1.5s 后验证串口断线自动重连");
+            await Task.Delay(1500);
+            if (_config is null || DataContext is not MainViewModel viewModel)
+            {
+                throw new InvalidOperationException("MainWindow 未就绪");
+            }
+
+            RefreshPorts();
+            await Task.Delay(1200);
+
+            var candidates = _config.Ports
+                .Select(port => port.Device)
+                .Where(device => _config.SerialSessions.Get(device) is null)
+                .ToList();
+            if (candidates.Count == 0)
+            {
+                AppLog.Info(
+                    "[SelfTest] r68: SKIP 没有空闲串口（当前端口: "
+                    + string.Join(",", _config.Ports.Select(port => port.Device)) + "）");
+                (Application.Current?.ApplicationLifetime
+                    as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(0);
+                return;
+            }
+
+            Exception? lastError = null;
+            foreach (var candidate in candidates)
+            {
+                try
+                {
+                    _config.SerialSessions.Upsert(
+                        candidate,
+                        new SerialConnectionConfig { Port = candidate, Baudrate = 115200 },
+                        candidate);
+                    tempPort = candidate;
+                    OpenSerialSession(candidate);
+                    await Task.Delay(700);
+                    tab = viewModel.Tabs.FirstOrDefault(item =>
+                        item.Kind == SessionKind.Serial
+                        && string.Equals(item.SessionId, candidate, StringComparison.OrdinalIgnoreCase));
+                    if (tab is null)
+                    {
+                        throw new InvalidOperationException("标签未创建");
+                    }
+
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    lastError = ex;
+                    AppLog.Info(
+                        $"[SelfTest] r68: 打开 {candidate} 失败: {ex.Message}，尝试下一个");
+                    if (tempPort is not null)
+                    {
+                        _config.SerialSessions.Remove(tempPort);
+                        tempPort = null;
+                    }
+
+                    tab = null;
+                }
+            }
+
+            if (tab is null || tempPort is null)
+            {
+                throw lastError ?? new InvalidOperationException("没有可用的串口");
+            }
+
+            var state = _serialTabs[tab];
+            if (!tab.IsAlive || !state.IsTransportOpen)
+            {
+                throw new InvalidOperationException(
+                    $"打开后状态异常 IsAlive={tab.IsAlive} IsTransportOpen={state.IsTransportOpen}");
+            }
+
+            AppLog.Info(
+                $"[SelfTest] r68: ① {tempPort} 标签已连接 IsAlive=True IsTransportOpen=True OK");
+
+            MarkSerialDisconnected(state);
+            UpdateConnectionStates();
+            if (tab.IsAlive)
+            {
+                throw new InvalidOperationException("断线后 IsAlive 仍为 true");
+            }
+
+            AppLog.Info(
+                $"[SelfTest] r68: ② 模拟读流 EOF 断线: 状态=\"{tab.StatusMessage}\" IsAlive=False OK");
+
+            var deadline = DateTime.UtcNow.AddSeconds(12);
+            while (DateTime.UtcNow < deadline && !tab.IsAlive)
+            {
+                await Task.Delay(300);
+            }
+
+            if (!tab.IsAlive)
+            {
+                throw new InvalidOperationException(
+                    $"12s 内未自动重连（状态=\"{tab.StatusMessage}\"）");
+            }
+
+            var reopened = _serialTabs[tab];
+            if (!reopened.IsTransportOpen)
+            {
+                throw new InvalidOperationException("自动重连后传输未打开");
+            }
+
+            AppLog.Info(
+                $"[SelfTest] r68: ③ 2s 扫描后自动重连: 状态=\"{tab.StatusMessage}\" IsTransportOpen=True OK");
+            AppLog.Info("[SelfTest] r68: 自检完成 断线上膛=OK 自动重连=OK 标签恢复=OK，退出");
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(0);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("[SelfTest] r68: 自检失败", ex);
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
+        }
+        finally
+        {
+            if (tempPort is not null && _config is not null)
+            {
+                _config.SerialSessions.Remove(tempPort);
+            }
+        }
     }
 
     /// <summary>

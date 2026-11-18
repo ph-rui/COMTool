@@ -122,6 +122,12 @@ public sealed partial class TerminalTab : ObservableObject
     public bool IsSshTab => Kind == SessionKind.Ssh;
 
     /// <summary>
+    /// True for a tab of a serial session; the tab context menu offers
+    /// "Reconnect now" for these (r67.6).
+    /// </summary>
+    public bool IsSerialTab => Kind == SessionKind.Serial;
+
+    /// <summary>
     /// The session-type glyph shown at the head of the tab, so a serial and an SSH tab are
     /// distinguishable at a glance instead of both showing a generic status dot. MobaXterm tags each
     /// tab with a type-specific icon (plug for serial, key for SSH); ours mirrors that. The glyphs and

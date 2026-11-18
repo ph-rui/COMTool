@@ -585,8 +585,22 @@ public partial class ConnectionSettingsWindow : Window
         }
     }
 
+    protected override void OnOpened(EventArgs e)
+    {
+        base.OnOpened(e);
+        // r67.6：原设计（2026-10-17 热插拔刷新设计 G1/G2）要求端口下拉框展开期间
+        // 随设备插拔刷新；Avalonia 版此前只在窗口构造时枚举一次，设备后插进来
+        // 必须关掉重开才看得到。现在每秒跟随主窗口的 2s 扫描结果刷新一次。
+        _portRefreshTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _portRefreshTimer.Tick += (_, _) => RefreshPortList();
+        _portRefreshTimer.Start();
+    }
+
     protected override void OnClosed(EventArgs e)
     {
+        _portRefreshTimer?.Stop();
+        _portRefreshTimer = null;
+
         if (_tcpSession is not null)
         {
             _tcpSession.ClientsChanged -= OnTcpClientsChanged;
@@ -596,4 +610,53 @@ public partial class ConnectionSettingsWindow : Window
     }
 
     private void OnCloseClick(object? sender, RoutedEventArgs e) => Close();
+
+    private DispatcherTimer? _portRefreshTimer;
+
+    /// <summary>
+    /// Rebuilds the port list from the shared scan results while the dialog is
+    /// open. The selected device is preserved across refreshes, and a session
+    /// whose port is currently offline keeps its entry so editing settings
+    /// never silently changes the port.
+    /// </summary>
+    internal void RefreshPortList()
+    {
+        var selected = (PortCombo.SelectedItem as SerialPortInfo)?.Device ?? "";
+        var ports = _config.Ports.ToList();
+        var sessionPort = _sessionKind == SessionKind.Serial && _sessionId is { Length: > 0 }
+            ? _config.SerialSessions.Get(_sessionId)?.Port ?? ""
+            : "";
+        if (sessionPort.Length > 0 && !Contains(ports, sessionPort))
+        {
+            ports.Add(new SerialPortInfo(sessionPort));
+        }
+
+        var target = selected;
+        if (target.Length == 0 || !Contains(ports, target))
+        {
+            target = sessionPort.Length > 0 && Contains(ports, sessionPort)
+                ? sessionPort
+                : "";
+        }
+
+        var existing = PortCombo.ItemsSource as IList<SerialPortInfo>;
+        if (existing is not null
+            && existing.Count == ports.Count
+            && existing.Zip(ports).All(pair =>
+                string.Equals(pair.First.Device, pair.Second.Device, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(pair.First.DisplayText, pair.Second.DisplayText, StringComparison.Ordinal)))
+        {
+            return;
+        }
+
+        PortCombo.ItemsSource = ports;
+        var index = target.Length == 0
+            ? -1
+            : ports.FindIndex(port => string.Equals(
+                port.Device, target, StringComparison.OrdinalIgnoreCase));
+        PortCombo.SelectedIndex = index >= 0 ? index : (ports.Count > 0 ? 0 : -1);
+    }
+
+    private static bool Contains(IEnumerable<SerialPortInfo> ports, string device) =>
+        ports.Any(port => string.Equals(port.Device, device, StringComparison.OrdinalIgnoreCase));
 }

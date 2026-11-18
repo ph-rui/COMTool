@@ -101,6 +101,25 @@ internal sealed class InMemoryPty : IPtyConnection
     public void Dispose() => Close();
 
     /// <summary>
+    /// Completes the reader so its pending read returns 0, but does NOT raise
+    /// <see cref="ProcessExited"/> — this is what a real unplugged serial
+    /// device looks like: <c>ZmodemStream.Pump</c> ends and only sets its
+    /// internal completed flag, while <c>PtyStreamConnection.ProcessExited</c>
+    /// fires only on an explicit <c>Close()</c>.
+    /// </summary>
+    public void EndInputWithoutExit()
+    {
+        try
+        {
+            _incoming.CompleteAdding();
+        }
+        catch (ObjectDisposedException)
+        {
+            // Already disposed by a test cleanup path.
+        }
+    }
+
+    /// <summary>
     /// Completes the reader so its pending read returns 0 and raises
     /// <see cref="ProcessExited"/> exactly once.
     /// </summary>
