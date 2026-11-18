@@ -1,5 +1,6 @@
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
@@ -485,6 +486,14 @@ public partial class MainWindow : Window
         if (Environment.GetCommandLineArgs().Contains("--selftest-r68"))
         {
             _ = RunR68SelfTestAsync();
+        }
+        // --selftest-r69：实机自检 r69 终端滚动条（MobaXterm 式）：开本地终端灌满回滚，
+        // 断言滚动条常显 16px、滑块同步到底部、点一次翻一整屏；再在滑块上方按住左键
+        // 1.2s，断言回滚位置每 250ms 连续上翻（≥3 次）且松手后立刻停止。
+        // DispatcherTimer 的重复在 headless 不跑，必须实机验。落盘 r69-scrollbar.png。
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r69"))
+        {
+            _ = RunR69SelfTestAsync();
         }
     }
 
@@ -2166,9 +2175,12 @@ public partial class MainWindow : Window
                 () =>
                 {
                     ApplyTerminalTheme(terminal);
-                    HideTerminalScrollBars(terminal);
+                    ApplyTerminalScrollBar(terminal);
                 },
                 DispatcherPriority.Loaded);
+        // r67.7：模板可能晚于 AttachedToVisualTree 才应用（Loaded 回调先跑），
+        // 之后再补一次，保证 LargeChange（一屏翻页）与按钮重复节奏一定装上。
+        terminal.TemplateApplied += (_, _) => ApplyTerminalScrollBar(terminal);
         // 终端右键被库抢先：模板内最深命中目标 TerminalView 在自己的 OnPointerPressed 里
         // 同步置 e.Handled=true 并执行复制/粘贴，TerminalControl 上的冒泡阶段 handler
         // 永远收不到真实右键（实机 Shift+右键菜单不弹的根因）。改在隧道阶段订阅
@@ -2211,20 +2223,55 @@ public partial class MainWindow : Window
         terminal.Terminal.Colors.ApplyTheme(theme);
     }
 
-    private static void HideTerminalScrollBars(TerminalControl terminal)
+    /// <summary>
+    /// r67.7：把库模板里的滚动条变成 MobaXterm 式的常显滚动条。
+    /// 宽度/配色由 AppStyles 的 TerminalScrollBarTheme 负责；这里只补两件样式
+    /// 表达不了的事：
+    /// 1) <c>LargeChange = ViewportSize</c>——点一下/按住重复一次滚一整屏
+    ///    （库只设了 Minimum/Maximum/ViewportSize，LargeChange 是 RangeBase 默认 10 行）；
+    /// 2) 上下翻页按钮的重复节奏 300ms 首延迟 + 250ms 间隔，对齐 MobaXterm 实机
+    ///    （Avalonia 默认 300/100 太快，按住会飞）。
+    /// </summary>
+    internal static void ApplyTerminalScrollBar(TerminalControl terminal)
     {
-        foreach (var descendant in terminal.GetVisualDescendants())
+        foreach (var scrollBar in terminal.GetVisualDescendants().OfType<ScrollBar>())
         {
-            if (descendant is not ScrollBar scrollBar)
-            {
-                continue;
-            }
-
-            scrollBar.IsVisible = false;
-            scrollBar.Width = 0;
-            scrollBar.MinWidth = 0;
+            ApplyTerminalScrollBar(scrollBar);
         }
     }
+
+    internal static void ApplyTerminalScrollBar(ScrollBar scrollBar)
+    {
+        scrollBar.Width = TerminalScrollBarWidth;
+        scrollBar.MinWidth = TerminalScrollBarWidth;
+        scrollBar.LargeChange = Math.Max(1, scrollBar.ViewportSize);
+
+        if (!_terminalScrollBarsApplied.TryGetValue(scrollBar, out _))
+        {
+            _terminalScrollBarsApplied.Add(scrollBar, null);
+            scrollBar.PropertyChanged += (_, e) =>
+            {
+                if (e.Property == ScrollBar.ViewportSizeProperty)
+                {
+                    scrollBar.LargeChange = Math.Max(1, scrollBar.ViewportSize);
+                }
+            };
+        }
+
+        foreach (var button in scrollBar.GetVisualDescendants().OfType<RepeatButton>())
+        {
+            if (button.Name is "PART_PageUpButton" or "PART_PageDownButton")
+            {
+                button.Delay = 300;
+                button.Interval = 250;
+            }
+        }
+    }
+
+    /// <summary>r67.7：终端滚动条宽度（MobaXterm 实机 16px）。</summary>
+    private const double TerminalScrollBarWidth = 16;
+
+    private static readonly ConditionalWeakTable<ScrollBar, object?> _terminalScrollBarsApplied = new();
 
     private void SubscribeZmodem(TerminalTab tab, ZmodemStream? zmodem)
     {
@@ -6791,7 +6838,8 @@ public partial class MainWindow : Window
     }
 
     /// <summary>「切换终端滚动条」（MobaXterm）：toggle 终端模板内 ScrollBar 可见性
-    /// （附加时默认隐藏；显示宽度 14px）。</summary>
+    /// （r67.7：默认 16px 常显；关掉时 Width=0 让终端重新分列，再打开时重新装配
+    /// 一屏翻页与按钮重复节奏）。</summary>
     internal bool ToggleTerminalScrollBar(TerminalControl terminal)
     {
         var bars = terminal.GetVisualDescendants().OfType<ScrollBar>().ToList();
@@ -6805,7 +6853,14 @@ public partial class MainWindow : Window
         foreach (var bar in bars)
         {
             bar.IsVisible = currentlyHidden;
-            bar.Width = currentlyHidden ? 14 : 0;
+            if (!currentlyHidden)
+            {
+                bar.Width = 0;
+                bar.MinWidth = 0;
+                continue;
+            }
+
+            ApplyTerminalScrollBar(bar);
         }
 
         AppLog.Info($"Terminal scrollbar toggled: visible={currentlyHidden}");
@@ -10843,6 +10898,173 @@ public static class ClipCheck {
         catch (Exception ex)
         {
             AppLog.Error("[SelfTest] r67: 自检失败", ex);
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
+        }
+    }
+
+    /// <summary>
+    /// r69：实机自检终端滚动条（MobaXterm 式）。headless 的 DispatcherTimer 不随
+    /// RunJobs 触发，所以「按住轨道连续翻页」只能在真实窗口里验。
+    /// </summary>
+    private async Task RunR69SelfTestAsync()
+    {
+        try
+        {
+            AppLog.Info("[SelfTest] r69: 等主窗稳定 1.5s 后开本地终端灌回滚");
+            await Task.Delay(1500);
+            if (DataContext is not MainViewModel viewModel)
+            {
+                throw new InvalidOperationException("MainViewModel 未就绪");
+            }
+
+            var terminal = CreateTerminal();
+            var tab = new TerminalTab
+            {
+                Title = "r69-scroll",
+                SessionId = "local:r69",
+                Kind = SessionKind.Local,
+                Content = terminal,
+                Terminal = terminal,
+                IsAlive = true,
+                CloseAction = () => { },
+            };
+            viewModel.AddTab(tab);
+            await Task.Delay(500);
+            UpdateLayout();
+
+            // 直接写模拟器缓冲区（不经过 PTY）灌满回滚，再显式改一次 ViewportY，
+            // 让库的 UpdateScrollBar 把 Maximum/Value 同步到真实滚动条。
+            for (var i = 0; i < 300; i++)
+            {
+                terminal.Terminal.Write($"scroll line {i:000}\r\n");
+            }
+            terminal.ViewportY = 0;
+            await Task.Delay(150);
+            terminal.ViewportY = terminal.MaxScrollback;
+            await Task.Delay(250);
+            UpdateLayout();
+
+            var bar = terminal.GetVisualDescendants().OfType<ScrollBar>().SingleOrDefault()
+                ?? throw new InvalidOperationException("终端模板里没有 ScrollBar");
+            if (!bar.IsVisible || bar.Bounds.Width < 15.5 || bar.Bounds.Width > 16.5)
+            {
+                throw new InvalidOperationException(
+                    $"滚动条应常显 16px：visible={bar.IsVisible} width={bar.Bounds.Width:0.##}");
+            }
+            if (terminal.MaxScrollback < 3 * bar.ViewportSize)
+            {
+                throw new InvalidOperationException(
+                    $"回滚不足：max={terminal.MaxScrollback} viewport={bar.ViewportSize}");
+            }
+            if (Math.Abs(bar.LargeChange - bar.ViewportSize) > 0.01)
+            {
+                throw new InvalidOperationException(
+                    $"翻页量应为一整屏：LargeChange={bar.LargeChange} ViewportSize={bar.ViewportSize}");
+            }
+            if (Math.Abs(bar.Value - terminal.MaxScrollback) > 0.5)
+            {
+                throw new InvalidOperationException(
+                    $"滑块未同步到底部：Value={bar.Value} MaxScrollback={terminal.MaxScrollback}");
+            }
+            AppLog.Info(
+                $"[SelfTest] r69: ① 常显 16px + 滑块同步底部 + LargeChange=一屏({bar.ViewportSize}) OK");
+
+            var pageUp = bar.GetVisualDescendants().OfType<RepeatButton>()
+                .FirstOrDefault(b => b.Name == "PART_PageUpButton")
+                ?? throw new InvalidOperationException("找不到 PART_PageUpButton");
+            var thumb = bar.GetVisualDescendants().OfType<Thumb>().FirstOrDefault()
+                ?? throw new InvalidOperationException("找不到 Thumb");
+            if (pageUp.Delay != 300 || pageUp.Interval != 250)
+            {
+                throw new InvalidOperationException(
+                    $"按住节奏应为 300/250：{pageUp.Delay}/{pageUp.Interval}");
+            }
+
+            var root = (Visual)this;
+            var win = TopLevel.GetTopLevel(this)
+                ?? throw new InvalidOperationException("TopLevel 未就绪");
+            var barCenterX = bar.TranslatePoint(new Point(bar.Bounds.Width / 2, 0), root)!.Value.X;
+            var thumbTop = thumb.TranslatePoint(new Point(0, 0), root)!.Value.Y;
+            var pageUpTop = pageUp.TranslatePoint(new Point(0, 0), root)!.Value.Y;
+            var press = new Point(barCenterX, Math.Max(pageUpTop + 4, thumbTop - 40));
+
+            // ② 点一次 = 翻一整屏。
+            var beforeClick = terminal.ViewportY;
+            pageUp.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            await Task.Delay(200);
+            var afterClick = terminal.ViewportY;
+            if (beforeClick - afterClick != (int)bar.ViewportSize)
+            {
+                throw new InvalidOperationException(
+                    $"点一次应翻一屏：{beforeClick} -> {afterClick}（屏 {bar.ViewportSize}）");
+            }
+            AppLog.Info(
+                $"[SelfTest] r69: ② 单击翻一整屏 {beforeClick}->{afterClick} OK");
+
+            // ③ 按住滑块上方 1.2s：连续上翻（≥3 次），松手立即停。
+            var pointer = new Pointer(Pointer.GetNextFreeId(), PointerType.Mouse, isPrimary: true);
+            pageUp.RaiseEvent(new PointerPressedEventArgs(
+                pageUp, pointer, win, press, 0,
+                new PointerPointProperties(
+                    RawInputModifiers.LeftMouseButton, PointerUpdateKind.LeftButtonPressed),
+                KeyModifiers.None, clickCount: 1)
+            {
+                RoutedEvent = InputElement.PointerPressedEvent,
+            });
+
+            var steps = new List<int> { terminal.ViewportY };
+            var hold = System.Diagnostics.Stopwatch.StartNew();
+            while (hold.ElapsedMilliseconds < 1200)
+            {
+                await Task.Delay(40);
+                if (terminal.ViewportY != steps[^1])
+                {
+                    steps.Add(terminal.ViewportY);
+                }
+            }
+            SaveVisualPng(Content as Visual, "r69-scrollbar.png");
+
+            pageUp.RaiseEvent(new PointerReleasedEventArgs(
+                pageUp, pointer, win, press, 0,
+                new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.LeftButtonReleased),
+                KeyModifiers.None, MouseButton.Left)
+            {
+                RoutedEvent = InputElement.PointerReleasedEvent,
+            });
+            await Task.Delay(150);
+            var afterRelease = terminal.ViewportY;
+            await Task.Delay(700);
+            if (terminal.ViewportY != afterRelease)
+            {
+                throw new InvalidOperationException(
+                    $"松手后应停止翻页：{afterRelease} -> {terminal.ViewportY}");
+            }
+            for (var i = 1; i < steps.Count; i++)
+            {
+                if (steps[i] >= steps[i - 1])
+                {
+                    throw new InvalidOperationException(
+                        $"按住应连续上翻，实际序列 {string.Join(",", steps)}");
+                }
+            }
+            if (steps.Count < 4)
+            {
+                throw new InvalidOperationException(
+                    $"按住 1.2s 应至少翻 3 次，实际 {steps.Count - 1} 次：{string.Join(",", steps)}");
+            }
+            AppLog.Info(
+                $"[SelfTest] r69: ③ 按住连续上翻 {steps.Count - 1} 次（{string.Join(",", steps)}），" +
+                $"松手停在 {afterRelease} OK");
+
+            AppLog.Info("[SelfTest] r69: 自检完成 常显16px=OK 滑块同步=OK 单击一屏=OK 按住连续翻页=OK 松手即停=OK，退出");
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(0);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("[SelfTest] r69: 自检失败", ex);
+            SaveVisualPng(Content as Visual, "r69-failure.png");
             (Application.Current?.ApplicationLifetime
                 as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
         }

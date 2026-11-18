@@ -1,5 +1,108 @@
 <Styles x:CompileBindings="True" xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:terminal="using:Iciclecreek.Terminal">
+
+  <!-- r67.7：MobaXterm 式终端滚动条。
+       库模板里本来就有 PART_ScrollBar（Grid *,Auto），但 Fluent 的滚动条平时
+       全透明、只在悬停时浮现，我们此前干脆把它隐藏（Width=0），所以终端右侧
+       什么都没有。这里换成固定 16px、始终可见的经典滚动条：浅灰轨道 +
+       满宽滑块 + 上下箭头，按住轨道空白区由 RepeatButton 自动重复翻页。 -->
+  <Styles.Resources>
+    <ControlTheme x:Key="TerminalScrollBarThumbTheme" TargetType="Thumb">
+      <Setter Property="Width" Value="16" />
+      <Setter Property="MinHeight" Value="16" />
+      <Setter Property="MinWidth" Value="16" />
+      <Setter Property="Background" Value="{DynamicResource TerminalScrollBarThumbBrush}" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Background="{TemplateBinding Background}" />
+        </ControlTemplate>
+      </Setter>
+      <Style Selector="^:pointerover">
+        <Setter Property="Background" Value="{DynamicResource TerminalScrollBarThumbHoverBrush}" />
+      </Style>
+      <Style Selector="^:pressed">
+        <Setter Property="Background" Value="{DynamicResource TerminalScrollBarThumbPressedBrush}" />
+      </Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="TerminalScrollBarButtonTheme" TargetType="RepeatButton">
+      <Setter Property="Focusable" Value="False" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="CornerRadius" Value="0" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="Foreground" Value="{DynamicResource TerminalScrollBarArrowBrush}" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Background="{TemplateBinding Background}">
+            <ContentPresenter Content="{TemplateBinding Content}"
+                              HorizontalContentAlignment="Center"
+                              VerticalContentAlignment="Center" />
+          </Border>
+        </ControlTemplate>
+      </Setter>
+      <Style Selector="^:pointerover">
+        <Setter Property="Background" Value="{DynamicResource TerminalScrollBarButtonHoverBrush}" />
+      </Style>
+      <Style Selector="^:pressed">
+        <Setter Property="Background" Value="{DynamicResource TerminalScrollBarButtonPressedBrush}" />
+      </Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="TerminalScrollBarTheme" TargetType="ScrollBar">
+      <Setter Property="Width" Value="16" />
+      <Setter Property="MinWidth" Value="16" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Background" Value="{DynamicResource TerminalScrollBarTrackBrush}" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Grid RowDefinitions="16,*,16" Background="{TemplateBinding Background}">
+            <RepeatButton Name="PART_LineUpButton"
+                          Grid.Row="0"
+                          Theme="{StaticResource TerminalScrollBarButtonTheme}"
+                          AutomationProperties.Name="Line up">
+              <PathIcon Data="M 19.091797 14.970703 L 10 5.888672 L 0.908203 14.970703 L 0.029297 14.091797 L 10 4.111328 L 19.970703 14.091797 Z"
+                        Width="8" Height="8" />
+            </RepeatButton>
+            <Track Grid.Row="1"
+                   Minimum="{TemplateBinding Minimum}"
+                   Maximum="{TemplateBinding Maximum}"
+                   Value="{TemplateBinding Value, Mode=TwoWay}"
+                   ViewportSize="{TemplateBinding ViewportSize}"
+                   Orientation="{TemplateBinding Orientation}"
+                   IsDirectionReversed="True">
+              <Track.DecreaseButton>
+                <RepeatButton Name="PART_PageUpButton"
+                              Theme="{StaticResource TerminalScrollBarButtonTheme}"
+                              AutomationProperties.Name="Page up" />
+              </Track.DecreaseButton>
+              <Track.IncreaseButton>
+                <RepeatButton Name="PART_PageDownButton"
+                              Theme="{StaticResource TerminalScrollBarButtonTheme}"
+                              AutomationProperties.Name="Page down" />
+              </Track.IncreaseButton>
+              <Thumb Theme="{StaticResource TerminalScrollBarThumbTheme}"
+                     AutomationProperties.Name="Position" />
+            </Track>
+            <RepeatButton Name="PART_LineDownButton"
+                          Grid.Row="2"
+                          Theme="{StaticResource TerminalScrollBarButtonTheme}"
+                          AutomationProperties.Name="Line down">
+              <PathIcon Data="M 18.935547 4.560547 L 19.814453 5.439453 L 10 15.253906 L 0.185547 5.439453 L 1.064453 4.560547 L 10 13.496094 Z"
+                        Width="8" Height="8" />
+            </RepeatButton>
+          </Grid>
+        </ControlTemplate>
+      </Setter>
+    </ControlTheme>
+  </Styles.Resources>
+
+  <Style Selector="terminal|TerminalControl ScrollBar">
+    <Setter Property="Theme" Value="{StaticResource TerminalScrollBarTheme}" />
+  </Style>
 
   <Style Selector="Button.TitleBarButton, ToggleButton.TitleBarButton">
     <Setter Property="Width" Value="35" />

@@ -50,6 +50,15 @@
   <SolidColorBrush x:Key="MonIconUptimeBrush" Color="#6fc39a" />
   <SolidColorBrush x:Key="MonSegHotBrush" Color="#ff8a3d" />
 
+  <!-- r67.7：终端滚动条（深色主题配套；浅色主题是 MobaXterm 的亮灰条）。 -->
+  <SolidColorBrush x:Key="TerminalScrollBarTrackBrush" Color="#2D2D2D" />
+  <SolidColorBrush x:Key="TerminalScrollBarThumbBrush" Color="#5A5A5A" />
+  <SolidColorBrush x:Key="TerminalScrollBarThumbHoverBrush" Color="#6E6E6E" />
+  <SolidColorBrush x:Key="TerminalScrollBarThumbPressedBrush" Color="#7F7F7F" />
+  <SolidColorBrush x:Key="TerminalScrollBarArrowBrush" Color="#C8C8C8" />
+  <SolidColorBrush x:Key="TerminalScrollBarButtonHoverBrush" Color="#3A3A3A" />
+  <SolidColorBrush x:Key="TerminalScrollBarButtonPressedBrush" Color="#464646" />
+
   <FontFamily x:Key="IconFontAwesome">avares://COMTool.App/Assets/Fonts/fontawesome6-solid.ttf#Font Awesome 6 Free Solid</FontFamily>
   <FontFamily x:Key="IconMaterialDesign">avares://COMTool.App/Assets/Fonts/materialdesignicons6.ttf#Material Design Icons</FontFamily>
   <FontFamily x:Key="IconPhosphor">avares://COMTool.App/Assets/Fonts/phosphor.ttf#Phosphor</FontFamily>

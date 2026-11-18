@@ -59,14 +59,15 @@ public sealed class NewSessionMenuTests
 
                 var image = Assert.IsType<Image>(window.FindControl<Image>("TitleBarLogo"));
                 Assert.NotNull(image.Source);
-                // r67.4：30px 显示、上下边距相等（2.5）→ logo 在 35px 标题栏内精确垂直居中，
-                // 与标题文字视觉中心对齐（用户反馈 28px 偏小发虚、位置偏上）。
-                Assert.Equal(30, image.Width);
-                Assert.Equal(30, image.Height);
+                // r67.7：按用户反馈「logo 太大」改为 MobaXterm 式小图标：19px 显示
+                // （有效图形 ~17px，与 MobaXterm 标题栏图标同量级），上下各 8px
+                // 整数边距 → 35px 栏内精确居中且不落半像素（半像素会抗锯齿发虚）。
+                Assert.Equal(19, image.Width);
+                Assert.Equal(19, image.Height);
                 Assert.Equal(6, image.Margin.Left);
-                Assert.Equal(2.5, image.Margin.Top);
+                Assert.Equal(8, image.Margin.Top);
                 Assert.Equal(0, image.Margin.Right);
-                Assert.Equal(2.5, image.Margin.Bottom);
+                Assert.Equal(8, image.Margin.Bottom);
 
                 // 渲染几何回归：logo 盒子中心与标题栏中心偏差 ≤0.5px（防「太靠上」回潮）。
                 var titleBar = window.FindControl<Border>("TitleBar");
@@ -77,6 +78,27 @@ public sealed class NewSessionMenuTests
                 var barC = titleBar.Bounds.Y + titleBar.Bounds.Height / 2.0;
                 Assert.True(Math.Abs(logoC - barC) <= 0.5,
                     $"logo 应垂直居中于标题栏：logo 中心 {logoC:0.##}，栏中心 {barC:0.##}");
+
+                // r67.7 防回潮：
+                // 1) 图标不得再占满标题栏（≤ 60% 栏高），上下留白 ≥ 6px；
+                // 2) 布局偏移必须是整数像素（半像素会被 Skia 抗锯齿 → 发虚）；
+                // 3) 标题文字紧贴图标（同一视觉组），间距 ≤ 10px。
+                Assert.True(image.Bounds.Height <= titleBar.Bounds.Height * 0.6,
+                    $"logo 高度 {image.Bounds.Height:0.##} 不应超过标题栏的 60%");
+                Assert.True(image.Bounds.Y >= 6
+                    && titleBar.Bounds.Height - image.Bounds.Bottom >= 6,
+                    $"logo 上下留白应 ≥ 6px：上 {image.Bounds.Y:0.##}，下 {titleBar.Bounds.Height - image.Bounds.Bottom:0.##}");
+                Assert.Equal(Math.Floor(image.Bounds.Y), image.Bounds.Y);
+                Assert.Equal(Math.Floor(image.Bounds.Height), image.Bounds.Height);
+                Assert.Equal(Math.Floor(image.Bounds.X), image.Bounds.X);
+                var titleText = window.GetVisualDescendants().OfType<TextBlock>()
+                    .FirstOrDefault(block => block.Text == "COMTool v0.01");
+                Assert.NotNull(titleText);
+                var titleX = titleText!.TranslatePoint(new Point(0, 0), window)!.Value.X;
+                var logoRight = image.Bounds.X + image.Bounds.Width;
+                var gap = titleX - logoRight;
+                Assert.True(gap >= 0 && gap <= 10,
+                    $"标题文字应在图标右侧 0–10px：图标右 {logoRight:0.##}，文字左 {titleX:0.##}，间距 {gap:0.##}");
 
                 using var png = AssetLoader.Open(
                     new Uri("avares://COMTool.App/Assets/logo.png"));

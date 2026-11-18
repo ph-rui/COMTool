@@ -82,15 +82,16 @@
           <MenuItem Header="About COMTool" Click="OnAboutClick" />
         </ContextMenu>
       </Border.ContextMenu>
-      <Grid ColumnDefinitions="40,104,40,*,35,35,35">
-        <!-- r67.4：28px → 30px（用户反馈图标偏小、边缘发虚：logo.png 内建 5.5%
-             透明边距，28px 槽内有效图形仅 ~24px），Margin 上下 2.5 精确居中，
-             与标题文字视觉中心（~17px @35px 栏高）对齐。 -->
+      <Grid ColumnDefinitions="25,119,40,*,35,35,35">
+        <!-- r67.7：30px → 19px，改为 MobaXterm 那种小图标（用户反馈「logo 太大」）。
+             35-19=16 → 上下各 8px 整数边距，垂直居中且不落半像素（半像素会让 Skia
+             抗锯齿，重现 r67.4 的「发虚」）。第 0 列 40→25、第 1 列 104→119，
+             标题文字起点 47→30，紧贴图标；pin/窗口按钮列起点仍为 144，位置不变。 -->
         <Image Grid.Column="0"
                Name="TitleBarLogo"
                Source="/Assets/logo.png"
-               Width="30" Height="30"
-               Margin="6,2.5,0,2.5"
+               Width="19" Height="19"
+               Margin="6,8,0,8"
                HorizontalAlignment="Left"
                VerticalAlignment="Center"
                Stretch="Uniform" />

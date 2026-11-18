@@ -5,6 +5,8 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
+using Avalonia.Interactivity;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Iciclecreek.Terminal;
@@ -310,13 +312,223 @@ public sealed class TerminalR39FeatureTests
                 RunJobs(window);
 
                 var (terminal, _, _) = CreateTestTerminal(window, "sb");
+                var bar = SingleScrollBar(terminal);
+                // r67.7：默认就是可见的 16px 常显滚动条（此前附加时被隐藏）。
+                Assert.True(bar.IsVisible);
+                Assert.Equal(16, bar.Width);
+
                 Assert.True(window.ToggleTerminalScrollBar(terminal));
-                var v1 = terminal.GetVisualDescendants().OfType<ScrollBar>()
-                    .Select(b => b.IsVisible).Distinct().Single();
+                Assert.False(bar.IsVisible);
+                Assert.Equal(0, bar.Width);
+
                 Assert.True(window.ToggleTerminalScrollBar(terminal));
-                var v2 = terminal.GetVisualDescendants().OfType<ScrollBar>()
-                    .Select(b => b.IsVisible).Distinct().Single();
-                Assert.NotEqual(v1, v2);
+                Assert.True(bar.IsVisible);
+                Assert.Equal(16, bar.Width);
+                Assert.Equal(16, bar.MinWidth);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    // ───────────────── r67.7：MobaXterm 式常显终端滚动条（TERM-36）─────────────────
+
+    private static ScrollBar SingleScrollBar(TerminalControl terminal) =>
+        terminal.GetVisualDescendants().OfType<ScrollBar>().Single();
+
+    private static void FillScrollback(TerminalControl terminal, int lines = 120)
+    {
+        for (var i = 0; i < lines; i++)
+        {
+            terminal.Terminal.Write($"line{i:000}\r\n");
+        }
+    }
+
+    /// <summary>通过 PTY 输出灌满回滚（库只在真实输出/属性通知时刷新 ScrollBar 的
+    /// Maximum/Value；直接写 TerminalBuffer 不会触发，headless 里须走 PTY 路径）。</summary>
+    private static void PumpScrollback(InMemoryPty pty, TerminalControl terminal, int lines = 120)
+    {
+        for (var i = 0; i < lines; i++)
+        {
+            pty.Send($"line{i:000}\r\n");
+        }
+
+        var deadline = System.DateTime.UtcNow.AddSeconds(5);
+        while (System.DateTime.UtcNow < deadline)
+        {
+            Dispatcher.UIThread.RunJobs();
+            if (terminal.MaxScrollback > 20 && terminal.ViewportY == terminal.MaxScrollback)
+            {
+                break;
+            }
+            Thread.Sleep(20);
+        }
+        Dispatcher.UIThread.RunJobs();
+    }
+
+    /// <summary>r67.7：滚动条默认常显、16px 宽、贴终端右缘（MobaXterm 实机采样），
+    /// 且浅色主题用亮灰轨道 #EDEDED / 滑块 #BDBDBD，而不是 Fluent 的悬停才浮现。</summary>
+    [AvaloniaFact]
+    public void TERM36_ScrollBarAlwaysVisibleAtMobaWidth()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                window = new MainWindow { DataContext = new MainViewModel() };
+                window.Show();
+                window.StopPortTimerForTests();
+                RunJobs(window);
+
+                var (terminal, _, _) = CreateTestTerminal(window, "term30-visible");
+                window.UpdateLayout();
+                RunJobs(window);
+
+                var bar = SingleScrollBar(terminal);
+                Assert.True(bar.IsVisible);
+                Assert.Equal(16, bar.Width);
+                Assert.Equal(16, bar.MinWidth);
+                Assert.Equal(16, bar.Bounds.Width);
+                Assert.Equal(1, bar.Opacity);
+                Assert.Equal(ScrollBarVisibility.Visible, bar.Visibility);
+
+                // 不悬停也必须看得见：Fluent 默认给轨道/按钮 Opacity=0，我们换成实心配色。
+                var trackBrush = Assert.IsType<SolidColorBrush>(bar.Background);
+                Assert.Equal(Color.Parse("#EDEDED"), trackBrush.Color);
+                Assert.True(trackBrush.Opacity > 0.99);
+
+                // 上下箭头按钮常显（不再等悬停），行高 16px 且带箭头图标。
+                var lineUp = bar.GetVisualDescendants().OfType<RepeatButton>()
+                    .Single(b => b.Name == "PART_LineUpButton");
+                var lineDown = bar.GetVisualDescendants().OfType<RepeatButton>()
+                    .Single(b => b.Name == "PART_LineDownButton");
+                foreach (var button in new[] { lineUp, lineDown })
+                {
+                    Assert.Equal(1, button.Opacity);
+                    Assert.Equal(16, button.Bounds.Height);
+                    var arrow = button.GetVisualDescendants().OfType<PathIcon>().Single();
+                    Assert.Equal(8, arrow.Width);
+                    Assert.Equal(8, arrow.Height);
+                }
+
+                // 贴终端右缘：滚动条右边界 = 终端右边界（MobaXterm 就是紧贴窗口边）。
+                var terminalRight = terminal.Bounds.Width;
+                var barRight = bar.TranslatePoint(new Point(bar.Bounds.Width, 0), terminal)!.Value.X;
+                Assert.Equal(terminalRight, barRight, 1);
+
+                // 滑块满宽，且不再套 Fluent 的 0.5 缩放变换（否则视觉只有 8px 细条）。
+                var thumb = bar.GetVisualDescendants().OfType<Thumb>().Single();
+                Assert.Equal(16, thumb.Bounds.Width);
+                Assert.Null(thumb.RenderTransform);
+                var thumbBrush = Assert.IsType<SolidColorBrush>(thumb.Background);
+                Assert.Equal(Color.Parse("#BDBDBD"), thumbBrush.Color);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    /// <summary>r67.7：点一次轨道空白 = 翻一整屏（LargeChange = ViewportSize），
+    /// 按住重复节奏对齐 MobaXterm 视频（首延迟 300ms、每 250ms 一页）。</summary>
+    [AvaloniaFact]
+    public void TERM36_PageClickScrollsOneScreenWithMobaRepeat()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                window = new MainWindow { DataContext = new MainViewModel() };
+                window.Show();
+                window.StopPortTimerForTests();
+                RunJobs(window);
+
+                var (terminal, pty, _) = CreateTestTerminal(window, "term30-page");
+                PumpScrollback(pty, terminal);
+                window.UpdateLayout();
+                RunJobs(window);
+
+                var bar = SingleScrollBar(terminal);
+                Assert.True(bar.ViewportSize > 2, $"视口行数应 >2，实际 {bar.ViewportSize}");
+                Assert.Equal(bar.ViewportSize, bar.LargeChange);
+                // 库把滚动位置同步到滑块：灌满输出后滑块应在底部。
+                Assert.True(terminal.ViewportY > 20, $"应已回滚，viewportY={terminal.ViewportY}");
+                Assert.Equal(terminal.ViewportY, (int)bar.Value);
+
+                var pageUp = bar.GetVisualDescendants().OfType<RepeatButton>()
+                    .Single(b => b.Name == "PART_PageUpButton");
+                var pageDown = bar.GetVisualDescendants().OfType<RepeatButton>()
+                    .Single(b => b.Name == "PART_PageDownButton");
+                Assert.Equal(300, pageUp.Delay);
+                Assert.Equal(250, pageUp.Interval);
+                Assert.Equal(300, pageDown.Delay);
+                Assert.Equal(250, pageDown.Interval);
+
+                var viewport = (int)bar.ViewportSize;
+                var before = terminal.ViewportY;
+                Assert.True(before >= viewport, $"回滚不足一屏：viewportY={before} viewport={viewport}");
+
+                pageUp.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                RunJobs(window);
+                Assert.Equal(before - viewport, terminal.ViewportY);
+
+                pageDown.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                RunJobs(window);
+                Assert.Equal(before, terminal.ViewportY);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    /// <summary>r67.7：没有回滚内容时滚动条同样占位 16px（库会禁用但仍保留列），
+    /// 这样终端列宽不会随回滚内容出现/消失而抖动。</summary>
+    [AvaloniaFact]
+    public void TERM36_ScrollBarReservesWidthWithoutScrollback()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                env.SeedConfig(new ComtoolConfig());
+                window = new MainWindow { DataContext = new MainViewModel() };
+                window.Show();
+                window.StopPortTimerForTests();
+                RunJobs(window);
+
+                var (terminal, _, _) = CreateTestTerminal(window, "term30-empty");
+                window.UpdateLayout();
+                RunJobs(window);
+
+                var bar = SingleScrollBar(terminal);
+                var narrow = terminal.Terminal.Buffer.Cols;
+                // 起步（几乎无回滚）就已占 16px：终端列宽不随回滚内容出现而抖动。
+                Assert.True(bar.IsVisible);
+                Assert.Equal(16, bar.Bounds.Width);
+
+                FillScrollback(terminal);
+                window.UpdateLayout();
+                RunJobs(window);
+                Assert.True(terminal.Terminal.Buffer.YBase > 0);
+                Assert.True(bar.IsVisible);
+                Assert.Equal(16, bar.Bounds.Width);
+                Assert.Equal(narrow, terminal.Terminal.Buffer.Cols);
             });
         }
         finally

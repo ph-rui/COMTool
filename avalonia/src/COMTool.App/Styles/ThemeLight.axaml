@@ -64,6 +64,17 @@
   <!-- 磁盘占用最高的分区（MobaXterm 用橙红文字突出）。 -->
   <SolidColorBrush x:Key="MonSegHotBrush" Color="#ff6400" />
 
+  <!-- r67.7：终端滚动条（MobaXterm 式）。浅色主题对齐 MobaXterm 实机采样：
+       轨道 #EDEDED、滑块 #BDBDBD、箭头深灰。终端底色本身是深色，所以浅色
+       主题下这条亮灰滚动条正是 MobaXterm 的观感。 -->
+  <SolidColorBrush x:Key="TerminalScrollBarTrackBrush" Color="#EDEDED" />
+  <SolidColorBrush x:Key="TerminalScrollBarThumbBrush" Color="#BDBDBD" />
+  <SolidColorBrush x:Key="TerminalScrollBarThumbHoverBrush" Color="#A8A8A8" />
+  <SolidColorBrush x:Key="TerminalScrollBarThumbPressedBrush" Color="#949494" />
+  <SolidColorBrush x:Key="TerminalScrollBarArrowBrush" Color="#505050" />
+  <SolidColorBrush x:Key="TerminalScrollBarButtonHoverBrush" Color="#E0E0E0" />
+  <SolidColorBrush x:Key="TerminalScrollBarButtonPressedBrush" Color="#D2D2D2" />
+
   <FontFamily x:Key="IconFontAwesome">avares://COMTool.App/Assets/Fonts/fontawesome6-solid.ttf#Font Awesome 6 Free Solid</FontFamily>
   <FontFamily x:Key="IconMaterialDesign">avares://COMTool.App/Assets/Fonts/materialdesignicons6.ttf#Material Design Icons</FontFamily>
   <FontFamily x:Key="IconPhosphor">avares://COMTool.App/Assets/Fonts/phosphor.ttf#Phosphor</FontFamily>
