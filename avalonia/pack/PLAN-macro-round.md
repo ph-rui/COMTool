@@ -3070,3 +3070,81 @@ publish 158s `rc=0`，robocopy /MIR 到运行目录。
   `8aa83b86d22f12ec28d0cf9e423d782a5e2f338b5a018a9eacffcdb510d1bcb0`
   （首轮 zip 脚本报「流不可读」`ZIP_ERR`，重跑即 `ZIP_OK`）。
 
+### 67.9 删除会话确认框统一为 ConfirmDialog（2026-11-23，用户截图反馈）
+
+**用户反馈**：附 Windows AOT 实机截图（436×212）：「这个界面在优化一下，出个方案」。
+
+**现状**：`MainWindow.ShowConfirmAsync`（约 50 行）内联拼装 `Window`：440×190 固定尺寸、
+系统标题栏、单个 `TextBlock` 显示 "Remove this Telnet session from memory?\n会话标识"、
+两个 80px 等宽灰色按钮 `No`/`Yes`。
+
+**问题（对照截图与代码）**：
+1. 系统标题栏带最小化/最大化按钮，对固定尺寸模态框没有意义，也与主窗的无边框外观不一致；
+2. 固定高度 190px，内容只占上半部分，按钮下方约 70px 空白；长会话名换行时反而可能被裁；
+3. 问句与会话标识在同一 `TextBlock`，字号与颜色相同，没有层级；
+4. `No`/`Yes` 同宽同色，破坏性操作没有视觉区分；
+5. 没有 Enter/Esc 键盘路径，焦点落点不确定；
+6. "from memory" 与实现不符（会话写入 `config.json` 持久化）。
+
+**方案**（用户选定「统一确认框组件，先用于删除会话」）：
+- 新增 `Views/ConfirmDialog.axaml(.cs)`：`WindowDecorations="None"` + 自绘 35px 标题栏
+  （标题 + 关闭按钮，`PointerPressed` 调 `BeginMoveDrag`），`SizeToContent="Height"`、
+  宽 436，`ShowInTaskbar=False`、`CenterOwner`；
+- 内容三段：问句 13px `WindowTextBrush`；名称 12px `SessionNameBrush`；端点 12px
+  `SessionDetailBrush`；均 `TextTrimming=CharacterEllipsis`，名称/端点重复时省略端点；
+  可选备注行默认隐藏（本轮不传）；
+- 按钮：`Cancel` 在左、`Remove` 在右；`Remove` 用新增 `Button.DialogDanger`（浅色
+  #c42b1c、深色 #d13438，白字，悬停/按下状态直接改模板内 `PART_ContentPresenter`，
+  否则被 Fluent 的 :pointerover 规则覆盖）；`Cancel` 同时为 `IsDefault` 与 `IsCancel`，
+  Enter/Esc 都返回取消，初始焦点在 `Cancel`；确认只能点击 `Remove` 或在按钮上按空格；
+- `ShowAsync/Create` 两个内部入口：前者供业务调用，后者供实机自检持有实例；
+- 文案组装抽为 `Services/SessionRemovalPrompt.cs`（纯函数）：`Title` 固定
+  "Remove session"，`Question` 为 "Remove this {SSH|Telnet|TCP|serial} session?"，
+  `Name`/`Detail` 取会话规则（`DisplayName`/`Detail`），会话缺失时退回会话 ID；
+  SSH/Telnet 且 `PasswordCache` 中存有该会话密码时，`Note` 为
+  "The saved password will also be deleted."（删除分支同时调用 `PasswordCache.Remove`）；
+- `MainWindow.OnSessionRemoveRequested` 改为调用组件；内联 `ShowConfirmAsync` 删除。
+
+**测试**（先红后绿）：
+- `ConfirmDialogTests`（6 项）：无系统标题栏（`WindowDecorations=None`、无
+  `WindowMinButton`/`WindowMaxButton`、`CanResize=False`、`SizeToContent=Height`、宽 436、
+  1px 边框、标题栏 35px）；三段文本与主题刷子、纵向层级；200 字名称 `CharacterEllipsis`
+  截断且窗口仍 436；按钮顺序、`DialogDanger` 类与 #c42b1c 背景、`Cancel` 的
+  IsDefault/IsCancel、备注可见性；Enter 与 Esc 均返回 false；点击 `Remove` 返回 true；
+  `danger:false` 不套危险样式。
+- `SessionRemovalPromptTests`（5 项）：Telnet 名称/端点拆分；SSH 别名与重复去重；
+  TCP `TCP client` 端点与串口端口；会话缺失退回 ID；密码缓存中存在该会话时
+  提示 `The saved password will also be deleted.`，不存在时为空。
+- 红验证两轮：① 去掉 `IsDefault`/`IsCancel` 与 XAML 的 `DialogDanger` 类 →
+  2 项失败（`Expected: True / Actual: False`）；② 去掉 `WindowDecorations="None"` 并把
+  `DialogDanger` 背景改为 Transparent → 3 项失败（`#ffc42b1c` vs `Transparent`、
+  `None` vs `Full`）。还原后 11 项全绿；App 全量 367 项通过（原 356 + 11）。
+
+**Xvfb 实跑**（`--selftest-r70`，mutter）：exit 0；① 无边框 + 标题栏 35px + 无最小化/
+最大化；② 危险色 `#ffc42b1c`；③ Esc 返回取消。`r70-confirm.png` 436×164（固定宽度、
+高度随内容收缩），像素复核：标题栏分隔线、关闭按钮、红色 `Remove`、灰色 `Cancel`。
+
+**gate**（`pack/verify.sh --results /tmp/opencode/r679-gate2`，2026-11-23）：
+restore/build PASS，unit-tests PASS（411 项 / 6 项目），app-tests PASS（367 项，
+原 356 + UI17 11 项），test-list PASS（App 367 项），e2e PASS（15/15），
+testgate PASS，合计 778 项全过。补密码提示后重跑一次仍全绿（首跑 gate1 为
+777 项，差异仅新增 UI17 密码提示用例）。
+
+**VM 实机部署验证**（2026-11-23，`C:\Users\zhangrui\COMTool-Avalonia-AOT`）：
+bundle `comtool-r679.bundle` → HEAD `a36bd12`；win-x64 AOT publish 107s `rc=0`，
+robocopy /MIR 到运行目录。运行目录 `COMTool.App.exe` SHA256
+`c672a868ea637f13d2acad5c57df11b49e21920d4bc39514dac5842442872534`。
+- `--selftest-r70`：① 无系统标题栏 + 自绘标题栏 35px + 无最小化/最大化；
+  ② 确认按钮危险色 `#ffc42b1c`；③ Esc 返回取消；`r70-confirm.png` 落盘。
+  截图 436×172：自绘标题栏（标题 + 关闭按钮）、问句 "Remove this SSH session?"、
+  名称 `172.16.66.48`、端点 `zlgmcu@172.16.66.48:22`、右下灰色 `Cancel` +
+  红色 `Remove`；无系统 chrome，下方无原 70px 空白。
+- `--selftest-r69`（滚动条常显/一屏/逐行平滑）、`--selftest-r67`（标签拖动）、
+  `--selftest-r68`（串口断线重连）回归全过。
+- `COMTool-Avalonia-AOT-r67.zip` 已刷新：78,474,615 字节，SHA256
+  `6acfe5e4b52333b3ce4ca48ab8ed14b685ec68ecd93c1771ed490547b4bc356e`
+  （首轮 zip 脚本报「流不可读」`ZIP_ERR`，重跑即 `ZIP_OK`，与 r67.8 相同）。
+
+**已知取舍**：本轮只把「删除会话」迁到新组件，其他确认/提示点（如宏编辑、
+服务器设置）仍用各自实现；界面语言沿用英文，与现有 App 对话框的中英混用问题
+一并未处理。
