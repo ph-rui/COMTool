@@ -38,6 +38,7 @@ public sealed class SessionRemovalPromptTests
         Assert.Equal("Remove this Telnet session?", prompt.Question);
         Assert.Equal("192.168.1.12", prompt.Name);
         Assert.Equal("root@192.168.1.12:23", prompt.Detail);
+        Assert.Equal("", prompt.Note);
     }
 
     [Fact]
@@ -71,6 +72,7 @@ public sealed class SessionRemovalPromptTests
             SessionKind.Ssh, SshSessionRules.Key("192.0.2.49", 22, "devuser"), config);
         Assert.Equal("devuser@192.0.2.49:22", same.Name);
         Assert.Equal("", same.Detail);
+        Assert.Equal("", same.Note);
     }
 
     [Fact]
@@ -100,6 +102,7 @@ public sealed class SessionRemovalPromptTests
         Assert.Equal("Remove this serial session?", serialPrompt.Question);
         Assert.Equal("COM99", serialPrompt.Name);
         Assert.Equal("", serialPrompt.Detail);
+        Assert.Equal("", serialPrompt.Note);
     }
 
     [Fact]
@@ -112,5 +115,28 @@ public sealed class SessionRemovalPromptTests
 
         Assert.Equal("root@192.168.1.12:23", prompt.Name);
         Assert.Equal("", prompt.Detail);
+        Assert.Equal("", prompt.Note);
+    }
+
+    [Fact]
+    public void UI17_RemovalPromptWarnsAboutCachedPassword()
+    {
+        using var env = new TestEnvironment();
+        var telnet = new TelnetSession
+        {
+            Host = "192.168.1.12",
+            Port = 23,
+            User = "root",
+        };
+        var config = Load(env, new ComtoolConfig { TelnetSessions = { telnet } });
+        var key = TelnetSessionRules.Key("192.168.1.12", 23, "root");
+
+        // 无缓存密码时不显示提示行。
+        Assert.Equal("", SessionRemovalPrompt.Build(SessionKind.Telnet, key, config).Note);
+
+        config.PasswordCache.Set(key, "secret");
+        Assert.Equal(
+            "The saved password will also be deleted.",
+            SessionRemovalPrompt.Build(SessionKind.Telnet, key, config).Note);
     }
 }

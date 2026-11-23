@@ -880,6 +880,7 @@ public partial class MainWindow : Window
                 prompt.Question,
                 prompt.Name,
                 prompt.Detail,
+                prompt.Note,
                 confirmText: "Remove"))
         {
             return;
@@ -11066,13 +11067,15 @@ public static class ClipCheck {
                     SessionRemovalPrompt.DefaultTitle,
                     "Remove this Telnet session?",
                     "192.168.1.12",
-                    "root@192.168.1.12:23")
+                    "root@192.168.1.12:23",
+                    "")
                 : SessionRemovalPrompt.Build(kind, id, _config);
             var dialog = ConfirmDialog.Create(
                 prompt.Title,
                 prompt.Question,
                 prompt.Name,
                 prompt.Detail,
+                prompt.Note,
                 confirmText: "Remove");
             var result = dialog.ShowDialog<bool>(this);
             await Task.Delay(600);
