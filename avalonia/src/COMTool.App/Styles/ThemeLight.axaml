@@ -19,6 +19,11 @@
   <SolidColorBrush x:Key="CloseHoverBrush" Color="#e81123" />
   <SolidColorBrush x:Key="AccentBrush" Color="#1e95f4" />
   <SolidColorBrush x:Key="AccentHoverBrush" Color="#1a7fd4" />
+  <!-- r67.9：确认对话框的危险操作按钮（删除/移除）。 -->
+  <SolidColorBrush x:Key="DangerBrush" Color="#c42b1c" />
+  <SolidColorBrush x:Key="DangerHoverBrush" Color="#a3221a" />
+  <SolidColorBrush x:Key="DangerPressedBrush" Color="#8a1c16" />
+  <SolidColorBrush x:Key="DangerForegroundBrush" Color="#ffffff" />
   <SolidColorBrush x:Key="SidebarTitleBrush" Color="#1c1c1c" />
   <SolidColorBrush x:Key="SidebarBorderBrush" Color="#b4b4b4" />
   <SolidColorBrush x:Key="SidebarListBackgroundBrush" Color="#ffffff" />

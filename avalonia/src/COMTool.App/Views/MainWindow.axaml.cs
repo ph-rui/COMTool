@@ -495,6 +495,14 @@ public partial class MainWindow : Window
         {
             _ = RunR69SelfTestAsync();
         }
+        // --selftest-r70：实机自检删除会话确认框（r67.9）：用真实会话数据打开确认框，
+        // 断言无系统标题栏（WindowDecorations=None、没有最小化/最大化按钮）、
+        // 自绘标题栏 35px、确认按钮为危险色 #c42b1c、Esc 返回取消。
+        // 落盘 r70-confirm.png。
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r70"))
+        {
+            _ = RunR70SelfTestAsync();
+        }
     }
 
     private volatile bool _portScanBusy;
@@ -865,42 +873,14 @@ public partial class MainWindow : Window
             return;
         }
 
-        string label;
-        string kind;
-        if (item.Kind == SessionKind.Ssh)
-        {
-            var session = _config.SshSessions.Get(item.SessionId);
-            label = session is null
-                ? item.SessionId
-                : $"{SshSessionRules.DisplayName(session)} ({SshSessionRules.Detail(session)})";
-            kind = "SSH";
-        }
-        else if (item.Kind == SessionKind.Telnet)
-        {
-            var session = _config.TelnetSessions.Get(item.SessionId);
-            label = session is null
-                ? item.SessionId
-                : $"{TelnetSessionRules.DisplayName(session)} ({TelnetSessionRules.Detail(session)})";
-            kind = "Telnet";
-        }
-        else if (item.Kind == SessionKind.Tcp)
-        {
-            var session = _config.TcpSessions.Get(item.SessionId);
-            label = session is null
-                ? item.SessionId
-                : $"{TcpSessionRules.DisplayName(session)} ({TcpSessionRules.Detail(session)})";
-            kind = "TCP";
-        }
-        else
-        {
-            label = item.SessionId;
-            kind = "serial";
-        }
-
-        var confirmed = await ShowConfirmAsync(
-            "Remove session",
-            $"Remove this {kind} session from memory?\n{label}");
-        if (!confirmed)
+        var prompt = SessionRemovalPrompt.Build(item.Kind, item.SessionId, _config);
+        if (!await ConfirmDialog.ShowAsync(
+                this,
+                prompt.Title,
+                prompt.Question,
+                prompt.Name,
+                prompt.Detail,
+                confirmText: "Remove"))
         {
             return;
         }
@@ -3230,56 +3210,6 @@ public partial class MainWindow : Window
         tab.ZmodemLabel = "Cancelling...";
         zmodem.CancelSend();
         zmodem.CancelTransfer();
-    }
-
-    private async Task<bool> ShowConfirmAsync(string title, string message)
-    {
-        var dialog = new Window
-        {
-            Title = title,
-            Width = 440,
-            Height = 190,
-            MinWidth = 320,
-            MinHeight = 160,
-            CanResize = false,
-            ShowInTaskbar = false,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-        };
-        var yes = new Button
-        {
-            Content = "Yes",
-            Width = 80,
-            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
-        };
-        yes.Click += (_, _) => dialog.Close(true);
-        var no = new Button
-        {
-            Content = "No",
-            Width = 80,
-            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Center,
-        };
-        no.Click += (_, _) => dialog.Close(false);
-        dialog.Content = new StackPanel
-        {
-            Margin = new Thickness(16),
-            Spacing = 12,
-            Children =
-            {
-                new TextBlock
-                {
-                    Text = message,
-                    TextWrapping = TextWrapping.Wrap,
-                },
-                new StackPanel
-                {
-                    Orientation = Avalonia.Layout.Orientation.Horizontal,
-                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
-                    Spacing = 8,
-                    Children = { no, yes },
-                },
-            },
-        };
-        return await dialog.ShowDialog<bool>(this);
     }
 
     private async Task ShowInfoAsync(string title, string message)
@@ -11092,6 +11022,130 @@ public static class ClipCheck {
         {
             AppLog.Error("[SelfTest] r69: 自检失败", ex);
             SaveVisualPng(Content as Visual, "r69-failure.png");
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
+        }
+    }
+
+    private async Task RunR70SelfTestAsync()
+    {
+        try
+        {
+            AppLog.Info("[SelfTest] r70: 等主窗稳定 1.2s 后打开删除会话确认框");
+            await Task.Delay(1200);
+
+            // 优先用真实会话（用户实机是 Telnet 192.168.1.12），没有就退回示例标识。
+            var kind = SessionKind.Telnet;
+            var id = "root@192.168.1.12:23";
+            if (_config is not null)
+            {
+                if (_config.TelnetSessions.SortedSessions().FirstOrDefault() is { } tel)
+                {
+                    kind = SessionKind.Telnet;
+                    id = tel.Key;
+                }
+                else if (_config.SshSessions.SortedSessions().FirstOrDefault() is { } ssh)
+                {
+                    kind = SessionKind.Ssh;
+                    id = ssh.Key;
+                }
+                else if (_config.TcpSessions.SortedSessions().FirstOrDefault() is { } tcp)
+                {
+                    kind = SessionKind.Tcp;
+                    id = tcp.Key;
+                }
+                else if (_config.SerialSessions.SortedSessions().FirstOrDefault() is { } serial)
+                {
+                    kind = SessionKind.Serial;
+                    id = serial.Port;
+                }
+            }
+
+            var prompt = _config is null
+                ? new SessionRemovalPrompt(
+                    SessionRemovalPrompt.DefaultTitle,
+                    "Remove this Telnet session?",
+                    "192.168.1.12",
+                    "root@192.168.1.12:23")
+                : SessionRemovalPrompt.Build(kind, id, _config);
+            var dialog = ConfirmDialog.Create(
+                prompt.Title,
+                prompt.Question,
+                prompt.Name,
+                prompt.Detail,
+                confirmText: "Remove");
+            var result = dialog.ShowDialog<bool>(this);
+            await Task.Delay(600);
+            dialog.UpdateLayout();
+
+            if (dialog.WindowDecorations != WindowDecorations.None)
+            {
+                throw new InvalidOperationException(
+                    $"确认框应无系统标题栏，实际 {dialog.WindowDecorations}");
+            }
+
+            if (dialog.GetVisualDescendants().OfType<Button>()
+                .Any(b => b.Name is "WindowMinButton" or "WindowMaxButton"))
+            {
+                throw new InvalidOperationException("确认框不应出现最小化/最大化按钮");
+            }
+
+            var titleBar = dialog.FindControl<Border>("DialogTitleBar")
+                ?? throw new InvalidOperationException("找不到自绘标题栏");
+            if (Math.Abs(titleBar.Bounds.Height - 35) > 0.5)
+            {
+                throw new InvalidOperationException(
+                    $"标题栏应为 35px，实际 {titleBar.Bounds.Height}");
+            }
+
+            var confirm = dialog.FindControl<Button>("ConfirmButton")
+                ?? throw new InvalidOperationException("找不到确认按钮");
+            if (!confirm.Classes.Contains("DialogDanger"))
+            {
+                throw new InvalidOperationException("确认按钮缺少 DialogDanger 样式");
+            }
+
+            if (confirm.Background is not ISolidColorBrush fill
+                || fill.Color != Color.Parse("#c42b1c"))
+            {
+                throw new InvalidOperationException(
+                    $"确认按钮应为危险色 #c42b1c，实际 {(confirm.Background as ISolidColorBrush)?.Color}");
+            }
+
+            var cancel = dialog.FindControl<Button>("CancelButton")
+                ?? throw new InvalidOperationException("找不到取消按钮");
+            if (!cancel.IsDefault || !cancel.IsCancel)
+            {
+                throw new InvalidOperationException("Enter/Esc 应都走取消按钮");
+            }
+
+            SaveVisualPng(dialog, "r70-confirm.png");
+            AppLog.Info(
+                $"[SelfTest] r70: ① 无边框 + 标题栏 {titleBar.Bounds.Height:0}px + 无最小化/最大化 OK；" +
+                $"② 危险色按钮 {((ISolidColorBrush)confirm.Background!).Color} OK");
+
+            // Esc = 取消：破坏性操作不做键盘直达确认。
+            dialog.RaiseEvent(new KeyEventArgs
+            {
+                RoutedEvent = InputElement.KeyDownEvent,
+                Key = Key.Escape,
+            });
+            await Task.Delay(250);
+            if (!result.IsCompleted || result.Result)
+            {
+                throw new InvalidOperationException("Esc 应返回取消");
+            }
+
+            AppLog.Info("[SelfTest] r70: ③ Esc 返回取消 OK");
+            AppLog.Info(
+                "[SelfTest] r70: 自检完成 无系统标题栏=OK 标题栏35px=OK 危险色=OK Esc取消=OK，退出");
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(0);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("[SelfTest] r70: 自检失败", ex);
+            SaveVisualPng(Content as Visual, "r70-failure.png");
             (Application.Current?.ApplicationLifetime
                 as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
         }

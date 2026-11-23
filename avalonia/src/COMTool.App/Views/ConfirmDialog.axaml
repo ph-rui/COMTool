@@ -1,0 +1,92 @@
+<Window x:CompileBindings="True" xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="COMTool.App.Views.ConfirmDialog"
+        Title="Confirm"
+        Width="436"
+        SizeToContent="Height"
+        CanResize="False"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        WindowDecorations="None"
+        Background="{DynamicResource WindowBackgroundBrush}"
+        FontFamily="{DynamicResource UiFontFamily}"
+        FontSize="12">
+  <!-- r67.9：与主窗一致的无边框外观（WindowDecorations=None），自绘 35px 标题栏。
+       系统标题栏对固定尺寸的确认框没有意义，还会带出最小化/最大化按钮。 -->
+  <Border Name="DialogBorder"
+          Background="{DynamicResource WindowBackgroundBrush}"
+          BorderBrush="{DynamicResource TitleBarBorderBrush}"
+          BorderThickness="1">
+    <Grid RowDefinitions="35,Auto,Auto">
+      <Border Grid.Row="0"
+              Name="DialogTitleBar"
+              Background="{DynamicResource TitleBarBackgroundBrush}"
+              BorderBrush="{DynamicResource TitleBarBorderBrush}"
+              BorderThickness="0,0,0,1"
+              PointerPressed="OnTitleBarPointerPressed">
+        <Grid ColumnDefinitions="*,35">
+          <TextBlock Grid.Column="0"
+                     Name="DialogTitleText"
+                     Margin="12,0,8,0"
+                     VerticalAlignment="Center"
+                     FontSize="12"
+                     Foreground="{DynamicResource TitleBarForegroundBrush}"
+                     TextTrimming="CharacterEllipsis" />
+          <Button Grid.Column="1"
+                  Name="DialogCloseButton"
+                  Classes="TitleBarButton WindowCloseButton"
+                  ToolTip.Tip="Close"
+                  Click="OnCancelClick">
+            <TextBlock Text="&#xF05AD;"
+                       FontFamily="{DynamicResource IconMaterialDesign}"
+                       FontSize="13"
+                       Foreground="{DynamicResource TitleBarForegroundBrush}" />
+          </Button>
+        </Grid>
+      </Border>
+
+      <StackPanel Grid.Row="1" Margin="16,14,16,0" Spacing="6">
+        <TextBlock Name="QuestionText"
+                   FontSize="13"
+                   Foreground="{DynamicResource WindowTextBrush}"
+                   TextWrapping="Wrap" />
+        <TextBlock Name="NameText"
+                   FontSize="12"
+                   Foreground="{DynamicResource SessionNameBrush}"
+                   TextWrapping="NoWrap"
+                   TextTrimming="CharacterEllipsis" />
+        <TextBlock Name="DetailText"
+                   FontSize="12"
+                   Foreground="{DynamicResource SessionDetailBrush}"
+                   TextWrapping="NoWrap"
+                   TextTrimming="CharacterEllipsis" />
+        <TextBlock Name="NoteText"
+                   FontSize="12"
+                   Foreground="{DynamicResource SessionDetailBrush}"
+                   TextWrapping="Wrap"
+                   IsVisible="False" />
+      </StackPanel>
+
+      <StackPanel Grid.Row="2"
+                  Orientation="Horizontal"
+                  HorizontalAlignment="Right"
+                  Margin="16,16,16,14"
+                  Spacing="8">
+        <!-- Enter/Esc 都走 Cancel：破坏性操作不做键盘直达确认。 -->
+        <Button Name="CancelButton"
+                Content="Cancel"
+                Width="80"
+                IsDefault="True"
+                IsCancel="True"
+                HorizontalContentAlignment="Center"
+                Click="OnCancelClick" />
+        <Button Name="ConfirmButton"
+                Content="Remove"
+                Width="80"
+                Classes="DialogDanger"
+                HorizontalContentAlignment="Center"
+                Click="OnConfirmClick" />
+      </StackPanel>
+    </Grid>
+  </Border>
+</Window>

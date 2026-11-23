@@ -175,6 +175,28 @@
     <Setter Property="Background" Value="{DynamicResource AccentHoverBrush}" />
   </Style>
 
+  <!-- r67.9：确认对话框的危险操作按钮（红底白字；悬停/按下直接改模板内
+       ContentPresenter，Fluent 的 :pointerover 规则优先级更高，不能只改
+       Button.Background）。 -->
+  <Style Selector="Button.DialogDanger">
+    <Setter Property="Background" Value="{DynamicResource DangerBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource DangerForegroundBrush}" />
+    <Setter Property="BorderThickness" Value="0" />
+  </Style>
+  <Style Selector="Button.DialogDanger:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource DangerHoverBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource DangerForegroundBrush}" />
+  </Style>
+  <Style Selector="Button.DialogDanger:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource DangerPressedBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource DangerForegroundBrush}" />
+  </Style>
+  <Style Selector="Button.DialogDanger:disabled /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource DangerBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource DangerForegroundBrush}" />
+    <Setter Property="Opacity" Value="0.5" />
+  </Style>
+
   <Style Selector="Button.SidebarAddButton">
     <Setter Property="Width" Value="24" />
     <Setter Property="Height" Value="24" />
