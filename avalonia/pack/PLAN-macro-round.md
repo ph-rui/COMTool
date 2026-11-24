@@ -3148,3 +3148,87 @@ robocopy /MIR 到运行目录。运行目录 `COMTool.App.exe` SHA256
 **已知取舍**：本轮只把「删除会话」迁到新组件，其他确认/提示点（如宏编辑、
 服务器设置）仍用各自实现；界面语言沿用英文，与现有 App 对话框的中英混用问题
 一并未处理。
+
+### 67.10 串口自动波特率（被动试速，2026-11-24，用户需求「能否实现自动波特率」）
+
+**需求**：连接设置里选择 `Auto` 后，打开串口时自动识别设备当前波特率；用户确认
+场景为「设备持续输出文本」（启动日志、shell 提示符）。
+
+**约束**：`System.IO.Ports.SerialPort.BaudRate` 只在端口关闭时可修改，识别必须
+对每个候选速率做一次「关闭→重开→采集」，无法在打开状态下热切换。
+
+**实现**：
+- 新增 `COMTool.Connections/SerialBaudScanner.cs`：
+  - 候选速率按常见程度排序：115200、9600、57600、38400、19200、230400、460800、
+    921600、4800、2400、1200；
+  - 每档采集 500ms、上限 4KB，丢弃打开前驱动残留；
+  - 评分 0~1：合法 UTF-8 字符中可打印 ASCII（含 `\r\n\t`、ESC/退格/响铃）与非 ASCII
+    字符占比为基数，≥1 个换行 +0.06、≥2 个再 +0.04；按 0x00/0xFF 占比、非法 UTF-8
+    占比各扣 2 倍，最长同字节串 ≥8 再扣 0.20；
+  - 样本 <8 字节记 0 分；接受阈值 0.80，首个 ≥0.97 提前结束（常见设备 1~2 档即完成，
+    最坏 11 档约 5.5s）；
+  - 端口打开失败（占用/驱动异常）跳过该档并继续；扫描只读不写；
+  - `ScanAsync` 在后台线程执行，`onProbing` 回报当前档位，支持取消。
+- `SerialConnection` 抽出 `CreatePort(portName, config, baudrate)`，`Open` 与扫描共用
+  同一套参数映射（数据位/校验/停止位/流控/RTS/DTR）。
+- `ConnectionSettingsWindow`：
+  - 波特率下拉框首项新增 `Auto`（下拉框本就可编辑）；
+  - `OpenSerialAsync` 识别 `Auto`（不区分大小写）后调用扫描；期间 `OPEN` 按钮禁用、
+    文案 `Detecting <rate>...`，结束后复原；
+  - 成功：把识别值写入 `BaudrateCombo` 与会话配置（落盘具体数字，不保存 Auto），
+    日志记录 `[Serial] auto baud <port> -> <rate> (score, bytes, probed)`；
+  - 失败：抛错由既有错误框展示，列出已试速率并提示检查设备供电与输出，对话框保持打开；
+  - 扫描中关闭对话框：取消扫描并静默退出，不再保存或打开；
+  - 测试注入点 `ScanForTests`（internal），headless 测试不碰真实串口。
+- `--selftest-r71`：先打开连接设置选中 `Auto` 落盘 `r71-auto-baud.png`，再对空闲串口
+  逐个扫描（跳过 r68 占用的 COM2），识别成功时记录结果并退出 0，无设备输出则记 SKIP；
+  扫描只读。
+
+**测试**（先红后绿）：
+- `SerialBaudScannerTests`（11 项，`COMTool.Connections.Tests`）：
+  - `BAUD01` 读得懂的 U-Boot 控制台文本 ≥0.9；
+  - `BAUD02` 0x00/0xFF 帧错误垃圾 <0.3；
+  - `BAUD03` 二进制帧（0xA5 5A + 控制字节）<0.5；
+  - `BAUD04` UTF-8 中文日志 ≥0.85；
+  - `BAUD05` 空样本/2 字节样本记 0；
+  - `BAUD06` 只在 9600 有可读文本时选中 9600；
+  - `BAUD07` 首档高分只探测 1 次；
+  - `BAUD08` 9600 分数更高时压过候选顺序；
+  - `BAUD09` 静默设备返回 null 且记录全部已试速率；
+  - `BAUD10` 打开失败的档位跳过、继续下一档；
+  - `BAUD11` socat PTY 集成：真实开关端口读取路径，首档 115200 读到文本、样本 ≥16 字节。
+  - 红验证：`Score` 恒返回 0、`ScanCore` 恒返回空 → 8 项失败（NullReference/断言失败），
+    实现后 11 项全绿。
+- `AutoBaudrateTests`（4 项，`COMTool.App.Tests`）：
+  - `UI18_BaudrateComboOffersAutoAsFirstEntry`：下拉首项 Auto、默认仍 115200；
+  - `UI18_AutoDetectsAndSavesNumericBaudrate`：扫描期间按钮禁用且显示 `Detecting 9600...`，
+    完成后保存 19200、回调打开 COM7、窗口关闭；
+  - `UI18_AutoFailureKeepsDialogOpenAndReportsTriedRates`：失败不保存、不打开、窗口保持、
+    错误含 115200/9600 与 readable text；
+  - `UI18_OtherBaudratePathsUnaffected`：手填 57600 不触发扫描，直接保存打开。
+
+**gate**（`pack/verify.sh --results /tmp/opencode/r6710-gate7`，2026-11-24）：
+restore/build PASS，unit-tests PASS（422 项 / 6 项目，Connections 161 项含 BAUD01-11），
+app-tests PASS（371 项，原 367 + UI18 4 项），test-list PASS（App 371 项），
+e2e PASS（15/15），testgate PASS，合计 808 项全过。期间两个与本轮无关的既有用例
+各失败一次（FTP 会话临时文件占用、标题栏双击最大化未生效），单独重跑均通过，
+最终门禁一次全绿。
+
+**VM 实机**（172.16.66.163，AOT，2026-11-24）：
+- 同步 `423bb35` 后重建 win-x64 AOT（109s），镜像到 `C:\Users\zhangrui\COMTool-Avalonia-AOT`，
+  `COMTool.App.exe` SHA256 `c3c151a6508d272b263694df15f1f0c47b1c96275c317a16d45ab7f467e3db9a`；
+- `--selftest-r71`：连接设置对话框选中 `Auto` 落盘 `r71-auto-baud.png`（380×500），
+  对空闲串口 COM202 依次探测 115200/9600/57600/38400/19200/230400/460800/921600/4800/2400/1200，
+  该设备当时没有持续输出，返回「无可读文本」，按设计记 SKIP 并退出 0
+  （无设备输出时无法实机验收识别结果，扫描与评分逻辑由 BAUD01-11 覆盖）；
+- 回归：`--selftest-r70`、`--selftest-r69`、`--selftest-r67`、`--selftest-r68` 全部通过
+  （确认框 436×172、滚动条 16px 常显与按住逐行、标签拖动换位、COM2 断线自动重连）；
+- 安装包刷新：`COMTool-Avalonia-AOT-r67.zip` 78,486,070 B，
+  SHA256 `78d3420e8ff430bcb74281f18fb4301ffe875cbcbd4771f45952cb3b3ce6c2fb`；
+  首次压缩仍报 `ZIP_ERR 流不可读`（与 r67.8/r67.9 相同的既有现象），重跑成功。
+
+**已知限制**：
+- 只做被动识别：设备不发数据或纯二进制帧无法识别，界面明确报失败，不静默连错速率；
+- 扫描按会话的 RTS/DTR 设置开关端口，Arduino 一类 DTR 复位设备可能在扫描期间重启；
+- 不识别数据位/校验/停止位，不持久化「始终自动」（一次识别后保存具体速率）；
+- 错误波特率下偶尔仍可打印的垃圾流无法完全排除，评分优先保证可读文本与换行结构。
