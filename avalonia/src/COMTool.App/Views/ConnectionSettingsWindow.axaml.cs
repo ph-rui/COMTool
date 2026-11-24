@@ -16,12 +16,22 @@ namespace COMTool.App.Views;
 /// </summary>
 public partial class ConnectionSettingsWindow : Window
 {
+    internal const string AutoBaudrate = "Auto";
+
     private static readonly string[] Baudrates =
     {
+        AutoBaudrate,
         "300", "600", "1200", "2400", "4800", "9600", "14400", "19200",
         "38400", "57600", "115200", "128000", "230400", "256000", "460800",
         "500000", "576000", "921600", "1000000", "1500000", "2000000",
     };
+
+    /// <summary>
+    /// r67.10：自动波特率的测试注入点。headless 测试用它跳过真实串口 I/O；
+    /// 生产路径留空时走 <see cref="SerialBaudScanner"/>。
+    /// </summary>
+    internal static Func<SerialConnectionConfig, Action<int>?, CancellationToken, Task<BaudScanOutcome>>?
+        ScanForTests { get; set; }
 
     private static readonly string[] FlowControls =
     {
@@ -43,6 +53,7 @@ public partial class ConnectionSettingsWindow : Window
     private readonly Func<string, Task> _showError;
     private ITcpSession? _tcpSession;
     private bool _updatingTcpClients;
+    private readonly CancellationTokenSource _lifetime = new();
 
     // Avalonia's XAML runtime loader requires a public parameterless
     // constructor. The window is always created through the parameterized
@@ -85,6 +96,7 @@ public partial class ConnectionSettingsWindow : Window
         PopulateTelnetDefaults();
         PopulateTcpDefaults();
         PopulateCurrentSession();
+        Closed += (_, _) => _lifetime.Cancel();
     }
 
     private void PopulateSerialDefaults()
@@ -315,6 +327,10 @@ public partial class ConnectionSettingsWindow : Window
                     break;
             }
         }
+        catch (OperationCanceledException)
+        {
+            // 扫描过程中关闭窗口：静默退出，不再弹错误框。
+        }
         catch (Exception ex)
         {
             var action = ConnectionTypeCombo.SelectedIndex switch
@@ -336,7 +352,14 @@ public partial class ConnectionSettingsWindow : Window
             throw new InvalidOperationException("Select a serial port first.");
         }
 
-        if (!int.TryParse(BaudrateCombo.Text?.Trim(), out var baudrate) || baudrate <= 0)
+        var baudText = BaudrateCombo.Text?.Trim() ?? "";
+        var autoBaud = string.Equals(baudText, AutoBaudrate, StringComparison.OrdinalIgnoreCase);
+        int baudrate;
+        if (autoBaud)
+        {
+            baudrate = await DetectBaudrateAsync(port.Device);
+        }
+        else if (!int.TryParse(baudText, out baudrate) || baudrate <= 0)
         {
             throw new InvalidOperationException("Baudrate must be a positive integer.");
         }
@@ -353,10 +376,68 @@ public partial class ConnectionSettingsWindow : Window
             Dtr = DtrCheck.IsChecked == true,
         };
 
+        // 扫描期间用户关掉了窗口：不再保存/打开。
+        if (_lifetime.IsCancellationRequested)
+        {
+            return;
+        }
+
         _config.SerialSessions.Upsert(port.Device, serial);
         _config.Save();
         Close();
         await _openSerial(port.Device, _currentTab);
+    }
+
+    /// <summary>
+    /// r67.10：Auto 选项——按候选速率扫描，返回识别到的波特率；失败抛出带已试
+    /// 速率的错误。扫描期间禁用 OPEN 按钮并显示当前探测速率。
+    /// </summary>
+    private async Task<int> DetectBaudrateAsync(string portName)
+    {
+        var probe = new SerialConnectionConfig
+        {
+            Port = portName,
+            Bytesize = int.Parse(DataBytesCombo.SelectedItem?.ToString() ?? "8"),
+            Parity = ParityCombo.SelectedItem?.ToString() ?? "None",
+            Stopbits = StopBitsCombo.SelectedItem?.ToString() ?? "1",
+            Flowcontrol = FlowControlCombo.SelectedItem?.ToString() ?? "None",
+            Rts = RtsCheck.IsChecked == true,
+            Dtr = DtrCheck.IsChecked == true,
+        };
+
+        var originalContent = SerialOpenButton.Content;
+        SerialOpenButton.IsEnabled = false;
+        try
+        {
+            void OnProbing(int rate) =>
+                Dispatcher.UIThread.Post(() =>
+                    SerialOpenButton.Content = $"Detecting {rate}...");
+
+            var outcome = ScanForTests is { } scan
+                ? await scan(probe, OnProbing, _lifetime.Token)
+                : await SerialBaudScanner.ScanAsync(probe, OnProbing, _lifetime.Token);
+
+            _lifetime.Token.ThrowIfCancellationRequested();
+            if (outcome.Best is not { } best)
+            {
+                throw new InvalidOperationException(
+                    "Auto baudrate: no readable text at "
+                    + string.Join(", ", outcome.Tried)
+                    + ". Check that the device is powered on and keeps sending text.");
+            }
+
+            AppLog.Info(
+                $"[Serial] auto baud {portName} -> {best.Baudrate} "
+                + $"(score {best.Score:0.00}, {best.SampleBytes} bytes, "
+                + $"probed {string.Join("/", outcome.Tried)})");
+            BaudrateCombo.Text = best.Baudrate.ToString();
+            return best.Baudrate;
+        }
+        finally
+        {
+            SerialOpenButton.Content = originalContent;
+            SerialOpenButton.IsEnabled = true;
+        }
     }
 
     private async Task OpenSshAsync()

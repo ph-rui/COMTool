@@ -503,6 +503,13 @@ public partial class MainWindow : Window
         {
             _ = RunR70SelfTestAsync();
         }
+        // --selftest-r71：实机自检自动波特率（r67.10）：对空闲串口逐个跑被动扫描，
+        // 设备在持续输出文本时断言识别到 ≥0.8 分的速率；没有这样的设备则记 SKIP。
+        // 扫描只读，不写端口；跳过 r68 占用的 COM2。
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r71"))
+        {
+            _ = RunR71SelfTestAsync();
+        }
     }
 
     private volatile bool _portScanBusy;
@@ -11151,6 +11158,111 @@ public static class ClipCheck {
             SaveVisualPng(Content as Visual, "r70-failure.png");
             (Application.Current?.ApplicationLifetime
                 as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
+        }
+    }
+
+    private async Task RunR71SelfTestAsync()
+    {
+        try
+        {
+            AppLog.Info("[SelfTest] r71: 等主窗稳定 1.2s 后扫描空闲串口的自动波特率");
+            await Task.Delay(1200);
+            if (_config is null || DataContext is not MainViewModel)
+            {
+                throw new InvalidOperationException("MainWindow 未就绪");
+            }
+
+            RefreshPorts();
+            await Task.Delay(1200);
+
+            // 截图用：打开连接设置，选中 Auto，落盘 r71-auto-baud.png 后关闭（不点 OPEN）。
+            try
+            {
+                var dialog = new ConnectionSettingsWindow(
+                    _config,
+                    null,
+                    (_, _) => Task.CompletedTask,
+                    (_, _) => Task.CompletedTask,
+                    (_, _) => Task.CompletedTask,
+                    (_, _) => Task.CompletedTask,
+                    _ => Task.CompletedTask);
+                dialog.Show(this);
+                await Task.Delay(400);
+                dialog.FindControl<ComboBox>("BaudrateCombo")!.Text =
+                    ConnectionSettingsWindow.AutoBaudrate;
+                dialog.UpdateLayout();
+                SaveVisualPng(dialog, "r71-auto-baud.png");
+                dialog.Close();
+                AppLog.Info("[SelfTest] r71: 设置对话框 Auto 选项截图 r71-auto-baud.png");
+            }
+            catch (Exception ex)
+            {
+                AppLog.Info($"[SelfTest] r71: 设置对话框截图失败（不影响扫描）: {ex.Message}");
+            }
+
+            var candidates = _config.Ports
+                .Select(port => port.Device)
+                .Where(device => !string.Equals(device, "COM2", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (candidates.Count == 0)
+            {
+                AppLog.Info(
+                    "[SelfTest] r71: SKIP 没有可探测串口（当前端口: "
+                    + string.Join(",", _config.Ports.Select(port => port.Device)) + "）");
+                (Application.Current?.ApplicationLifetime
+                    as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)
+                    ?.TryShutdown(0);
+                return;
+            }
+
+            BaudScanResult? detected = null;
+            string? detectedPort = null;
+            foreach (var candidate in candidates)
+            {
+                var outcome = await SerialBaudScanner.ScanAsync(new SerialConnectionConfig
+                {
+                    Port = candidate,
+                    Bytesize = 8,
+                    Parity = "None",
+                    Stopbits = "1",
+                    Flowcontrol = "None",
+                });
+                var summary = outcome.Best is { } best
+                    ? $"{best.Baudrate} (score {best.Score:0.00}, {best.SampleBytes} bytes)"
+                    : "无可读文本";
+                AppLog.Info(
+                    $"[SelfTest] r71: {candidate} 探测 {string.Join("/", outcome.Tried)} -> {summary}");
+                if (outcome.Best is { } found)
+                {
+                    detected = found;
+                    detectedPort = candidate;
+                    break;
+                }
+            }
+
+            if (detected is null)
+            {
+                AppLog.Info(
+                    "[SelfTest] r71: SKIP 没有设备在持续输出文本（评分与选速逻辑已由 BAUD01-11 覆盖），退出");
+                (Application.Current?.ApplicationLifetime
+                    as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)
+                    ?.TryShutdown(0);
+                return;
+            }
+
+            AppLog.Info(
+                $"[SelfTest] r71: 自检完成 {detectedPort} 自动波特率={detected.Baudrate} "
+                + $"(score {detected.Score:0.00}) OK，退出");
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)
+                ?.TryShutdown(0);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("[SelfTest] r71: 自检失败", ex);
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)
+                ?.TryShutdown(2);
         }
     }
 
