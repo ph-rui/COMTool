@@ -45,11 +45,17 @@ public sealed class SerialConnection : ISerialConnection
             throw new ArgumentException("serial port name is empty", nameof(config));
         }
 
-        var port = CreatePort(
+        var port = new SerialPort(
             portName,
-            config,
-            config.Baudrate > 0 ? config.Baudrate : 115200);
+            config.Baudrate > 0 ? config.Baudrate : 115200,
+            ParseParity(config.Parity),
+            config.Bytesize is >= 5 and <= 8 ? config.Bytesize : 8,
+            ParseStopBits(config.Stopbits));
+        port.Handshake = ParseHandshake(config.Flowcontrol);
         port.ReadTimeout = 500;
+        port.WriteTimeout = 5000;
+        port.RtsEnable = config.Rts;
+        port.DtrEnable = config.Dtr;
 
         try
         {
@@ -72,28 +78,6 @@ public sealed class SerialConnection : ISerialConnection
             port.Dispose();
             throw;
         }
-    }
-
-    /// <summary>
-    /// r67.10：按配置创建 SerialPort（不打开）。自动波特率扫描需要为每个候选
-    /// 速率重建端口，因此把端口参数映射集中在这里，避免两处各写一份。
-    /// </summary>
-    internal static SerialPort CreatePort(
-        string portName,
-        SerialConnectionConfig config,
-        int baudrate)
-    {
-        var port = new SerialPort(
-            portName,
-            baudrate,
-            ParseParity(config.Parity),
-            config.Bytesize is >= 5 and <= 8 ? config.Bytesize : 8,
-            ParseStopBits(config.Stopbits));
-        port.Handshake = ParseHandshake(config.Flowcontrol);
-        port.WriteTimeout = 5000;
-        port.RtsEnable = config.Rts;
-        port.DtrEnable = config.Dtr;
-        return port;
     }
 
     public static Parity ParseParity(string? value) =>

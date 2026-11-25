@@ -3232,3 +3232,24 @@ e2e PASS（15/15），testgate PASS，合计 808 项全过。期间两个与本�
 - 扫描按会话的 RTS/DTR 设置开关端口，Arduino 一类 DTR 复位设备可能在扫描期间重启；
 - 不识别数据位/校验/停止位，不持久化「始终自动」（一次识别后保存具体速率）；
 - 错误波特率下偶尔仍可打印的垃圾流无法完全排除，评分优先保证可读文本与换行结构。
+
+### 67.11 移除串口自动波特率（2026-11-25，用户反馈「不实用」）
+
+r67.10 交付的 Auto 被动试速在实机上没有可用场景（VM 空闲串口均无持续输出，
+真机设备也不保证上电即刷日志），按用户要求整体下线。
+
+- 代码：删除 `SerialBaudScanner.cs` 与 BAUD01-11、UI18 共 15 项测试；
+  `SerialConnection`、`ConnectionSettingsWindow`、`MainWindow` 三个文件还原到
+  r67.10 之前（`git checkout 2c2aedd` 逐文件恢复，`--selftest-r71` 一并移除）。
+- 文档：`parity-matrix.md` 删 SER-11、`feature-test-matrix.md` 删 SER-11、
+  `manual-acceptance.md` 删 WIN-36；§67.10 历史记录保留。
+- 验证：全量门禁回到 r67.9 基线（unit 411 + app 367 + e2e 15）。
+- VM：重建 AOT 覆盖运行目录，刷新 zip，回归自检 r70/r69/r67/r68。
+- `10.0.9.2` 上的 r67.8 副本按用户要求保持不动。
+
+**gate**（`pack/verify.sh --results /tmp/opencode/r6711-gate1`，2026-11-25）：
+restore/build PASS，unit-tests PASS（411 项 / 6 项目，Connections 150 项 = 161−BAUD 11 项），
+app-tests PASS（367 项 = 371−UI18 4 项），test-list PASS（367 项），e2e PASS（15/15），
+testgate PASS，合计 778 项全过——与 r67.9 基线一致，回退无回归。
+
+**VM 实机**：PLACEHOLDER_VM
