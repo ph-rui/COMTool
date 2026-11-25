@@ -3252,4 +3252,14 @@ restore/build PASS，unit-tests PASS（411 项 / 6 项目，Connections 150 项 
 app-tests PASS（367 项 = 371−UI18 4 项），test-list PASS（367 项），e2e PASS（15/15），
 testgate PASS，合计 778 项全过——与 r67.9 基线一致，回退无回归。
 
-**VM 实机**：PLACEHOLDER_VM
+**VM 实机**（172.16.66.163，AOT，2026-11-25，HEAD `9927d7b`）：
+- AOT 重建 116s，`COMTool.App.exe` SHA256
+  `b751151afd402820f472ce834e5a936551d94a4808fb525b796d1bd442dbd7b3`；
+- 回归自检全过：r70 确认框（436×172、危险色 #ffc42b1c、Esc 取消）、
+  r69 滚动条（16px 常显、LargeChange=一屏 35、按住 1506ms 逐行 71 行、松手停 125）、
+  r67 标签拖动（阈值/实时换位/动画/不裁剪全 OK）、r68 断线自动重连（上膛→2s 重连恢复）；
+- `--selftest-r71` 已随代码删除，本轮不再执行；连接设置对话框波特率下拉首项恢复为 300，
+  无 Auto 项（由 `UI18` 删除后 app-tests 367 项全绿间接确认）；
+- zip 刷新：`COMTool-Avalonia-AOT-r67.zip` 78,474,620 B，
+  SHA256 `563f3cd0211f955b79e743849e7f9db9b18216269e16cbf3b4123336ea5cb7fa`
+  （首次仍报「流不可读」，重跑成功，与 r67.8/r67.9/r67.10 一致）。
