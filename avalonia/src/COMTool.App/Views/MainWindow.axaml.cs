@@ -552,6 +552,27 @@ public partial class MainWindow : Window
         {
             _ = RunR75SelfTestAsync("c");
         }
+        // --selftest-r76a/b/c：r67.12 后续实机自检（第四轮）：真实 raw4 会话流全量回放。
+        // r75a/b/c 合成语境全部 PASS（偏移生效）；用户截图同一实例「上散文行偏移 / 下表格行原生」混合
+        // （红框=内核行；PIL：表格 7 行 topRel +5.5..+6.5、顶差 +2/+3、底差 +5，偏移态应为 +1.2/+0/-1）。
+        // raw4=同一 TUI（rk3588 opencode）实抓 130513B：189 帧，表格首绘在 frame#139（流式输出，
+        //   前 138 帧为对话/散文/状态更新，值内嵌 CJK「编译于」），含 ?1049h alt / ?25l / 逐字符 SGR。
+        // 嵌入流已剥离 ?2026h/l（自检直写路径不递增 _liveWriteGeneration，多 2026 窗会把后续直写行
+        //   钉在旧快照上——r75v1 实锤的自检伪影；真实 PTY 路径无此问题）。zlib+base64 内嵌（11792 字符）。
+        // a=100+列固定窗整流回放；b=frames 1-138（表格未绘）→窗口加宽（会话中网格变化+rewrap）→帧139起（表格）；
+        //   c=124列窗自始无 resize。判据（Windows）：任一 CJK 行 topRel≥+4（原生签名 4.5..5.5）→复现。
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r76a"))
+        {
+            _ = RunR76SelfTestAsync("a");
+        }
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r76b"))
+        {
+            _ = RunR76SelfTestAsync("b");
+        }
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r76c"))
+        {
+            _ = RunR76SelfTestAsync("c");
+        }
     }
 
     private volatile bool _portScanBusy;
@@ -12210,6 +12231,276 @@ public static class ClipCheck {
         catch (Exception ex)
         {
             AppLog.Error($"[SelfTest] r75{mode}: 自检失败", ex);
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
+        }
+    }
+
+    // ── r76 数据：raw4 全量（?2026h/l 剥离后 127489B）zlib 压缩 + base64；SplitAt=92227=frame138 结束（剥离后坐标，表格帧#139 之前）
+    private const string R76Raw4ZlibB64 =
+        "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"
+    ;
+
+    // --selftest-r76a/b/c：r67.12 后续实机自检（第四轮）：真实 raw4 会话流全量回放（100 列宽终端）。
+    // 单进程单截图铁律（VM 虚拟 GPU 禁二次 RTB 渲染）：a/b/c 各一次独立启动。
+    private async Task RunR76SelfTestAsync(string mode)
+    {
+        try
+        {
+            var isWin = OperatingSystem.IsWindows();
+            var tag = "r76" + mode;
+            AppLog.Info($"[SelfTest] {tag}: 回放真实 raw4 流（?2026 已剥离）CJK 行垂直对齐, mode={mode}（a=100+列无resize / b=会话中加宽 / c=124列无resize）");
+            await Task.Delay(300);
+            if (DataContext is not MainViewModel viewModel)
+            {
+                throw new InvalidOperationException("MainViewModel 未就绪");
+            }
+
+            // raw4 宽 99-100 列，默认 850 窗（sidebar 260）仅 76 列 → 收起 sidebar（留 40px rail）+ 按需加窗
+            SetSidebarVisible(false, persist: false);
+            this.Width = mode == "c" ? 1020 : 850;
+            this.Height = 738;
+            await Task.Delay(500);
+
+            var terminal = CreateTerminal();
+            var tab = new TerminalTab
+            {
+                Title = tag + "-selftest",
+                SessionId = "terminal:r76selftest",
+                Kind = SessionKind.Local,
+                Content = terminal,
+                Terminal = terminal,
+                IsAlive = true,
+                CloseAction = () => { },
+            };
+            viewModel.AddTab(tab);
+
+            int ColsNow()
+            {
+                var cw = terminal.CharWidth;
+                return cw > 0 ? (int)((terminal.Bounds.Width - Math.Max(0, terminal.GutterWidth)) / cw) : 0;
+            }
+            int RowsNow()
+            {
+                var chh = terminal.CharHeight;
+                return chh > 0 ? (int)(terminal.Bounds.Height / chh) : 0;
+            }
+            for (var i = 0; i < 120 && ColsNow() < 100; i++)
+            {
+                if (i % 15 == 0 && this.Width < 1024) this.Width += 60; // 屏幕过窄时逐步加窗
+                await Task.Delay(100);
+            }
+            var charW = terminal.CharWidth;
+            var charH = terminal.CharHeight;
+            AppLog.Info($"[SelfTest] {tag}: 度量 charW={charW:0.###} charH={charH:0.###} grid={ColsNow()}x{RowsNow()}（需 ≥100x30）");
+            if (ColsNow() < 100 || RowsNow() < 30)
+            {
+                AppLog.Info($"[SelfTest] {tag}: 警告 grid 仅 {ColsNow()}x{RowsNow()}，表格右侧/底部可能裁切（不影响 CJK 行测量）");
+            }
+
+            // ── 解码内嵌流（zlib+base64）──
+            byte[] stream;
+            try
+            {
+                var zbytes = Convert.FromBase64String(R76Raw4ZlibB64);
+                using var zms = new MemoryStream(zbytes);
+                using var zr = new System.IO.Compression.ZLibStream(zms, System.IO.Compression.CompressionMode.Decompress);
+                using var oms = new MemoryStream();
+                zr.CopyTo(oms);
+                stream = oms.ToArray();
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("raw4 内嵌数据解码失败: " + ex.Message, ex);
+            }
+            AppLog.Info($"[SelfTest] {tag}: 内嵌流解码 {stream.Length}B（期望 127489）");
+            var text = System.Text.Encoding.UTF8.GetString(stream);
+            const int SplitAt = 92227; // frame138 结束（剥离后坐标）：之前=全部对话/散文帧，之后=表格帧#139 起
+            const int Chunk = 4096;
+            async Task Pump(int from, int to)
+            {
+                for (var p = from; p < to; p += Chunk)
+                {
+                    terminal.Terminal.Write(text.Substring(p, Math.Min(Chunk, to - p)));
+                    await Task.Delay(33); // 模拟真实 PTY 路径 PublishThrottled(33ms) 节奏
+                }
+            }
+
+            if (mode == "b")
+            {
+                await Pump(0, SplitAt);
+                await Task.Delay(600);
+                var colsBefore = ColsNow();
+                AppLog.Info($"[SelfTest] {tag}: 阶段1完成（frames 1-138，表格未绘；grid {colsBefore}x{RowsNow()}），窗口加宽至 1020（xterm rewrap+度量重算）…");
+                this.Width = 1020;
+                for (var i = 0; i < 120 && ColsNow() <= colsBefore; i++) await Task.Delay(100);
+                await Task.Delay(1000); // 等布局/字体稳定
+                AppLog.Info($"[SelfTest] {tag}: 加宽后 grid={ColsNow()}x{RowsNow()}（之前 {colsBefore} 列）");
+                if (ColsNow() <= colsBefore) AppLog.Info($"[SelfTest] {tag}: 警告：加宽后列数未变（屏幕过窄？），resize 语境弱化");
+                await Pump(SplitAt, text.Length);
+            }
+            else
+            {
+                await Pump(0, text.Length);
+            }
+
+            await Task.Delay(1200);
+            terminal.Terminal.Write("\u001b[?25l");
+            await Task.Delay(150);
+
+            // ── 截图 + 逐行测量（按网格行切分，竖边框跨行合并带的问题消除）──
+            SaveVisualPng(terminal, tag + "-cjk.png");
+            var pngPath = Path.Combine(Path.GetDirectoryName(AppLog.Path) ?? ".", tag + "-cjk.png");
+            PngPixelDecoder.Decode(File.ReadAllBytes(pngPath), out var W, out var H, out var pxBytes);
+            var px = new int[W * H];
+            for (var i = 0; i < W * H; i++) px[i] = BitConverter.ToInt32(pxBytes, i * 4);
+            AppLog.Info($"[SelfTest] {tag}: png {W}x{H} 解码完成");
+            double Bright(int x, int y)
+            {
+                var p = px[y * W + x];
+                var a = (p >> 24) & 0xFF;
+                if (a == 0) return 0.0;
+                return ((p & 0xFF) + ((p >> 8) & 0xFF) + ((p >> 16) & 0xFF)) / (3.0 * 255.0) * a / 255.0;
+            }
+            var xEnd = W - 18; // 排除滚动条区
+            var rowCount = (int)(H / charH) + 1;
+            var nonEmpty = 0;
+            var cjkRows = 0;
+            var nativeRows = 0;
+            for (var k = 0; k < rowCount; k++)
+            {
+                var rTop = (int)Math.Round(k * charH);
+                var rBot = Math.Min(H - 1, (int)Math.Round((k + 1) * charH) - 1);
+                if (rBot <= rTop) continue;
+                var rowH = rBot - rTop + 1;
+                var colTop = new int[xEnd];
+                var colBot = new int[xEnd];
+                var colCnt = new int[xEnd];
+                for (var x = 0; x < xEnd; x++)
+                {
+                    var t = 0; var b2 = -1;
+                    for (var y = rTop; y <= rBot; y++)
+                    {
+                        if (Bright(x, y) > 0.4) { if (t == 0) t = y; b2 = y; colCnt[x]++; }
+                    }
+                    colTop[x] = t; colBot[x] = b2;
+                }
+                bool anyInk = false;
+                for (var x = 0; x < xEnd; x++) if (colTop[x] > 0) { anyInk = true; break; }
+                if (!anyInk) continue;
+                nonEmpty++;
+                // 分段（连续 ink 列），排除竖线框列（≤1格宽且 ink 连续率 ≥0.9）
+                var segs = new List<(int x0, int x1)>();
+                var s0 = -10; var run = 0;
+                for (var x = 0; x <= xEnd; x++)
+                {
+                    var isText = x < xEnd && colTop[x] > 0;
+                    if (isText) { if (run == 0) s0 = x; run++; }
+                    else
+                    {
+                        if (run > 0)
+                        {
+                            var x1 = x - 1;
+                            var wpx = x1 - s0 + 1;
+                            if (wpx <= charW * 1.1)
+                            {
+                                double cont = 0;
+                                for (var xx = s0; xx <= x1; xx++) cont += colCnt[xx] / (double)rowH;
+                                cont /= Math.Max(1, wpx);
+                                if (cont >= 0.9) { run = 0; continue; } // 竖线框列
+                            }
+                            segs.Add((s0, x1));
+                            run = 0;
+                        }
+                    }
+                }
+                if (segs.Count == 0) continue;
+                // 段内按列高分类：CJK 列 ink h≥rowH*0.6，拉丁列更低
+                var cjkTop = int.MaxValue; var cjkBot = -1;
+                var latTops = new List<int>(); var latBots = new List<int>();
+                foreach (var (x0, x1) in segs)
+                {
+                    for (var x = x0; x <= x1; x++)
+                    {
+                        var h = colBot[x] - colTop[x] + 1;
+                        if (h >= rowH * 0.6) { cjkTop = Math.Min(cjkTop, colTop[x]); cjkBot = Math.Max(cjkBot, colBot[x]); }
+                        else { latTops.Add(colTop[x]); latBots.Add(colBot[x]); }
+                    }
+                }
+                if (cjkTop == int.MaxValue) continue; // 纯拉丁/框线行：不参与 CJK 判定
+                cjkRows++;
+                var topRel = cjkTop - rTop;
+                var extra = "";
+                if (latBots.Count >= 3)
+                {
+                    latTops.Sort(); latBots.Sort();
+                    var baseline = latBots[latBots.Count / 2];
+                    extra = $" 拉丁top={latTops[0]} 基线={baseline} 顶差={(cjkTop - latTops[0]):+0.#} 底差={(cjkBot - baseline):+0.#}";
+                }
+                string state;
+                if (isWin) state = topRel >= 4.0 ? "NATIVE" : (topRel <= 2.5 ? "OK" : "MID");
+                else state = "?";
+                if (isWin && topRel >= 4.0) nativeRows++;
+                AppLog.Info($"[SelfTest] {tag}: 行{k} CJK {cjkTop}..{cjkBot} topRel={topRel:+0.##}{extra} 态={state}");
+            }
+            AppLog.Info($"[SelfTest] {tag}: 非空行={nonEmpty}，CJK 行={cjkRows}，原生态={nativeRows}");
+            var fails = new List<string>();
+            if (isWin)
+            {
+                if (cjkRows == 0) fails.Add("未检出 CJK 行（回放失败或截图异常）");
+                else if (nativeRows > 0) fails.Add($"{nativeRows} 个 CJK 行处于原生位（topRel≥+4）→ 复现用户 bug");
+            }
+            if (fails.Count > 0)
+            {
+                throw new InvalidOperationException($"{tag}: " + string.Join("；", fails));
+            }
+            AppLog.Info($"[SelfTest] {tag}: 自检完成 raw4 回放 CJK 行内垂直对齐=OK（未复现），退出");
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(0);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error($"[SelfTest] r76{mode}: 自检失败", ex);
             (Application.Current?.ApplicationLifetime
                 as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
         }
