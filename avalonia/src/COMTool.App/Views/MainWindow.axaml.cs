@@ -511,6 +511,18 @@ public partial class MainWindow : Window
         {
             _ = RunR72SelfTestAsync();
         }
+        // --selftest-r73：r67.12 后续实机自检：TUI（opencode）CJK 偏低复现。r72 探针为
+        // 批量写入纯文本且已通过，但 2026-11-26 用户 TUI 截图中「用户消息行/内核值行」
+        // CJK ≈ 零偏移（顶差 +3/底差 +5，旧 4.1.7 几何），同表「架构/发行版」行正常。
+        // 实抓 TUI 字节流（tui-raw3.bin）显示其用户消息行为「光标绝对定位 + 逐字符
+        // SGR(38;5;15/48;5;233) + 单字符写入 + \x1b[0m 重置」。本自检做 2×2 析因：
+        // 写入模式（批量 vs 逐字符定位）× 属性（默认 vs TUI SGR），同内容
+        // 「校验测试abcABC」4 行，逐行测 CJK/拉丁 ink 顶底。
+        // 断言：各行 顶差∈[-1.5,1.5] 底差≤3（r72 同一判据）。落盘 r73-cjk.png；仅 Windows。
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r73"))
+        {
+            _ = RunR73SelfTestAsync();
+        }
     }
 
     private volatile bool _portScanBusy;
@@ -11378,6 +11390,225 @@ public static class ClipCheck {
         catch (Exception ex)
         {
             AppLog.Error("[SelfTest] r72: 自检失败", ex);
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
+        }
+    }
+
+    private async Task RunR73SelfTestAsync()
+    {
+        try
+        {
+            if (!OperatingSystem.IsWindows())
+            {
+                // 非 Windows：CJK 回退为内置 Noto，绝对几何与雅黑不同，但「offset 是否被
+                // 应用」的机制相同 → 仍跑本自检，判据改用行不变性（R2-R4 相对 R1 偏差），
+                // 用于本地快速复现 TUI 背景/逐字符写入是否绕过 CJK 垂直偏移。
+                AppLog.Info("[SelfTest] r73: 非 Windows（Noto 回退）：绝对判据放宽为行不变性判据");
+            }
+
+            AppLog.Info("[SelfTest] r73: 等主窗稳定 1.2s 后自检 TUI 写入模式下的 CJK 行内垂直居中");
+            await Task.Delay(1200);
+            if (DataContext is not MainViewModel viewModel)
+            {
+                throw new InvalidOperationException("MainViewModel 未就绪");
+            }
+
+            var terminal = CreateTerminal();
+            var tab = new TerminalTab
+            {
+                Title = "r73-selftest",
+                SessionId = "terminal:r73selftest",
+                Kind = SessionKind.Local,
+                Content = terminal,
+                Terminal = terminal,
+                IsAlive = true,
+                CloseAction = () => { },
+            };
+            viewModel.AddTab(tab);
+            await Task.Delay(600);
+
+            var charW = terminal.CharWidth;
+            var charH = terminal.CharHeight;
+            if (charW <= 0 || charH <= 0)
+            {
+                throw new InvalidOperationException("终端度量未就绪");
+            }
+
+            const string probe = "校验测试abcABC"; // 8 格 CJK + 6 格拉丁，共 14 格
+            const string esc = "\u001b";
+
+            // R1 行1：批量写入、默认属性（r72 同形对照，已知正常）
+            terminal.Terminal.Write(probe + "\r\n\r\n");
+            // R2 行3：批量写入 + TUI 用户消息属性（实抓 38;5;15 白 / 48;5;233 深灰底）
+            terminal.Terminal.Write(esc + "[38;5;15m" + esc + "[48;5;233m" + probe + esc + "[0m\r\n\r\n");
+            // R3 行5 / R4 行7：TUI 实抓写入模式（tui-raw3.bin）：每字符一段
+            // 「ESC[row;colH 绝对定位 + 38;5;N m + 48;5;M m + 单字符 + ESC[0m 重置」。
+            // R3 全字符 fg15（用户消息行）；R4 逐字符 fg 渐变 245/247/249/251（输入框样式）。
+            void WritePerCharLine(int row, int[] cjkFcs, int bg, int latFg)
+            {
+                var sb = new System.Text.StringBuilder();
+                var col = 1;
+                for (var i = 0; i < 4; i++)
+                {
+                    sb.Append(esc).Append('[').Append(row).Append(';').Append(col).Append("H");
+                    sb.Append(esc).Append("[38;5;").Append(cjkFcs[i]).Append('m');
+                    sb.Append(esc).Append("[48;5;").Append(bg).Append('m');
+                    sb.Append(probe[i]);
+                    sb.Append(esc).Append("[0m");
+                    col += 2;
+                }
+                sb.Append(esc).Append('[').Append(row).Append(';').Append(col).Append("H");
+                sb.Append(esc).Append("[38;5;").Append(latFg).Append('m');
+                sb.Append(esc).Append("[48;5;").Append(bg).Append('m');
+                sb.Append(probe.Substring(4));
+                sb.Append(esc).Append("[0m");
+                terminal.Terminal.Write(sb.ToString() + "\r\n\r\n");
+            }
+            WritePerCharLine(5, new[] { 15, 15, 15, 15 }, 233, 15);
+            WritePerCharLine(7, new[] { 245, 247, 249, 251 }, 235, 15);
+            await Task.Delay(500);
+
+            // 落盘走 SaveVisualPng（与 r72 同一成熟路径，VM 虚拟 GPU 上禁止二次 RTB 渲染）
+            SaveVisualPng(terminal, "r73-cjk.png");
+            var pngPath = Path.Combine(Path.GetDirectoryName(AppLog.Path) ?? ".", "r73-cjk.png");
+            PngPixelDecoder.Decode(File.ReadAllBytes(pngPath), out var W, out var H, out var pxBytes);
+            var px = new int[W * H];
+            for (var i = 0; i < W * H; i++)
+            {
+                px[i] = BitConverter.ToInt32(pxBytes, i * 4);
+            }
+            AppLog.Info($"[SelfTest] r73: png {W}x{H} 解码完成，开始逐行像素分析");
+            double Bright(int x, int y)
+            {
+                var p = px[y * W + x];
+                return ((p & 0xFF) + ((p >> 8) & 0xFF) + ((p >> 16) & 0xFF)) / (3.0 * 255.0);
+            }
+            var xEnd = W - 18; // 排除右侧 16px 滚动条
+            if (xEnd < 40)
+            {
+                throw new InvalidOperationException("截图宽度不足");
+            }
+            bool RowHasInk(int y)
+            {
+                for (var x = 0; x < xEnd; x++)
+                {
+                    if (Bright(x, y) > 0.4) return true;
+                }
+                return false;
+            }
+
+            // 收 4 个 ink 行带（行间有空行，间隔 >2px 即断带）
+            var bands = new List<(int top, int bot)>();
+            for (var y = 0; y < H; y++)
+            {
+                if (RowHasInk(y))
+                {
+                    if (bands.Count == 0 || y - bands[bands.Count - 1].bot > 2)
+                    {
+                        bands.Add((y, y));
+                    }
+                    else
+                    {
+                        bands[bands.Count - 1] = (bands[bands.Count - 1].top, y);
+                    }
+                }
+            }
+            if (bands.Count < 4)
+            {
+                throw new InvalidOperationException($"ink 行带不足 4 个，仅 {bands.Count} 个");
+            }
+
+            // 网格已知：0-7 格 CJK 校验测试，8-13 格拉丁 abcABC。
+            // 逐带测 CJK/拉丁 ink 顶底，基线取拉丁逐列 ink 底中位数（同 r72 方法）。
+            // 先测完 4 行再汇总判定：RED 时保留完整 2×2 析因数据。
+            var fails = new List<string>();
+            void AnalyzeBand(int idx, int bandTop, int bandBot)
+            {
+                string[] names =
+                {
+                    "R1 批量+默认属性", "R2 批量+TUI属性",
+                    "R3 逐字符+TUI用户消息", "R4 逐字符+TUI输入框",
+                };
+                int originX = -1;
+                for (var x = 0; x < xEnd && originX < 0; x++)
+                {
+                    for (var y = bandTop; y <= bandBot; y++)
+                    {
+                        if (Bright(x, y) > 0.4) { originX = x; break; }
+                    }
+                }
+                if (originX < 0)
+                {
+                    throw new InvalidOperationException($"{names[idx]} 行带 ink 不足");
+                }
+                double CellX(int cell) => originX + cell * charW;
+                void Slice(int c0, int c1, out int top, out int bot)
+                {
+                    top = int.MaxValue;
+                    bot = -1;
+                    var x0 = (int)Math.Max(0, Math.Ceiling(CellX(c0)));
+                    var x1 = (int)Math.Min(xEnd, Math.Floor(CellX(c1)));
+                    for (var x = x0; x < x1; x++)
+                    {
+                        for (var y = bandTop; y <= bandBot; y++)
+                        {
+                            if (Bright(x, y) > 0.4) { top = Math.Min(top, y); break; }
+                        }
+                        for (var y = bandBot; y >= bandTop; y--)
+                        {
+                            if (Bright(x, y) > 0.4) { bot = Math.Max(bot, y); break; }
+                        }
+                    }
+                }
+                Slice(0, 8, out var cjkTop, out var cjkBot);
+                Slice(8, 14, out var latTop, out var latBot);
+                var colBots = new List<int>();
+                for (var x = (int)Math.Ceiling(CellX(8)); x < Math.Min(xEnd, (int)Math.Floor(CellX(14))); x++)
+                {
+                    for (var y = bandBot; y >= bandTop; y--)
+                    {
+                        if (Bright(x, y) > 0.4) { colBots.Add(y); break; }
+                    }
+                }
+                if (latBot < 0 || cjkBot < 0 || colBots.Count < 5)
+                {
+                    throw new InvalidOperationException(
+                        $"{names[idx]} 切片 ink 不足 latin={latTop}..{latBot} cjk={cjkTop}..{cjkBot} 拉丁列数={colBots.Count}");
+                }
+                colBots.Sort();
+                var baseline = colBots[colBots.Count / 2];
+                var cjkCenter = (cjkTop + cjkBot) / 2.0;
+                var bandCenter = (bandTop + bandBot) / 2.0;
+                var dTop = cjkTop - latTop;
+                var dBot = cjkBot - baseline;
+                var dCenter = cjkCenter - bandCenter;
+                AppLog.Info(
+                    $"[SelfTest] r73: {names[idx]} 带={bandTop}..{bandBot} origin={originX} " +
+                    $"CJK {cjkTop}..{cjkBot} 拉丁 {latTop}..{latBot} 基线={baseline} " +
+                    $"顶差={dTop:+0.##;-0.##} 底差={dBot:+0.##;-0.##} 居中偏差={dCenter:+0.##;-0.##}");
+                if (dTop < -1.5 || dTop > 1.5 || dBot > 3 || Math.Abs(dCenter) > 1.5)
+                {
+                    fails.Add($"{names[idx]} 顶差={dTop:+0.##} 底差={dBot:+0.##} 居中偏差={dCenter:+0.##}（要求 顶差∈[-1.5,1.5] 底差≤3 |居中偏差|≤1.5）");
+                }
+            }
+            for (var i = 0; i < 4; i++)
+            {
+                AnalyzeBand(i, bands[i].top, bands[i].bot);
+            }
+            if (fails.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    $"r73: {fails.Count}/4 行 CJK 垂直居中未达标 → " + string.Join("；", fails));
+            }
+
+            AppLog.Info("[SelfTest] r73: 自检完成 4 种写入模式 CJK 行内垂直居中=OK，退出");
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(0);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("[SelfTest] r73: 自检失败", ex);
             (Application.Current?.ApplicationLifetime
                 as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
         }
