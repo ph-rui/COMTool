@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <Version>4.1.8</Version>
+    <AssemblyVersion>4.1.7.0</AssemblyVersion>
+    <Description>Avalonia terminal controls (TerminalControl/TerminalWindow) that provide an XTerm console for hosting console applications in Avalonia, including Sixel and Kitty graphics.</Description>
+    <Company>Iciclecreek</Company>
+    <Authors>Tom Laird-McConnell</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/tomlm/Iciclecreek.Avalonia.Terminal</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/tomlm/Iciclecreek.Avalonia.Terminal</RepositoryUrl>
+    <Copyright>Tom Laird-McConnell All Rights Reserved</Copyright>
+    <RootNamespace>Iciclecreek.Terminal</RootNamespace>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <NoWarn>$(NoWarn);CS1591;CS0162;CS8073;CS8600;CS8602;CS8604;CS8625;CS8618;CS8765;CS0414;CS0169</NoWarn>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <EnableAvaloniaXamlCompilers>false</EnableAvaloniaXamlCompilers>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.0.4" />
+    <PackageReference Include="Avalonia.Skia" Version="12.0.4" />
+    <PackageReference Include="SkiaSharp.HarfBuzz" Version="3.119.4" />
+    <PackageReference Include="Unicode.net" Version="2.0.0" />
+    <PackageReference Include="Wcwidth" Version="4.0.1" />
+    <PackageReference Include="Porta.Pty" Version="2.2.3" />
+    <PackageReference Include="XTerm.NET" Version="3.0.0" />
+  </ItemGroup>
+</Project>

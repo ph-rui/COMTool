@@ -503,6 +503,14 @@ public partial class MainWindow : Window
         {
             _ = RunR70SelfTestAsync();
         }
+        // --selftest-r72：实机自检 r67.12 中文行内垂直居中（库 4.1.8）：本地终端写一行
+        // 中英文混排（升部/x 高度/数字/CJK），渲染 PNG 后逐字形测 ink 包围盒，
+        // 断言 CJK 顶不再低于英文升部顶 3px、底不超英文基线 3px、行内居中偏差 ≤1.5px。
+        // 仅 Windows 有意义（CJK 回退=雅黑）；非 Windows 记 SKIP。落盘 r72-cjk.png。
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r72"))
+        {
+            _ = RunR72SelfTestAsync();
+        }
     }
 
     private volatile bool _portScanBusy;
@@ -11149,6 +11157,227 @@ public static class ClipCheck {
         {
             AppLog.Error("[SelfTest] r70: 自检失败", ex);
             SaveVisualPng(Content as Visual, "r70-failure.png");
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
+        }
+    }
+
+    /// <c>--selftest-r72</c>：实机自检 r67.12 终端中英文混排垂直对齐（库 4.1.8 宽字符
+    /// ink 行内垂直居中）。本地终端写一行混排探测文本，落盘 PNG 后纯托管解码
+    /// （PngPixelDecoder），按已知单元格列区间切片（CJK 占 2 格、拉丁占 1 格）测 ink，
+    /// 断言（容差 px）：
+    /// ① CJK ink 顶 − 英文升部顶 ∈ [-1.5, +1.5]（修复前 +3：中文整块偏低）；
+    /// ② CJK ink 底 − 基线（拉丁列底部中位数）≤ 3（修复前 +5，MobaXterm 为 +2）；
+    /// ③ CJK ink 中心与整行 ink 中心偏差 ≤ 1.5。
+    /// 像素只走落盘 PNG 路径，不对已挂树控件做第二次 RTB 渲染：两次实机事件
+    /// （2026-11-26，Windows 事件日志 FailFast 栈）证实后者在 VM 虚拟 GPU 上会
+    /// 使渲染线程 AccessViolation。
+    /// 非 Windows 平台 SKIP（回退字体是内置 Noto，不代表实机雅黑场景）。
+    /// </summary>
+    private async Task RunR72SelfTestAsync()
+    {
+        try
+        {
+            if (!OperatingSystem.IsWindows())
+            {
+                AppLog.Info("[SelfTest] r72: SKIP 非 Windows 环境（CJK 回退为内置 Noto，不代表实机雅黑场景）");
+                (Application.Current?.ApplicationLifetime
+                    as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(0);
+                return;
+            }
+
+            AppLog.Info("[SelfTest] r72: 等主窗稳定 1.2s 后自检 CJK 行内垂直居中");
+            await Task.Delay(1200);
+            if (DataContext is not MainViewModel viewModel)
+            {
+                throw new InvalidOperationException("MainViewModel 未就绪");
+            }
+
+            var terminal = CreateTerminal();
+            var tab = new TerminalTab
+            {
+                Title = "r72-selftest",
+                SessionId = "terminal:r72selftest",
+                Kind = SessionKind.Local,
+                Content = terminal,
+                Terminal = terminal,
+                IsAlive = true,
+                CloseAction = () => { },
+            };
+            viewModel.AddTab(tab);
+            await Task.Delay(600);
+
+            var charW = terminal.CharWidth;
+            var charH = terminal.CharHeight;
+            if (charW <= 0 || charH <= 0)
+            {
+                throw new InvalidOperationException("终端度量未就绪");
+            }
+
+            const string probe = "CJKALIGN校验abcABCxyz 测试";
+            terminal.Terminal.Write(probe + "\r\n");
+            await Task.Delay(500);
+
+            // 落盘走 SaveVisualPng（与 r67/r69 同一成熟路径）。像素分析改为纯托管
+            // 解码这份 PNG（PngPixelDecoder），不再对已挂树控件做第二次 RTB Render +
+            // CopyPixels：两次实机事件（2026-11-26 13:20:51、13:58:04）证实该操作在
+            // VM 虚拟 GPU 上会令渲染线程 AccessViolation（栈落在
+            // DefaultRenderLoop.TimerTick → StringLogSink.FormatSource，进程 FailFast）。
+            SaveVisualPng(terminal, "r72-cjk.png");
+            var pngPath = Path.Combine(Path.GetDirectoryName(AppLog.Path) ?? ".", "r72-cjk.png");
+            PngPixelDecoder.Decode(File.ReadAllBytes(pngPath), out var W, out var H, out var pxBytes);
+            var px = new int[W * H];
+            for (var i = 0; i < W * H; i++)
+            {
+                px[i] = BitConverter.ToInt32(pxBytes, i * 4);
+            }
+            AppLog.Info($"[SelfTest] r72: png {W}x{H} 解码完成，开始像素分析");
+            double Bright(int x, int y)
+            {
+                var p = px[y * W + x];
+                return ((p & 0xFF) + ((p >> 8) & 0xFF) + ((p >> 16) & 0xFF)) / (3.0 * 255.0);
+            }
+            var xEnd = W - 18; // 排除右侧 16px 滚动条
+            if (xEnd < 40)
+            {
+                throw new InvalidOperationException("截图宽度不足");
+            }
+
+            // 1) 找探测行 ink 带（文本区第一个有 ink 的行带）
+            bool RowHasInk(int y)
+            {
+                for (var x = 0; x < xEnd; x++)
+                {
+                    if (Bright(x, y) > 0.4) return true;
+                }
+                return false;
+            }
+
+            int bandTop = -1, bandBot = -1;
+            for (var y = 0; y < H; y++)
+            {
+                if (RowHasInk(y))
+                {
+                    if (bandTop < 0) bandTop = y;
+                    bandBot = y;
+                }
+                else if (bandTop >= 0 && y - bandBot > 2)
+                {
+                    break;
+                }
+            }
+            if (bandTop < 0)
+            {
+                throw new InvalidOperationException("未找到探测行 ink");
+            }
+
+            // 2) 按列切片：探针是固定文本，网格已知（CJK 占 2 格、拉丁占 1 格），
+            //    列边界 = origin + i*charW，origin 取行带最左 ink 列（左旁白 ~1px，
+            //    对 16px 的 CJK 格界影响可忽略）。
+            //    不用「空隙分段 + 高度阈值」启发式：实机测量中「校」左部笔画与 GN
+            //    粘连成宽段被误判为 CJK、BCxyz 粘连成 31px 宽段、拉丁段高低于
+            //    0.55*charH 阈值 → latin=0 分段不足（2026-11-26 两轮实测）。
+            int originX = -1;
+            for (var x = 0; x < xEnd && originX < 0; x++)
+            {
+                for (var y = bandTop; y <= bandBot; y++)
+                {
+                    if (Bright(x, y) > 0.4) { originX = x; break; }
+                }
+            }
+            if (originX < 0)
+            {
+                throw new InvalidOperationException("探测行 ink 不足");
+            }
+            double CellX(int cell) => originX + cell * charW;
+
+            // 返回 [c0, c1) 格区间在行带内的 ink top/bot
+            void Slice(int c0, int c1, out int top, out int bot)
+            {
+                top = int.MaxValue;
+                bot = -1;
+                var x0 = (int)Math.Max(0, Math.Ceiling(CellX(c0)));
+                var x1 = (int)Math.Min(xEnd, Math.Floor(CellX(c1)));
+                for (var x = x0; x < x1; x++)
+                {
+                    for (var y = bandTop; y <= bandBot; y++)
+                    {
+                        if (Bright(x, y) > 0.4) { top = Math.Min(top, y); break; }
+                    }
+                    for (var y = bandBot; y >= bandTop; y--)
+                    {
+                        if (Bright(x, y) > 0.4) { bot = Math.Max(bot, y); break; }
+                    }
+                }
+            }
+
+            // 探针 "CJKALIGN校验abcABCxyz 测试" = 26 格：
+            // 0-7 拉丁 CJKALIGN；8-11 CJK 校验；12-20 拉丁 abcABCxyz；21 空格；22-25 CJK 测试
+            Slice(0, 8, out var lat1Top, out var lat1Bot);
+            Slice(12, 21, out var lat2Top, out var lat2Bot);
+            Slice(8, 12, out var cjk1Top, out var cjk1Bot);
+            Slice(22, 26, out var cjk2Top, out var cjk2Bot);
+            if (lat1Bot < 0 || lat2Bot < 0 || cjk1Bot < 0 || cjk2Bot < 0)
+            {
+                throw new InvalidOperationException(
+                    $"列切片 ink 不足 latin1={lat1Top}..{lat1Bot} latin2={lat2Top}..{lat2Bot} " +
+                    $"cjk1={cjk1Top}..{cjk1Bot} cjk2={cjk2Top}..{cjk2Bot}（origin={originX} charW={charW:0.###}）");
+            }
+
+            var latinTop = Math.Min(lat1Top, lat2Top);
+            var cjkTop = Math.Min(cjk1Top, cjk2Top);
+            var cjkBot = Math.Max(cjk1Bot, cjk2Bot);
+
+            // 基线 = 拉丁范围内逐列 ink 底的中位数（y 的 descender 只影响 1 列，被中位数滤掉）
+            var colBots = new List<int>();
+            void CollectBots(int c0, int c1)
+            {
+                var x0 = (int)Math.Max(0, Math.Ceiling(CellX(c0)));
+                var x1 = (int)Math.Min(xEnd, Math.Floor(CellX(c1)));
+                for (var x = x0; x < x1; x++)
+                {
+                    for (var y = bandBot; y >= bandTop; y--)
+                    {
+                        if (Bright(x, y) > 0.4) { colBots.Add(y); break; }
+                    }
+                }
+            }
+            CollectBots(0, 8);
+            CollectBots(12, 21);
+            if (colBots.Count < 5)
+            {
+                throw new InvalidOperationException($"拉丁有 ink 列数过少 {colBots.Count}");
+            }
+            colBots.Sort();
+            int baseline = colBots[colBots.Count / 2];
+
+            var cjkCenter = (cjkTop + cjkBot) / 2.0;
+            var lineCenter = (bandTop + bandBot) / 2.0;
+            var dTop = cjkTop - latinTop;         // ① CJK 顶相对英文升部顶（修复前 +3）
+            var dBot = cjkBot - baseline;         // ② CJK 底相对基线（修复前 +5，MobaXterm +2）
+            var dCenter = cjkCenter - lineCenter; // ③ 行内居中偏差
+
+            AppLog.Info(
+                $"[SelfTest] r72: 度量 charW={charW:0.###} charH={charH:0.###} 行带={bandTop}..{bandBot} origin={originX} " +
+                $"拉丁1={lat1Top}..{lat1Bot} 拉丁2={lat2Top}..{lat2Bot} CJK1={cjk1Top}..{cjk1Bot} CJK2={cjk2Top}..{cjk2Bot}");
+            AppLog.Info(
+                $"[SelfTest] r72: 英文升部顶={latinTop} 基线(逐列底中位数)={baseline} CJK ink {cjkTop}..{cjkBot}" +
+                $"（顶差 {dTop:+0.##;-0.##} 底差 {dBot:+0.##;-0.##} 居中偏差 {dCenter:+0.##;-0.##} 行中心={lineCenter:0.##}）");
+
+            var ok = dTop >= -1.5 && dTop <= 1.5 && dBot <= 3 && Math.Abs(dCenter) <= 1.5;
+            if (!ok)
+            {
+                throw new InvalidOperationException(
+                    $"CJK 垂直居中未达标: 顶差={dTop:+0.##} 底差={dBot:+0.##} 居中偏差={dCenter:+0.##}（要求 顶差∈[-1.5,1.5] 底差≤3 |居中偏差|≤1.5）");
+            }
+
+            AppLog.Info("[SelfTest] r72: 自检完成 CJK行内垂直居中=OK（顶/底/中心三项均达标），退出");
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(0);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("[SelfTest] r72: 自检失败", ex);
             (Application.Current?.ApplicationLifetime
                 as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
         }

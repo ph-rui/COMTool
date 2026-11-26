@@ -1,0 +1,63 @@
+<!-- r67.12: 按 4.1.7 DLL 反编译（TerminalGenericStyles，11 月 18 日镜像）逐条转写的
+     重建文件。原始 Generic.axaml 源文件随库仓库丢失（2026-11-26 确认本机/VM/开发机
+     均无），本文件为忠实重建：内容 = 反编译出的 TerminalControl 样式（背景黑、前景白、
+     等宽字体链、FocusAdorner 关闭、模板 = 2 列 Grid：PART_TerminalView +
+     PART_ScrollBar(Vertical, AllowAutoHide=False)），模板内 TemplateBinding 与反编译
+     代码逐条一致（24 项绑定 + 5 项字体/前景背景绑定）。x:Class 由 XAML 编译器重新
+     生成 TerminalGenericStyles（原 4.1.7 亦为 x:Class 生成，AOT-safe，见 r52）。 -->
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:Iciclecreek.Terminal"
+        x:Class="Iciclecreek.Terminal.TerminalGenericStyles">
+    <Style Selector="local|TerminalControl">
+        <Setter Property="Background" Value="Black"/>
+        <Setter Property="Foreground" Value="White"/>
+        <Setter Property="FontFamily"
+                Value="Cascadia Mono,Cascadia Code,Consolas,Menlo,DejaVu Sans Mono,Liberation Mono,Courier New,Segoe UI Emoji,Apple Color Emoji,Noto Color Emoji,monospace"/>
+        <Setter Property="FocusAdorner" Value="{x:Null}"/>
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Grid ColumnDefinitions="*,Auto">
+                    <local:TerminalView Name="PART_TerminalView"
+                                         FontFamily="{TemplateBinding FontFamily}"
+                                         FontSize="{TemplateBinding FontSize}"
+                                         FontStyle="{TemplateBinding FontStyle}"
+                                         FontWeight="{TemplateBinding FontWeight}"
+                                         Foreground="{TemplateBinding Foreground}"
+                                         Background="{TemplateBinding Background}"
+                                         SelectionBrush="{TemplateBinding SelectionBrush}"
+                                         Process="{TemplateBinding Process}"
+                                         StartingDirectory="{TemplateBinding StartingDirectory}"
+                                         ProcessArgs="{TemplateBinding ProcessArgs}"
+                                         BufferSize="{TemplateBinding BufferSize}"
+                                         ShowCaretOnClick="{TemplateBinding ShowCaretOnClick}"
+                                         AutoCopyOnSelection="{TemplateBinding AutoCopyOnSelection}"
+                                         ShortcutMode="{TemplateBinding ShortcutMode}"
+                                         SuppressCursor="{TemplateBinding SuppressCursor}"
+                                         OutputReceivedOnReadTask="{TemplateBinding OutputReceivedOnReadTask}"
+                                         AutoScrollToBottom="{TemplateBinding AutoScrollToBottom}"
+                                         TextDecorations="{TemplateBinding TextDecorations}"
+                                         CursorColor="{TemplateBinding CursorColor}"
+                                         Ligatures="{TemplateBinding Ligatures}"
+                                         ConvertEol="{TemplateBinding ConvertEol}"
+                                         AllowWindowOps="{TemplateBinding AllowWindowOps}"
+                                         BoldFont="{TemplateBinding BoldFont}"
+                                         CursorStyle="{TemplateBinding CursorStyle}"
+                                         CursorBlink="{TemplateBinding CursorBlink}"
+                                         CursorBlinkRate="{TemplateBinding CursorBlinkRate}"
+                                         VerbatimCommandLine="{TemplateBinding VerbatimCommandLine}"
+                                         EnvironmentVariables="{TemplateBinding EnvironmentVariables}"
+                                         Options="{TemplateBinding Options}"
+                                         GutterWidth="{TemplateBinding GutterWidth}"
+                                         GutterPromptBrush="{TemplateBinding GutterPromptBrush}"
+                                         GutterSuccessBrush="{TemplateBinding GutterSuccessBrush}"
+                                         GutterFailureBrush="{TemplateBinding GutterFailureBrush}"
+                                         SearchHighlightBrush="{TemplateBinding SearchHighlightBrush}"
+                                         SearchCurrentBrush="{TemplateBinding SearchCurrentBrush}"/>
+                    <ScrollBar Name="PART_ScrollBar" Grid.Column="1"
+                               Orientation="Vertical" AllowAutoHide="False"/>
+                </Grid>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+</Styles>

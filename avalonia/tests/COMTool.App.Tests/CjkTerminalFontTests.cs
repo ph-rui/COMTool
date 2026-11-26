@@ -344,6 +344,115 @@ public sealed class CjkTerminalFontTests
         }
     }
 
+    /// <summary>
+    /// r67.12 / TERM38：宽字符（CJK）ink 必须在行内垂直居中（对齐 MobaXterm）。
+    /// 库 4.1.7 把宽字形钉在主字体基线上、零偏移，雅黑 CJK ink 重心在基线附近，
+    /// 而 Consolas 行中心在基线上方 → 整块中文偏低 ~3px（用户对照 MobaXterm 截图反馈）。
+    /// 4.1.8：GlyphInfo.GlyphOffset.Y = 行中心 − ink 中心；ink 中心首选 1em 探针
+    /// （BuildGeometry 实测），几何不可用（headless 零宽占位框）时退化为 em 盒中心
+    /// （FontMetrics.Ascent/Descent），两者皆无则零偏移（不丢字）。
+    /// 本测试按库同序镜像复算期望值（face 解析：首选 face → 字体链；探针 → em 盒），
+    /// 并断言：① offset 与库算法一致；② 方向为上移；③ 拉丁路径零影响；④ r33 两格 advance 不破。
+    /// </summary>
+    [AvaloniaFact]
+    public void TERM38_WideCjkInkCenteredInRow()
+    {
+        using var env = new TestEnvironment();
+        MainWindow? window = null;
+        try
+        {
+            env.Run(() =>
+            {
+                window = new MainWindow { DataContext = new MainViewModel() };
+                window.Show();
+                window.StopPortTimerForTests();
+                var viewModel = (MainViewModel)window.DataContext!;
+                var terminal = AddTerminalTab(viewModel, "term38");
+                window.UpdateLayout();
+                Dispatcher.UIThread.RunJobs();
+
+                var view = terminal.GetVisualDescendants().OfType<TerminalView>().Single();
+                var run = view.TryBuildGlyphRun("编", 2, FontStyle.Normal, FontWeight.Normal);
+                Assert.NotNull(run); // 宽字符仍走 glyph 快路径
+                var gi = run!.GlyphInfos.Single();
+                Assert.Equal(view.CharWidth * 2, gi.GlyphAdvance, precision: 4); // r33 两格 advance 不破
+
+                // 镜像库 ResolveWideGlyphTypeface 的 face 解析：① 首选 face
+                // （new Typeface(FontFamily,...)，含字形且有度量）；② 否则按字体链逐个解析。
+                GlyphTypeface? libFace = null;
+                ushort libGid = 0;
+                try
+                {
+                    var primary = new Typeface(view.FontFamily, FontStyle.Normal, FontWeight.Normal).GlyphTypeface;
+                    if (primary is { } p && p.CharacterToGlyphMap.TryGetGlyph('编', out var g0) && g0 != 0
+                        && p.TryGetGlyphMetrics(g0, out _))
+                    {
+                        libFace = p; libGid = (ushort)g0;
+                    }
+                }
+                catch { }
+                if (libFace is null)
+                {
+                    foreach (var fam in MainWindow.TerminalFontFamily().ToString().Split(','))
+                    {
+                        var name = fam.Trim();
+                        if (name.Length == 0) continue;
+                        try
+                        {
+                            var gt = new Typeface(name, FontStyle.Normal, FontWeight.Normal).GlyphTypeface;
+                            if (gt is { } g && g.CharacterToGlyphMap.TryGetGlyph('编', out var g2) && g2 != 0
+                                && g.TryGetGlyphMetrics(g2, out _))
+                            {
+                                libFace = g; libGid = (ushort)g2; break;
+                            }
+                        }
+                        catch { }
+                    }
+                }
+                Assert.True(libFace is not null && libGid != 0, "库可解析的 CJK face 必须可获得");
+
+                // 镜像库 WideGlyphVerticalOffset 的 ink 中心获取：1em 探针 → em 盒退化
+                double expInk = double.NaN;
+                string mode = "ink";
+                try
+                {
+                    var probe = new GlyphRun(libFace!, 1.0, "编".AsMemory(),
+                                             new[] { new GlyphInfo(libGid, 0, 0.0) }, new Point(0, 0));
+                    if (probe.BuildGeometry() is { Bounds: { Width: > 0 } ink })
+                    {
+                        expInk = ink.Y + ink.Height / 2.0;
+                    }
+                }
+                catch { }
+                if (double.IsNaN(expInk))
+                {
+                    var fm = libFace!.Metrics;
+                    Assert.True(fm != null && fm.DesignEmHeight > 0, "em 盒度量必须可获得");
+                    expInk = -(fm.Ascent - fm.Descent) / 2.0 / fm.DesignEmHeight;
+                    mode = "embox";
+                }
+
+                var baseline = run.BaselineOrigin.Y;
+                var expected = ((view.CharHeight / 2.0 - baseline) / terminal.FontSize - expInk) * terminal.FontSize;
+                var diag2 = $"mode={mode} ChW={view.CharWidth:0.###} ChH={view.CharHeight:0.###} FS={view.FontSize:0.###} " +
+                    $"baseline={baseline:0.###} face={libFace!.ToString()} gid={libGid} inkCenter={expInk:0.###}em " +
+                    $"expected={expected:0.###} actual={gi.GlyphOffset.Y:0.###} adv={gi.GlyphAdvance:0.###}";
+                Assert.True(Math.Abs(expected - gi.GlyphOffset.Y) < 1e-4, diag2 + " | offset 与库算法不一致");
+                Assert.True(gi.GlyphOffset.Y < -0.5, diag2 + "（CJK ink 应上移居中）");
+
+                // 拉丁路径零影响
+                var latin = view.TryBuildGlyphRun("A", 1, FontStyle.Normal, FontWeight.Normal);
+                Assert.NotNull(latin);
+                Assert.Equal(0, latin!.GlyphInfos.Single().GlyphOffset.Y, precision: 4);
+            });
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
     private static TerminalControl AddTerminalTab(MainViewModel viewModel, string id)
     {
         var terminal = new TerminalControl

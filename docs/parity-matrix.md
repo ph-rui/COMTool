@@ -69,6 +69,8 @@
 | TERM-36 | 终端滚动条（MobaXterm 式常显） | P1 | 完成（Avalonia 增强） | 2026-11-18 第 67.7 轮（用户录屏 `test.mp4` 实测）：终端右侧常显 16px 滚动条，浅色主题轨道 #EDEDED / 滑块 #BDBDBD / 箭头 #505050（深色主题配套 #2D2D2D/#5A5A5A），滑块满宽不套 Fluent 0.5 缩放、上下行按钮 16px+8px 箭头、不悬停也可见；点一次轨道空白翻一整屏（LargeChange=ViewportSize 并随窗口尺寸重算）；按住轨道空白区的连续滚动见 TERM-37（r67.8 起为逐行平滑，替换 r67.7 的 300/250 整屏重复——实机那是 4 次/秒跳屏，用户反馈“一顿一顿”）；无回滚时仍占 16px 列（不让终端列宽抖动）；右键「终端显示 → 切换终端滚动条」仍可关掉。根因是既有 `HideTerminalScrollBars` 把库模板自带的 PART_ScrollBar 设 IsVisible=false/Width=0，且 Fluent 滚动条默认 Opacity=0；改为 AppStyles 三个 ControlTheme + 主题刷子 + `ApplyTerminalScrollBar`（TemplateApplied/AttachedToVisualTree 双挂）| 
 | TERM-37 | 终端滚动条按住平滑滚动（MobaXterm 实测对齐） | P1 | 完成（Avalonia 增强） | 2026-11-18 第 67.8 轮（用户反馈 r67.7 按住翻页“一顿一顿”）：`TerminalSmoothPager` 在隧道阶段接管 `PART_PageUpButton`/`PART_PageDownButton` 的 PointerPressed（`Handled=true` + 指针捕获），按下立即翻一整屏，按住超过 350ms 后每 16ms 滚 1 行（≈60 行/秒）连续推进，松手/指针捕获丢失/终端离开可视树立即停；滑块拖动、上下箭头、单击翻屏语义不变，滚动写 `ViewportY` 由库回同步 `ScrollBar.Value`（滑块跟手）；`LargeChange=ViewportSize` 保留给自动化/无障碍；headless 用 `Advance(TimeSpan)` 手动推进时钟覆盖“350ms 首延迟/16ms 一行/8+8ms 合并一行/松手即停/顶部 clamp”，实机 `--selftest-r69` 按住 1.5s 实测 70 次采样共 71 行、单次采样 ≤2 行 | 
 
+ | TERM-38 | 中英文混排垂直对齐（MobaXterm 对齐，第二轮） | P1 | 完成（Avalonia 增强） | 2026-11-26 第 67.12 轮（用户反馈「同一行中文字与英文字高低不一」，附同文 MobaXterm 对照截图）：r43 只钉了基线，雅黑 CJK ink 重心在基线附近，相对 Consolas 行中心整块中文仍偏低 ~3px（像素实测：中文顶比英文升部顶低 3px、底超基线 5px；MobaXterm 中文 ink 充满行框且行内居中）。修复=库 4.1.8 width-2 分支 `GlyphOffset.Y = 行中心 − ink 中心`（1em 探针实测 ink，headless 退化为 em 盒中心，皆不可用则零偏移不丢字）；水平 2 格（r22）、基线钉扎（r43）、单格回退、FormattedText 路径均不变。4.1.7 源码仓库丢失，4.1.8 以线上 4.1.7 DLL 反编译重建+本补丁（构建说明见 feature-test-matrix TERM-38）；实机 `--selftest-r72` 像素自检，人工目视签收 WIN-36 |
+
 ## 3. 串口
 
 | ID | 功能 | 优先级 | 状态 | 验收要点 |
