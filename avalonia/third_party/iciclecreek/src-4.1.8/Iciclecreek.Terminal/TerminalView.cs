@@ -448,6 +448,9 @@ public class TerminalView : Control, ICustomHitTest, IDisposable
 	private readonly Dictionary<(FontStyle Style, FontWeight Weight), GlyphTypeface?> _wideFallback = new Dictionary<(FontStyle, FontWeight), GlyphTypeface>();
 	// r67.12: 宽字形垂直居中偏移缓存（face+glyph -> offset）
 	private readonly Dictionary<(GlyphTypeface Face, ushort Glyph), Vector> _wideVOffsets = new Dictionary<(GlyphTypeface, ushort), Vector>();
+	// r67.12（r77）：启动期 CJK 字体预热状态
+	private bool _wideWarmupDone;
+	private int _wideWarmupRetries;
 
 	private bool _boldIsBright = true;
 
@@ -6779,7 +6782,10 @@ public class TerminalView : Control, ICustomHitTest, IDisposable
 			}
 			if (double.IsNaN(inkCenter))
 			{
-				_wideVOffsets[key] = default(Vector);
+				// r67.12（r77）：几何/度量暂不可用时不缓存零偏移。
+				// 旧行为把 default 写入 _wideVOffsets，使冷启动窗口期（字体文件
+				// 未加载）建立的行缓存永久钉在 4.1.7 原生位（用户截图：整屏 CJK
+				// 原生、底差 +5 签名）。本次仍按基线渲染（不丢字），下次行重建重试探针。
 				return default(Vector);
 			}
 			double rowCenter = (_charHeight / 2.0 - _baseline) / FontSize;  // em，行中心相对基线
@@ -7799,15 +7805,70 @@ public class TerminalView : Control, ICustomHitTest, IDisposable
 
 	private void UpdateTextMetrics()
 	{
+		double oldCharWidth = _charWidth;
+		double oldCharHeight = _charHeight;
+		double oldBaseline = _baseline;
 		Typeface typeface = new Typeface(FontFamily, FontStyle, FontWeight);
 		_fontFamilyChain = (((object)FontFamily == null) ? "monospace" : string.Join(",", FontFamily.FamilyNames));
 		_measureText = new FormattedText("W", CultureInfo.CurrentCulture, FlowDirection.LeftToRight, typeface, FontSize, Brushes.Black);
-		_charWidth = _measureText.Width;
-		_charHeight = _measureText.Height;
-		_baseline = _measureText.Baseline;
+		// r67.12（r77）：瞬时测量为 0（布局/字体未就绪）时保留旧非零度量，
+		// 避免 _charWidth<=0 使整行走 FormattedText 回退（CJK 原生位）并烘焙进行缓存。
+		if (_measureText.Width > 0.0)
+		{
+			_charWidth = _measureText.Width;
+		}
+		if (_measureText.Height > 0.0)
+		{
+			_charHeight = _measureText.Height;
+		}
+		if (_measureText.Baseline > 0.0)
+		{
+			_baseline = _measureText.Baseline;
+		}
+		bool metricsChanged = Math.Abs(oldCharWidth - _charWidth) > 1e-6 || Math.Abs(oldCharHeight - _charHeight) > 1e-6 || Math.Abs(oldBaseline - _baseline) > 1e-6;
 		_glyphTypefaces.Clear();
 		_wideVOffsets.Clear();
+		// r67.12（r77）：度量变化（含首次 0→就绪、字号缩放、窗口重排）时：
+		// (1) _wideFallback 重新解析——冷启动期解析到的半就绪 CJK typeface 不再持久；
+		// (2) 行 run 缓存（line.Cache）整体失效——烘焙了旧偏移/零偏移的 GlyphRun 重建。
+		if (metricsChanged)
+		{
+			_wideFallback.Clear();
+			InvalidateRunCaches();
+		}
 		PublishCellPixelSize();
+		// r67.12（r77）：启动期预热 CJK 回退字体（强制字体文件加载），
+		// 使 TUI 首帧 CJK 探针落在已就绪字体上（冷启动竞态的根因修复）。
+		// 探针失败（字体未就绪）时不置完成位，安排有限次重试（≤5 次布局轮）。
+		if (!_wideWarmupDone && _charWidth > 0.0)
+		{
+			bool warmupOk = false;
+			try
+			{
+				ushort g = 0;
+				if (ResolveWideGlyphTypeface('\u4E2D', FontStyle.Normal, FontWeight.Normal, out g) is { } wt && g != 0)
+				{
+					warmupOk = WideGlyphVerticalOffset(wt, g, '\u4E2D') != default;
+				}
+			}
+			catch
+			{
+				// 预热异常：按失败处理，走重试。
+			}
+			if (warmupOk)
+			{
+				_wideWarmupDone = true;
+			}
+			else if (_wideWarmupRetries < 5)
+			{
+				_wideWarmupRetries++;
+				global::Avalonia.Threading.Dispatcher.UIThread.Post(() => InvalidateMeasure(), global::Avalonia.Threading.DispatcherPriority.Background);
+			}
+			else
+			{
+				_wideWarmupDone = true; // 放弃重试：零偏移不缓存策略仍保证后续行重建时重试探针
+			}
+		}
 	}
 
 	private void PublishCellPixelSize()
