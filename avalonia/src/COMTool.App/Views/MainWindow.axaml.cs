@@ -523,6 +523,16 @@ public partial class MainWindow : Window
         {
             _ = RunR73SelfTestAsync();
         }
+        // --selftest-r74：r67.12 后续实机自检：TUI 表格框/用户消息框语境复现（r73 的 2×2
+        // 析因未复现 → 剩余差异为同行边框字符/表格框语境）。按 tui-raw4.bin 实抓字节流
+        // 复刻：表格（fg102/bg232 框线 + fg255/bg232 逐字符 CJK 标签 + 批量值）、用户
+        // 消息框（fg238/bg233 ┃ + fg15/bg233 逐字符）、以及无框对照行。像素判据同 r72，
+        // 行原点取同行 │/┃ 竖线 ink 中心（−0.5charW）。另修正 Bright() 为 alpha 合成
+        // （VM 截图左下存在 ~40% 半透明 UI 覆盖层，r73 R4 行带被其拉满至图底）。
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r74"))
+        {
+            _ = RunR74SelfTestAsync();
+        }
     }
 
     private volatile bool _portScanBusy;
@@ -11609,6 +11619,280 @@ public static class ClipCheck {
         catch (Exception ex)
         {
             AppLog.Error("[SelfTest] r73: 自检失败", ex);
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
+        }
+    }
+
+    private async Task RunR74SelfTestAsync()
+    {
+        try
+        {
+            var isWin = OperatingSystem.IsWindows();
+            if (!isWin)
+            {
+                AppLog.Info("[SelfTest] r74: 非 Windows（CJK 回退 Noto）：仅断言行不变性，绝对判据跳过");
+            }
+            AppLog.Info("[SelfTest] r74: 等主窗稳定 1.2s 后自检 TUI 表格框/用户消息框语境下的 CJK 行内垂直居中");
+            await Task.Delay(1200);
+            if (DataContext is not MainViewModel viewModel)
+            {
+                throw new InvalidOperationException("MainViewModel 未就绪");
+            }
+
+            var terminal = CreateTerminal();
+            var tab = new TerminalTab
+            {
+                Title = "r74-selftest",
+                SessionId = "terminal:r74selftest",
+                Kind = SessionKind.Local,
+                Content = terminal,
+                Terminal = terminal,
+                IsAlive = true,
+                CloseAction = () => { },
+            };
+            viewModel.AddTab(tab);
+            await Task.Delay(600);
+
+            var charW = terminal.CharWidth;
+            var charH = terminal.CharHeight;
+            if (charW <= 0 || charH <= 0)
+            {
+                throw new InvalidOperationException("终端度量未就绪");
+            }
+
+            const string esc = "\u001b";
+            void Tx(string s) => terminal.Terminal.Write(s);
+            var cols = terminal.Terminal.Cols;
+            if (cols < 30)
+            {
+                throw new InvalidOperationException($"终端列数不足 {cols}");
+            }
+            var RB = Math.Min(73, cols - 1); // 右框线 0 基格（按实际终端宽度，避免换行）
+
+            // 5 行隔行、文字完全相同（校验测试abcABC，消除字形自身 ink 范围变量），仅「行语境」不同：
+            //  行1 R1 框+填充：整行 bg232 空格填充；│ fg102/bg232 @1,@12,@RB+1；校 fg255/bg232 @3,验@5,测@7,试@9
+            //      （H定位 + SGR + 单字符 + 尾随空格 + 0m，与 raw4 实抓标签一致）；abcABC @13 批量 fg255/bg232。
+            //  行3 R2 仅框：同 R1，无整行填充（bg 只存在于 │ 与 CJK 单元格自身）。
+            //  行5 R3 仅填充：整行 bg232 填充 + CJK + 值，无 │。
+            //  行7 R4 用户消息：┃ fg238/bg233 @3；col4 起 bg233 填充；校@6 验@8 测@10 试@12 fg15/bg233 逐字符；abcABC @15。
+            //  行9 R5 对照：逐字符 fg15/bg233 校@1 验@3 测@5 试@7 + abcABC @9，无填充无边框（r73 R3 同形）。
+            // 目的：判定「同行边框字符」或「同行整行 bg 填充」是否吞掉 width-2 垂直偏移（r72/r73 修复）。
+            void CJKLabel(int row, int startCol, string fg, string bg)
+            {
+                var c = startCol;
+                foreach (var ch in new[] { "校", "验", "测", "试" })
+                {
+                    Tx(esc + "[" + row + ";" + c + "H" + esc + "[38;5;" + fg + "m" + esc + "[48;5;" + bg + "m" + ch + " " + esc + "[0m");
+                    c += 2;
+                }
+            }
+            void TableBorders(int row, bool fill)
+            {
+                if (fill)
+                {
+                    Tx(esc + "[" + row + ";1H" + esc + "[38;5;255m" + esc + "[48;5;232m" + new string(' ', RB) + esc + "[0m");
+                }
+                Tx(esc + "[" + row + ";1H" + esc + "[38;5;102m" + esc + "[48;5;232m│" + esc + "[0m");
+                Tx(esc + "[" + row + ";12H" + esc + "[38;5;102m" + esc + "[48;5;232m│" + esc + "[0m");
+                Tx(esc + "[" + row + ";" + (RB + 1) + "H" + esc + "[38;5;102m" + esc + "[48;5;232m│" + esc + "[0m");
+            }
+            TableBorders(1, true);
+            CJKLabel(1, 3, "255", "232");
+            Tx(esc + "[1;13H" + esc + "[38;5;255m" + esc + "[48;5;232mabcABC" + esc + "[0m\r\n\r\n");
+            TableBorders(3, false);
+            CJKLabel(3, 3, "255", "232");
+            Tx(esc + "[3;13H" + esc + "[38;5;255m" + esc + "[48;5;232mabcABC" + esc + "[0m\r\n\r\n");
+            Tx(esc + "[5;1H" + esc + "[38;5;255m" + esc + "[48;5;232m" + new string(' ', RB) + esc + "[0m");
+            CJKLabel(5, 3, "255", "232");
+            Tx(esc + "[5;13H" + esc + "[38;5;255m" + esc + "[48;5;232mabcABC" + esc + "[0m\r\n\r\n");
+            Tx(esc + "[7;3H" + esc + "[38;5;238m" + esc + "[48;5;233m┃" + esc + "[0m");
+            Tx(esc + "[7;4H" + esc + "[38;5;15m" + esc + "[48;5;233m" + new string(' ', RB - 3) + esc + "[0m");
+            CJKLabel(7, 6, "15", "233");
+            Tx(esc + "[7;15H" + esc + "[38;5;15m" + esc + "[48;5;233mabcABC" + esc + "[0m\r\n\r\n");
+            CJKLabel(9, 1, "15", "233");
+            Tx(esc + "[9;9H" + esc + "[38;5;15m" + esc + "[48;5;233mabcABC" + esc + "[0m\r\n");
+            await Task.Delay(500);
+
+            // 落盘走 SaveVisualPng（VM 虚拟 GPU 上禁止二次 RTB 渲染）
+            SaveVisualPng(terminal, "r74-cjk.png");
+            var pngPath = Path.Combine(Path.GetDirectoryName(AppLog.Path) ?? ".", "r74-cjk.png");
+            PngPixelDecoder.Decode(File.ReadAllBytes(pngPath), out var W, out var H, out var pxBytes);
+            var px = new int[W * H];
+            for (var i = 0; i < W * H; i++)
+            {
+                px[i] = BitConverter.ToInt32(pxBytes, i * 4);
+            }
+            AppLog.Info($"[SelfTest] r74: png {W}x{H} 解码完成（alpha 合成判 ink）");
+            // r73 教训：VM 截图含 ~40% 半透明 UI 覆盖层 → Bright 必须 alpha 合成（对黑底），
+            // 否则覆盖层 RGB≈104 过 0.4 阈值把行带拉满至图底。
+            double Bright(int x, int y)
+            {
+                var p = px[y * W + x];
+                var a = (p >> 24) & 0xFF;
+                if (a == 0) return 0.0;
+                var lum = ((p & 0xFF) + ((p >> 8) & 0xFF) + ((p >> 16) & 0xFF)) / (3.0 * 255.0);
+                return lum * a / 255.0;
+            }
+            var xEnd = W - 18;
+            if (xEnd < 40)
+            {
+                throw new InvalidOperationException("截图宽度不足");
+            }
+            bool RowHasInk(int y)
+            {
+                for (var x = 0; x < xEnd; x++)
+                {
+                    if (Bright(x, y) > 0.4) return true;
+                }
+                return false;
+            }
+
+            // 5 个 ink 行带：[0]R1框+填充(行1) [1]R2仅框(行3) [2]R3仅填充(行5) [3]R4用户消息(行7) [4]R5对照(行9)
+            var bands = new List<(int top, int bot)>();
+            for (var y = 0; y < H; y++)
+            {
+                if (RowHasInk(y))
+                {
+                    if (bands.Count == 0 || y - bands[bands.Count - 1].bot > 2)
+                    {
+                        bands.Add((y, y));
+                    }
+                    else
+                    {
+                        bands[bands.Count - 1] = (bands[bands.Count - 1].top, y);
+                    }
+                }
+            }
+            if (bands.Count < 5)
+            {
+                throw new InvalidOperationException($"ink 行带不足 5 个，仅 {bands.Count} 个");
+            }
+
+            // 行原点（cell0 左缘 x）：取同行最左细竖线（│/┃）ink 中心 − (borderCell+0.5)*charW；
+            // 行9 无框，用表格行（cell0=│）推得的同一原点（同终端同网格）。
+            double OriginFromBorder(int bandTop, int bandBot, int borderCell)
+            {
+                var colInk = new bool[xEnd];
+                for (var x = 0; x < xEnd; x++)
+                {
+                    for (var y = bandTop; y <= bandBot; y++)
+                    {
+                        if (Bright(x, y) > 0.4) { colInk[x] = true; break; }
+                    }
+                }
+                for (var x = 0; x < xEnd - 6; x++)
+                {
+                    if (!colInk[x]) continue;
+                    int wseg = 1;
+                    while (x + wseg < xEnd && colInk[x + wseg]) wseg++;
+                    if (wseg <= 6)
+                    {
+                        var center = x + wseg / 2.0;
+                        return center - (borderCell + 0.5) * charW;
+                    }
+                    x += wseg;
+                }
+                return double.NaN;
+            }
+            var originA = OriginFromBorder(bands[0].top, bands[0].bot, 0);
+            if (double.IsNaN(originA))
+            {
+                throw new InvalidOperationException("表格行未找到左侧竖线，无法定位网格原点");
+            }
+            var originU = OriginFromBorder(bands[3].top, bands[3].bot, 2);
+            AppLog.Info($"[SelfTest] r74: 原点 表格={originA:0.###}（┃ 行={originU:0.###}，charW={charW:0.###}）");
+            double originU2 = double.IsNaN(originU) ? originA : originU;
+
+            // 各行网格（0 基 cell）：CJK 切片 / 拉丁切片
+            var rows = new (string name, int band, double origin, int c0, int c1, int l0, int l1)[]
+            {
+                ("R1 框+填充",  0, originA,  2, 10, 12, 19),
+                ("R2 仅框",     1, originA,  2, 10, 12, 19),
+                ("R3 仅填充",   2, originA,  2, 10, 12, 19),
+                ("R4 用户消息", 3, originU2, 5, 13, 14, 21),
+                ("R5 无框对照", 4, originA,  0,  8,  8, 15),
+            };
+            var fails = new List<string>();
+            var results = new List<(string name, double dTop, double dBot)>();
+            foreach (var r in rows)
+            {
+                var (bandTop, bandBot) = bands[r.band];
+                double CellX(int cell) => r.origin + cell * charW;
+                void Slice(int c0, int c1, out int top, out int bot)
+                {
+                    top = int.MaxValue;
+                    bot = -1;
+                    var x0 = (int)Math.Max(0, Math.Ceiling(CellX(c0)));
+                    var x1 = (int)Math.Min(xEnd, Math.Floor(CellX(c1)));
+                    for (var x = x0; x < x1; x++)
+                    {
+                        for (var y = bandTop; y <= bandBot; y++)
+                        {
+                            if (Bright(x, y) > 0.4) { top = Math.Min(top, y); break; }
+                        }
+                        for (var y = bandBot; y >= bandTop; y--)
+                        {
+                            if (Bright(x, y) > 0.4) { bot = Math.Max(bot, y); break; }
+                        }
+                    }
+                }
+                Slice(r.c0, r.c1, out var cjkTop, out var cjkBot);
+                Slice(r.l0, r.l1, out var latTop, out var latBot);
+                var colBots = new List<int>();
+                for (var x = (int)Math.Ceiling(CellX(r.l0)); x < Math.Min(xEnd, (int)Math.Floor(CellX(r.l1))); x++)
+                {
+                    for (var y = bandBot; y >= bandTop; y--)
+                    {
+                        if (Bright(x, y) > 0.4) { colBots.Add(y); break; }
+                    }
+                }
+                if (cjkBot < 0 || latBot < 0 || colBots.Count < 5)
+                {
+                    throw new InvalidOperationException(
+                        $"{r.name} 切片 ink 不足 cjk={cjkTop}..{cjkBot} latin={latTop}..{latBot} 拉丁列数={colBots.Count} 带={bandTop}..{bandBot} origin={r.origin:0.###}");
+                }
+                colBots.Sort();
+                var baseline = colBots[colBots.Count / 2];
+                var dTop = cjkTop - latTop;
+                var dBot = cjkBot - baseline;
+                AppLog.Info(
+                    $"[SelfTest] r74: {r.name} 带={bandTop}..{bandBot} CJK {cjkTop}..{cjkBot} 拉丁 {latTop}..{latBot} 基线={baseline} " +
+                    $"顶差={dTop:+0.##;-0.##} 底差={dBot:+0.##;-0.##}");
+                results.Add((r.name, dTop, dBot));
+            }
+            // 判据①（全平台）：行不变性——相对无框对照 C，顶差/底差漂移 ≤1.5px（bug 信号=offset 被某语境吞掉）
+            var (ctlName, ctlTop, ctlBot) = results[4];
+            foreach (var (name, dTop, dBot) in results)
+            {
+                if (name == ctlName) continue;
+                if (Math.Abs(dTop - ctlTop) > 1.5 || Math.Abs(dBot - ctlBot) > 1.5)
+                {
+                    fails.Add($"{name} 相对对照漂移 顶差Δ={dTop - ctlTop:+0.##;-0.##} 底差Δ={dBot - ctlBot:+0.##;-0.##}");
+                }
+            }
+            // 判据②（仅 Windows）：绝对几何（r72 同判据，雅黑基准）
+            if (isWin)
+            {
+                foreach (var (name, dTop, dBot) in results)
+                {
+                    if (dTop < -1.5 || dTop > 1.5 || dBot > 3)
+                    {
+                        fails.Add($"{name} 绝对几何未达标 顶差={dTop:+0.##} 底差={dBot:+0.##}（要求 顶差∈[-1.5,1.5] 底差≤3）");
+                    }
+                }
+            }
+            if (fails.Count > 0)
+            {
+                throw new InvalidOperationException($"r74: {fails.Count} 项未达标 → " + string.Join("；", fails));
+            }
+            AppLog.Info("[SelfTest] r74: 自检完成 TUI 框线语境 CJK 行内垂直居中=OK，退出");
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(0);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("[SelfTest] r74: 自检失败", ex);
             (Application.Current?.ApplicationLifetime
                 as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
         }
