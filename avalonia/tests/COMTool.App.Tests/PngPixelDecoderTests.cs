@@ -91,7 +91,9 @@ public sealed class PngPixelDecoderTests
         {
             var ftype = filterPerRow(y);
             stored[y * (rowBytes + 1)] = ftype;
-            // 线性样本流：left/up-left 按线性下标取（PNG 规范 8.2）
+            // PNG 规范 15.6.7.1：参考样本按「像素」定位（同通道上一像素，行内像素首字节为 0），
+            // 不是按线性前一个字节。2026-11-26 以 Pillow 自编码 PNG 逐像素对照修正
+            // （旧实现按前一字节，与 Skia/Pillow 编码的实机 PNG 不符）。
             for (var lin = 0; lin < rowBytes; lin++)
             {
                 var x = lin / 4;
@@ -99,9 +101,9 @@ public sealed class PngPixelDecoderTests
                 // expect 为 B,G,R,A；PNG 通道 c 为 R,G,B,A → 源下标 2,1,0,3
                 var src = c == 3 ? 3 : 2 - c;
                 var v = expectBgra[(y * w + x) * 4 + src];
-                int a = lin > 0 ? recon[y * rowBytes + lin - 1] : 0;
+                int a = lin >= 4 ? recon[y * rowBytes + lin - 4] : 0;
                 int b = y > 0 ? recon[(y - 1) * rowBytes + lin] : 0;
-                int u = lin > 0 && y > 0 ? recon[(y - 1) * rowBytes + lin - 1] : 0;
+                int u = lin >= 4 && y > 0 ? recon[(y - 1) * rowBytes + lin - 4] : 0;
                 int p = ftype switch
                 {
                     0 => v,

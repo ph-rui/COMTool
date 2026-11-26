@@ -114,8 +114,13 @@ internal static class PngPixelDecoder
         }
 
         pixels = new byte[width * height * 4];
-        // PNG 规范 8.2：滤波在「线性样本流」上进行。left 是线性前一个样本，
-        // up-left 是上一行的线性前一个样本；均不能按像素/通道分组取。
+        // PNG 规范 15.6.7.1：参考样本按「像素」定位，不是按「字节」：
+        //   a（left）  = 上一像素的同通道重建样本，行首（x < channels）为 0；
+        //   b（up）    = 上一行同字节位置的重建样本，首行为 0；
+        //   c（up-left）= 上一行的 a（即上一像素同通道、上一行），x < channels 或首行为 0。
+        // 2026-11-26 r74 实机 PNG 取证发现旧实现按「前一字节」取 left/up-left，
+        // 与 Skia/PIL 编码的规范 PNG 不符（文字边缘像素错乱、行带测量失真），
+        // 以 PIL 编码 PNG + 逐像素对照修正。
         var curRow = new byte[rowBytes];
         var prevRow = new byte[rowBytes];
         for (var y = 0; y < height; y++)
@@ -129,9 +134,9 @@ internal static class PngPixelDecoder
             for (var x = 0; x < rowBytes; x++)
             {
                 var v = (sbyte)raw[rowStart + x];
-                var a = x > 0 ? curRow[x - 1] : (byte)0;   // left
-                var b = prevRow[x];                        // up
-                var u = x > 0 ? prevRow[x - 1] : (byte)0;  // up-left
+                var a = x >= channels ? curRow[x - channels] : (byte)0;        // left（同通道、上一像素）
+                var b = prevRow[x];                                            // up（同字节位置、上一行）
+                var u = x >= channels ? prevRow[x - channels] : (byte)0;       // up-left（b 的左参考）
                 int p;
                 switch (ftype)
                 {

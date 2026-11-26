@@ -533,6 +533,25 @@ public partial class MainWindow : Window
         {
             _ = RunR74SelfTestAsync();
         }
+        // --selftest-r75a/b/c：r67.12 后续实机自检（第三轮）：「会话恢复爆发」场景复现。
+        // 用户 TUI 截图显示：恢复时首帧（alt-screen+?2026 同步+整屏爆发写入）的表格/消息框行
+        // CJK 为零偏移（原生位），之后新写入行（r72 探针等）偏移正常 → 嫌疑=首帧早期渲染竞态。
+        // 三轮同一行布局（8 个逻辑行，raw4 实抓样式复刻：粗体表头/逐字符标签/整行填充/┃消息框），
+        // 仅语境不同：a=主屏 t0 爆发；b=主屏 延迟3.5s（字体稳定后）+?2026 窗口；c=alt-screen+?2026 t0 爆发。
+        // 判据=行不变性（相对行内拉丁基线/行顶）+Windows 绝对几何（顶差≤2.5、底差≤15）。
+        // 各轮单进程单截图：r75a-cjk.png / r75b-cjk.png / r75c-cjk.png。
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r75a"))
+        {
+            _ = RunR75SelfTestAsync("a");
+        }
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r75b"))
+        {
+            _ = RunR75SelfTestAsync("b");
+        }
+        if (Environment.GetCommandLineArgs().Contains("--selftest-r75c"))
+        {
+            _ = RunR75SelfTestAsync("c");
+        }
     }
 
     private volatile bool _portScanBusy;
@@ -11893,6 +11912,304 @@ public static class ClipCheck {
         catch (Exception ex)
         {
             AppLog.Error("[SelfTest] r74: 自检失败", ex);
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
+        }
+    }
+
+    // --selftest-r75a/b/c：r67.12 后续实机自检（第三轮）：「会话恢复爆发」场景复现。
+    // r73（SGR×写入模式）与 r74（同行边框/填充/用户消息框）在实机均确认偏移生效（PIL 复核），
+    // 用户截图的异常仅出现在 TUI 会话恢复首帧（?1049 alt + ?2026 同步 + 整屏爆发写入，raw4 实证）。
+    // 本自检复刻 raw4 的表格/用户消息行（粗体表头 fg140+SGR1、标签 fg255/bg232 逐字符+尾随空格、
+    // 值 fg255/bg232 批量、┃ fg238/bg233 消息框、整行 bg 填充），8 个逻辑行（1/3/5/7/9/11/13/15）：
+    //   行1 ┌─┐顶边；行3 表头「项目/内容」粗体；行5 主机名|rk3588-buildroot；
+    //   行7 内核|Linux 6.1 编译于 2026 CST（值内嵌 CJK）；行9 └┴┘底边；
+    //   行11 用户消息框（┃+bg233 填充+「查看Linux版本信息abcABCxyz 测试」逐字符 fg15/bg233）；
+    //   行13 散文「串口 top cat 测试」；行15 无框对照「校验测试abcABC」。
+    // 三轮：a=主屏 t≈150ms 爆发；b=主屏 延迟3.5s+?2026 窗口；c=?1049 alt+?2026 t≈150ms 爆发。
+    // 判据：行不变性（各行 CJK 相对行顶 topRel/botRel 的中位数漂移 ≤1.5px，全平台）
+    //   + Windows 绝对几何（topRel∈[-1,2.5]、botRel∈[9,15]，r74 实测偏移态 1.2/14.2、
+    //   原生态 4.5-5.5/15.5-16.5，判据按实测分离带设定）。
+    private async Task RunR75SelfTestAsync(string mode)
+    {
+        try
+        {
+            var isWin = OperatingSystem.IsWindows();
+            var tag = "r75" + mode;
+            if (!isWin)
+            {
+                AppLog.Info($"[SelfTest] {tag}: 非 Windows（CJK 回退 Noto）：绝对判据跳过，仅断言行不变性");
+            }
+            AppLog.Info($"[SelfTest] {tag}: 等主窗稳定后自检「会话恢复爆发」语境 CJK 行内垂直居中");
+            var t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+            await Task.Delay(mode == "b" ? 1500 : 150);
+            if (DataContext is not MainViewModel viewModel)
+            {
+                throw new InvalidOperationException("MainViewModel 未就绪");
+            }
+            var terminal = CreateTerminal();
+            var tab = new TerminalTab
+            {
+                Title = tag + "-selftest",
+                SessionId = "terminal:r75selftest",
+                Kind = SessionKind.Local,
+                Content = terminal,
+                Terminal = terminal,
+                IsAlive = true,
+                CloseAction = () => { },
+            };
+            viewModel.AddTab(tab);
+            await Task.Delay(400);
+            var charW = terminal.CharWidth;
+            var charH = terminal.CharHeight;
+            if (charW <= 0 || charH <= 0)
+            {
+                throw new InvalidOperationException("终端度量未就绪");
+            }
+            AppLog.Info($"[SelfTest] {tag}: 度量 charW={charW:0.###} charH={charH:0.###}（控件创建后 {(double)(System.Diagnostics.Stopwatch.GetTimestamp() - t0) / System.Diagnostics.Stopwatch.Frequency:0.###}s 开始写入）");
+
+            const string esc = "\u001b";
+            void Tx(string str) => terminal.Terminal.Write(str);
+            // 逐字符 CJK（实抓样式：H定位 + SGR + 单字符 + 尾随空格 + 0m）
+            void Cjk(int row, int col, string ch, string fg, string bg)
+            {
+                Tx(esc + "[" + row + ";" + col + "H" + esc + "[38;5;" + fg + "m" + esc + "[48;5;" + bg + "m" + ch + " " + esc + "[0m");
+            }
+            void Bulk(int row, int col, string text, string fg, string bg)
+            {
+                Tx(esc + "[" + row + ";" + col + "H" + esc + "[38;5;" + fg + "m" + esc + "[48;5;" + bg + "m" + text + esc + "[0m");
+            }
+            void FillRow(int row, int fromCol, int count, string fg, string bg)
+            {
+                Tx(esc + "[" + row + ";" + fromCol + "H" + esc + "[38;5;" + fg + "m" + esc + "[48;5;" + bg + "m" + new string(' ', count) + esc + "[0m");
+            }
+            // 8 逻辑行复刻（列均为 1 基；cell = 列-1）
+            void WriteRows()
+            {
+                // 行1 顶边
+                Bulk(1, 1, "┌" + new string('─', 30) + "┐", "102", "232");
+                // 行3 表头（粗体 fg140/bg232，逐字符）
+                Tx(esc + "[3;1H" + esc + "[38;5;102m" + esc + "[48;5;232m│" + esc + "[0m");
+                Cjk(3, 3, "项", "140", "232"); Cjk(3, 5, "目", "140", "232");
+                Tx(esc + "[3;12H" + esc + "[38;5;102m" + esc + "[48;5;232m│" + esc + "[0m");
+                Cjk(3, 13, "内", "140", "232"); Cjk(3, 15, "容", "140", "232");
+                Tx(esc + "[3;21H" + esc + "[38;5;102m" + esc + "[48;5;232m│" + esc + "[0m");
+                // 行5 主机名（标签逐字符 fg255/bg232，值批量）
+                Tx(esc + "[5;1H" + esc + "[38;5;102m" + esc + "[48;5;232m│" + esc + "[0m");
+                Cjk(5, 3, "主", "255", "232"); Cjk(5, 5, "机", "255", "232"); Cjk(5, 7, "名", "255", "232");
+                Tx(esc + "[5;12H" + esc + "[38;5;102m" + esc + "[48;5;232m│" + esc + "[0m");
+                Bulk(5, 13, " rk3588-buildroot", "255", "232");
+                Tx(esc + "[5;21H" + esc + "[38;5;102m" + esc + "[48;5;232m│" + esc + "[0m");
+                // 行7 内核（值内嵌 CJK「编译于」）
+                Tx(esc + "[7;1H" + esc + "[38;5;102m" + esc + "[48;5;232m│" + esc + "[0m");
+                Cjk(7, 3, "内", "255", "232"); Cjk(7, 5, "核", "255", "232");
+                Tx(esc + "[7;12H" + esc + "[38;5;102m" + esc + "[48;5;232m│" + esc + "[0m");
+                Bulk(7, 13, " Linux 6.1 编译于 2026 CST", "255", "232");
+                Tx(esc + "[7;21H" + esc + "[38;5;102m" + esc + "[48;5;232m│" + esc + "[0m");
+                // 行9 底边
+                Bulk(9, 1, "└" + new string('─', 10) + "┴" + new string('─', 10) + "┘", "102", "232");
+                // 行11 用户消息框（┃ fg238/bg233 + col4 起 bg233 填充 + 逐字符 fg15/bg233）
+                Tx(esc + "[11;2H" + esc + "[38;5;238m" + esc + "[48;5;233m┃" + esc + "[0m");
+                FillRow(11, 4, 46, "15", "233");
+                Cjk(11, 5, "查", "15", "233"); Cjk(11, 9, "看", "15", "233");
+                Bulk(11, 13, "Linux", "15", "233");
+                Cjk(11, 18, "版", "15", "233"); Cjk(11, 20, "本", "15", "233");
+                Cjk(11, 23, "信", "15", "233"); Cjk(11, 25, "息", "15", "233");
+                Bulk(11, 28, "abcABC", "15", "233");
+                Cjk(11, 34, "测", "15", "233"); Cjk(11, 36, "试", "15", "233");
+                // 行13 散文（无框，fg15）
+                Cjk(13, 1, "串", "15", "233"); Cjk(13, 3, "口", "15", "233");
+                Bulk(13, 5, " top cat ", "15", "233");
+                Cjk(13, 14, "测", "15", "233"); Cjk(13, 16, "试", "15", "233");
+                // 行15 无框对照（r73/r74 同形）
+                Cjk(15, 1, "校", "15", "233"); Cjk(15, 3, "验", "15", "233");
+                Cjk(15, 5, "测", "15", "233"); Cjk(15, 7, "试", "15", "233");
+                Bulk(15, 9, "abcABC", "15", "233");
+            }
+
+            // ── 语境差异 ──
+            if (mode == "c")
+            {
+                Tx(esc + "[?1049h");
+                await Task.Delay(100);
+                Tx(esc + "[?2026h");
+                WriteRows();
+                Tx(esc + "[?2026l");
+            }
+            else if (mode == "b")
+            {
+                await Task.Delay(3500);  // 等字体/度量稳定（模拟用户稍后新写入）
+                Tx(esc + "[?2026h");
+                WriteRows();
+                Tx(esc + "[?2026l");
+            }
+            else
+            {
+                WriteRows();  // a：t0 爆发，无 alt 无同步
+            }
+            await Task.Delay(800);
+            Tx(esc + "[?25l");
+            await Task.Delay(150);
+
+            // ── 截图 + 分析 ──
+            SaveVisualPng(terminal, tag + "-cjk.png");
+            var pngPath = Path.Combine(Path.GetDirectoryName(AppLog.Path) ?? ".", tag + "-cjk.png");
+            PngPixelDecoder.Decode(File.ReadAllBytes(pngPath), out var W, out var H, out var pxBytes);
+            var px = new int[W * H];
+            for (var i = 0; i < W * H; i++)
+            {
+                px[i] = BitConverter.ToInt32(pxBytes, i * 4);
+            }
+            AppLog.Info($"[SelfTest] {tag}: png {W}x{H} 解码完成");
+            double Bright(int x, int y)
+            {
+                var p = px[y * W + x];
+                var a = (p >> 24) & 0xFF;
+                if (a == 0) return 0.0;
+                var lum = ((p & 0xFF) + ((p >> 8) & 0xFF) + ((p >> 16) & 0xFF)) / (3.0 * 255.0);
+                return lum * a / 255.0;
+            }
+            var xEnd = W - 18;
+            bool RowHasInk(int y)
+            {
+                for (var x = 0; x < xEnd; x++)
+                {
+                    if (Bright(x, y) > 0.4) return true;
+                }
+                return false;
+            }
+            var bands = new List<(int top, int bot)>();
+            for (var y = 0; y < H; y++)
+            {
+                if (RowHasInk(y))
+                {
+                    if (bands.Count == 0 || y - bands[bands.Count - 1].bot > 2)
+                    {
+                        bands.Add((y, y));
+                    }
+                    else
+                    {
+                        bands[bands.Count - 1] = (bands[bands.Count - 1].top, y);
+                    }
+                }
+            }
+            if (bands.Count < 8)
+            {
+                throw new InvalidOperationException($"{tag} ink 行带不足 8 个，仅 {bands.Count} 个");
+            }
+            // 行几何（cell 0 基）：cjk 区间 / latin 区间
+            var rows = new (int row, string name, (int, int)[] cjk, (int, int)[] lat)[]
+            {
+                (1,  "顶边",  Array.Empty<(int, int)>(), Array.Empty<(int, int)>()),
+                (3,  "表头(粗)", new[] { (2, 6), (12, 16) }, Array.Empty<(int, int)>()),
+                (5,  "主机名", new[] { (2, 8) }, new[] { (13, 28) }),
+                (7,  "内核",  new[] { (2, 6), (23, 29) }, new[] { (13, 23), (29, 38) }),
+                (9,  "底边",  Array.Empty<(int, int)>(), Array.Empty<(int, int)>()),
+                (11, "用户消息", new[] { (4, 6), (8, 10), (17, 19), (19, 21), (22, 24), (24, 26), (33, 35), (35, 37) }, new[] { (12, 17), (27, 33) }),
+                (13, "散文",  new[] { (0, 4), (13, 17) }, new[] { (5, 12) }),
+                (15, "无框对照", new[] { (0, 8) }, new[] { (8, 14) }),
+            };
+            double CellX(int cell) => cell * charW;
+            void Slice(int bandTop, int bandBot, int[] xs01, out int top, out int bot)
+            {
+                top = int.MaxValue;
+                bot = -1;
+                for (var k = 0; k < xs01.Length; k += 2)
+                {
+                    var x0 = (int)Math.Max(0, Math.Ceiling(CellX(xs01[k])));
+                    var x1 = (int)Math.Min(xEnd, Math.Floor(CellX(xs01[k + 1])));
+                    for (var x = x0; x < x1; x++)
+                    {
+                        for (var y = bandTop; y <= bandBot; y++)
+                        {
+                            if (Bright(x, y) > 0.4) { top = Math.Min(top, y); break; }
+                        }
+                        for (var y = bandBot; y >= bandTop; y--)
+                        {
+                            if (Bright(x, y) > 0.4) { bot = Math.Max(bot, y); break; }
+                        }
+                    }
+                }
+            }
+            var fails = new List<string>();
+            var topRels = new List<double>();
+            var botRels = new List<double>();
+            var relRows = new List<(int row, string name)>();
+            for (var bandIdx = 0; bandIdx < 8; bandIdx++)
+            {
+                var (row, name, cjk, lat) = rows[bandIdx];
+                var (bandTop, bandBot) = bands[bandIdx];
+                var rowTop = (row - 1) * charH;
+                if (cjk.Length == 0)
+                {
+                    AppLog.Info($"[SelfTest] {tag}: 行{row} {name} 带={bandTop}..{bandBot} 行顶={rowTop:0.###}（无边框行，仅行顶核对）");
+                    continue;
+                }
+                var cj = cjk.Select(v => new[] { v.Item1, v.Item2 }).SelectMany(a => a).ToArray();
+                Slice(bandTop, bandBot, cj, out var cjkTop, out var cjkBot);
+                if (cjkBot < 0)
+                {
+                    throw new InvalidOperationException($"{tag} 行{row} {name} CJK ink 缺失 带={bandTop}..{bandBot}");
+                }
+                double topRel = cjkTop - rowTop;
+                double botRel = cjkBot - rowTop;
+                var extra = "";
+                if (lat.Length > 0)
+                {
+                    var la = lat.Select(v => new[] { v.Item1, v.Item2 }).SelectMany(a => a).ToArray();
+                    Slice(bandTop, bandBot, la, out var latTop, out var latBot);
+                    var colBots = new List<int>();
+                    for (var x = (int)Math.Ceiling(CellX(lat[0].Item1)); x < Math.Min(xEnd, (int)Math.Floor(CellX(lat[^1].Item2))); x++)
+                    {
+                        for (var y = bandBot; y >= bandTop; y--)
+                        {
+                            if (Bright(x, y) > 0.4) { colBots.Add(y); break; }
+                        }
+                    }
+                    var baseline = colBots.Count >= 5 ? colBots.OrderBy(v => v).ElementAt(colBots.Count / 2) : (double?)null;
+                    if (baseline.HasValue)
+                    {
+                        extra = $" 拉丁顶差={cjkTop - latTop:+0.##;-0.##} 底差={cjkBot - baseline.Value:+0.##;-0.##} 基线={baseline.Value}";
+                    }
+                }
+                AppLog.Info($"[SelfTest] {tag}: 行{row} {name} 带={bandTop}..{bandBot} 行顶={rowTop:0.###} CJK {cjkTop}..{cjkBot} topRel={topRel:+0.##} botRel={botRel:+0.##}{extra}");
+                topRels.Add(topRel);
+                botRels.Add(botRel);
+                relRows.Add((row, name));
+            }
+            // 行不变性：相对中位数漂移 ≤1.5px
+            var medT = topRels.OrderBy(v => v).ElementAt(topRels.Count / 2);
+            var medB = botRels.OrderBy(v => v).ElementAt(botRels.Count / 2);
+            AppLog.Info($"[SelfTest] {tag}: 中位数 topRel={medT:+0.##} botRel={medB:+0.##}（{topRels.Count} 个 CJK 行）");
+            for (var i = 0; i < topRels.Count; i++)
+            {
+                if (Math.Abs(topRels[i] - medT) > 1.5 || Math.Abs(botRels[i] - medB) > 1.5)
+                {
+                    fails.Add($"行{relRows[i].row}({relRows[i].name}) 相对中位数漂移 topRelΔ={topRels[i] - medT:+0.##} botRelΔ={botRels[i] - medB:+0.##}");
+                }
+            }
+            // Windows 绝对几何（偏移态实测 1.2/14.2，原生态 4.5-5.5/15.5-16.5）
+            if (isWin)
+            {
+                for (var i = 0; i < topRels.Count; i++)
+                {
+                    if (topRels[i] < -1 || topRels[i] > 2.5 || botRels[i] < 9 || botRels[i] > 15)
+                    {
+                        fails.Add($"行{relRows[i].row}({relRows[i].name}) 绝对几何 topRel={topRels[i]:+0.##} botRel={botRels[i]:+0.##}（要求 topRel∈[-1,2.5] botRel∈[9,15]）");
+                    }
+                }
+            }
+            if (fails.Count > 0)
+            {
+                throw new InvalidOperationException($"{tag}: {fails.Count} 项未达标 → " + string.Join("；", fails));
+            }
+            AppLog.Info($"[SelfTest] {tag}: 自检完成 会话恢复爆发语境 CJK 行内垂直居中=OK，退出");
+            (Application.Current?.ApplicationLifetime
+                as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(0);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error($"[SelfTest] r75{mode}: 自检失败", ex);
             (Application.Current?.ApplicationLifetime
                 as Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime)?.TryShutdown(2);
         }
