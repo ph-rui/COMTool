@@ -3263,3 +3263,106 @@ testgate PASS，合计 778 项全过——与 r67.9 基线一致，回退无回�
 - zip 刷新：`COMTool-Avalonia-AOT-r67.zip` 78,474,620 B，
   SHA256 `563f3cd0211f955b79e743849e7f9db9b18216269e16cbf3b4123336ea5cb7fa`
   （首次仍报「流不可读」，重跑成功，与 r67.8/r67.9/r67.10 一致）。
+
+### 67.12 终端中英文混排垂直居中（库 4.1.8，2026-11-26，用户反馈「同一行中文字与英文字高低不一」）
+
+用户同文对照截图（左 MobaXterm、右 COMTool 10.0.9.2 上的 2026-11-18 旧构建，同一串
+`用console.sh -b 1500000 29连上Linux开发板的调试串口`，@14.5px）：同一行内中文整块比英文低。
+
+**像素取证**（阈值 140，逐字形 ink 包围盒）：
+
+| | MobaXterm | COMTool（库 4.1.7，10.0.9.2 旧构建） |
+|---|---|---|
+| 行 ink 带 | 87–99（13px） | 63–77（15px） |
+| 英文升部顶 / x 高度 | 87 / 91–97（基线≈97） | 63 / 66–72（基线=72） |
+| CJK ink | 87–99：充满行带，顶=英文升部顶、底=基线+2 | 66–77：顶比英文升部顶低 3px、底超基线 5px |
+| CJK/英文升部高度比 | 13/11 = 1.18 | 12/10 = 1.20（一致，排除字号差异，定性为垂直位置问题） |
+
+**根因**（4.1.7 DLL 反编译确认，`TerminalView.TryBuildGlyphRun`）：width-2 分支
+（`text.Length==1 && cellCount==2`）用 `ResolveWideGlyphTypeface` 沿字体链取 CJK face，
+以 `new GlyphInfo(glyph, 0, 2×CharWidth)` 零偏移把宽字形钉在主字体基线 `_baseline` 上。
+雅黑 CJK ink 重心在基线附近（上 6px/下 5px），Consolas 行中心在基线上方
+（charHeight≈16.978、baseline≈12 @14.5px）→ 整块中文偏低 ~3px。
+r43 只解决基线钉扎（中文不再走 FormattedText 的雅黑高 ascent 基线），未做 ink 行内居中。
+
+**修复（库 4.1.8，width-2 分支）**：
+- `GlyphInfo.GlyphOffset.Y = WideGlyphVerticalOffset(face, glyph, c)`；
+  offset = (行中心 − ink 中心)×FontSize，行中心 = `_charHeight/2 − _baseline`（相对基线，y 向下为正）。
+- ink 中心两级获取：① 1em 探针 `BuildGeometry().Bounds`（要求 Width>0，Windows 实机 Skia 路径
+  走此分支，实测 ink）；② 几何不可用（headless 渲染接口返回零宽占位框，实测 Y=0/H=1.448em/W=0）
+  退化为 em 盒中心（`FontMetrics.Ascent/Descent/DesignEmHeight`，CJK 字体字形 ink 近似居中于 em 盒）；
+  两者皆不可用返回零偏移（保持 4.1.7 行为，不丢字）。
+- 按 (face, glyph) 缓存（上限 8192 清空）；字体变更（`UpdateTextMetrics`）清空缓存。
+- 水平 2 格 advance（r22/TERM-22）、基线钉扎（r43/TERM-34）、单格回退、FormattedText 慢路径、
+  BoldFont（r56）、AutoCopyOnSelection（r45）均不变。
+
+**库构建说明（向用户披露）**：4.1.7 源码仓库已丢失（2026-11-26 确认本机、VM、10.0.9.2
+均无 csproj/源文件；上游 GitHub master 特性集与 4.1.7 不符，不可用）。4.1.8 以线上 4.1.7 DLL
+（2026-11-10 构建）带引用反编译重建（`ilspycmd -r`，38 源文件，按 XTerm.NET 3.0.0/Avalonia
+12.0.4 实际 API 修正类型引用），`Themes/Generic.axaml` 按反编译 `TerminalGenericStyles` 逐条
+转写重建（x:Class 存根 + XAML 编译器重新生成，AOT-safe 同 r52 结论），全量 gate + 实机自检
+兜底验证。重建源码存档 `avalonia/third_party/iciclecreek/src-4.1.8/`（含 README 说明差异），
+nupkg 入 `third_party/iciclecreek/` 本地 feed，防止源码再次丢失。
+
+**测试**：
+- `CjkTerminalFontTests.TERM38_WideCjkInkCenteredInRow`（headless 新增，编号避开已占用的
+  TERM-26/37）：按库同序镜像复算期望值（face 解析=首选 `Typeface(FontFamily)`→字体链逐个；
+  ink 中心=探针 Width>0 否则 em 盒中心；offset=(行中心−ink 中心)×FS），断言与
+  `GlyphInfos[0].GlyphOffset.Y` 一致（1e-4）、方向上移（<−0.5px）、拉丁路径 offset==0、
+  advance==2×CharWidth。
+  红证据（4.1.7）：宽字符 `GlyphOffset.Y=0`，独立复算期望 ≠0（首版断言 Expected −16.82px /
+  Actual 0）→ 失败；绿证据（4.1.8）：CJK 组 11/11 通过（含既有 TERM22/TERM34，无回归）。
+- `PngPixelDecoderTests.TERM39/TERM40`（headless 新增）：验证 `PngPixelDecoder` 纯托管
+  PNG 解码器（r72 自检依赖）——① None 滤波器往返逐字节一致；② 五种滤波器
+  （None/Sub/Up/Average/Paeth）按 PNG 规范 8.2 正向编码（滤波参考取重建样本）后能还原。
+- `--selftest-r72`（实机，Windows-only，非 Windows 记 SKIP）：本地终端写混排行
+  `CJKALIGN校验abcABCxyz 测试`（26 格），渲染落盘 r72-cjk.png 后解码逐像素断言：
+  ① CJK 顶 − 英文升部顶 ∈ [−1.5,+1.5]px（修复前 +3）；② CJK 底 − 基线（拉丁列底部中位数）
+  ≤3px（修复前 +5、MobaXterm +2）；③ |CJK 中心 − 行带中心| ≤1.5px。
+  实现迭代（两轮实机问题，均已在代码注释留证）：
+  - 像素获取初版为进程内第二次 RTB Render + CopyPixels，VM 虚拟 GPU 上两次触发渲染线程
+    AccessViolation（Windows 事件日志 2026-11-26 13:20:51、13:58:04，FailFast 栈
+    `DefaultRenderLoop.TimerTick → StringLogSink.FormatSource`）；改为 `SaveVisualPng`
+    落盘 + `PngPixelDecoder` 纯托管解码，不再产生第二个 GPU 表面。
+  - 分类初版「空隙分段 + 高度阈值」误判：「校」左部笔画与 GN 粘连成宽段被判 CJK、
+    `BCxyz` 粘连成 31px 宽段、拉丁段高低于 0.55×charH 阈值（实测 latin=0 分段不足）；
+    改为按已知探针网格列切片（CJK 占 2 格、拉丁占 1 格，列边界 = origin + i×charW），
+    基线取拉丁范围逐列 ink 底中位数（y 的 descender 仅 1 列，被中位数滤除）。
+
+**gate**（`pack/verify.sh`，results `20261126T063656Z`，2026-11-26）：
+restore/build PASS，unit-tests PASS（411 项 / 6 项目），app-tests PASS（370 项 = 368+TERM39/40），
+test-list PASS（370），e2e PASS（15/15），testgate PASS，合计 781 项。
+
+**VM 实机**（172.16.66.163，win-x64 AOT，第 7 轮部署，2026-11-26 15:03–15:05）：
+- AOT 重建 104s rc=0；`COMTool.App.exe` SHA256 `5bde8e81be249fa6bfd96b4699b23525417c67cc80d9f4b94c9967e909d5df2d`；
+  zip `COMTool-Avalonia-AOT-r67.zip` 78,487,284 B，SHA256
+  `76e91a47d4406d3e939743d0e375306e5c29bb83530c038afd5f933aa90e7e5a`（首次即成功）。
+- `--selftest-r72` PASS：charW=7.972 charH=16.978 行带=1..14 origin=0，
+  拉丁1=2..11 拉丁2=2..14 CJK1=2..14 CJK2=1..14；英文升部顶=2、基线=11、CJK ink 1..14
+  → 顶差 −1（修复前 +3）、底差 +3（修复前 +5、MobaXterm +2）、居中偏差 +0 —— 三项达标。
+- 回归自检全过：r70 删除确认框（436×172、危险色 #ffc42b1c、Esc 取消）、
+  r69 滚动条（16px 常显、LargeChange=一屏 37、按住 1505ms 逐行 67 次采样/72 行、单次≤2 行、松手停）、
+  r67 标签拖动（阈值/实时换位/动画/不裁剪全 OK）、r68 串口断线自动重连（上膛→2s 重连恢复）。
+
+**10.0.9.2 部署**（用户 PC，hostname zhangrui，zhri 账户，2026-11-26，应用户要求替换旧版）：
+- 旧构建 2026-11-18（库 4.1.7，exe SHA256 `c2fdb33f840245803c90eac9151dd304f10668b8fd14528b09e810a03201af6e`，
+  即用户截图右侧窗口所用版本）位于 `C:\Users\26451\COMTool-Avalonia-AOT`；
+- 替换为 VM 验证过的同一构建（zip SHA256 `76e91a47…`，上传后远端哈希一致；替换后 exe SHA256
+  `5bde8e81…` 与 VM 逐字节一致）；旧目录备份为 `COMTool-Avalonia-AOT.bak-20261126`；
+- 用户会话配置在 `AppData\Roaming\COMTool-Avalonia\config.json`（安装目录之外），替换不影响；
+- 此前「r67.8 副本保持不动」的约束本轮按用户要求解除；如需回退，恢复 .bak 目录即可。
+
+**人工验收（WIN-36）**：用户打开 10.0.9.2 上的 COMTool，终端输入中英文混排内容，
+对照 MobaXterm 确认中文与英文同高（顶差 ≤1px、底差 ≤3px）。
+
+**已知限制**：
+- 居中量随字体/字号自适应（Ctrl+滚轮缩放、「字体设置」换族后缓存清空重算）；不同 CJK 字形
+  ink 高度不同（如「一」），按各字形 ink 单独居中。
+- Windows 实机走 ink 实测（精确）；headless/几何不可用环境走 em 盒中心退化（雅黑 em 盒中心与
+  ink 中心差 ~0.1em，不产生 3px 级错位）。
+- 行框高度与 MobaXterm 不同（Consolas 16.978px@14.5 vs MobaFont 紧凑行距），居中后 CJK 上下
+  留白略多于 MobaXterm 的「充满行带」，属行高差异而非对齐错误（像素取证见上表）。
+- 库为反编译重建版本，后续升级需以 `src-4.1.8/` 存档为基线；若取得 4.1.7 上游正式源码应以
+  上游为准重新验证本补丁。
+- r72 自检的像素获取依赖 `SaveVisualPng`（单次 RTB 渲染）：VM 虚拟 GPU 上不得对已挂树控件
+  做第二次 RTB Render/CopyPixels（已两次实机证实渲染线程 FailFast）。
